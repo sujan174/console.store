@@ -35,6 +35,7 @@ var (
 	CatOnStyle   = fg(Gold)
 	CatOffStyle  = fg(Dim)
 	FavStyle     = fg(Fav)
+	AccentStyle  = fg(Accent)
 	SelRowStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(Bright)).Background(lipgloss.Color(SelRowBg))
 	KeyHintStyle = fg(Faint)
 )

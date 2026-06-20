@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"console.store/internal/catalog"
@@ -15,6 +17,8 @@ const (
 	scrRestaurant
 	scrCart
 	scrAddress
+	scrCheckout
+	scrConfirm
 )
 
 type Model struct {
@@ -27,6 +31,7 @@ type Model struct {
 	rest           screens.Restaurant
 	cart           screens.Cart
 	addrScreen     screens.Address
+	checkout       screens.Checkout
 	lines          []screens.CartLine
 	cartRestaurant string
 }
@@ -49,6 +54,17 @@ func (m Model) buildMenu() screens.Menu {
 		ok = false
 	}
 	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartTotal())
+}
+
+func orderID(lines []screens.CartLine) string {
+	sum := 0
+	for _, l := range lines {
+		for _, r := range l.Item.ID + l.Item.Name {
+			sum = (sum*31 + int(r)) & 0xffff
+		}
+		sum = (sum + l.Qty) & 0xffff
+	}
+	return fmt.Sprintf("CS-%04X", sum)
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -149,6 +165,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.screen = scrMenu
 				return m, nil
+			case "enter":
+				if len(m.lines) > 0 {
+					m.checkout = screens.NewCheckout(m.cartHeader(), m.addr, m.lines)
+					m.screen = scrCheckout
+					return m, nil
+				}
 			case "j", "down":
 				m.cart = m.cart.Down()
 			case "k", "up":
@@ -179,6 +201,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.addrScreen = na.(screens.Address)
 				return m, cmd
 			}
+		case scrCheckout:
+			switch k.String() {
+			case "esc":
+				m.screen = scrCart
+				return m, nil
+			case "enter":
+				m.checkout = m.checkout.Placed(orderID(m.lines))
+				m.screen = scrConfirm
+				return m, nil
+			}
+		case scrConfirm:
+			if k.String() == "esc" || k.String() == "enter" {
+				m.lines = nil
+				m.cartRestaurant = ""
+				m.menu = m.buildMenu()
+				m.screen = scrMenu
+				return m, nil
+			}
 		}
 	}
 	return m, nil
@@ -192,6 +232,8 @@ func (m Model) View() string {
 		return m.cart.View()
 	case scrAddress:
 		return m.addrScreen.View()
+	case scrCheckout, scrConfirm:
+		return m.checkout.View()
 	default:
 		return m.menu.View()
 	}

@@ -140,3 +140,29 @@ func TestCartEditsSyncToRouter(t *testing.T) {
 		t.Errorf("qty = %d, want 2", m.cart.Lines()[0].Qty)
 	}
 }
+
+func TestCheckoutFlowPlacesAndResets(t *testing.T) {
+	m := New()
+	steps := []tea.KeyMsg{
+		{Type: tea.KeyEnter},                     // open place
+		{Type: tea.KeyEnter},                     // add item
+		{Type: tea.KeyRunes, Runes: []rune("c")}, // cart
+		{Type: tea.KeyEnter},                     // checkout
+		{Type: tea.KeyEnter},                     // place order
+	}
+	for _, k := range steps {
+		updated, _ := m.Update(k)
+		m = updated.(Model)
+	}
+	if !strings.Contains(m.View(), "order placed") {
+		t.Errorf("expected confirm screen:\n%s", m.View())
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.cartTotal() != 0 {
+		t.Errorf("cart should be empty after confirm, total=%d", m.cartTotal())
+	}
+	if !strings.Contains(m.View(), "console.store") {
+		t.Errorf("should be back on menu:\n%s", m.View())
+	}
+}
