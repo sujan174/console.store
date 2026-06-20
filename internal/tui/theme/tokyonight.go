@@ -26,6 +26,9 @@ const (
 
 func fg(hex string) lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color(hex)) }
 
+// Fg is an exported wrapper around fg, for coloring by hex string.
+func Fg(hex string) lipgloss.Style { return fg(hex) }
+
 var (
 	BrandStyle   = fg(Bright).Bold(true)
 	TextStyle    = fg(Text)

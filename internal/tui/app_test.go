@@ -8,6 +8,38 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// newAtMenu returns a Model that has dismissed the splash and is on the menu,
+// so flow tests can drive menu interactions directly.
+func newAtMenu() Model {
+	m := New()
+	m.screen = scrMenu
+	return m
+}
+
+func TestStartsOnSplashThenKeyToMenu(t *testing.T) {
+	m := New()
+	if m.screen != scrSplash {
+		t.Fatalf("app should start on splash, got screen %d", m.screen)
+	}
+	// a key advances splash -> menu
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = updated.(Model)
+	if !strings.Contains(m.View(), "console.store") {
+		t.Errorf("after key, should be on menu:\n%s", m.View())
+	}
+}
+
+func TestSplashAutoConnectsAfterTicks(t *testing.T) {
+	m := New()
+	for i := 0; i < 200 && m.screen == scrSplash; i++ {
+		updated, _ := m.Update(tickMsg(time.Now()))
+		m = updated.(Model)
+	}
+	if m.screen == scrSplash {
+		t.Error("splash should auto-advance to menu after enough ticks")
+	}
+}
+
 func TestTickAdvancesFrame(t *testing.T) {
 	m := New()
 	f0 := m.frame
@@ -22,7 +54,7 @@ func TestTickAdvancesFrame(t *testing.T) {
 }
 
 func TestAppStartsOnMenu(t *testing.T) {
-	m := New()
+	m := newAtMenu()
 	out := m.View()
 	if !strings.Contains(out, "console.store") || !strings.Contains(out, "Blue Tokai") {
 		t.Fatal("app should start on menu with places")
@@ -30,7 +62,7 @@ func TestAppStartsOnMenu(t *testing.T) {
 }
 
 func TestAppEnterOpensRestaurantThenEscBack(t *testing.T) {
-	m := New()
+	m := newAtMenu()
 	// enter on first place
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if !strings.Contains(m2.View(), "35-45 min") {
@@ -44,7 +76,7 @@ func TestAppEnterOpensRestaurantThenEscBack(t *testing.T) {
 }
 
 func TestSectionSwitchChangesPlaces(t *testing.T) {
-	m := New()
+	m := newAtMenu()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	view := updated.(Model).View()
 	if !strings.Contains(view, "California Burrito") {
@@ -56,7 +88,7 @@ func TestSectionSwitchChangesPlaces(t *testing.T) {
 }
 
 func TestUsualPreloadsCartAndJumps(t *testing.T) {
-	m := New()                                          // a1 -> usual is Cold Coffee · Blue Tokai
+	m := newAtMenu()                                    // a1 -> usual is Cold Coffee · Blue Tokai
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp}) // move onto the usual row
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -71,7 +103,7 @@ func TestUsualPreloadsCartAndJumps(t *testing.T) {
 }
 
 func TestAddressSwitchReFiltersMenu(t *testing.T) {
-	m := New() // starts at a1 (HSR), coffee section
+	m := newAtMenu() // starts at a1 (HSR), coffee section
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
@@ -101,7 +133,7 @@ func TestAppQuits(t *testing.T) {
 // reset the restaurant list cursor back to 0. This would fail against the old
 // NewRestaurant rebuild behavior.
 func TestAddToCartPreservesCursor(t *testing.T) {
-	m := New()
+	m := newAtMenu()
 
 	// Open first restaurant (Blue Tokai).
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -128,7 +160,7 @@ func TestAddToCartPreservesCursor(t *testing.T) {
 // TestCartHeaderFromMenuNotNonsense opens the cart from the menu before any
 // items are added and asserts the header is sensible (no "cart · cart").
 func TestCartHeaderFromMenuNotNonsense(t *testing.T) {
-	m := New()
+	m := newAtMenu()
 
 	// Press 'c' to open cart from menu with zero items.
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
@@ -143,7 +175,7 @@ func TestCartHeaderFromMenuNotNonsense(t *testing.T) {
 }
 
 func TestCartEditsSyncToRouter(t *testing.T) {
-	m := New()
+	m := newAtMenu()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open place
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add item
@@ -161,7 +193,7 @@ func TestCartEditsSyncToRouter(t *testing.T) {
 }
 
 func TestCheckoutFlowPlacesAndResets(t *testing.T) {
-	m := New()
+	m := newAtMenu()
 	steps := []tea.KeyMsg{
 		{Type: tea.KeyEnter},                     // open place
 		{Type: tea.KeyEnter},                     // add item
@@ -187,7 +219,7 @@ func TestCheckoutFlowPlacesAndResets(t *testing.T) {
 }
 
 func TestSearchEmptyThenEnterDoesNotPanic(t *testing.T) {
-	m := New()
+	m := newAtMenu()
 	seq := []tea.KeyMsg{
 		{Type: tea.KeyEnter},                     // open first place
 		{Type: tea.KeyRunes, Runes: []rune("/")}, // enter search
@@ -207,7 +239,7 @@ func TestSearchEmptyThenEnterDoesNotPanic(t *testing.T) {
 }
 
 func TestAddressSwitchFlushesUnserviceableCart(t *testing.T) {
-	m := New() // a1 (HSR); Blue Tokai serves a1 but NOT a3
+	m := newAtMenu() // a1 (HSR); Blue Tokai serves a1 but NOT a3
 	// add a Blue Tokai item (first coffee place at a1, first item)
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
 	m = updated.(Model)
@@ -233,7 +265,7 @@ func TestAddressSwitchFlushesUnserviceableCart(t *testing.T) {
 }
 
 func TestInstamartSeparateCartAndMinimum(t *testing.T) {
-	m := New()
+	m := newAtMenu()
 	// walk coffee -> food -> snacks -> instamart
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(Model)
@@ -262,7 +294,7 @@ func TestInstamartSeparateCartAndMinimum(t *testing.T) {
 }
 
 func TestInstamartOrderIDDerivedFromItsOwnCart(t *testing.T) {
-	m := New()
+	m := newAtMenu()
 	seq := []tea.KeyMsg{
 		{Type: tea.KeyRight},                     // coffee -> food
 		{Type: tea.KeyRight},                     // food -> snacks

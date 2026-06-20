@@ -23,7 +23,8 @@ var spinFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"
 type screen int
 
 const (
-	scrMenu screen = iota
+	scrSplash screen = iota
+	scrMenu
 	scrRestaurant
 	scrCart
 	scrAddress
@@ -51,6 +52,10 @@ type Model struct {
 	imLines []screens.CartLine
 	imCart  screens.Cart
 
+	splash   screens.Splash
+	bootStep int
+	bootHold int
+
 	frame int
 }
 
@@ -58,7 +63,8 @@ func New() Model {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, addr: addr, section: section, screen: scrMenu}
+	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash}
+	m.splash = screens.NewSplash()
 	m.menu = m.buildMenu()
 	return m
 }
@@ -99,7 +105,21 @@ func orderID(lines []screens.CartLine) string {
 func (m Model) Init() tea.Cmd { return tick() }
 
 // onTick advances time-based screen state; extended by later tasks.
-func (m Model) onTick() Model { return m }
+func (m Model) onTick() Model {
+	if m.screen == scrSplash {
+		if m.bootStep < screens.BootLineCount {
+			if m.frame%3 == 0 {
+				m.bootStep++
+			}
+		} else {
+			m.bootHold++
+			if m.bootHold > 20 { // ~2.2s hold on the logo, then connect
+				m.screen = scrMenu
+			}
+		}
+	}
+	return m
+}
 
 func (m Model) spin() string { return spinFrames[m.frame%len(spinFrames)] }
 
@@ -157,6 +177,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch k.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
+		}
+		if m.screen == scrSplash {
+			m.screen = scrMenu
+			return m, nil
 		}
 		switch m.screen {
 		case scrMenu:
@@ -366,6 +390,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	switch m.screen {
+	case scrSplash:
+		return m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/15)%len(screens.Taglines)]).View()
 	case scrRestaurant:
 		return m.rest.View()
 	case scrCart:

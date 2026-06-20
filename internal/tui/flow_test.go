@@ -12,6 +12,8 @@ import (
 func TestFlowMenuToCart(t *testing.T) {
 	tm := teatest.NewTestModel(t, New(), teatest.WithInitialTermSize(80, 24))
 
+	// dismiss the splash -> menu
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	// open first restaurant
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
 	// add first item
