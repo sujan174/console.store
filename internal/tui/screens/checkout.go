@@ -35,6 +35,12 @@ func (c Checkout) Placed(orderID, eta string) Checkout {
 
 func (c Checkout) IsPlaced() bool { return c.placed }
 
+// Place returns the restaurant/store name (used to seed tracking).
+func (c Checkout) Place() string { return c.restaurant }
+
+// OrderID returns the placed order's id (used to seed tracking).
+func (c Checkout) OrderID() string { return c.orderID }
+
 // Lines returns the order's cart lines (used to derive the order id).
 func (c Checkout) Lines() []CartLine { return c.lines }
 

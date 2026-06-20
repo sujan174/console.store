@@ -47,6 +47,7 @@ const (
 	scrAddress
 	scrCheckout
 	scrConfirm
+	scrTracking
 	scrInstamart
 	scrImCart
 )
@@ -72,6 +73,10 @@ type Model struct {
 	splash   screens.Splash
 	bootStep int
 	bootHold int
+
+	track     screens.Tracking
+	trackStep int
+	trackTick int
 
 	frame int
 }
@@ -167,6 +172,12 @@ func (m Model) onTick() Model {
 			if m.bootHold > 20 { // ~2.2s hold on the logo, then connect
 				m.screen = scrMenu
 			}
+		}
+	}
+	if m.screen == scrTracking {
+		m.trackTick++
+		if m.trackTick%38 == 0 && m.trackStep < 3 {
+			m.trackStep++
 		}
 	}
 	return m
@@ -418,12 +429,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case scrConfirm:
-			if k.String() == "esc" || k.String() == "enter" {
+			switch k.String() {
+			case "enter", "t":
+				m.track = screens.NewTracking(m.checkout.Place(), m.addr.Line, m.checkout.OrderID())
+				m.screen = scrTracking
+				m.trackStep = 1
+				m.trackTick = 0
+				return m, nil
+			case "esc":
 				m.lines = nil
 				m.imLines = nil
 				m.cartRestaurant = ""
 				m.menu = m.buildMenu()
 				m.screen = scrMenu
+				return m, nil
+			}
+		case scrTracking:
+			if k.String() == "esc" {
+				m.lines = nil
+				m.imLines = nil
+				m.cartRestaurant = ""
+				m.screen = scrMenu
+				m.menu = m.buildMenu()
 				return m, nil
 			}
 		case scrInstamart:
@@ -495,6 +522,8 @@ func (m Model) View() string {
 		return m.addrScreen.View()
 	case scrCheckout, scrConfirm:
 		return m.checkout.View()
+	case scrTracking:
+		return m.track.View(m.trackStep, m.spin())
 	case scrInstamart:
 		return m.inst.View()
 	case scrImCart:

@@ -255,6 +255,43 @@ func TestCheckoutFlowPlacesAndResets(t *testing.T) {
 	}
 }
 
+func TestTrackingFlowAdvancesAndEscResets(t *testing.T) {
+	m := newAtMenu()
+	steps := []tea.KeyMsg{
+		{Type: tea.KeyEnter},                     // open place
+		{Type: tea.KeyEnter},                     // add item
+		{Type: tea.KeyRunes, Runes: []rune("c")}, // cart
+		{Type: tea.KeyEnter},                     // checkout
+		{Type: tea.KeyEnter},                     // place order -> confirm
+		{Type: tea.KeyEnter},                     // confirm -> tracking
+	}
+	for _, k := range steps {
+		updated, _ := m.Update(k)
+		m = updated.(Model)
+	}
+	if !strings.Contains(m.View(), "tracking ·") {
+		t.Fatalf("expected tracking screen:\n%s", m.View())
+	}
+
+	// drive ticks: trackStep should advance and cap at 3
+	for i := 0; i < 120; i++ {
+		updated, _ := m.Update(tickMsg(time.Now()))
+		m = updated.(Model)
+	}
+	if m.trackStep != 3 {
+		t.Errorf("trackStep should cap at 3, got %d", m.trackStep)
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.cartTotal() != 0 {
+		t.Errorf("cart should be empty after esc, total=%d", m.cartTotal())
+	}
+	if !strings.Contains(m.View(), "console.store") {
+		t.Errorf("should be back on menu:\n%s", m.View())
+	}
+}
+
 func TestSearchEmptyThenEnterDoesNotPanic(t *testing.T) {
 	m := newAtMenu()
 	seq := []tea.KeyMsg{
