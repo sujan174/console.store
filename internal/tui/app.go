@@ -145,10 +145,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		case scrCart:
-			if k.String() == "esc" {
+			switch k.String() {
+			case "esc":
 				m.screen = scrMenu
 				return m, nil
+			case "j", "down":
+				m.cart = m.cart.Down()
+			case "k", "up":
+				m.cart = m.cart.Up()
+			case "+", "=":
+				m.cart = m.cart.Inc()
+			case "-":
+				m.cart = m.cart.Dec()
+			case "x":
+				m.cart = m.cart.Remove()
 			}
+			// keep router's authoritative lines in sync with cart edits
+			m.lines = m.cart.Lines()
+			m.menu = m.menu.WithCartTotal(m.cartTotal())
+			return m, nil
 		case scrAddress:
 			switch k.String() {
 			case "esc":

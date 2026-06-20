@@ -122,3 +122,21 @@ func TestCartHeaderFromMenuNotNonsense(t *testing.T) {
 		t.Fatalf("cart header should say 'your order' when cart is empty, got view:\n%s", view)
 	}
 }
+
+func TestCartEditsSyncToRouter(t *testing.T) {
+	m := New()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open place
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add item
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")}) // cart
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("+")}) // qty 2
+	m = updated.(Model)
+	if m.cartTotal() != m.cart.Total() {
+		t.Errorf("router total %d != cart total %d", m.cartTotal(), m.cart.Total())
+	}
+	if m.cart.Lines()[0].Qty != 2 {
+		t.Errorf("qty = %d, want 2", m.cart.Lines()[0].Qty)
+	}
+}
