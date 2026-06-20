@@ -198,6 +198,6 @@ func (c CmdBar) View(blink bool) string {
 	body := strings.Join(lines, "\n")
 	return lipgloss.NewStyle().
 		Background(lipgloss.Color(theme.PanelCmd)).
-		Width(components.InnerWidth).
+		Width(components.FrameWidth()).
 		Render(body)
 }

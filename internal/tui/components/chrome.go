@@ -8,20 +8,54 @@ import (
 	"console.store/internal/tui/theme"
 )
 
-// InnerWidth is the content column width all screens render to.
+// InnerWidth is the default content column width used before a window size
+// is known. Once the SSH session reports its size the root calls
+// SetFrameWidth and the UI renders full-bleed to the terminal width.
 const InnerWidth = 60
 
-// Divider is the full-width section rule under a screen header (design: 1px #232539).
+// margin is the left/right text gutter inside the full-bleed frame.
+const margin = 2
+
+// frameWidth is the full-bleed width (dividers, status bar, selected rows
+// span this). It tracks the terminal width at runtime.
+var frameWidth = InnerWidth + 2*margin
+
+// SetFrameWidth sets the full-bleed width from the terminal size.
+func SetFrameWidth(w int) {
+	if w < 24 {
+		w = 24
+	}
+	frameWidth = w
+}
+
+// FrameWidth is the current full-bleed width (edge to edge).
+func FrameWidth() int { return frameWidth }
+
+// ContentWidth is the text area width between the gutters.
+func ContentWidth() int { return frameWidth - 2*margin }
+
+// PadTo right-pads s with spaces to the given display width.
+func PadTo(s string, width int) string {
+	if pad := width - lipgloss.Width(s); pad > 0 {
+		return s + strings.Repeat(" ", pad)
+	}
+	return s
+}
+
+// Divider is the full-bleed section rule under a screen header
+// (design line 241: border-top 1px #232539, margin 0 -36px → edge to edge).
 func Divider() string {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Div)).Render(strings.Repeat("─", InnerWidth)) + "\n"
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Div)).Render(strings.Repeat("─", frameWidth)) + "\n"
 }
 
-// DashRule is the dashed bill separator (design: 1px dashed #2c2e44).
+// DashRule is the dashed bill separator (design line 322: margin 0 → content
+// width, indented inside the gutters, not full-bleed).
 func DashRule() string {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Div2)).Render(strings.Repeat("╌", InnerWidth)) + "\n"
+	return strings.Repeat(" ", margin) +
+		lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Div2)).Render(strings.Repeat("╌", ContentWidth())) + "\n"
 }
 
-// StatusBar renders the persistent bottom bar (design lines 459-463):
+// StatusBar renders the persistent full-bleed bottom bar (design lines 459-463):
 //
 //	⊙ linked · <addr> · home · <screen>            <hint> · ↑<lat>ms ▋
 func StatusBar(addr, screen, hint, latency string, blink bool) string {
@@ -33,12 +67,15 @@ func StatusBar(addr, screen, hint, latency string, blink bool) string {
 		cur = theme.CursorStyle.Render("▋")
 	}
 	right := theme.DimStyle.Render(hint) + theme.FaintStyle.Render(" · ↑"+latency+"ms ") + cur
-	gap := InnerWidth - lipgloss.Width(left) - lipgloss.Width(right)
+	// inner content sits inside the gutters; the panel background spans full width.
+	inner := strings.Repeat(" ", margin) + left
+	gap := frameWidth - margin - lipgloss.Width(left) - lipgloss.Width(right) - margin
 	if gap < 1 {
 		gap = 1
 	}
-	bar := left + strings.Repeat(" ", gap) + right
-	return lipgloss.NewStyle().Background(lipgloss.Color(theme.PanelLo)).Render(bar)
+	inner += strings.Repeat(" ", gap) + right + strings.Repeat(" ", margin)
+	inner = PadTo(inner, frameWidth)
+	return lipgloss.NewStyle().Background(lipgloss.Color(theme.PanelLo)).Render(inner)
 }
 
 // Hint renders a footer hint line from alternating (keyGlyph, label) pairs:

@@ -108,7 +108,7 @@ func (s Restaurant) Searching() bool { return s.searching }
 
 func (s Restaurant) View() string {
 	var b strings.Builder
-	w := components.InnerWidth
+	w := components.ContentWidth()
 
 	header := justify(
 		theme.PriceStyle.Render("← "+strings.ToLower(s.p.Name)),

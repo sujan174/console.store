@@ -121,7 +121,7 @@ func (c Cart) Init() tea.Cmd { return nil }
 
 func (c Cart) View() string {
 	var b strings.Builder
-	w := components.InnerWidth
+	w := components.ContentWidth()
 
 	// Header: "cart · {restaurant}" (brand) … "{eta}" (eta), 2-space indent.
 	header := justify(

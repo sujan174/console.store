@@ -6,11 +6,13 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"console.store/internal/catalog"
 	"console.store/internal/catalog/mem"
 	"console.store/internal/tui/components"
 	"console.store/internal/tui/screens"
+	"console.store/internal/tui/theme"
 )
 
 // Bill constants mirror the design (script line 606: toPay = item + 29 − 50).
@@ -83,6 +85,7 @@ type Model struct {
 	cmd     screens.CmdBar
 
 	frame int
+	w, h  int // terminal size from WindowSizeMsg
 }
 
 func New() Model {
@@ -271,6 +274,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.frame++
 		m = m.onTick()
 		return m, tick()
+	}
+	if ws, ok := msg.(tea.WindowSizeMsg); ok {
+		m.w, m.h = ws.Width, ws.Height
+		components.SetFrameWidth(m.w)
+		return m, nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
 		// Command palette captures all keys while open, so letters like `q`
@@ -601,10 +609,29 @@ func (m Model) statusBar() string {
 	return components.StatusBar(m.addr.Line, m.screenLabel(), hint, "12.4", m.blinkOn())
 }
 
-func (m Model) View() string {
-	if m.screen == scrSplash {
-		return m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/15)%len(screens.Taglines)]).View()
+// canvas wraps a frame in the design's full-screen dark background so the
+// whole terminal becomes the #15161f page (design line 191).
+func (m Model) canvas(frame string) string {
+	if m.w == 0 || m.h == 0 {
+		return frame
 	}
+	return lipgloss.NewStyle().
+		Width(m.w).Height(m.h).
+		Background(lipgloss.Color(theme.Bg)).
+		Render(frame)
+}
+
+func (m Model) View() string {
+	// Splash is centered on the dark canvas (design lines 196-228).
+	if m.screen == scrSplash {
+		sp := m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/15)%len(screens.Taglines)]).View()
+		if m.w == 0 || m.h == 0 {
+			return sp
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, sp,
+			lipgloss.WithWhitespaceBackground(lipgloss.Color(theme.Bg)))
+	}
+
 	var body string
 	switch m.screen {
 	case scrRestaurant:
@@ -624,9 +651,21 @@ func (m Model) View() string {
 	default: // scrMenu
 		body = m.menu.View()
 	}
-	out := body
+
+	// The command palette and status bar are pinned to the bottom of the
+	// viewport (design: cmd palette + status bar sit below a flex:1 content area).
+	bottom := ""
 	if m.cmdOpen {
-		out += "\n" + m.cmd.View(m.blinkOn())
+		bottom += m.cmd.View(m.blinkOn()) + "\n"
 	}
-	return out + "\n" + m.statusBar()
+	bottom += m.statusBar()
+
+	if m.w == 0 || m.h == 0 {
+		return body + "\n" + bottom
+	}
+	gap := m.h - lipgloss.Height(body) - lipgloss.Height(bottom)
+	if gap < 1 {
+		gap = 1
+	}
+	return m.canvas(body + strings.Repeat("\n", gap) + bottom)
 }

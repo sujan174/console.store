@@ -82,7 +82,7 @@ func (s Instamart) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (s Instamart) View() string {
 	var b strings.Builder
-	w := components.InnerWidth
+	w := components.ContentWidth()
 
 	header := justify(
 		theme.PriceStyle.Render("← instamart"),

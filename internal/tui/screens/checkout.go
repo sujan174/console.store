@@ -75,7 +75,7 @@ func padTo(s string, width int) string {
 
 func (c Checkout) summaryView() string {
 	var b strings.Builder
-	w := components.InnerWidth
+	w := components.ContentWidth()
 
 	b.WriteString("  " + theme.BrandStyle.Render("checkout") + "\n")
 	b.WriteString(components.Divider())
@@ -97,7 +97,7 @@ func (c Checkout) summaryView() string {
 		lipgloss.NewStyle().
 			Foreground(lipgloss.Color(theme.Bright)).
 			Background(lipgloss.Color(theme.SelRowBg)).
-			Render(padTo(" ❯ place order ", components.InnerWidth))
+			Render(padTo(" ❯ place order ", components.FrameWidth()-1))
 	b.WriteString(bar + "\n\n")
 
 	b.WriteString("  " + theme.FavStyle.Render("no online payment — pay the rider on delivery") + "\n")

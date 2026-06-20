@@ -32,10 +32,11 @@ func progressBar(step int) string {
 	if pct > 3 {
 		pct = 3
 	}
-	filled := pct * components.InnerWidth / 3
+	w := components.ContentWidth()
+	filled := pct * w / 3
 	var b strings.Builder
-	for i := 0; i < components.InnerWidth; i++ {
-		if i == filled && filled < components.InnerWidth {
+	for i := 0; i < w; i++ {
+		if i == filled && filled < w {
 			b.WriteString("🛵")
 		} else if i < filled {
 			b.WriteString(theme.GreenStyle.Render("━"))
@@ -48,7 +49,7 @@ func progressBar(step int) string {
 
 func (t Tracking) View(trackStep int, spin string) string {
 	var b strings.Builder
-	w := components.InnerWidth
+	w := components.ContentWidth()
 
 	// header: ← tracking · {orderId}  …  {place}
 	b.WriteString("  " + justify(

@@ -78,9 +78,10 @@ func (l *List) Down() {
 }
 
 func (l List) View() string {
+	// Text area width: explicit override, else the dynamic content width.
 	width := l.Width
 	if width == 0 {
-		width = InnerWidth
+		width = ContentWidth()
 	}
 	var b strings.Builder
 	for i, r := range l.VisibleRows() {
@@ -97,16 +98,15 @@ func (l List) View() string {
 		}
 		body := r.Left + strings.Repeat(" ", pad) + right
 		if i == l.Cursor {
+			// Full-bleed selected row: blue bar at col 0, selected-row
+			// background spanning the rest of the frame, text inside the gutter.
 			bar := theme.CursorStyle.Render("▌")
-			bw := lipgloss.Width(body)
-			if bw < width {
-				body += strings.Repeat(" ", width-bw)
-			}
-			b.WriteString(bar + theme.SelRowStyle.Render(" "+body+" ") + "\n")
+			inner := PadTo(strings.Repeat(" ", margin-1)+body, FrameWidth()-1)
+			b.WriteString(bar + theme.SelRowStyle.Render(inner) + "\n")
 		} else {
-			lead := "  "
+			lead := strings.Repeat(" ", margin)
 			if r.BarGreen {
-				lead = theme.GreenStyle.Render("▌") + " "
+				lead = theme.GreenStyle.Render("▌") + strings.Repeat(" ", margin-1)
 			}
 			b.WriteString(lead + theme.ItemStyle.Render(body) + "\n")
 		}

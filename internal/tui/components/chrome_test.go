@@ -24,7 +24,8 @@ func TestHintContents(t *testing.T) {
 }
 
 func TestDividerWidth(t *testing.T) {
-	if lipgloss.Width(strings.TrimRight(Divider(), "\n")) != InnerWidth {
-		t.Errorf("divider width != %d", InnerWidth)
+	SetFrameWidth(80)
+	if lipgloss.Width(strings.TrimRight(Divider(), "\n")) != FrameWidth() {
+		t.Errorf("divider width != FrameWidth() (%d)", FrameWidth())
 	}
 }

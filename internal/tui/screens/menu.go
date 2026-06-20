@@ -102,7 +102,7 @@ func justify(left, right string, width int) string {
 
 func (m Menu) View() string {
 	var b strings.Builder
-	w := components.InnerWidth
+	w := components.ContentWidth()
 
 	// header row: brand (left) · cart total (right)
 	header := justify(
