@@ -19,6 +19,8 @@ const (
 	scrAddress
 	scrCheckout
 	scrConfirm
+	scrInstamart
+	scrImCart
 )
 
 type Model struct {
@@ -34,6 +36,10 @@ type Model struct {
 	checkout       screens.Checkout
 	lines          []screens.CartLine
 	cartRestaurant string
+
+	inst    screens.Instamart
+	imLines []screens.CartLine
+	imCart  screens.Cart
 }
 
 func New() Model {
@@ -76,6 +82,17 @@ func (m Model) cartTotal() int {
 	}
 	return t
 }
+
+func (m Model) imCartTotal() int {
+	t := 0
+	for _, l := range m.imLines {
+		t += l.Item.Price * l.Qty
+	}
+	return t
+}
+
+// InstamartMin is the Instamart minimum order value (₹).
+const InstamartMin = 99
 
 func (m Model) cartHeader() string {
 	if m.cartRestaurant != "" {
@@ -126,6 +143,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "a":
 				m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
 				m.screen = scrAddress
+				return m, nil
+			case "i":
+				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imCartTotal())
+				m.screen = scrInstamart
 				return m, nil
 			default:
 				nm, cmd := m.menu.Update(msg)
@@ -214,11 +235,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case scrConfirm:
 			if k.String() == "esc" || k.String() == "enter" {
 				m.lines = nil
+				m.imLines = nil
 				m.cartRestaurant = ""
 				m.menu = m.buildMenu()
 				m.screen = scrMenu
 				return m, nil
 			}
+		case scrInstamart:
+			switch k.String() {
+			case "esc":
+				m.screen = scrMenu
+				return m, nil
+			case "enter":
+				m.imLines = append(m.imLines, screens.CartLine{Item: m.inst.Selected(), Qty: 1})
+				m.inst = m.inst.WithCartTotal(m.imCartTotal())
+				return m, nil
+			case "c":
+				m.imCart = screens.NewCart("Instamart", m.imLines)
+				if m.imCartTotal() < InstamartMin {
+					m.imCart = m.imCart.WithMinNotice(fmt.Sprintf("add ₹%d more — ₹%d minimum on Instamart", InstamartMin-m.imCartTotal(), InstamartMin))
+				}
+				m.screen = scrImCart
+				return m, nil
+			default:
+				ni, cmd := m.inst.Update(msg)
+				m.inst = ni.(screens.Instamart)
+				return m, cmd
+			}
+		case scrImCart:
+			switch k.String() {
+			case "esc":
+				m.screen = scrInstamart
+				return m, nil
+			case "j", "down":
+				m.imCart = m.imCart.Down()
+			case "k", "up":
+				m.imCart = m.imCart.Up()
+			case "+", "=":
+				m.imCart = m.imCart.Inc()
+			case "-":
+				m.imCart = m.imCart.Dec()
+			case "x":
+				m.imCart = m.imCart.Remove()
+			case "enter":
+				if m.imCartTotal() >= InstamartMin {
+					m.checkout = screens.NewCheckout("Instamart", m.addr, m.imLines)
+					m.screen = scrCheckout
+					return m, nil
+				}
+			}
+			m.imLines = m.imCart.Lines()
+			return m, nil
 		}
 	}
 	return m, nil
@@ -234,6 +301,10 @@ func (m Model) View() string {
 		return m.addrScreen.View()
 	case scrCheckout, scrConfirm:
 		return m.checkout.View()
+	case scrInstamart:
+		return m.inst.View()
+	case scrImCart:
+		return m.imCart.View()
 	default:
 		return m.menu.View()
 	}

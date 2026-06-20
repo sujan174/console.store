@@ -166,3 +166,27 @@ func TestCheckoutFlowPlacesAndResets(t *testing.T) {
 		t.Errorf("should be back on menu:\n%s", m.View())
 	}
 }
+
+func TestInstamartSeparateCartAndMinimum(t *testing.T) {
+	m := New()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	m = updated.(Model)
+	if !strings.Contains(m.View(), "fast lane") {
+		t.Fatalf("expected instamart screen:\n%s", m.View())
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.cartTotal() != 0 {
+		t.Errorf("food cart should be untouched by instamart add, got %d", m.cartTotal())
+	}
+	if m.imCartTotal() != 125 {
+		t.Errorf("instamart cart total = %d, want 125", m.imCartTotal())
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if !strings.Contains(m.View(), "checkout") {
+		t.Errorf("expected checkout after meeting minimum:\n%s", m.View())
+	}
+}

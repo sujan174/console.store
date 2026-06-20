@@ -20,6 +20,7 @@ type Cart struct {
 	restaurant string
 	lines      []CartLine
 	cursor     int
+	minNotice  string
 }
 
 func NewCart(restaurant string, lines []CartLine) Cart {
@@ -30,6 +31,9 @@ func NewCart(restaurant string, lines []CartLine) Cart {
 }
 
 func (c Cart) Lines() []CartLine { return c.lines }
+
+// WithMinNotice sets a notice shown when the cart is below a minimum.
+func (c Cart) WithMinNotice(s string) Cart { c.minNotice = s; return c }
 
 func (c Cart) Total() int {
 	t := 0
@@ -97,6 +101,9 @@ func (c Cart) View() string {
 	b.WriteString("  " + theme.BrightStyle.Render(fmt.Sprintf("to pay (COD)   ₹%d", c.Total())) + "\n\n")
 	b.WriteString("  " + theme.DimStyle.Render("pay the rider on delivery · cash or UPI") + "\n")
 	b.WriteString("  " + theme.FavStyle.Render("orders can't be cancelled once placed") + "\n\n")
+	if c.minNotice != "" {
+		b.WriteString("  " + theme.FavStyle.Render(c.minNotice) + "\n\n")
+	}
 	b.WriteString(components.KeyHints("j/k move   +/- qty   x remove   ↵ checkout   esc back"))
 	return b.String()
 }
