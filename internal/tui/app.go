@@ -3,7 +3,8 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/mock"
+	"console.store/internal/catalog"
+	"console.store/internal/catalog/mem"
 	"console.store/internal/tui/screens"
 )
 
@@ -16,19 +17,31 @@ const (
 )
 
 type Model struct {
+	repo    catalog.Repository
+	addr    catalog.Address
+	section catalog.Section
+
 	screen         screen
 	menu           screens.Menu
 	rest           screens.Restaurant
 	cart           screens.Cart
 	lines          []screens.CartLine
-	cartRestaurant string // name of the restaurant whose items are in the cart
+	cartRestaurant string
 }
 
 func New() Model {
-	return Model{
-		screen: scrMenu,
-		menu:   screens.NewMenu(mock.Restaurants, mock.Addresses[0], 0),
-	}
+	repo := mem.New()
+	addr := repo.Addresses()[0]
+	section := catalog.SectionCoffee
+	m := Model{repo: repo, addr: addr, section: section, screen: scrMenu}
+	m.menu = m.buildMenu()
+	return m
+}
+
+// buildMenu constructs the menu screen for the current address + section.
+func (m Model) buildMenu() screens.Menu {
+	usual, ok := m.repo.Usual(m.addr)
+	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartTotal())
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -41,8 +54,6 @@ func (m Model) cartTotal() int {
 	return t
 }
 
-// cartHeader returns the restaurant name for the cart header, falling back to
-// "your order" if no restaurant name has been recorded yet.
 func (m Model) cartHeader() string {
 	if m.cartRestaurant != "" {
 		return m.cartRestaurant
@@ -60,8 +71,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case scrMenu:
 			switch k.String() {
 			case "enter":
-				m.rest = screens.NewRestaurant(m.menu.Selected(), m.cartTotal())
-				m.screen = scrRestaurant
+				if p, ok := m.menu.Selected(); ok {
+					m.rest = screens.NewRestaurant(p, m.cartTotal())
+					m.screen = scrRestaurant
+				}
 				return m, nil
 			case "c":
 				m.cart = screens.NewCart(m.cartHeader(), m.lines)
@@ -81,15 +94,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				wasEmpty := len(m.lines) == 0
 				m.lines = append(m.lines, screens.CartLine{Item: m.rest.Selected(), Qty: 1})
 				if wasEmpty {
-					// Record the restaurant name the first time an item is added.
-					m.cartRestaurant = m.rest.RestaurantData().Name
+					m.cartRestaurant = m.rest.PlaceData().Name
 				}
-				// Update cart totals without resetting the list cursor.
 				m.menu = m.menu.WithCartTotal(m.cartTotal())
 				m.rest = m.rest.WithCartTotal(m.cartTotal())
 				return m, nil
 			case "c":
-				m.cart = screens.NewCart(m.rest.RestaurantData().Name, m.lines)
+				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines)
 				m.screen = scrCart
 				return m, nil
 			default:

@@ -5,11 +5,17 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"console.store/internal/mock"
+
+	"console.store/internal/catalog"
+	"console.store/internal/catalog/mem"
 )
 
 func TestMenuRendersPlacesAndUsual(t *testing.T) {
-	m := NewMenu(mock.Restaurants, mock.Addresses[0], 338)
+	repo := mem.New()
+	addr := repo.Addresses()[0]
+	places := repo.Places(addr, catalog.SectionCoffee)
+	usual, ok := repo.Usual(addr)
+	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 338)
 	out := m.View()
 	if !strings.Contains(out, "the usual") {
 		t.Fatal("missing the usual pin")
@@ -23,13 +29,21 @@ func TestMenuRendersPlacesAndUsual(t *testing.T) {
 }
 
 func TestMenuEnterSelectsRestaurant(t *testing.T) {
-	m := NewMenu(mock.Restaurants, mock.Addresses[0], 338)
+	repo := mem.New()
+	addr := repo.Addresses()[0]
+	places := repo.Places(addr, catalog.SectionCoffee)
+	usual, ok := repo.Usual(addr)
+	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 338)
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	mm := m2.(Menu)
 	if mm.list.Cursor != 1 {
 		t.Fatalf("down should move cursor to 1, got %d", mm.list.Cursor)
 	}
-	if got := mm.Selected(); got.Name != "Third Wave" {
+	got, ok := mm.Selected()
+	if !ok {
+		t.Fatal("Selected() returned ok=false")
+	}
+	if got.Name != "Third Wave" {
 		t.Fatalf("Selected() = %s, want Third Wave", got.Name)
 	}
 }

@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"strings"
 
-	"console.store/internal/mock"
+	"console.store/internal/catalog"
 	"console.store/internal/tui/components"
 	"console.store/internal/tui/theme"
 )
 
 type CartLine struct {
-	Item mock.Item
+	Item catalog.Item
 	Qty  int
 }
 

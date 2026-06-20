@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/mock"
+	"console.store/internal/catalog"
 )
 
 func TestCartTotalsAndCODNotice(t *testing.T) {
 	c := NewCart("Blue Tokai", []CartLine{
-		{Item: mock.Item{Name: "Cold Coffee", Price: 149}, Qty: 2},
-		{Item: mock.Item{Name: "Almond Croissant", Price: 129}, Qty: 1},
+		{Item: catalog.Item{Name: "Cold Coffee", Price: 149}, Qty: 2},
+		{Item: catalog.Item{Name: "Almond Croissant", Price: 129}, Qty: 1},
 	})
 	if c.Total() != 427 {
 		t.Fatalf("total = %d, want 427", c.Total())

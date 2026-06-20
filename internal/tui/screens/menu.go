@@ -5,31 +5,38 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/mock"
+	"console.store/internal/catalog"
 	"console.store/internal/tui/components"
 	"console.store/internal/tui/theme"
 )
 
 type Menu struct {
-	restaurants []mock.Restaurant
-	address     mock.Address
-	cartTotal   int
-	list        components.List
+	places    []catalog.Place
+	address   catalog.Address
+	section   catalog.Section
+	usual     catalog.Usual
+	hasUsual  bool
+	cartTotal int
+	list      components.List
 }
 
-func NewMenu(rs []mock.Restaurant, addr mock.Address, cartTotal int) Menu {
-	rows := make([]components.Row, len(rs))
-	for i, r := range rs {
-		rows[i] = components.Row{Left: r.Name, Right: r.ETA, Fav: r.Fav}
+func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartTotal int) Menu {
+	rows := make([]components.Row, len(places))
+	for i, p := range places {
+		rows[i] = components.Row{Left: p.Name, Right: p.ETA, Fav: p.Fav}
 	}
-	return Menu{restaurants: rs, address: addr, cartTotal: cartTotal, list: components.List{Rows: rows}}
+	return Menu{places: places, address: addr, section: section, usual: usual, hasUsual: hasUsual, cartTotal: cartTotal, list: components.List{Rows: rows}}
 }
 
-// Selected returns the restaurant under the cursor.
-func (m Menu) Selected() mock.Restaurant { return m.restaurants[m.list.Cursor] }
+// Selected returns the place under the cursor. Returns ok=false if the list is empty.
+func (m Menu) Selected() (catalog.Place, bool) {
+	if len(m.places) == 0 {
+		return catalog.Place{}, false
+	}
+	return m.places[m.list.Cursor], true
+}
 
-// WithCartTotal returns a copy of the menu with an updated cart total,
-// preserving the list cursor and selection.
+// WithCartTotal returns a copy with an updated cart total, preserving the cursor.
 func (m Menu) WithCartTotal(t int) Menu { m.cartTotal = t; return m }
 
 func (m Menu) Init() tea.Cmd { return nil }
@@ -50,16 +57,18 @@ func (m Menu) View() string {
 	var b strings.Builder
 	b.WriteString(components.Header("console.store", m.address.Line, m.cartTotal))
 	b.WriteString("\n")
-	if u, ok := mock.Usual(); ok {
+	if m.hasUsual {
 		b.WriteString("  " + theme.CursorStyle.Render("↵ the usual") + "   " +
-			theme.ItemStyle.Render(u.Name) + "\n\n")
+			theme.ItemStyle.Render(m.usual.Label) + "\n\n")
 	}
-	b.WriteString("  " + theme.CatOnStyle.Render("coffee") + "   " +
-		theme.CatOffStyle.Render("food") + "   " +
-		theme.CatOffStyle.Render("snacks") + "   " +
-		theme.PriceStyle.Render("instamart ↗") + "\n\n")
-	b.WriteString(m.list.View())
+	b.WriteString(components.SectionTabs(m.section))
 	b.WriteString("\n")
-	b.WriteString(components.KeyHints("j/k move   ↵ open   / search   a address   c cart"))
+	if len(m.places) == 0 {
+		b.WriteString("  " + theme.DimStyle.Render("no curated spots deliver here right now") + "\n")
+	} else {
+		b.WriteString(m.list.View())
+	}
+	b.WriteString("\n")
+	b.WriteString(components.KeyHints("j/k move   ↵ open   1/2/3 section   i instamart   a address   c cart"))
 	return b.String()
 }

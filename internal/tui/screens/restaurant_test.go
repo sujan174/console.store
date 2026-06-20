@@ -4,11 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/mock"
+	"console.store/internal/catalog/mem"
 )
 
 func TestRestaurantRendersItemsWithPrices(t *testing.T) {
-	r := NewRestaurant(mock.Restaurants[0], 338)
+	repo := mem.New()
+	p, _ := repo.Menu("blue-tokai")
+	r := NewRestaurant(p, 338)
 	out := r.View()
 	if !strings.Contains(out, "blue tokai") {
 		t.Fatal("missing restaurant name header")
@@ -25,7 +27,9 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 }
 
 func TestRestaurantSelectedItem(t *testing.T) {
-	r := NewRestaurant(mock.Restaurants[0], 0)
+	repo := mem.New()
+	p, _ := repo.Menu("blue-tokai")
+	r := NewRestaurant(p, 0)
 	if got := r.Selected().Name; got != "Cold Coffee" {
 		t.Fatalf("Selected() = %s, want Cold Coffee", got)
 	}
