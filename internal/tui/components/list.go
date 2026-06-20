@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"console.store/internal/tui/theme"
 )
 
@@ -51,7 +53,7 @@ func (l List) View() string {
 			right = right + "  " + theme.FavStyle.Render("♥")
 		}
 		// pad between left and right
-		pad := width - len(r.Left) - len(stripANSI(right))
+		pad := width - lipgloss.Width(r.Left) - lipgloss.Width(right)
 		if pad < 1 {
 			pad = 1
 		}
@@ -59,6 +61,11 @@ func (l List) View() string {
 
 		if i == l.Cursor {
 			cur := theme.CursorStyle.Render("❯")
+			// pad body so the highlight bar fills the full column width
+			bodyWidth := lipgloss.Width(body)
+			if bodyWidth < width {
+				body = body + strings.Repeat(" ", width-bodyWidth)
+			}
 			line := theme.SelRowStyle.Render(" " + body + " ")
 			b.WriteString("  " + cur + " " + line + "\n")
 		} else {
