@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"io"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/ssh"
@@ -18,6 +20,7 @@ import (
 	"github.com/charmbracelet/wish/logging"
 
 	consoletui "console.store/internal/tui"
+	"console.store/internal/tui/theme"
 )
 
 const host, port = "127.0.0.1", "2222"
@@ -33,6 +36,19 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	return consoletui.New(), []tea.ProgramOption{tea.WithAltScreen()}
 }
 
+// canvasMiddleware sets the client terminal's default background to the design
+// canvas (#15161f) via OSC 11 for the duration of the session, then resets it
+// (OSC 111) on disconnect. This makes the WHOLE screen — gaps, dividers, rows —
+// sit on the design's dark page with no per-line background (which would band
+// on inner colour resets).
+func canvasMiddleware(next ssh.Handler) ssh.Handler {
+	return func(s ssh.Session) {
+		io.WriteString(s, "\x1b]11;"+theme.Bg+"\x07")
+		next(s)
+		io.WriteString(s, "\x1b]111\x07")
+	}
+}
+
 func main() {
 	srv, err := wish.NewServer(
 		wish.WithAddress(net.JoinHostPort(host, port)),
@@ -41,6 +57,7 @@ func main() {
 		wish.WithMiddleware(
 			bubbletea.Middleware(teaHandler),
 			logging.Middleware(),
+			canvasMiddleware,
 		),
 	)
 	if err != nil {

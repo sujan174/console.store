@@ -106,19 +106,29 @@ func (l List) View() string {
 		}
 		body := r.Left + strings.Repeat(" ", pad) + right
 		if i == l.Cursor {
-			// Full-bleed selected row: blue bar at col 0, selected-row
-			// background spanning the rest of the frame, text inside the gutter.
-			// Strip inner colours so the background is continuous (design: the
-			// selected row is uniformly bright #c0caf5).
-			bar := theme.CursorStyle.Render("▌")
-			inner := PadTo(strings.Repeat(" ", margin-1)+stripANSI(body), FrameWidth()-1)
-			b.WriteString(bar + theme.SelRowStyle.Render(inner) + "\n")
+			// Full-bleed selected row: blue ▌ border at col 0, then a blue ❯
+			// chevron and uniformly-bright text on the selected-row background
+			// (design line 845 + 257). Every piece is background-aware so the
+			// highlight is one continuous strip with no colour-reset banding.
+			selBg := lipgloss.Color(theme.SelRowBg)
+			chevron := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Cursor)).Background(selBg).Render("❯ ")
+			bright := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Bright)).Background(selBg)
+			lead := bright.Render(strings.Repeat(" ", margin-1))
+			text := bright.Render(stripANSI(body))
+			// pad the remainder of the row with the selected-row background
+			used := margin - 1 + lipgloss.Width("❯ ") + lipgloss.Width(stripANSI(body))
+			tail := ""
+			if rest := FrameWidth() - 1 - used; rest > 0 {
+				tail = bright.Render(strings.Repeat(" ", rest))
+			}
+			b.WriteString(theme.CursorStyle.Render("▌") + lead + chevron + text + tail + "\n")
 		} else {
+			// idle row: a chevron slot keeps names aligned with the selected row.
 			lead := strings.Repeat(" ", margin)
 			if r.BarGreen {
 				lead = theme.GreenStyle.Render("▌") + strings.Repeat(" ", margin-1)
 			}
-			b.WriteString(lead + theme.ItemStyle.Render(body) + "\n")
+			b.WriteString(lead + theme.FaintStyle.Render("  ") + theme.ItemStyle.Render(body) + "\n")
 		}
 	}
 	return b.String()
