@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/bubbletea"
@@ -22,6 +23,13 @@ import (
 const host, port = "127.0.0.1", "2222"
 
 func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
+	// Our theme styles render through lipgloss's default renderer. The server
+	// process has no controlling TTY, so that renderer defaults to the Ascii
+	// (no-color) profile and strips every colour. Bind it to THIS SSH session's
+	// detected colour profile (truecolor on iTerm/kitty, 256 on Terminal.app)
+	// so the Tokyo Night palette actually reaches the client.
+	renderer := bubbletea.MakeRenderer(s)
+	lipgloss.SetColorProfile(renderer.ColorProfile())
 	return consoletui.New(), []tea.ProgramOption{tea.WithAltScreen()}
 }
 
