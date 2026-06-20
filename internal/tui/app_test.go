@@ -41,6 +41,19 @@ func TestSectionSwitchChangesPlaces(t *testing.T) {
 	}
 }
 
+func TestUsualPreloadsCartAndJumps(t *testing.T) {
+	m := New() // a1 -> usual is Cold Coffee · Blue Tokai
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	m = updated.(Model)
+	view := m.View()
+	if !strings.Contains(view, "Cold Coffee") {
+		t.Errorf("usual item should be in cart view:\n%s", view)
+	}
+	if !strings.Contains(view, "to pay (COD)") {
+		t.Errorf("should have jumped to cart:\n%s", view)
+	}
+}
+
 func TestAppQuits(t *testing.T) {
 	m := New()
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})

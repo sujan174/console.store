@@ -90,6 +90,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.section = catalog.MenuSections[idx]
 				m.menu = m.buildMenu()
 				return m, nil
+			case "u":
+				if usual, ok := m.repo.Usual(m.addr); ok {
+					if p, ok := m.repo.Menu(usual.PlaceID); ok {
+						m.lines = []screens.CartLine{{Item: usual.Item, Qty: 1}}
+						m.cartRestaurant = p.Name
+						m.cart = screens.NewCart(p.Name, m.lines)
+						m.screen = scrCart
+					}
+				}
+				return m, nil
 			default:
 				nm, cmd := m.menu.Update(msg)
 				m.menu = nm.(screens.Menu)

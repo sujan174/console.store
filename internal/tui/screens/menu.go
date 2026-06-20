@@ -58,7 +58,7 @@ func (m Menu) View() string {
 	b.WriteString(components.Header("console.store", m.address.Line, m.cartTotal))
 	b.WriteString("\n")
 	if m.hasUsual {
-		b.WriteString("  " + theme.CursorStyle.Render("↵ the usual") + "   " +
+		b.WriteString("  " + theme.CursorStyle.Render("u  the usual") + "   " +
 			theme.ItemStyle.Render(m.usual.Label) + "\n\n")
 	}
 	b.WriteString(components.SectionTabs(m.section))
@@ -69,6 +69,6 @@ func (m Menu) View() string {
 		b.WriteString(m.list.View())
 	}
 	b.WriteString("\n")
-	b.WriteString(components.KeyHints("j/k move   ↵ open   1/2/3 section   i instamart   a address   c cart"))
+	b.WriteString(components.KeyHints("j/k move   ↵ open   u usual   1/2/3 section   i instamart   a address   c cart"))
 	return b.String()
 }
