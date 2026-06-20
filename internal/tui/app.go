@@ -440,7 +440,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "enter":
 				if len(m.lines) > 0 {
-					m.checkout = screens.NewCheckout(m.cartHeader(), m.addr, m.lines)
+					m.checkout = screens.NewCheckout(m.cartHeader(), m.addr, m.lines, m.cartEta())
 					m.screen = scrCheckout
 					return m, nil
 				}
@@ -561,7 +561,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.imCart = m.imCart.Left()
 			case "enter":
 				if m.imCartTotal() >= InstamartMin {
-					m.checkout = screens.NewCheckout("Instamart", m.addr, m.imLines)
+					m.checkout = screens.NewCheckout("Instamart", m.addr, m.imLines, screens.InstamartETA)
 					m.screen = scrCheckout
 					return m, nil
 				}

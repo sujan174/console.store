@@ -21,8 +21,8 @@ type Checkout struct {
 	eta        string
 }
 
-func NewCheckout(restaurant string, addr catalog.Address, lines []CartLine) Checkout {
-	return Checkout{restaurant: restaurant, addr: addr, lines: lines}
+func NewCheckout(restaurant string, addr catalog.Address, lines []CartLine, eta string) Checkout {
+	return Checkout{restaurant: restaurant, addr: addr, lines: lines, eta: eta}
 }
 
 // Placed returns a confirm-state copy carrying the order id and eta.
@@ -83,7 +83,11 @@ func (c Checkout) summaryView() string {
 
 	label := func(s string) string { return theme.DimStyle.Render(padTo(s, 10)) }
 	b.WriteString("  " + label("deliver to") + theme.TextStyle.Render(addrLine(c.addr)+" · "+c.addr.Label) + "\n")
-	b.WriteString("  " + label("from") + theme.TextStyle.Render(c.restaurant+" · ~40 min") + "\n")
+	from := c.restaurant
+	if c.eta != "" {
+		from += " · " + c.eta
+	}
+	b.WriteString("  " + label("from") + theme.TextStyle.Render(from) + "\n")
 	b.WriteString("  " + label("pay") + theme.GoldStyle.Render("Cash / UPI to rider on delivery") + "\n")
 
 	b.WriteString(components.DashRule())

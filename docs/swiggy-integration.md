@@ -98,14 +98,27 @@ address switch     → get_addresses ; create_address is Instamart-only ; flush_
 ```go
 order, err := c.PlaceFoodOrder(ctx, tok, req)
 if err != nil && is5xx(err) {
-    // DO NOT blind-retry
-    recent := c.GetFoodOrders(ctx, tok)
-    if placedJustNow(recent, req) {
-        return recent.latest, nil   // it actually went through
+    // DO NOT blind-retry. First establish ground truth from order history.
+    recent, gErr := c.GetFoodOrders(ctx, tok)
+    if gErr != nil {
+        // Verification failed too — we CANNOT prove the order's state.
+        // Fail SAFE: never retry blind (would risk a double). Surface
+        // "order status unknown — check the Swiggy app" and stop.
+        return Order{}, ErrOrderStateUnknown
     }
-    // else safe to retry once
+    if o, ok := placedJustNow(recent, req); ok {
+        return o, nil   // it actually went through; adopt the real order
+    }
+    // Proven NOT placed → safe to retry exactly once.
 }
 ```
+
+`placedJustNow(recent, req)` matches the just-attempted order against history and is the crux of the guard. Match precedence:
+
+1. **Client idempotency key (preferred).** Generate a stable key per checkout attempt (uuid persisted in session state, not regenerated on retry) and send it with `place_food_order`; match the returned/echoed key in history. Use this the moment Swiggy supports echoing it.
+2. **Fallback fingerprint (v1, no key support).** Match on `(restaurantId, addressId, sorted item+qty set, total)` **AND** `placedAt` within the **last 90s**. All must agree — a same-cart order from yesterday must NOT match. The window must exceed the request timeout so an order that landed just before the 5xx is still in range.
+
+Never treat "no match" as "definitely not placed" unless `get_food_orders` **succeeded** — an absent record from a failed/partial history read is not proof. Only a successful, empty-of-this-order history authorizes the single retry.
 
 - `401` / `-32001` → `onUnauth` → re-auth flow, then resume.
 - `UPSTREAM_ERROR` → exponential backoff (upstream capacity shedding).
