@@ -239,3 +239,27 @@ func TestInstamartSeparateCartAndMinimum(t *testing.T) {
 		t.Errorf("expected checkout after meeting minimum:\n%s", m.View())
 	}
 }
+
+func TestInstamartOrderIDDerivedFromItsOwnCart(t *testing.T) {
+	m := New()
+	seq := []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("i")}, // instamart
+		{Type: tea.KeyEnter},                     // add Red Bull (₹125 >= 99)
+		{Type: tea.KeyRunes, Runes: []rune("c")}, // im cart
+		{Type: tea.KeyEnter},                     // checkout
+		{Type: tea.KeyEnter},                     // place order
+	}
+	for _, k := range seq {
+		updated, _ := m.Update(k)
+		m = updated.(Model)
+	}
+	view := m.View()
+	if !strings.Contains(view, "order placed") {
+		t.Fatalf("expected confirm screen:\n%s", view)
+	}
+	// the food cart (m.lines) is empty for an instamart order; the id must be
+	// derived from the instamart lines, so it must NOT be the empty-cart CS-0000.
+	if strings.Contains(view, "CS-0000") {
+		t.Errorf("instamart order id should derive from its own cart, got CS-0000:\n%s", view)
+	}
+}

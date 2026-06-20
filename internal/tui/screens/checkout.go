@@ -32,6 +32,9 @@ func (c Checkout) Placed(orderID string) Checkout {
 
 func (c Checkout) IsPlaced() bool { return c.placed }
 
+// Lines returns the order's cart lines (used to derive the order id).
+func (c Checkout) Lines() []CartLine { return c.lines }
+
 func (c Checkout) Total() int {
 	t := 0
 	for _, l := range c.lines {

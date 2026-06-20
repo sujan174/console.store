@@ -251,7 +251,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrCart
 				return m, nil
 			case "enter":
-				m.checkout = m.checkout.Placed(orderID(m.lines))
+				m.checkout = m.checkout.Placed(orderID(m.checkout.Lines()))
 				m.screen = scrConfirm
 				return m, nil
 			}
