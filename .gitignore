@@ -1,0 +1,37 @@
+# Brainstorming / visual-companion artifacts (local only)
+.superpowers/
+
+# Secrets & local config — NEVER commit (Swiggy creds, tokens, KMS keys)
+.env
+.env.*
+*.local
+config/local.*
+secrets/
+*.pem
+*.key
+
+# Go build output
+/sshd
+/broker
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Go workspace
+go.work
+go.work.sum
+
+# Local databases (dev SQLite)
+*.db
+*.sqlite
+*.sqlite3
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
