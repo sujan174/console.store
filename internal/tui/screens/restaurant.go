@@ -18,17 +18,37 @@ type Restaurant struct {
 	searching bool
 }
 
-func NewRestaurant(p catalog.Place, cartTotal int) Restaurant {
-	rows := make([]components.Row, len(p.Items))
-	for i, it := range p.Items {
-		rows[i] = components.Row{Left: it.Name, Right: fmt.Sprintf("₹%d", it.Price), Tag: it.Tag}
+// NewRestaurant builds the restaurant screen, rendering in-cart checks and
+// inline qty steppers from the current cart quantities (keyed by item ID).
+func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) Restaurant {
+	rows := make([]components.Row, 0, len(p.Items))
+	for _, it := range p.Items {
+		qty := qtyByItemID[it.ID]
+
+		var name string
+		if qty > 0 {
+			name = theme.GreenStyle.Render("✓ ") + theme.BrightStyle.Render(it.Name)
+		} else {
+			name = theme.ItemStyle.Render(it.Name)
+		}
+
+		price := theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price))
+		right := price
+		if qty > 0 {
+			stepper := theme.FavStyle.Render("−") + " " +
+				theme.GreenStyle.Render(fmt.Sprintf("×%d", qty)) + " " +
+				theme.GreenStyle.Render("+") + "   "
+			right = stepper + price
+		}
+
+		rows = append(rows, components.Row{Left: name, Right: right, Tag: it.Tag, BarGreen: qty > 0})
 	}
 	return Restaurant{p: p, cartTotal: cartTotal, list: components.List{Rows: rows}}
 }
 
 func (s Restaurant) Selected() (catalog.Item, bool) {
 	i := s.list.SelectedIndex()
-	if i < 0 {
+	if i < 0 || i >= len(s.p.Items) {
 		return catalog.Item{}, false
 	}
 	return s.p.Items[i], true
@@ -38,6 +58,13 @@ func (s Restaurant) WithCartTotal(t int) Restaurant { s.cartTotal = t; return s 
 
 // PlaceData returns the underlying place (used by the app router).
 func (s Restaurant) PlaceData() catalog.Place { return s.p }
+
+// CursorIndex returns the current list cursor so the router can preserve it
+// across a rebuild (NewRestaurant resets the cursor to 0).
+func (s Restaurant) CursorIndex() int { return s.list.Cursor }
+
+// WithCursor restores a previously captured cursor position.
+func (s Restaurant) WithCursor(i int) Restaurant { s.list.Cursor = i; return s }
 
 func (s Restaurant) Init() tea.Cmd { return nil }
 
@@ -81,12 +108,18 @@ func (s Restaurant) Searching() bool { return s.searching }
 
 func (s Restaurant) View() string {
 	var b strings.Builder
-	back := theme.PriceStyle.Render("← " + strings.ToLower(s.p.Name))
-	cart := theme.CartStyle.Render(fmt.Sprintf("cart · ₹%d", s.cartTotal))
-	b.WriteString("  " + back + "              " + cart + "\n")
-	b.WriteString("  " + theme.EtaStyle.Render(s.p.ETA) + "\n\n")
+	w := components.InnerWidth
+
+	header := justify(
+		theme.PriceStyle.Render("← "+strings.ToLower(s.p.Name)),
+		theme.CartStyle.Render(fmt.Sprintf("cart · ₹%d", s.cartTotal)),
+		w,
+	)
+	b.WriteString("  " + header + "\n")
+	b.WriteString("  " + theme.EtaStyle.Render(s.p.ETA) + "\n")
+	b.WriteString("  " + components.Divider())
 	b.WriteString(s.list.View())
 	b.WriteString("\n")
-	b.WriteString(components.KeyHints("↑↓ move   ↵ add   / search   ← back   c cart"))
+	b.WriteString(components.Hint("↑↓", "move", "↵/→", "add", "←", "remove", "esc", "back", "c", "cart"))
 	return b.String()
 }

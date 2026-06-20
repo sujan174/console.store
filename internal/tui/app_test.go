@@ -276,5 +276,34 @@ func TestAddressSwitchFlushesUnserviceableCart(t *testing.T) {
 	}
 }
 
+// TestRestaurantLeftDecrements verifies that, on the restaurant screen, ← (left)
+// decrements the highlighted item rather than navigating back, and removes the
+// item from the cart when its qty reaches 0. esc is the only "back" key.
+func TestRestaurantLeftDecrements(t *testing.T) {
+	m := newAtMenu()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add Cold Coffee (qty 1)
+	m = updated.(Model)
+	if m.qtyMap()["bt-cold-coffee"] != 1 {
+		t.Fatalf("expected qty 1 after add, qtyMap=%v", m.qtyMap())
+	}
+	if m.screen != scrRestaurant {
+		t.Fatalf("should still be on restaurant after add, screen=%d", m.screen)
+	}
+	// ← decrements (not back)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(Model)
+	if m.screen != scrRestaurant {
+		t.Fatalf("← must decrement, not navigate back; screen=%d", m.screen)
+	}
+	if len(m.lines) != 0 {
+		t.Fatalf("item should leave the cart at qty 0, lines=%v", m.lines)
+	}
+	if m.cartTotal() != 0 {
+		t.Fatalf("cart total should be 0 after decrement, got %d", m.cartTotal())
+	}
+}
+
 // Instamart is no longer a menu lane in the approved 3-tab design, so it is not
 // reachable from the menu. The instamart flow tests were removed with that change.

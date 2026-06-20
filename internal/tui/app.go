@@ -102,6 +102,29 @@ func appendOrInc(lines []screens.CartLine, item catalog.Item) []screens.CartLine
 	return append(lines, screens.CartLine{Item: item, Qty: 1})
 }
 
+// decItem decrements the qty of item id in lines, removing the line at qty 0.
+func decItem(lines []screens.CartLine, id string) []screens.CartLine {
+	for i := range lines {
+		if lines[i].Item.ID == id {
+			lines[i].Qty--
+			if lines[i].Qty <= 0 {
+				return append(lines[:i], lines[i+1:]...)
+			}
+			return lines
+		}
+	}
+	return lines
+}
+
+// qtyMap returns current cart quantities keyed by item ID.
+func (m Model) qtyMap() map[string]int {
+	q := map[string]int{}
+	for _, l := range m.lines {
+		q[l.Item.ID] += l.Qty
+	}
+	return q
+}
+
 func orderID(lines []screens.CartLine) string {
 	sum := 0
 	for _, l := range lines {
@@ -203,7 +226,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch k.String() {
 			case "enter":
 				if p, ok := m.menu.Selected(); ok {
-					m.rest = screens.NewRestaurant(p, m.cartTotal())
+					m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartTotal())
 					m.screen = scrRestaurant
 				}
 				return m, nil
@@ -261,21 +284,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 			switch k.String() {
-			case "esc", "left", "h":
+			case "esc":
 				m.screen = scrMenu
 				return m, nil
-			case "enter":
+			case "enter", "right", "l":
 				it, ok := m.rest.Selected()
 				if !ok {
 					return m, nil
 				}
 				wasEmpty := len(m.lines) == 0
-				m.lines = append(m.lines, screens.CartLine{Item: it, Qty: 1})
+				m.lines = appendOrInc(m.lines, it)
 				if wasEmpty {
 					m.cartRestaurant = m.rest.PlaceData().Name
 				}
 				m.menu = m.menu.WithCartTotal(m.cartTotal())
-				m.rest = m.rest.WithCartTotal(m.cartTotal())
+				ci := m.rest.CursorIndex()
+				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartTotal()).WithCursor(ci)
+				return m, nil
+			case "left", "h":
+				it, ok := m.rest.Selected()
+				if !ok {
+					return m, nil
+				}
+				m.lines = decItem(m.lines, it.ID)
+				if len(m.lines) == 0 {
+					m.cartRestaurant = ""
+				}
+				m.menu = m.menu.WithCartTotal(m.cartTotal())
+				ci := m.rest.CursorIndex()
+				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartTotal()).WithCursor(ci)
 				return m, nil
 			case "c":
 				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines)
