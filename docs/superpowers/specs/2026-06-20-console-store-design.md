@@ -114,11 +114,13 @@ Phone-keyed, broker-mediated. Full detail: [auth.md](../../auth.md).
 
 Three MCP servers (we use two). Full tool table + mapping: [swiggy-integration.md](../../swiggy-integration.md).
 
-- **Food** `mcp.swiggy.com/food` (14 tools) — coffee + restaurants.
-- **Instamart** `mcp.swiggy.com/im` (13 tools) — snacks/grocery, separate cart.
+- **Food** `mcp.swiggy.com/food` (14 documented; 13 used) — coffee + restaurants, **standard delivery ~30-60 min**.
+- **Instamart** `mcp.swiggy.com/im` (13 documented; 11 used) — snacks/grocery, separate cart, the **fast lane ~10-20 min**.
 - Dineout — skipped v1.
 
-Ordering is **non-idempotent** (`place_food_order`, `checkout`); always verify via `get_*_orders` before retry. Cart binds to one restaurant + one address; switching flushes (warn user). Food cart cap **₹1000**; Instamart min **₹99**.
+**Delivery times are honest:** Food shows the live `deliveryTimeRange` (~30 min–1 hr) — there is **no Bolt/10-min** on the Food server. Instamart is the only quick lane.
+
+Ordering is **non-idempotent** (`place_food_order`, `checkout`) **and orders cannot be cancelled** (no cancel/modify tool) — so a wrongful retry is an un-undoable double order; always verify via `get_*_orders` before retry. Cart binds to one restaurant + one address; switching flushes (warn user). Food cart cap **₹1000**; Instamart min **₹99**. Food has **no `create_address`** (Instamart-only); Instamart has **no fetch-by-`spinId`** (curated list built via `search_products` + cache).
 
 ## 9. Curation model
 
@@ -138,9 +140,13 @@ Curation data is editorial content, versioned, owned by console.store — indepe
 | Nothing serviceable at address | Empty state: "no curated spots deliver here right now" |
 | Address switch with items in cart | Warn; re-validate cart; `flush` if restaurant unavailable |
 | Switch restaurant mid-cart | Prompt "start a new cart?" → `flush_food_cart` |
-| Order place 5xx | **Do not blind-retry**; `get_food_orders` to check, then decide |
+| Order place 5xx | **Do not blind-retry**; `get_food_orders` to check, then decide (no cancel exists to undo a double) |
+| User wants to cancel | **Not possible** — no cancel tool; UI states this at checkout/confirm, never offers cancel |
 | Upstream shedding (`UPSTREAM_ERROR`) | Exponential backoff |
 | Cart > ₹1000 (Food) / < ₹99 (Instamart) | Inline validation before checkout |
+| Add address from Food flow | Food has no `create_address`; route via Instamart `create_address` or Swiggy app |
+| Coupon not COD-compatible | Can't pre-filter; apply, show `apply_food_coupon` rejection inline |
+| `track` returns coarse status | Render what's present; rider/step detail is best-effort, degrade gracefully |
 | Swiggy app open concurrently | Warn (session conflict risk) |
 
 ## 11. Risks (verify on staging)

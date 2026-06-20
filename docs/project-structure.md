@@ -96,10 +96,13 @@ func (s *Service) BindDevice(acc *Account, pk string) error
 ```
 
 ### `internal/auth`
+Completion is signaled via a **shared store (DB/Redis) that the TUI polls** — NOT a Go channel. A channel would not cross processes if `broker` and `sshd` run as separate binaries/replicas (the SSH session and the OAuth callback are different requests, possibly on different hosts).
 ```go
-type PendingAuth struct { ID, Verifier, State string; Done chan TokenResult }
-func (b *Broker) Begin() (authURL string, pending *PendingAuth, err error)
-func (b *Broker) Callback(code, state string) error      // exchanges, stores, signals
+type AuthStatus int // Pending | Done | Expired
+type PendingAuth struct { ID, Verifier, State string; Status AuthStatus }
+func (b *Broker) Begin() (authURL, pendingID string, err error)   // persists PendingAuth
+func (b *Broker) Callback(code, state string) error               // exchanges, stores token, sets Status=Done
+func (b *Broker) Poll(pendingID string) (AuthStatus, *TokenRef)   // TUI polls this
 func DecodeClaims(jwt string) (phone, sub string, exp time.Time, err error)
 ```
 

@@ -81,7 +81,9 @@ Postgres (prod) / SQLite (dev). Tokens encrypted at rest. Curation is editorial 
 
 ## Matching strategy (curation ∩ live)
 
-Live Swiggy results are matched to curation rows by **name + city** (normalized). A curated entry only renders if Swiggy reports it serviceable + `OPEN` at the user's address. Unmatched curated rows are silently hidden (logged for ops to fix coverage).
+**Food** — live `search_restaurants` / `get_restaurant_menu` results are matched to `curated_restaurant` / `curated_item` rows by **name + city** (normalized). A curated entry only renders if Swiggy reports it serviceable + `OPEN` at the user's address. Prices and the `deliveryTimeRange` come from the live response, never from cached curation. Unmatched curated rows are silently hidden (logged for ops to fix coverage).
+
+**Instamart** — there is **no fetch-by-`spinId`** tool. To render the curated SKU list with live price/availability, run `search_products` for each `curated_instamart_sku.name`, match the returned `spinId`, and cache the result for the session. SKUs with no live match are hidden.
 
 ## Encryption
 
@@ -91,5 +93,5 @@ Live Swiggy results are matched to curation rows by **name + city** (normalized)
 
 ## "The usual"
 
-`curation.Usual(history)` = most-frequent / most-recent item across `order_history` for that phone, resolved to a `curated_item` if still curated + serviceable. Rendered as the pinned top row.
+`curation.Usual(history)` = most-frequent / most-recent item across `order_history` for that phone, resolved to a `curated_item` if still curated + serviceable. Rendered as the pinned top row with a **live-fetched price** (the `order_history.items` snapshot is for matching only — never displayed as the current price). Hidden when the source restaurant is closed/unserviceable at the active address.
 ```

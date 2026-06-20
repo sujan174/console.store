@@ -10,25 +10,25 @@
 
 Transport: MCP over Streamable HTTP. Each call carries `Authorization: Bearer <per-user JWT>` and the `resource` parameter identifying the server. Access control is **user-level** in v1 — the one token grants the full tool set.
 
-## Food server — 14 tools
+## Food server — 13 enumerated (Swiggy documents 14)
 
 | Tool | Purpose | Used in |
 |------|---------|---------|
-| `search_restaurants` | restaurants by cuisine/query near an address (filter `OPEN`) | menu (places) |
+| `search_restaurants` | restaurants near an address; returns `deliveryTimeRange` (~30-60 min, **standard** delivery) (filter `OPEN`) | menu (places) |
 | `get_restaurant_menu` | items, categories, variants, add-ons | restaurant screen |
 | `search_menu` | keyword search within a menu | `/` search |
 | `update_food_cart` | add/modify items (binds to ONE restaurant) | add item |
 | `get_food_cart` | server-truth cart + bill | cart, pre-checkout |
 | `flush_food_cart` | clear cart before switching restaurant | "start new cart?" |
 | `fetch_food_coupons` | available codes | cart |
-| `apply_food_coupon` | apply a (COD-compatible) coupon | cart |
+| `apply_food_coupon` | apply a coupon (no COD pre-filter; handle rejection inline) | cart |
 | `place_food_order` | checkout with `paymentMethod: "COD"` | checkout |
 | `get_food_orders` | order history | "the usual", verify-on-failure |
 | `track_food_order` | live status + ETA (poll ≥10s) | tracking |
 | `get_addresses` | saved delivery locations | address bar/switcher |
 | `report_error` | diagnostics for support | error handler |
 
-## Instamart server — 13 tools
+## Instamart server — 11 enumerated (Swiggy documents 13)
 
 | Tool | Purpose | Used in |
 |------|---------|---------|
@@ -41,10 +41,23 @@ Transport: MCP over Streamable HTTP. Each call carries `Authorization: Bearer <p
 | `get_orders` | history | reorder / verify |
 | `track_order` | delivery progress | tracking |
 | `get_addresses` | saved locations | address |
-| `create_address` | add new delivery address | address add |
+| `create_address` | add address — **Instamart-only** (Food has none) | address add |
 | `report_error` | diagnostics | error handler |
 
 (Dineout's 8 tools intentionally unused in v1.)
+
+> **Count gap:** Swiggy documents 14 Food / 13 Instamart tools; the tables above enumerate the ones our flows use (13 / 11). The remaining few (likely product-detail / category-browse helpers) are uncaptured and **not relied on** by any v1 flow — confirm during staging integration.
+
+## Not available — no tool exists (design around these)
+
+| Missing capability | Reality | Handling |
+|--------------------|---------|----------|
+| Cancel / modify an order | Orders are **final** once placed | UI never offers cancel; show "can't be cancelled" at checkout/confirm; idempotency guard prevents accidental doubles |
+| Online payment | COD only | no payment UI; pay rider on delivery |
+| Bolt / 10-min restaurant delivery | Food is standard **~30-60 min** | honest delivery windows; **Instamart** is the only fast lane (~10-20 min) |
+| Fetch Instamart product by `spinId` | can't render a curated SKU list in one call | `search_products` per curated name → match `spinId` → cache |
+| Food `create_address` | can't add an address from the Food flow | use Instamart `create_address` (same account) or the Swiggy app |
+| Scheduled / future delivery | immediate only | no scheduling UI |
 
 ## Screen → tool mapping
 
@@ -58,9 +71,10 @@ cart chip / review → get_food_cart                    | get_cart
 coupon             → fetch_food_coupons / apply_food_coupon
 checkout           → get_food_cart → place_food_order(COD) | get_cart → checkout(COD)
 confirmed          → (orderId from place response)
-tracking           → track_food_order / track_order   (poll ≥10s)
-the usual          → get_food_orders / your_go_to_items → re-add → checkout
-address switch     → get_addresses / create_address ; flush_food_cart / clear_cart on change
+tracking           → track_food_order / track_order (status+ETA; rider/steps best-effort, poll ≥10s)
+the usual          → get_food_orders / your_go_to_items → re-add → checkout (re-fetch live price; skip if closed)
+instamart list     → search_products per curated SKU → match spinId → cache (no fetch-by-id tool)
+address switch     → get_addresses ; create_address is Instamart-only ; flush_food_cart / clear_cart on change
 ```
 
 ## Constraints baked into the client
@@ -73,11 +87,13 @@ address switch     → get_addresses / create_address ; flush_food_cart / clear_
 | Cart binds to address | address change → flush + re-validate |
 | **COD only** | always send `paymentMethod: "COD"`; no payment UI |
 | No scheduling | orders execute immediately; no future-time field |
+| **No cancellation** | no cancel/modify tool — orders final; UI shows this, never offers cancel |
+| Honest ETAs | Food shows `deliveryTimeRange` (~30-60 min); Instamart ~10-20 min |
 | Always read before mutate | call `get_*_cart` at turn start (server truth) |
 
 ## Idempotency & errors
 
-`place_food_order`, `checkout`, `book_table` are **non-idempotent**.
+`place_food_order` and `checkout` are **non-idempotent** — and orders **cannot be cancelled**, so a wrongful retry creates an un-undoable double order. The verify-before-retry guard below is **mandatory, not advisory**.
 
 ```go
 order, err := c.PlaceFoodOrder(ctx, tok, req)

@@ -41,11 +41,13 @@ Base: `https://mcp.swiggy.com`
      receive JWT
      DecodeClaims → phone, sub, exp
      store token encrypted, keyed by phone (account = phone)
-     signal PendingAuth.Done
-6. TUI (polling PendingAuth): unlock → load menu
+     set PendingAuth.Status = Done   (in shared store — DB/Redis, not a Go channel)
+6. TUI (polling Broker.Poll(id)): Status==Done → unlock → load menu
 ```
 
 **No separate console.store OTP** — the verified `phone` claim from the JWT *is* proof of phone ownership.
+
+> **Cross-process note:** the SSH session and the OAuth callback are separate requests (possibly different processes/hosts). Completion is signaled through the **shared `PendingAuth` store that the TUI polls**, never an in-process channel.
 
 ## Returning — same device
 

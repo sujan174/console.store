@@ -6,6 +6,10 @@ All screens in the **Tokyo Night** palette. Mocks are reference layouts; `lipglo
 
 Window chrome (the `● ● ●` titlebar) is drawn once by the frame; omitted in most mocks for brevity.
 
+> **Delivery times are honest.** Restaurant **Food** is standard Swiggy delivery — **~30 min to 1 hr** (`search_restaurants` returns a `deliveryTimeRange` like "35-45 MIN"). **Instamart** is the fast lane — **~10-20 min** (packaged / ready-to-eat). We show real windows, never a fake "10 min" on restaurant food.
+
+> **Orders cannot be cancelled.** Swiggy exposes **no cancel/modify tool** and states orders are non-cancellable. Every checkout/confirm screen says so, and `place_food_order`/`checkout` must pass the idempotency guard (a wrongful retry = an un-cancellable double order).
+
 ---
 
 ## 1. Splash / loading
@@ -22,7 +26,7 @@ Shown only during real network waits. Cyclable tagline. ASCII logo lives here (n
 
                     fetching your grub …                ← cyclable phrase
 
-                 bangalore · 10 min · for devs
+                 bangalore · coffee, food & snacks
 ```
 
 Tagline pool: `fetching your grub …` · `compiling your cravings …` · `warming the kitchen …` · `git pull origin coffee …`. **Never** add artificial delay — if data is ready, skip straight to menu.
@@ -60,37 +64,38 @@ First run, unknown account. QR rendered with half-blocks; user opens on phone.
 
 ## 3. Menu — pick a place
 
-The core screen. Address top-left, cart chip top-right (gold). Category tabs. Single column of curated, serviceable places with ETA. "The usual" pinned on top.
+The core screen. Address top-left, cart chip top-right (gold). Category tabs. Single column of curated, serviceable places with their **delivery window**. "The usual" pinned on top.
 
 ```
   console.store                              cart · ₹338
-  HSR Layout · 10 min                              [a]
+  HSR Layout                                       [a]
 
   ↵ the usual   Cold Coffee · Blue Tokai            ₹149
 
   coffee   food   snacks   instamart ↗
 
-  ❯ Blue Tokai            8 min   ♥
-    Third Wave            9 min
-    Sleepy Owl           11 min
-    Subko                14 min
+  ❯ Blue Tokai          35-45 min   ♥
+    Third Wave          30-40 min
+    Sleepy Owl          40-50 min
+    Subko               45-55 min
 
   j/k move   ↵ open   / search   a address   c cart
 ```
 
 - `coffee` gold (active), others dim. `❯` + selected row bg highlight.
-- ETA green, `♥` red. `instamart ↗` cyan (separate mode/cart).
+- Delivery window green (the `deliveryTimeRange` from `search_restaurants`), `♥` red. `instamart ↗` cyan (separate, fast cart).
+- "The usual" price is re-fetched live (not the stale history price); hidden if the place is closed/unserviceable.
 - Empty state (nothing serviceable) → see §11.
 
 ---
 
 ## 4. Restaurant — its items
 
-Replaces the list (no two-pane). Back affordance + single ETA on the restaurant. Prices cyan.
+Replaces the list (no two-pane). Back affordance + the restaurant's delivery window. Prices cyan.
 
 ```
   ← blue tokai                                cart · ₹338
-  8 min
+  35-45 min
 
   ❯ Cold Coffee                                     ₹149
     Hazelnut Cold Brew                              ₹169
@@ -101,7 +106,7 @@ Replaces the list (no two-pane). Back affordance + single ETA on the restaurant.
   j/k move   ↵ add   / search   esc back   c cart
 ```
 
-- `←` back = cyan. `new` green. No per-item ETA (one restaurant = one ETA).
+- `←` back = cyan. `new` green. One restaurant = one delivery window (no per-item ETA).
 - `↵ add` → `update_food_cart`; cart chip increments; brief `+1` flash in green next to the item.
 
 ---
@@ -126,7 +131,7 @@ Adding from a different restaurant while a cart exists.
 ## 6. Cart review
 
 ```
-  cart · Blue Tokai                            ~8 min
+  cart · Blue Tokai                          ~40 min
 
   ❯ Cold Coffee            x2                        ₹298
     Almond Croissant       x1                        ₹129
@@ -141,20 +146,21 @@ Adding from a different restaurant while a cart exists.
   +/- qty   x remove   p coupon   ↵ checkout   esc back
 ```
 
-- Coupon line green when applied. `to pay (COD)` emphasized (bright).
+- Bill breakdown comes from `get_food_cart`. Coupon line green when applied.
+- Coupons are **not** pre-filtered for COD — user applies; an incompatible code fails on `apply_food_coupon` and we show the rejection inline.
 - Validates ≤ ₹1000 before allowing checkout.
 
 ---
 
 ## 7. Checkout — COD confirm
 
-No payment capture. Just confirm + address + COD notice.
+No payment capture. Confirm + address + COD + non-cancellable notice.
 
 ```
   checkout
 
   deliver to    HSR Layout · home
-  from          Blue Tokai · ~8 min
+  from          Blue Tokai · ~40 min
   pay           Cash / UPI to rider on delivery
 
   ────────────────────────────────────────────────────
@@ -163,10 +169,11 @@ No payment capture. Just confirm + address + COD notice.
 
   ❯ place order            esc back
 
-  no online payment — you pay the rider when it arrives
+  no online payment — pay the rider on delivery
+  orders can't be cancelled once placed
 ```
 
-→ `place order` = `get_food_cart` (confirm) → `place_food_order(paymentMethod:"COD")` with idempotency guard.
+→ `place order` = `get_food_cart` (confirm) → `place_food_order(paymentMethod:"COD")` **with idempotency guard** (on 5xx, verify via `get_food_orders` before any retry — there is no cancel to undo a double).
 
 ---
 
@@ -180,45 +187,45 @@ No payment capture. Just confirm + address + COD notice.
                       ▄▄▄▄▄▄▄▄▄▄▄▄▄
                      ☕  on its way   ☕
 
-           Blue Tokai · ETA ~8 min · #SW83F21A
+          Blue Tokai · ETA ~40 min · #SW83F21A
                  pay ₹406 to rider (cash/UPI)
+                  can't be cancelled now
 
   t track    ↵ back to menu
 ```
 
-- `✓` green. Order id dim. ASCII coffee/celebration art.
+- `✓` green. Order id dim. ETA from the place response / first `track` poll. ASCII coffee/celebration art.
 
 ---
 
 ## 9. Live tracking
 
-Polls `track_food_order` (≥10s). Simple status ladder.
+Polls `track_food_order` (≥10s); it returns **status + ETA** (and, if present, active-order list). Rider name / fine-grained steps are **best-effort** — render whatever the response carries; degrade gracefully when fields are absent.
 
 ```
   ← tracking · #SW83F21A                       Blue Tokai
 
-  ●  order confirmed                              0:00
-  ●  preparing                                    1:12
-  ◌  rider assigned …
-  ○  picked up
+  ●  order confirmed
+  ◌  preparing …
+  ○  out for delivery
   ○  delivered
 
-  ETA  ~6 min        rohan is your rider · ●●●●● 4.9
+  ETA  ~32 min          rider details if provided
 
   esc back
 ```
 
-- Done steps green `●`, active dim spinner `◌`, pending `○`.
+- Done steps green `●`, active dim spinner `◌`, pending `○`. Steps shown are illustrative — collapse to the coarser status set if that's all `track` returns. No timestamps unless the API provides them.
 
 ---
 
-## 10. Instamart — flat curated snacks (separate cart)
+## 10. Instamart — fast curated snacks (separate cart)
 
-Single source (one dark store) → flat curated list, its own cart. Min ₹99.
+The quick lane (~10-20 min). Single source (one dark store) → flat curated list, its own cart. Min ₹99.
 
 ```
   ← instamart                            insta cart · ₹0
-  HSR Layout · 12 min
+  HSR Layout · ~12 min
 
   ❯ Sleepy Owl Cold Brew Can      ₹120
     Yoga Bar Protein Bar          ₹90    new
@@ -229,7 +236,7 @@ Single source (one dark store) → flat curated list, its own cart. Min ₹99.
   j/k move   ↵ add   / search   g your go-to   c cart
 ```
 
-- `g your go-to` → `your_go_to_items` (instamart "usual").
+- There is **no fetch-by-`spinId`** tool. The curated list is built by running `search_products` per curated SKU name, matching the `spinId`, and caching — not a single bulk call. `g your go-to` → `your_go_to_items`.
 - Cart enforces ₹99 min before checkout; otherwise inline hint: `add ₹X more to checkout`.
 
 ---
@@ -244,7 +251,7 @@ Single source (one dark store) → flat curated list, its own cart. Min ₹99.
 
   ❯ change address        try Instamart
 
-  we curate hard — coverage is growing. tap a above.
+  we curate hard — coverage is growing. pick one above.
 ```
 
 ---
@@ -276,12 +283,13 @@ Triggered mid-action on 401. Pause → push link to phone → resume.
   ❯ HSR Layout      home
     Koramangala     work
     Indiranagar     mom
-    + new address
+    + add address  ↗
 
   j/k move   ↵ select & reload   esc cancel
 ```
 
 - `↵` reloads menu against the new address (re-runs curation ∩ live). Warns if it would flush a non-empty cart.
+- **`+ add address`** — the Food server has **no `create_address`** tool. Creation goes through **Instamart's `create_address`** (same Swiggy account; verify it surfaces in Food's `get_addresses`) or the user adds it in the Swiggy app. Not a Food-native action.
 
 ---
 
@@ -292,7 +300,7 @@ Triggered mid-action on 401. Pause → push link to phone → resume.
 | `j` / `k` or ↑/↓ | move cursor |
 | `↵` | open / add / confirm (context) |
 | `esc` | back / cancel |
-| `/` | search (menu within scope) |
+| `/` | search (within current scope) |
 | `a` | address switcher |
 | `c` | cart / checkout |
 | `t` | track current order |
@@ -300,4 +308,5 @@ Triggered mid-action on 401. Pause → push link to phone → resume.
 
 - Exactly one highlighted row at a time. One color = one meaning. ASCII only at splash/confirm/drops.
 - Every network wait shows a spinner; nothing blocks the UI thread (backend calls are `tea.Cmd`s).
+- No cancellation exists anywhere — the UI never offers a "cancel order" action.
 ```
