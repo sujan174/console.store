@@ -91,6 +91,17 @@ func sectionIndex(s catalog.Section) int {
 	return 0
 }
 
+// appendOrInc adds item to lines, incrementing the qty if it is already present.
+func appendOrInc(lines []screens.CartLine, item catalog.Item) []screens.CartLine {
+	for i := range lines {
+		if lines[i].Item.ID == item.ID {
+			lines[i].Qty++
+			return lines
+		}
+	}
+	return append(lines, screens.CartLine{Item: item, Qty: 1})
+}
+
 func orderID(lines []screens.CartLine) string {
 	sum := 0
 	for _, l := range lines {
@@ -191,17 +202,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			switch k.String() {
 			case "enter":
-				if m.menu.SelectedUsual() {
-					if usual, ok := m.repo.Usual(m.addr); ok {
-						if p, ok := m.repo.Menu(usual.PlaceID); ok {
-							m.lines = []screens.CartLine{{Item: usual.Item, Qty: 1}}
-							m.cartRestaurant = p.Name
-							m.cart = screens.NewCart(p.Name, m.lines)
-							m.screen = scrCart
-						}
-					}
-					return m, nil
-				}
 				if p, ok := m.menu.Selected(); ok {
 					m.rest = screens.NewRestaurant(p, m.cartTotal())
 					m.screen = scrRestaurant
@@ -209,19 +209,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "right", "l":
 				i := sectionIndex(m.section)
-				if i < len(menuTabs)-1 {
-					m.section = menuTabs[i+1]
-					m.menu = m.buildMenu()
-				} else {
-					m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imCartTotal())
-					m.screen = scrInstamart
-				}
+				m.section = menuTabs[(i+1)%len(menuTabs)]
+				m.menu = m.buildMenu()
 				return m, nil
 			case "left", "h":
 				i := sectionIndex(m.section)
-				if i > 0 {
-					m.section = menuTabs[i-1]
-					m.menu = m.buildMenu()
+				m.section = menuTabs[(i+len(menuTabs)-1)%len(menuTabs)]
+				m.menu = m.buildMenu()
+				return m, nil
+			case "1":
+				m.section = catalog.SectionCoffee
+				m.menu = m.buildMenu()
+				return m, nil
+			case "2":
+				m.section = catalog.SectionFood
+				m.menu = m.buildMenu()
+				return m, nil
+			case "3":
+				m.section = catalog.SectionSnacks
+				m.menu = m.buildMenu()
+				return m, nil
+			case "u":
+				if usual, ok := m.repo.Usual(m.addr); ok {
+					wasEmpty := len(m.lines) == 0
+					m.lines = appendOrInc(m.lines, usual.Item)
+					if wasEmpty {
+						if p, ok := m.repo.Menu(usual.PlaceID); ok {
+							m.cartRestaurant = p.Name
+						}
+					}
+					m.menu = m.menu.WithCartTotal(m.cartTotal())
 				}
 				return m, nil
 			case "c":

@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"console.store/internal/catalog"
 )
 
 // newAtMenu returns a Model that has dismissed the splash and is on the menu,
@@ -87,18 +89,28 @@ func TestSectionSwitchChangesPlaces(t *testing.T) {
 	}
 }
 
-func TestUsualPreloadsCartAndJumps(t *testing.T) {
-	m := newAtMenu()                                    // a1 -> usual is Cold Coffee · Blue Tokai
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp}) // move onto the usual row
+func TestUsualAddsToCartStaysOnMenu(t *testing.T) {
+	m := newAtMenu() // a1 -> usual is Cold Coffee · Blue Tokai
+	before := m.cartTotal()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
-	view := m.View()
-	if !strings.Contains(view, "Cold Coffee") {
-		t.Errorf("usual item should be in cart view:\n%s", view)
+	if m.cartTotal() <= before {
+		t.Errorf("pressing u should add the usual to the cart; total %d -> %d", before, m.cartTotal())
 	}
-	if !strings.Contains(view, "to pay (COD)") {
-		t.Errorf("should have jumped to cart:\n%s", view)
+	if m.screen != scrMenu {
+		t.Errorf("pressing u should stay on the menu, got screen %d", m.screen)
+	}
+	if !strings.Contains(m.View(), "console.store") {
+		t.Errorf("should still render the menu:\n%s", m.View())
+	}
+}
+
+func TestSectionWrapLeft(t *testing.T) {
+	m := newAtMenu() // starts on coffee
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(Model)
+	if m.section != catalog.SectionSnacks {
+		t.Fatalf("left-arrow from coffee should wrap to snacks, got %q", m.section)
 	}
 }
 
@@ -264,57 +276,5 @@ func TestAddressSwitchFlushesUnserviceableCart(t *testing.T) {
 	}
 }
 
-func TestInstamartSeparateCartAndMinimum(t *testing.T) {
-	m := newAtMenu()
-	// walk coffee -> food -> snacks -> instamart
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = updated.(Model)
-	if !strings.Contains(m.View(), "fast lane") {
-		t.Fatalf("expected instamart screen:\n%s", m.View())
-	}
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
-	if m.cartTotal() != 0 {
-		t.Errorf("food cart should be untouched by instamart add, got %d", m.cartTotal())
-	}
-	if m.imCartTotal() != 125 {
-		t.Errorf("instamart cart total = %d, want 125", m.imCartTotal())
-	}
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
-	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
-	if !strings.Contains(m.View(), "checkout") {
-		t.Errorf("expected checkout after meeting minimum:\n%s", m.View())
-	}
-}
-
-func TestInstamartOrderIDDerivedFromItsOwnCart(t *testing.T) {
-	m := newAtMenu()
-	seq := []tea.KeyMsg{
-		{Type: tea.KeyRight},                     // coffee -> food
-		{Type: tea.KeyRight},                     // food -> snacks
-		{Type: tea.KeyRight},                     // snacks -> instamart
-		{Type: tea.KeyEnter},                     // add Red Bull (₹125 >= 99)
-		{Type: tea.KeyRunes, Runes: []rune("c")}, // im cart
-		{Type: tea.KeyEnter},                     // checkout
-		{Type: tea.KeyEnter},                     // place order
-	}
-	for _, k := range seq {
-		updated, _ := m.Update(k)
-		m = updated.(Model)
-	}
-	view := m.View()
-	if !strings.Contains(view, "order placed") {
-		t.Fatalf("expected confirm screen:\n%s", view)
-	}
-	// the food cart (m.lines) is empty for an instamart order; the id must be
-	// derived from the instamart lines, so it must NOT be the empty-cart CS-0000.
-	if strings.Contains(view, "CS-0000") {
-		t.Errorf("instamart order id should derive from its own cart, got CS-0000:\n%s", view)
-	}
-}
+// Instamart is no longer a menu lane in the approved 3-tab design, so it is not
+// reachable from the menu. The instamart flow tests were removed with that change.

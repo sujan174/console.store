@@ -10,21 +10,81 @@ import (
 	"console.store/internal/catalog/mem"
 )
 
-func TestMenuRendersPlacesAndUsual(t *testing.T) {
+func TestMenuHeaderShowsBrandAndCart(t *testing.T) {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
 	places := repo.Places(addr, catalog.SectionCoffee)
 	usual, ok := repo.Usual(addr)
 	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 338)
 	out := m.View()
+	if !strings.Contains(out, "console.store") {
+		t.Fatal("missing brand")
+	}
+	if !strings.Contains(out, "cart · ₹338") {
+		t.Fatalf("missing cart total:\n%s", out)
+	}
+}
+
+func TestMenuShowsUsualLine(t *testing.T) {
+	repo := mem.New()
+	addr := repo.Addresses()[0]
+	places := repo.Places(addr, catalog.SectionCoffee)
+	usual, ok := repo.Usual(addr)
+	if !ok {
+		t.Fatal("expected a usual at the first address")
+	}
+	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 0)
+	out := m.View()
 	if !strings.Contains(out, "the usual") {
-		t.Fatal("missing the usual pin")
+		t.Fatal("missing the usual line")
 	}
-	if !strings.Contains(out, "Blue Tokai") || !strings.Contains(out, "35-45 min") {
-		t.Fatal("missing places/eta")
+	if !strings.Contains(out, usual.Label) {
+		t.Fatalf("missing usual label %q:\n%s", usual.Label, out)
 	}
-	if !strings.Contains(out, "coffee") {
-		t.Fatal("missing category tabs")
+	priceStr := "₹" + itoa(usual.Item.Price)
+	if !strings.Contains(out, priceStr) {
+		t.Fatalf("missing usual price %q:\n%s", priceStr, out)
+	}
+}
+
+func TestMenuNoUsualHidesUsualLine(t *testing.T) {
+	places := []catalog.Place{{ID: "x", Name: "X", ETA: "10 min"}}
+	m := NewMenu(places, catalog.Address{Line: "HSR"}, catalog.SectionCoffee, catalog.Usual{}, false, 0)
+	if strings.Contains(m.View(), "the usual") {
+		t.Fatal("usual line should be hidden when hasUsual is false")
+	}
+}
+
+func TestMenuShowsThreeTabs(t *testing.T) {
+	repo := mem.New()
+	addr := repo.Addresses()[0]
+	places := repo.Places(addr, catalog.SectionCoffee)
+	usual, ok := repo.Usual(addr)
+	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 0)
+	out := m.View()
+	for _, tab := range []string{"coffee", "food", "snacks"} {
+		if !strings.Contains(out, tab) {
+			t.Fatalf("missing tab %q:\n%s", tab, out)
+		}
+	}
+	if strings.Contains(out, "instamart") {
+		t.Fatalf("menu should not show an instamart tab:\n%s", out)
+	}
+}
+
+func TestMenuPlacesOnly(t *testing.T) {
+	repo := mem.New()
+	addr := repo.Addresses()[0]
+	places := repo.Places(addr, catalog.SectionCoffee)
+	usual, ok := repo.Usual(addr)
+	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 0)
+	// cursor starts on the first place (no usual row offset)
+	got, ok := m.Selected()
+	if !ok {
+		t.Fatal("Selected() returned ok=false at cursor 0")
+	}
+	if got.Name != places[0].Name {
+		t.Fatalf("Selected() = %s, want %s", got.Name, places[0].Name)
 	}
 }
 
@@ -64,4 +124,24 @@ func TestMenuEnterSelectsRestaurant(t *testing.T) {
 	if got.Name != "Third Wave" {
 		t.Fatalf("Selected() = %s, want Third Wave", got.Name)
 	}
+}
+
+// itoa is a tiny int-to-string helper for tests (avoids importing strconv twice).
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var buf []byte
+	for n > 0 {
+		buf = append([]byte{byte('0' + n%10)}, buf...)
+		n /= 10
+	}
+	if neg {
+		buf = append([]byte{'-'}, buf...)
+	}
+	return string(buf)
 }
