@@ -19,7 +19,7 @@ import (
 	consoletui "console.store/internal/tui"
 )
 
-const host, port = "0.0.0.0", "2222"
+const host, port = "127.0.0.1", "2222"
 
 func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	return consoletui.New(), []tea.ProgramOption{tea.WithAltScreen()}
@@ -29,6 +29,7 @@ func main() {
 	srv, err := wish.NewServer(
 		wish.WithAddress(net.JoinHostPort(host, port)),
 		wish.WithHostKeyPath(".ssh/console_host_key"),
+		wish.WithIdleTimeout(5*time.Minute),
 		wish.WithMiddleware(
 			bubbletea.Middleware(teaHandler),
 			logging.Middleware(),

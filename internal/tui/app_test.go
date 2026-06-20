@@ -36,3 +36,45 @@ func TestAppQuits(t *testing.T) {
 		t.Fatal("ctrl-c should return a quit command")
 	}
 }
+
+// TestAddToCartPreservesCursor ensures that adding an item to the cart does not
+// reset the restaurant list cursor back to 0. This would fail against the old
+// NewRestaurant rebuild behavior.
+func TestAddToCartPreservesCursor(t *testing.T) {
+	m := New()
+
+	// Open first restaurant (Blue Tokai).
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// Move cursor down to the second item (index 1).
+	m3, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+
+	// Add the currently selected item (should be item at index 1).
+	m4, _ := m3.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	model := m4.(Model)
+
+	// After add, the restaurant cursor must still point to item 1.
+	got := model.rest.Selected()
+	want := "Hazelnut Cold Brew" // Blue Tokai index 1
+	if got.Name != want {
+		t.Fatalf("cursor was reset: want selected=%q, got selected=%q", want, got.Name)
+	}
+}
+
+// TestCartHeaderFromMenuNotNonsense opens the cart from the menu before any
+// items are added and asserts the header is sensible (no "cart · cart").
+func TestCartHeaderFromMenuNotNonsense(t *testing.T) {
+	m := New()
+
+	// Press 'c' to open cart from menu with zero items.
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	view := m2.View()
+
+	if strings.Contains(view, "cart · cart") {
+		t.Fatal("cart header must not contain 'cart · cart'")
+	}
+	if !strings.Contains(view, "your order") {
+		t.Fatalf("cart header should say 'your order' when cart is empty, got view:\n%s", view)
+	}
+}

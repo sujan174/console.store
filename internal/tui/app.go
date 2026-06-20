@@ -16,11 +16,12 @@ const (
 )
 
 type Model struct {
-	screen screen
-	menu   screens.Menu
-	rest   screens.Restaurant
-	cart   screens.Cart
-	lines  []screens.CartLine
+	screen         screen
+	menu           screens.Menu
+	rest           screens.Restaurant
+	cart           screens.Cart
+	lines          []screens.CartLine
+	cartRestaurant string // name of the restaurant whose items are in the cart
 }
 
 func New() Model {
@@ -40,6 +41,15 @@ func (m Model) cartTotal() int {
 	return t
 }
 
+// cartHeader returns the restaurant name for the cart header, falling back to
+// "your order" if no restaurant name has been recorded yet.
+func (m Model) cartHeader() string {
+	if m.cartRestaurant != "" {
+		return m.cartRestaurant
+	}
+	return "your order"
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if k, ok := msg.(tea.KeyMsg); ok {
 		switch k.String() {
@@ -54,7 +64,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrRestaurant
 				return m, nil
 			case "c":
-				m.cart = screens.NewCart(currentRestaurantName(m), m.lines)
+				m.cart = screens.NewCart(m.cartHeader(), m.lines)
 				m.screen = scrCart
 				return m, nil
 			default:
@@ -68,9 +78,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrMenu
 				return m, nil
 			case "enter":
+				wasEmpty := len(m.lines) == 0
 				m.lines = append(m.lines, screens.CartLine{Item: m.rest.Selected(), Qty: 1})
-				m.menu = screens.NewMenu(mock.Restaurants, mock.Addresses[0], m.cartTotal())
-				m.rest = screens.NewRestaurant(m.rest.RestaurantData(), m.cartTotal())
+				if wasEmpty {
+					// Record the restaurant name the first time an item is added.
+					m.cartRestaurant = m.rest.RestaurantData().Name
+				}
+				// Update cart totals without resetting the list cursor.
+				m.menu = m.menu.WithCartTotal(m.cartTotal())
+				m.rest = m.rest.WithCartTotal(m.cartTotal())
 				return m, nil
 			case "c":
 				m.cart = screens.NewCart(m.rest.RestaurantData().Name, m.lines)
@@ -100,11 +116,4 @@ func (m Model) View() string {
 	default:
 		return m.menu.View()
 	}
-}
-
-func currentRestaurantName(m Model) string {
-	if len(m.lines) == 0 {
-		return ""
-	}
-	return "cart"
 }

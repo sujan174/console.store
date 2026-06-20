@@ -28,6 +28,10 @@ func NewMenu(rs []mock.Restaurant, addr mock.Address, cartTotal int) Menu {
 // Selected returns the restaurant under the cursor.
 func (m Menu) Selected() mock.Restaurant { return m.restaurants[m.list.Cursor] }
 
+// WithCartTotal returns a copy of the menu with an updated cart total,
+// preserving the list cursor and selection.
+func (m Menu) WithCartTotal(t int) Menu { m.cartTotal = t; return m }
+
 func (m Menu) Init() tea.Cmd { return nil }
 
 func (m Menu) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

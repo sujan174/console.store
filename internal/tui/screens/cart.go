@@ -39,7 +39,7 @@ func (c Cart) View() string {
 			theme.ItemStyle.Render(l.Item.Name), l.Qty,
 			theme.PriceStyle.Render(fmt.Sprintf("₹%d", l.Item.Price*l.Qty))))
 	}
-	b.WriteString("  " + theme.FaintStyle.Render(strings.Repeat("─", 44)) + "\n")
+	b.WriteString("  " + theme.FaintStyle.Render(strings.Repeat("─", 50)) + "\n")
 	b.WriteString("  " + theme.BrightStyle.Render(fmt.Sprintf("to pay (COD)   ₹%d", c.Total())) + "\n\n")
 	b.WriteString("  " + theme.DimStyle.Render("pay the rider on delivery · cash or UPI") + "\n")
 	b.WriteString("  " + theme.FavStyle.Render("orders can't be cancelled once placed") + "\n\n")

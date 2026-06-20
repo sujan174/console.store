@@ -27,6 +27,10 @@ func NewRestaurant(r mock.Restaurant, cartTotal int) Restaurant {
 
 func (s Restaurant) Selected() mock.Item { return s.r.Items[s.list.Cursor] }
 
+// WithCartTotal returns a copy of the restaurant with an updated cart total,
+// preserving the list cursor and selection.
+func (s Restaurant) WithCartTotal(t int) Restaurant { s.cartTotal = t; return s }
+
 // RestaurantData returns the underlying restaurant (used by the app router).
 func (s Restaurant) RestaurantData() mock.Restaurant { return s.r }
 

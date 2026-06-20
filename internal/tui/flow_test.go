@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -19,22 +20,9 @@ func TestFlowMenuToCart(t *testing.T) {
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return contains(b, "to pay (COD)") && contains(b, "Cold Coffee")
+		return bytes.Contains(b, []byte("to pay (COD)")) && bytes.Contains(b, []byte("Cold Coffee"))
 	}, teatest.WithDuration(3*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
-}
-
-func contains(b []byte, s string) bool {
-	return len(b) >= len(s) && (string(b) != "" && indexOf(string(b), s) >= 0)
-}
-
-func indexOf(haystack, needle string) int {
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return i
-		}
-	}
-	return -1
 }
