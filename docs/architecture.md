@@ -11,28 +11,28 @@
                                   │ SSH
                                   ▼
    ┌──────────────────────────────────────────────────────────┐
-   │  console.store backend (Go)                               │
-   │                                                            │
-   │  ┌──────────────┐   renders    ┌──────────────────────┐   │
-   │  │ 1. SSH TUI   │◀────────────▶│ 6. Session/order     │   │
-   │  │   (wish +    │   key events │    state (per SSH)    │   │
-   │  │   bubbletea) │              └──────────┬───────────┘   │
-   │  └──────┬───────┘                         │               │
-   │         │ commands (no direct Swiggy)     │               │
-   │         ▼                                 ▼               │
-   │  ┌──────────────┐   ┌──────────────┐  ┌──────────────┐    │
-   │  │ 2. Account   │   │ 4. Curation  │  │ 5. Swiggy MCP│    │
-   │  │   service    │   │   store      │  │   client     │────┼──▶ mcp.swiggy.com
-   │  └──────┬───────┘   └──────────────┘  └──────┬───────┘    │    /food  /im
-   │         │                                    │            │
-   │         ▼                                    │ Bearer     │
-   │  ┌──────────────┐                            │ (per user) │
-   │  │ 3. OAuth     │◀───────────────────────────┘            │
-   │  │   broker     │   redirect callback                     │
+   │  console.store backend (Go)                              │
+   │                                                          │
+   │  ┌──────────────┐   renders    ┌──────────────────────┐  │
+   │  │ 1. SSH TUI   │◀────────────▶│ 6. Session/order     │  │
+   │  │   (wish +    │   key events │    state (per SSH)   │  │
+   │  │   bubbletea) │              └──────────┬───────────┘  │
+   │  └──────┬───────┘                         │              │
+   │         │ commands (no direct Swiggy)     │              │
+   │         ▼                                 ▼              │
+   │  ┌──────────────┐   ┌──────────────┐  ┌──────────────┐   │
+   │  │ 2. Account   │   │ 4. Curation  │  │ 5. Swiggy MCP│   │
+   │  │   service    │   │   store      │  │   client     │───┼──▶ mcp.swiggy.com
+   │  └──────┬───────┘   └──────────────┘  └──────┬───────┘   │    /food  /im
+   │         │                                    │           │
+   │         ▼                                    │ Bearer    │
+   │  ┌──────────────┐                            │ (per user)│
+   │  │ 3. OAuth     │◀───────────────────────────┘           │
+   │  │   broker     │   redirect callback                    │
    │  └──────┬───────┘◀─────────────────────────────────── phone (browser) ──▶ Swiggy /auth/*
-   │         ▼                                                 │
-   │  ┌──────────────────────────────────────────────────┐    │
-   │  │  store: Postgres/SQLite (tokens encrypted)        │    │
+   │         ▼                                                │
+   │  ┌──────────────────────────────────────────────────┐    |
+   │  │  store: Postgres/SQLite (tokens encrypted)       │    │
    │  └──────────────────────────────────────────────────┘    │
    └──────────────────────────────────────────────────────────┘
 ```
