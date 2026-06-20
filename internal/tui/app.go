@@ -9,6 +9,7 @@ import (
 
 	"console.store/internal/catalog"
 	"console.store/internal/catalog/mem"
+	"console.store/internal/tui/components"
 	"console.store/internal/tui/screens"
 )
 
@@ -510,25 +511,63 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) View() string {
+// statusHints rotate in the status bar (design line 925).
+var statusHints = []string{"type : for commands", "247 devs online", "DEVFRIDAY −₹50", "ssh console.store"}
+
+// screenLabel maps the current screen to the status-bar label (design line 836).
+func (m Model) screenLabel() string {
 	switch m.screen {
-	case scrSplash:
-		return m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/15)%len(screens.Taglines)]).View()
+	case scrMenu:
+		return "menu"
 	case scrRestaurant:
-		return m.rest.View()
+		return "menu"
 	case scrCart:
-		return m.cart.View()
-	case scrAddress:
-		return m.addrScreen.View()
-	case scrCheckout, scrConfirm:
-		return m.checkout.View()
+		return "cart"
+	case scrCheckout:
+		return "checkout"
+	case scrConfirm:
+		return "order placed"
 	case scrTracking:
-		return m.track.View(m.trackStep, m.spin())
+		return "tracking"
+	case scrAddress:
+		return "menu"
 	case scrInstamart:
-		return m.inst.View()
+		return "instamart"
 	case scrImCart:
-		return m.imCart.View()
+		return "cart"
 	default:
-		return m.menu.View()
+		return "menu"
 	}
+}
+
+// statusBar renders the bottom bar for the current frame/screen.
+func (m Model) statusBar() string {
+	hint := statusHints[(m.frame/15)%len(statusHints)]
+	return components.StatusBar(m.addr.Line, m.screenLabel(), hint, "12.4", m.blinkOn())
+}
+
+func (m Model) View() string {
+	if m.screen == scrSplash {
+		return m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/15)%len(screens.Taglines)]).View()
+	}
+	var body string
+	switch m.screen {
+	case scrRestaurant:
+		body = m.rest.View()
+	case scrCart:
+		body = m.cart.View()
+	case scrAddress:
+		body = m.addrScreen.View()
+	case scrCheckout, scrConfirm:
+		body = m.checkout.View()
+	case scrTracking:
+		body = m.track.View(m.trackStep, m.spin())
+	case scrInstamart:
+		body = m.inst.View()
+	case scrImCart:
+		body = m.imCart.View()
+	default: // scrMenu
+		body = m.menu.View()
+	}
+	return body + "\n" + m.statusBar()
 }

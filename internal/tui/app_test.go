@@ -18,6 +18,18 @@ func newAtMenu() Model {
 	return m
 }
 
+func TestStatusBarOnMenuNotSplash(t *testing.T) {
+	m := New() // splash
+	if strings.Contains(m.View(), "⊙ linked") {
+		t.Error("splash must not show the status bar")
+	}
+	m2 := newAtMenu()
+	v := m2.View()
+	if !strings.Contains(v, "⊙ linked") || !strings.Contains(v, m2.addr.Line) {
+		t.Errorf("menu should show the status bar with the address:\n%s", v)
+	}
+}
+
 func TestStartsOnSplashThenKeyToMenu(t *testing.T) {
 	m := New()
 	if m.screen != scrSplash {
