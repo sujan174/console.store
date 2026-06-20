@@ -195,9 +195,13 @@ func (c CmdBar) View(blink bool) string {
 		theme.DimStyle.Render("esc") + theme.FaintStyle.Render(" close")
 	lines = append(lines, hint)
 
-	body := strings.Join(lines, "\n")
-	return lipgloss.NewStyle().
-		Background(lipgloss.Color(theme.PanelCmd)).
-		Width(components.FrameWidth()).
-		Render(body)
+	// A top rule separates the palette from the content above; rendering on the
+	// terminal's own background avoids the colour-reset banding that an outer
+	// Background() over styled lines would cause.
+	rule := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Div2)).Render(strings.Repeat("─", components.FrameWidth()))
+	indented := make([]string, len(lines))
+	for i, l := range lines {
+		indented[i] = "  " + l
+	}
+	return rule + "\n" + strings.Join(indented, "\n")
 }

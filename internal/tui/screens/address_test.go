@@ -26,13 +26,15 @@ func TestAddressScreenListsAllAndMarksCurrent(t *testing.T) {
 	}
 }
 
-func TestAddressPanelHasBorder(t *testing.T) {
-	addrs := []catalog.Address{{ID: "a1", Label: "home", Line: "HSR Layout"}}
-	v := screens.NewAddress(addrs, "a1").View()
-	if !strings.Contains(v, "╮") && !strings.Contains(v, "╭") {
-		t.Errorf("address panel should have a rounded border:\n%s", v)
+func TestAddressScreenTitleAndEntries(t *testing.T) {
+	addrs := []catalog.Address{
+		{ID: "a1", Label: "home", Line: "HSR Layout"},
+		{ID: "a2", Label: "work", Line: "Koramangala"},
 	}
-	if !strings.Contains(v, "deliver to —") {
-		t.Errorf("missing title:\n%s", v)
+	v := screens.NewAddress(addrs, "a1").View()
+	for _, want := range []string{"deliver to —", "HSR Layout", "Koramangala", "select & reload"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("address screen missing %q:\n%s", want, v)
+		}
 	}
 }

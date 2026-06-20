@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"console.store/internal/catalog"
 	"console.store/internal/tui/components"
@@ -46,17 +45,12 @@ func (s Address) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (s Address) View() string {
-	var inner strings.Builder
-	inner.WriteString(theme.BrightStyle.Render("deliver to —") + "\n\n")
-	inner.WriteString(s.list.View())
-	inner.WriteString("\n")
-	inner.WriteString(components.Hint("↑↓", "move", "↵", "select & reload", "esc", "cancel"))
-
-	panel := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.Div2)).
-		Background(lipgloss.Color(theme.PanelHi)).
-		Padding(1, 3).
-		Render(inner.String())
-	return "\n" + panel
+	var b strings.Builder
+	b.WriteString("  " + theme.BrightStyle.Render("deliver to —") + "\n")
+	b.WriteString(components.Divider())
+	b.WriteString("\n")
+	b.WriteString(s.list.View())
+	b.WriteString("\n")
+	b.WriteString(components.Hint("↑↓", "move", "↵", "select & reload", "esc", "cancel"))
+	return b.String()
 }

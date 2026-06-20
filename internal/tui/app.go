@@ -12,7 +12,6 @@ import (
 	"console.store/internal/catalog/mem"
 	"console.store/internal/tui/components"
 	"console.store/internal/tui/screens"
-	"console.store/internal/tui/theme"
 )
 
 // Bill constants mirror the design (script line 606: toPay = item + 29 − 50).
@@ -609,27 +608,17 @@ func (m Model) statusBar() string {
 	return components.StatusBar(m.addr.Line, m.screenLabel(), hint, "12.4", m.blinkOn())
 }
 
-// canvas wraps a frame in the design's full-screen dark background so the
-// whole terminal becomes the #15161f page (design line 191).
-func (m Model) canvas(frame string) string {
-	if m.w == 0 || m.h == 0 {
-		return frame
-	}
-	return lipgloss.NewStyle().
-		Width(m.w).Height(m.h).
-		Background(lipgloss.Color(theme.Bg)).
-		Render(frame)
-}
-
 func (m Model) View() string {
-	// Splash is centered on the dark canvas (design lines 196-228).
+	// Splash is centered in the viewport (design lines 196-228). We render on
+	// the terminal's own background — wrapping the frame in a lipgloss
+	// Background tears on inner colour resets (banding), and a dark terminal
+	// already provides the #15161f-ish canvas.
 	if m.screen == scrSplash {
 		sp := m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/15)%len(screens.Taglines)]).View()
 		if m.w == 0 || m.h == 0 {
 			return sp
 		}
-		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, sp,
-			lipgloss.WithWhitespaceBackground(lipgloss.Color(theme.Bg)))
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, sp)
 	}
 
 	var body string
@@ -667,5 +656,5 @@ func (m Model) View() string {
 	if gap < 1 {
 		gap = 1
 	}
-	return m.canvas(body + strings.Repeat("\n", gap) + bottom)
+	return body + strings.Repeat("\n", gap) + bottom
 }

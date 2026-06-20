@@ -58,24 +58,29 @@ func DashRule() string {
 // StatusBar renders the persistent full-bleed bottom bar (design lines 459-463):
 //
 //	⊙ linked · <addr> · home · <screen>            <hint> · ↑<lat>ms ▋
+//
+// Every segment carries the panel background so the strip is continuous — a
+// single outer Background() would be torn apart by the inner colour resets.
 func StatusBar(addr, screen, hint, latency string, blink bool) string {
-	left := theme.GreenStyle.Render("⊙ linked") +
-		theme.FaintStyle.Render(" · ") + theme.DimStyle.Render(addr+" · home") +
-		theme.FaintStyle.Render(" · ") + theme.DimStyle.Render(screen)
-	cur := " "
-	if blink {
-		cur = theme.CursorStyle.Render("▋")
+	bg := lipgloss.Color(theme.PanelLo)
+	seg := func(fg, s string) string {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(fg)).Background(bg).Render(s)
 	}
-	right := theme.DimStyle.Render(hint) + theme.FaintStyle.Render(" · ↑"+latency+"ms ") + cur
-	// inner content sits inside the gutters; the panel background spans full width.
-	inner := strings.Repeat(" ", margin) + left
-	gap := frameWidth - margin - lipgloss.Width(left) - lipgloss.Width(right) - margin
+	sp := func(n int) string {
+		return lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", n))
+	}
+	left := seg(theme.Green, "⊙ linked") + seg(theme.Faint, " · ") +
+		seg(theme.Dim, addr+" · home") + seg(theme.Faint, " · ") + seg(theme.Dim, screen)
+	cur := sp(1)
+	if blink {
+		cur = seg(theme.Cursor, "▋")
+	}
+	right := seg(theme.Dim, hint) + seg(theme.Faint, " · ↑"+latency+"ms ") + cur
+	gap := frameWidth - 2*margin - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1
 	}
-	inner += strings.Repeat(" ", gap) + right + strings.Repeat(" ", margin)
-	inner = PadTo(inner, frameWidth)
-	return lipgloss.NewStyle().Background(lipgloss.Color(theme.PanelLo)).Render(inner)
+	return sp(margin) + left + sp(gap) + right + sp(margin)
 }
 
 // Hint renders a footer hint line from alternating (keyGlyph, label) pairs:

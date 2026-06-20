@@ -1,12 +1,20 @@
 package components
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 
 	"console.store/internal/tui/theme"
 )
+
+var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// stripANSI removes SGR colour codes so a string can be re-styled cleanly.
+// Wrapping already-coloured text in a Background leaves gaps where the inner
+// resets fire; the selected row is uniformly bright anyway (design line 845).
+func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
 
 // Row is one line: Left label, Right meta (eta/price), optional Tag (new), Fav marker.
 type Row struct {
@@ -100,8 +108,10 @@ func (l List) View() string {
 		if i == l.Cursor {
 			// Full-bleed selected row: blue bar at col 0, selected-row
 			// background spanning the rest of the frame, text inside the gutter.
+			// Strip inner colours so the background is continuous (design: the
+			// selected row is uniformly bright #c0caf5).
 			bar := theme.CursorStyle.Render("▌")
-			inner := PadTo(strings.Repeat(" ", margin-1)+body, FrameWidth()-1)
+			inner := PadTo(strings.Repeat(" ", margin-1)+stripANSI(body), FrameWidth()-1)
 			b.WriteString(bar + theme.SelRowStyle.Render(inner) + "\n")
 		} else {
 			lead := strings.Repeat(" ", margin)
