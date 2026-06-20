@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,6 +11,22 @@ import (
 	"console.store/internal/catalog/mem"
 	"console.store/internal/tui/screens"
 )
+
+// Bill constants mirror the design (script line 606: toPay = item + 29 − 50).
+// NOTE: duplicated in package screens (cart.go) since screens cannot import tui.
+const (
+	DeliveryFee  = 29
+	CouponCode   = "DEVFRIDAY"
+	CouponAmount = 50
+)
+
+// toPay applies the design's bill: item + delivery − coupon, or 0 when empty.
+func toPay(itemTotal int) int {
+	if itemTotal <= 0 {
+		return 0
+	}
+	return itemTotal + DeliveryFee - CouponAmount
+}
 
 type tickMsg time.Time
 
@@ -201,6 +218,30 @@ func (m Model) cartHeader() string {
 	return "your order"
 }
 
+// cartPlaceID finds the id of the cart's restaurant by name across sections.
+func (m Model) cartPlaceID() string {
+	for _, sec := range catalog.MenuSections {
+		for _, p := range m.repo.Places(m.addr, sec) {
+			if p.Name == m.cartRestaurant {
+				return p.ID
+			}
+		}
+	}
+	return ""
+}
+
+// cartEta returns "~{tail}" of the cart restaurant's ETA, e.g. "35-45 min" -> "~45 min".
+func (m Model) cartEta() string {
+	if p, ok := m.repo.Menu(m.cartPlaceID()); ok {
+		parts := strings.SplitN(p.ETA, "-", 2)
+		if len(parts) == 2 {
+			return "~" + strings.TrimSpace(parts[1])
+		}
+		return "~" + p.ETA
+	}
+	return ""
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(tickMsg); ok {
 		m.frame++
@@ -265,7 +306,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "c":
-				m.cart = screens.NewCart(m.cartHeader(), m.lines)
+				m.cart = screens.NewCart(m.cartHeader(), m.lines).WithEta(m.cartEta())
 				m.screen = scrCart
 				return m, nil
 			case "a":
@@ -315,7 +356,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartTotal()).WithCursor(ci)
 				return m, nil
 			case "c":
-				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines)
+				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta())
 				m.screen = scrCart
 				return m, nil
 			default:

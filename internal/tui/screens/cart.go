@@ -11,6 +11,15 @@ import (
 	"console.store/internal/tui/theme"
 )
 
+// Bill constants mirror the design (script line 606: toPay = item + 29 − 50).
+// NOTE: these are duplicated in package tui (app.go DeliveryFee/CouponAmount)
+// because screens does not import tui; keep the two in sync.
+const (
+	DeliveryFee  = 29
+	CouponCode   = "DEVFRIDAY"
+	CouponAmount = 50
+)
+
 type CartLine struct {
 	Item catalog.Item
 	Qty  int
@@ -20,6 +29,7 @@ type Cart struct {
 	restaurant string
 	lines      []CartLine
 	cursor     int
+	eta        string
 	minNotice  string
 }
 
@@ -32,8 +42,20 @@ func NewCart(restaurant string, lines []CartLine) Cart {
 
 func (c Cart) Lines() []CartLine { return c.lines }
 
+// WithEta sets the cart header ETA (e.g. "~45 min"), shown top-right.
+func (c Cart) WithEta(s string) Cart { c.eta = s; return c }
+
 // WithMinNotice sets a notice shown when the cart is below a minimum.
 func (c Cart) WithMinNotice(s string) Cart { c.minNotice = s; return c }
+
+// toPay applies the design bill: item + delivery − coupon, or 0 when empty.
+func (c Cart) toPay() int {
+	it := c.Total()
+	if it <= 0 {
+		return 0
+	}
+	return it + DeliveryFee - CouponAmount
+}
 
 func (c Cart) Total() int {
 	t := 0
@@ -96,28 +118,53 @@ func (c Cart) Init() tea.Cmd { return nil }
 
 func (c Cart) View() string {
 	var b strings.Builder
-	b.WriteString("  " + theme.CartStyle.Render("cart · "+c.restaurant) + "\n\n")
+	w := components.InnerWidth
+
+	// Header: "cart · {restaurant}" (brand) … "{eta}" (eta), 2-space indent.
+	header := justify(
+		theme.BrandStyle.Render("cart · "+c.restaurant),
+		theme.EtaStyle.Render(c.eta),
+		w,
+	)
+	b.WriteString("  " + header + "\n")
+	b.WriteString(components.Divider())
+	b.WriteString("\n")
+
 	if len(c.lines) == 0 {
-		b.WriteString("  " + theme.DimStyle.Render("your cart is empty") + "\n\n")
-		b.WriteString(components.KeyHints("esc back"))
+		b.WriteString("  " + theme.DimStyle.Render("your cart is empty — press ") +
+			theme.CursorStyle.Render("esc") + theme.DimStyle.Render(" to browse.") + "\n\n")
+		b.WriteString(components.Hint("↑↓", "move", "←→", "qty", "↵", "checkout", "esc", "back"))
 		return b.String()
 	}
-	for i, l := range c.lines {
-		marker := theme.FaintStyle.Render("·")
-		if i == c.cursor {
-			marker = theme.CursorStyle.Render("❯")
-		}
-		b.WriteString(fmt.Sprintf("  %s %s   x%d   %s\n",
-			marker, theme.ItemStyle.Render(l.Item.Name), l.Qty,
-			theme.PriceStyle.Render(fmt.Sprintf("₹%d", l.Item.Price*l.Qty))))
+
+	// Line rows reuse the List full-bleed selected bar.
+	list := components.List{Cursor: c.cursor}
+	for _, l := range c.lines {
+		list.Rows = append(list.Rows, components.Row{
+			Left:  l.Item.Name + theme.DimStyle.Render(fmt.Sprintf("    x%d", l.Qty)),
+			Right: theme.PriceStyle.Render(fmt.Sprintf("₹%d", l.Item.Price*l.Qty)),
+		})
 	}
-	b.WriteString("  " + theme.FaintStyle.Render(strings.Repeat("─", 50)) + "\n")
-	b.WriteString("  " + theme.BrightStyle.Render(fmt.Sprintf("to pay (COD)   ₹%d", c.Total())) + "\n\n")
-	b.WriteString("  " + theme.DimStyle.Render("pay the rider on delivery · cash or UPI") + "\n")
-	b.WriteString("  " + theme.FavStyle.Render("orders can't be cancelled once placed") + "\n\n")
+	b.WriteString(list.View())
+
+	// Bill breakdown.
+	b.WriteString(components.DashRule())
+	b.WriteString("  " + justify(theme.DimStyle.Render("item total"),
+		theme.TextStyle.Render(fmt.Sprintf("₹%d", c.Total())), w) + "\n")
+	b.WriteString("  " + justify(theme.DimStyle.Render("delivery"),
+		theme.TextStyle.Render(fmt.Sprintf("₹%d", DeliveryFee)), w) + "\n")
+	b.WriteString("  " + justify(
+		theme.GreenStyle.Render(fmt.Sprintf("%s  −₹%d", CouponCode, CouponAmount)),
+		theme.GreenStyle.Render("applied"), w) + "\n")
+	b.WriteString(components.DashRule())
+	b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
+		theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
+
 	if c.minNotice != "" {
-		b.WriteString("  " + theme.FavStyle.Render(c.minNotice) + "\n\n")
+		b.WriteString("\n  " + theme.FavStyle.Render(c.minNotice) + "\n")
 	}
-	b.WriteString(components.KeyHints("↑↓ move   ←→ qty   ← removes at 1   ↵ checkout   esc back"))
+
+	b.WriteString("\n")
+	b.WriteString(components.Hint("↑↓", "move", "←→", "qty", "↵", "checkout", "esc", "back"))
 	return b.String()
 }

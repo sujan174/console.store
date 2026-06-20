@@ -204,6 +204,31 @@ func TestCartEditsSyncToRouter(t *testing.T) {
 	}
 }
 
+// TestCartScreenShowsBillAndEta drives menu -> place -> add Cold Coffee (₹149)
+// -> cart, and asserts the restyled cart shows the bill breakdown (to-pay ₹128)
+// and the place ETA derived as "~45 min".
+func TestCartScreenShowsBillAndEta(t *testing.T) {
+	m := newAtMenu()
+	for _, k := range []tea.KeyMsg{
+		{Type: tea.KeyEnter},                     // open Blue Tokai
+		{Type: tea.KeyEnter},                     // add Cold Coffee (₹149)
+		{Type: tea.KeyRunes, Runes: []rune("c")}, // cart
+	} {
+		updated, _ := m.Update(k)
+		m = updated.(Model)
+	}
+	view := m.View()
+	for _, want := range []string{"item total", "₹149", "delivery", "₹29", "DEVFRIDAY", "to pay (COD)", "₹128", "~45 min"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("cart screen missing %q:\n%s", want, view)
+		}
+	}
+	// The menu cart chip stays the ITEM total, not the bill total.
+	if toPay(m.cartTotal()) != 128 {
+		t.Errorf("toPay(itemTotal) = %d, want 128", toPay(m.cartTotal()))
+	}
+}
+
 func TestCheckoutFlowPlacesAndResets(t *testing.T) {
 	m := newAtMenu()
 	steps := []tea.KeyMsg{
