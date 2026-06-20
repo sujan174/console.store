@@ -150,7 +150,7 @@ func orderID(lines []screens.CartLine) string {
 		}
 		sum = (sum + l.Qty) & 0xffff
 	}
-	return fmt.Sprintf("CS-%04X", sum)
+	return fmt.Sprintf("#SW%04X", sum)
 }
 
 func (m Model) Init() tea.Cmd { return tick() }
@@ -413,7 +413,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrCart
 				return m, nil
 			case "enter":
-				m.checkout = m.checkout.Placed(orderID(m.checkout.Lines()))
+				m.checkout = m.checkout.Placed(orderID(m.checkout.Lines()), "~40 min")
 				m.screen = scrConfirm
 				return m, nil
 			}

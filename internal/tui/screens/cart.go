@@ -48,14 +48,17 @@ func (c Cart) WithEta(s string) Cart { c.eta = s; return c }
 // WithMinNotice sets a notice shown when the cart is below a minimum.
 func (c Cart) WithMinNotice(s string) Cart { c.minNotice = s; return c }
 
-// toPay applies the design bill: item + delivery − coupon, or 0 when empty.
-func (c Cart) toPay() int {
-	it := c.Total()
-	if it <= 0 {
+// billToPay applies the design bill: item + delivery − coupon, or 0 when empty.
+// Shared by cart and checkout so the two screens never disagree on the total.
+func billToPay(itemTotal int) int {
+	if itemTotal <= 0 {
 		return 0
 	}
-	return it + DeliveryFee - CouponAmount
+	return itemTotal + DeliveryFee - CouponAmount
 }
+
+// toPay applies the design bill to the cart's item total.
+func (c Cart) toPay() int { return billToPay(c.Total()) }
 
 func (c Cart) Total() int {
 	t := 0
