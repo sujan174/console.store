@@ -3,9 +3,23 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+func TestTickAdvancesFrame(t *testing.T) {
+	m := New()
+	f0 := m.frame
+	updated, cmd := m.Update(tickMsg(time.Now()))
+	m = updated.(Model)
+	if m.frame != f0+1 {
+		t.Errorf("frame = %d, want %d", m.frame, f0+1)
+	}
+	if cmd == nil {
+		t.Error("tick must reschedule itself")
+	}
+}
 
 func TestAppStartsOnMenu(t *testing.T) {
 	m := New()

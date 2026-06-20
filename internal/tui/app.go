@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -9,6 +10,15 @@ import (
 	"console.store/internal/catalog/mem"
 	"console.store/internal/tui/screens"
 )
+
+type tickMsg time.Time
+
+func tick() tea.Cmd {
+	return tea.Tick(110*time.Millisecond, func(t time.Time) tea.Msg { return tickMsg(t) })
+}
+
+// spinFrames is the braille spinner (design line 536).
+var spinFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 type screen int
 
@@ -40,6 +50,8 @@ type Model struct {
 	inst    screens.Instamart
 	imLines []screens.CartLine
 	imCart  screens.Cart
+
+	frame int
 }
 
 func New() Model {
@@ -84,7 +96,15 @@ func orderID(lines []screens.CartLine) string {
 	return fmt.Sprintf("CS-%04X", sum)
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd { return tick() }
+
+// onTick advances time-based screen state; extended by later tasks.
+func (m Model) onTick() Model { return m }
+
+func (m Model) spin() string { return spinFrames[m.frame%len(spinFrames)] }
+
+// blinkOn reports the on-phase of a ~1s cursor blink.
+func (m Model) blinkOn() bool { return (m.frame/5)%2 == 0 }
 
 func (m Model) cartTotal() int {
 	t := 0
@@ -128,6 +148,11 @@ func (m Model) cartHeader() string {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, ok := msg.(tickMsg); ok {
+		m.frame++
+		m = m.onTick()
+		return m, tick()
+	}
 	if k, ok := msg.(tea.KeyMsg); ok {
 		switch k.String() {
 		case "ctrl+c", "q":
