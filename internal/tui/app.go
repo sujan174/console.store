@@ -76,6 +76,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch m.screen {
 		case scrMenu:
+			if m.menu.Searching() {
+				nm, cmd := m.menu.Update(msg)
+				m.menu = nm.(screens.Menu)
+				return m, cmd
+			}
 			switch k.String() {
 			case "enter":
 				if p, ok := m.menu.Selected(); ok {
@@ -112,6 +117,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		case scrRestaurant:
+			if m.rest.Searching() {
+				nr, cmd := m.rest.Update(msg)
+				m.rest = nr.(screens.Restaurant)
+				return m, cmd
+			}
 			switch k.String() {
 			case "esc":
 				m.screen = scrMenu

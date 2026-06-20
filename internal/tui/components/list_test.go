@@ -67,6 +67,28 @@ func TestListColumnAlignmentByDisplayWidth(t *testing.T) {
 	}
 }
 
+func TestListFilterMatchesSubstringCaseInsensitive(t *testing.T) {
+	l := List{Rows: []Row{
+		{Left: "Blue Tokai"}, {Left: "Third Wave"}, {Left: "Sleepy Owl"},
+	}}
+	l.SetFilter("wave")
+	if got := l.VisibleRows(); len(got) != 1 || got[0].Left != "Third Wave" {
+		t.Errorf("filter 'wave' -> %+v, want [Third Wave]", got)
+	}
+	l.SetFilter("")
+	if len(l.VisibleRows()) != 3 {
+		t.Error("empty filter should show all rows")
+	}
+}
+
+func TestListCursorClampsAfterFilter(t *testing.T) {
+	l := List{Rows: []Row{{Left: "aaa"}, {Left: "bbb"}, {Left: "ccc"}}, Cursor: 2}
+	l.SetFilter("bbb") // only one visible now; cursor must clamp to 0
+	if l.Cursor != 0 {
+		t.Errorf("cursor = %d after narrowing filter, want 0", l.Cursor)
+	}
+}
+
 func TestListRendersCursorOnSelectedRow(t *testing.T) {
 	l := List{Rows: []Row{{Left: "Blue Tokai", Right: "35-45 min"}, {Left: "Third Wave"}}}
 	out := l.View()

@@ -22,6 +22,47 @@ type List struct {
 	Rows   []Row
 	Cursor int
 	Width  int // total render width; 0 -> 50
+	filter string
+}
+
+// SetFilter sets the case-insensitive substring filter and clamps the cursor.
+func (l *List) SetFilter(q string) {
+	l.filter = strings.ToLower(strings.TrimSpace(q))
+	if l.Cursor >= len(l.VisibleRows()) {
+		l.Cursor = 0
+	}
+}
+
+// Filter returns the current filter string.
+func (l *List) Filter() string { return l.filter }
+
+// VisibleRows returns rows matching the filter (all rows if empty).
+func (l List) VisibleRows() []Row {
+	if l.filter == "" {
+		return l.Rows
+	}
+	var out []Row
+	for _, r := range l.Rows {
+		if strings.Contains(strings.ToLower(r.Left), l.filter) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// SelectedIndex returns the index into Rows of the currently selected visible row.
+func (l List) SelectedIndex() int {
+	vis := l.VisibleRows()
+	if len(vis) == 0 {
+		return -1
+	}
+	sel := vis[l.Cursor]
+	for i, r := range l.Rows {
+		if r == sel {
+			return i
+		}
+	}
+	return -1
 }
 
 func (l *List) Up() {
@@ -31,7 +72,7 @@ func (l *List) Up() {
 }
 
 func (l *List) Down() {
-	if l.Cursor < len(l.Rows)-1 {
+	if l.Cursor < len(l.VisibleRows())-1 {
 		l.Cursor++
 	}
 }
@@ -42,7 +83,7 @@ func (l List) View() string {
 		width = 50
 	}
 	var b strings.Builder
-	for i, r := range l.Rows {
+	for i, r := range l.VisibleRows() {
 		// build "  ❯ Left ........ Right tag ♥"
 		left := r.Left
 		right := r.Right

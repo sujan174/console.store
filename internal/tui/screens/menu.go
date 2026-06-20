@@ -18,6 +18,7 @@ type Menu struct {
 	hasUsual  bool
 	cartTotal int
 	list      components.List
+	searching bool
 }
 
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartTotal int) Menu {
@@ -30,10 +31,11 @@ func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Secti
 
 // Selected returns the place under the cursor. Returns ok=false if the list is empty.
 func (m Menu) Selected() (catalog.Place, bool) {
-	if len(m.places) == 0 {
+	i := m.list.SelectedIndex()
+	if i < 0 {
 		return catalog.Place{}, false
 	}
-	return m.places[m.list.Cursor], true
+	return m.places[i], true
 }
 
 // WithCartTotal returns a copy with an updated cart total, preserving the cursor.
@@ -42,16 +44,42 @@ func (m Menu) WithCartTotal(t int) Menu { m.cartTotal = t; return m }
 func (m Menu) Init() tea.Cmd { return nil }
 
 func (m Menu) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if k, ok := msg.(tea.KeyMsg); ok {
+	k, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	if m.searching {
 		switch k.String() {
-		case "j", "down":
-			m.list.Down()
-		case "k", "up":
-			m.list.Up()
+		case "esc":
+			m.searching = false
+			m.list.SetFilter("")
+		case "enter":
+			m.searching = false
+		case "backspace":
+			f := m.list.Filter()
+			if f != "" {
+				m.list.SetFilter(f[:len(f)-1])
+			}
+		default:
+			if k.Type == tea.KeyRunes {
+				m.list.SetFilter(m.list.Filter() + string(k.Runes))
+			}
 		}
+		return m, nil
+	}
+	switch k.String() {
+	case "/":
+		m.searching = true
+	case "j", "down":
+		m.list.Down()
+	case "k", "up":
+		m.list.Up()
 	}
 	return m, nil
 }
+
+// Searching reports whether the menu is in search-input mode.
+func (m Menu) Searching() bool { return m.searching }
 
 func (m Menu) View() string {
 	var b strings.Builder
@@ -63,6 +91,9 @@ func (m Menu) View() string {
 	}
 	b.WriteString(components.SectionTabs(m.section))
 	b.WriteString("\n")
+	if m.searching || m.list.Filter() != "" {
+		b.WriteString("  " + theme.PriceStyle.Render("/"+m.list.Filter()) + "\n")
+	}
 	if len(m.places) == 0 {
 		b.WriteString("  " + theme.DimStyle.Render("no curated spots deliver here right now") + "\n")
 	} else {

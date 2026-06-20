@@ -28,6 +28,26 @@ func TestMenuRendersPlacesAndUsual(t *testing.T) {
 	}
 }
 
+func TestMenuSearchFiltersList(t *testing.T) {
+	places := []catalog.Place{
+		{ID: "blue-tokai", Name: "Blue Tokai", ETA: "35-45 min"},
+		{ID: "third-wave", Name: "Third Wave", ETA: "30-40 min"},
+	}
+	m := NewMenu(places, catalog.Address{Line: "HSR"}, catalog.SectionCoffee, catalog.Usual{}, false, 0)
+	for _, r := range []rune{'/', 'w', 'a', 'v', 'e'} {
+		key := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
+		nm, _ := m.Update(key)
+		m = nm.(Menu)
+	}
+	view := m.View()
+	if strings.Contains(view, "Blue Tokai") {
+		t.Errorf("Blue Tokai should be filtered out:\n%s", view)
+	}
+	if !strings.Contains(view, "Third Wave") {
+		t.Errorf("Third Wave should remain:\n%s", view)
+	}
+}
+
 func TestMenuEnterSelectsRestaurant(t *testing.T) {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
