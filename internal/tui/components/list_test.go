@@ -93,13 +93,20 @@ func TestListRendersCursorOnSelectedRow(t *testing.T) {
 	l := List{Rows: []Row{{Left: "Blue Tokai", Right: "35-45 min"}, {Left: "Third Wave"}}}
 	out := l.View()
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	if !strings.Contains(lines[0], "❯") {
-		t.Fatalf("selected row 0 should show ❯, got %q", lines[0])
+	if !strings.Contains(lines[0], "▌") {
+		t.Fatalf("selected row 0 should show ▌, got %q", lines[0])
 	}
-	if strings.Contains(lines[1], "❯") {
-		t.Fatalf("non-selected row should not show ❯, got %q", lines[1])
+	if strings.Contains(lines[1], "▌") {
+		t.Fatalf("non-selected row should not show ▌, got %q", lines[1])
 	}
 	if !strings.Contains(out, "Blue Tokai") || !strings.Contains(out, "35-45 min") {
 		t.Fatal("row content missing")
+	}
+}
+
+func TestListSelectedRowHasBar(t *testing.T) {
+	l := List{Rows: []Row{{Left: "Blue Tokai", Right: "35-45 min"}}, Cursor: 0}
+	if !strings.Contains(l.View(), "▌") {
+		t.Errorf("selected row should render the ▌ bar:\n%s", l.View())
 	}
 }

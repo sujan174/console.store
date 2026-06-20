@@ -1,7 +1,6 @@
 package components
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -11,10 +10,11 @@ import (
 
 // Row is one line: Left label, Right meta (eta/price), optional Tag (new), Fav marker.
 type Row struct {
-	Left  string
-	Right string
-	Tag   string // "new" -> green
-	Fav   bool   // -> red ♥
+	Left     string
+	Right    string
+	Tag      string // "new" -> green
+	Fav      bool   // -> red ♥
+	BarGreen bool   // green left-bar when in-cart but not the cursor row
 }
 
 // List is a single-column selectable list with a ❯ cursor and highlighted row.
@@ -80,37 +80,35 @@ func (l *List) Down() {
 func (l List) View() string {
 	width := l.Width
 	if width == 0 {
-		width = 50
+		width = InnerWidth
 	}
 	var b strings.Builder
 	for i, r := range l.VisibleRows() {
-		// build "  ❯ Left ........ Right tag ♥"
-		left := r.Left
 		right := r.Right
 		if r.Tag != "" {
-			right = right + "  " + theme.NewStyle.Render(r.Tag)
+			right += "  " + theme.NewStyle.Render(r.Tag)
 		}
 		if r.Fav {
-			right = right + "  " + theme.FavStyle.Render("♥")
+			right += "  " + theme.FavStyle.Render("♥")
 		}
-		// pad between left and right
 		pad := width - lipgloss.Width(r.Left) - lipgloss.Width(right)
 		if pad < 1 {
 			pad = 1
 		}
-		body := fmt.Sprintf("%s%s%s", left, strings.Repeat(" ", pad), right)
-
+		body := r.Left + strings.Repeat(" ", pad) + right
 		if i == l.Cursor {
-			cur := theme.CursorStyle.Render("❯")
-			// pad body so the highlight bar fills the full column width
-			bodyWidth := lipgloss.Width(body)
-			if bodyWidth < width {
-				body = body + strings.Repeat(" ", width-bodyWidth)
+			bar := theme.CursorStyle.Render("▌")
+			bw := lipgloss.Width(body)
+			if bw < width {
+				body += strings.Repeat(" ", width-bw)
 			}
-			line := theme.SelRowStyle.Render(" " + body + " ")
-			b.WriteString("  " + cur + " " + line + "\n")
+			b.WriteString(bar + theme.SelRowStyle.Render(" "+body+" ") + "\n")
 		} else {
-			b.WriteString("  " + theme.FaintStyle.Render("·") + " " + theme.ItemStyle.Render(body) + "\n")
+			lead := "  "
+			if r.BarGreen {
+				lead = theme.GreenStyle.Render("▌") + " "
+			}
+			b.WriteString(lead + theme.ItemStyle.Render(body) + "\n")
 		}
 	}
 	return b.String()
