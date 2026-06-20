@@ -54,6 +54,25 @@ func TestUsualPreloadsCartAndJumps(t *testing.T) {
 	}
 }
 
+func TestAddressSwitchReFiltersMenu(t *testing.T) {
+	m := New() // starts at a1 (HSR), coffee section
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	view := m.View()
+	if !strings.Contains(view, "Indiranagar") {
+		t.Errorf("menu header should show new address Indiranagar:\n%s", view)
+	}
+	if !strings.Contains(view, "Subko") {
+		t.Errorf("Subko should be serviceable at Indiranagar:\n%s", view)
+	}
+}
+
 func TestAppQuits(t *testing.T) {
 	m := New()
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})

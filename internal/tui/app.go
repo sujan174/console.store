@@ -14,6 +14,7 @@ const (
 	scrMenu screen = iota
 	scrRestaurant
 	scrCart
+	scrAddress
 )
 
 type Model struct {
@@ -25,6 +26,7 @@ type Model struct {
 	menu           screens.Menu
 	rest           screens.Restaurant
 	cart           screens.Cart
+	addrScreen     screens.Address
 	lines          []screens.CartLine
 	cartRestaurant string
 }
@@ -100,6 +102,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return m, nil
+			case "a":
+				m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
+				m.screen = scrAddress
+				return m, nil
 			default:
 				nm, cmd := m.menu.Update(msg)
 				m.menu = nm.(screens.Menu)
@@ -133,6 +139,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrMenu
 				return m, nil
 			}
+		case scrAddress:
+			switch k.String() {
+			case "esc":
+				m.screen = scrMenu
+				return m, nil
+			case "enter":
+				m.addr = m.addrScreen.Selected()
+				m.menu = m.buildMenu()
+				m.screen = scrMenu
+				return m, nil
+			default:
+				na, cmd := m.addrScreen.Update(msg)
+				m.addrScreen = na.(screens.Address)
+				return m, cmd
+			}
 		}
 	}
 	return m, nil
@@ -144,6 +165,8 @@ func (m Model) View() string {
 		return m.rest.View()
 	case scrCart:
 		return m.cart.View()
+	case scrAddress:
+		return m.addrScreen.View()
 	default:
 		return m.menu.View()
 	}
