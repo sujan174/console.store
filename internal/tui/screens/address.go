@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"console.store/internal/catalog"
 	"console.store/internal/tui/components"
@@ -20,7 +21,7 @@ func NewAddress(addrs []catalog.Address, currentID string) Address {
 	rows := make([]components.Row, len(addrs))
 	cursor := 0
 	for i, a := range addrs {
-		rows[i] = components.Row{Left: a.Label, Right: a.Line}
+		rows[i] = components.Row{Left: a.Line, Right: a.Label}
 		if a.ID == currentID {
 			cursor = i
 		}
@@ -45,10 +46,17 @@ func (s Address) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (s Address) View() string {
-	var b strings.Builder
-	b.WriteString("  " + theme.BrandStyle.Render("deliver to") + "\n\n")
-	b.WriteString(s.list.View())
-	b.WriteString("\n")
-	b.WriteString(components.KeyHints("j/k move   ↵ select   esc cancel"))
-	return b.String()
+	var inner strings.Builder
+	inner.WriteString(theme.BrightStyle.Render("deliver to —") + "\n\n")
+	inner.WriteString(s.list.View())
+	inner.WriteString("\n")
+	inner.WriteString(components.Hint("↑↓", "move", "↵", "select & reload", "esc", "cancel"))
+
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(theme.Div2)).
+		Background(lipgloss.Color(theme.PanelHi)).
+		Padding(1, 3).
+		Render(inner.String())
+	return "\n" + panel
 }
