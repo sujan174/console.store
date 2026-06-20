@@ -87,6 +87,6 @@ func (s Restaurant) View() string {
 	b.WriteString("  " + theme.EtaStyle.Render(s.p.ETA) + "\n\n")
 	b.WriteString(s.list.View())
 	b.WriteString("\n")
-	b.WriteString(components.KeyHints("j/k move   ↵ add   / search   esc back   c cart"))
+	b.WriteString(components.KeyHints("↑↓ move   ↵ add   / search   ← back   c cart"))
 	return b.String()
 }

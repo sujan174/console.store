@@ -60,6 +60,6 @@ func (s Instamart) View() string {
 	b.WriteString("  " + theme.EtaStyle.Render(InstamartETA+" · fast lane") + "\n\n")
 	b.WriteString(s.list.View())
 	b.WriteString("\n")
-	b.WriteString(components.KeyHints("j/k move   ↵ add   esc back   c cart"))
+	b.WriteString(components.KeyHints("↑↓ move   ↵ add   ← back   c cart"))
 	return b.String()
 }

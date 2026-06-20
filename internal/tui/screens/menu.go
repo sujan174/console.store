@@ -22,17 +22,38 @@ type Menu struct {
 }
 
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartTotal int) Menu {
-	rows := make([]components.Row, len(places))
-	for i, p := range places {
-		rows[i] = components.Row{Left: p.Name, Right: p.ETA, Fav: p.Fav}
+	var rows []components.Row
+	if hasUsual {
+		rows = append(rows, components.Row{Left: "the usual", Right: usual.Label})
 	}
-	return Menu{places: places, address: addr, section: section, usual: usual, hasUsual: hasUsual, cartTotal: cartTotal, list: components.List{Rows: rows}}
+	for _, p := range places {
+		rows = append(rows, components.Row{Left: p.Name, Right: p.ETA, Fav: p.Fav})
+	}
+	cursor := 0
+	if hasUsual && len(places) > 0 {
+		cursor = 1 // start on the first place; ↑ reaches the usual
+	}
+	return Menu{places: places, address: addr, section: section, usual: usual, hasUsual: hasUsual, cartTotal: cartTotal, list: components.List{Rows: rows, Cursor: cursor}}
 }
 
-// Selected returns the place under the cursor. Returns ok=false if the list is empty.
+// SelectedUsual reports whether the cursor is on the "the usual" row.
+func (m Menu) SelectedUsual() bool {
+	return m.hasUsual && m.list.SelectedIndex() == 0
+}
+
+// Selected returns the place under the cursor (false if on the usual row or empty).
 func (m Menu) Selected() (catalog.Place, bool) {
 	i := m.list.SelectedIndex()
 	if i < 0 {
+		return catalog.Place{}, false
+	}
+	if m.hasUsual {
+		if i == 0 {
+			return catalog.Place{}, false
+		}
+		i--
+	}
+	if i < 0 || i >= len(m.places) {
 		return catalog.Place{}, false
 	}
 	return m.places[i], true
@@ -85,21 +106,17 @@ func (m Menu) View() string {
 	var b strings.Builder
 	b.WriteString(components.Header("console.store", m.address.Line, m.cartTotal))
 	b.WriteString("\n")
-	if m.hasUsual {
-		b.WriteString("  " + theme.CursorStyle.Render("u  the usual") + "   " +
-			theme.ItemStyle.Render(m.usual.Label) + "\n\n")
-	}
 	b.WriteString(components.SectionTabs(m.section))
 	b.WriteString("\n")
 	if m.searching || m.list.Filter() != "" {
 		b.WriteString("  " + theme.PriceStyle.Render("/"+m.list.Filter()) + "\n")
 	}
-	if len(m.places) == 0 {
+	if len(m.places) == 0 && !m.hasUsual {
 		b.WriteString("  " + theme.DimStyle.Render("no curated spots deliver here right now") + "\n")
 	} else {
 		b.WriteString(m.list.View())
 	}
 	b.WriteString("\n")
-	b.WriteString(components.KeyHints("j/k move   ↵ open   u usual   1/2/3 section   i instamart   a address   c cart"))
+	b.WriteString(components.KeyHints("↑↓ move   ←→ section   ↵ open   / search   c cart   a address"))
 	return b.String()
 }

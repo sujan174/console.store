@@ -78,6 +78,20 @@ func (c Cart) Remove() Cart {
 	return c.clampCursor()
 }
 
+// Right increments the selected line's quantity.
+func (c Cart) Right() Cart { return c.Inc() }
+
+// Left decrements the selected line; if its quantity is 1 it removes the line.
+func (c Cart) Left() Cart {
+	if len(c.lines) == 0 {
+		return c
+	}
+	if c.lines[c.cursor].Qty <= 1 {
+		return c.Remove()
+	}
+	return c.Dec()
+}
+
 func (c Cart) Init() tea.Cmd { return nil }
 
 func (c Cart) View() string {
@@ -104,6 +118,6 @@ func (c Cart) View() string {
 	if c.minNotice != "" {
 		b.WriteString("  " + theme.FavStyle.Render(c.minNotice) + "\n\n")
 	}
-	b.WriteString(components.KeyHints("j/k move   +/- qty   x remove   ↵ checkout   esc back"))
+	b.WriteString(components.KeyHints("↑↓ move   ←→ qty   ← removes at 1   ↵ checkout   esc back"))
 	return b.String()
 }

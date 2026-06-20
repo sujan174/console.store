@@ -62,6 +62,17 @@ func (m Model) buildMenu() screens.Menu {
 	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartTotal())
 }
 
+var menuTabs = []catalog.Section{catalog.SectionCoffee, catalog.SectionFood, catalog.SectionSnacks}
+
+func sectionIndex(s catalog.Section) int {
+	for i, t := range menuTabs {
+		if t == s {
+			return i
+		}
+	}
+	return 0
+}
+
 func orderID(lines []screens.CartLine) string {
 	sum := 0
 	for _, l := range lines {
@@ -131,37 +142,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			switch k.String() {
 			case "enter":
+				if m.menu.SelectedUsual() {
+					if usual, ok := m.repo.Usual(m.addr); ok {
+						if p, ok := m.repo.Menu(usual.PlaceID); ok {
+							m.lines = []screens.CartLine{{Item: usual.Item, Qty: 1}}
+							m.cartRestaurant = p.Name
+							m.cart = screens.NewCart(p.Name, m.lines)
+							m.screen = scrCart
+						}
+					}
+					return m, nil
+				}
 				if p, ok := m.menu.Selected(); ok {
 					m.rest = screens.NewRestaurant(p, m.cartTotal())
 					m.screen = scrRestaurant
+				}
+				return m, nil
+			case "right", "l":
+				i := sectionIndex(m.section)
+				if i < len(menuTabs)-1 {
+					m.section = menuTabs[i+1]
+					m.menu = m.buildMenu()
+				} else {
+					m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imCartTotal())
+					m.screen = scrInstamart
+				}
+				return m, nil
+			case "left", "h":
+				i := sectionIndex(m.section)
+				if i > 0 {
+					m.section = menuTabs[i-1]
+					m.menu = m.buildMenu()
 				}
 				return m, nil
 			case "c":
 				m.cart = screens.NewCart(m.cartHeader(), m.lines)
 				m.screen = scrCart
 				return m, nil
-			case "1", "2", "3":
-				idx := map[string]int{"1": 0, "2": 1, "3": 2}[k.String()]
-				m.section = catalog.MenuSections[idx]
-				m.menu = m.buildMenu()
-				return m, nil
-			case "u":
-				if usual, ok := m.repo.Usual(m.addr); ok {
-					if p, ok := m.repo.Menu(usual.PlaceID); ok {
-						m.lines = []screens.CartLine{{Item: usual.Item, Qty: 1}}
-						m.cartRestaurant = p.Name
-						m.cart = screens.NewCart(p.Name, m.lines)
-						m.screen = scrCart
-					}
-				}
-				return m, nil
 			case "a":
 				m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
 				m.screen = scrAddress
-				return m, nil
-			case "i":
-				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imCartTotal())
-				m.screen = scrInstamart
 				return m, nil
 			default:
 				nm, cmd := m.menu.Update(msg)
@@ -175,7 +195,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 			switch k.String() {
-			case "esc":
+			case "esc", "left", "h":
 				m.screen = scrMenu
 				return m, nil
 			case "enter":
@@ -215,12 +235,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cart = m.cart.Down()
 			case "k", "up":
 				m.cart = m.cart.Up()
-			case "+", "=":
-				m.cart = m.cart.Inc()
-			case "-":
-				m.cart = m.cart.Dec()
-			case "x":
-				m.cart = m.cart.Remove()
+			case "right", "l":
+				m.cart = m.cart.Right()
+			case "left", "h":
+				m.cart = m.cart.Left()
 			}
 			// keep router's authoritative lines in sync with cart edits
 			m.lines = m.cart.Lines()
@@ -269,6 +287,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.screen = scrMenu
 				return m, nil
+			case "left", "h":
+				m.section = catalog.SectionSnacks
+				m.menu = m.buildMenu()
+				m.screen = scrMenu
+				return m, nil
 			case "enter":
 				it, ok := m.inst.Selected()
 				if !ok {
@@ -298,12 +321,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.imCart = m.imCart.Down()
 			case "k", "up":
 				m.imCart = m.imCart.Up()
-			case "+", "=":
-				m.imCart = m.imCart.Inc()
-			case "-":
-				m.imCart = m.imCart.Dec()
-			case "x":
-				m.imCart = m.imCart.Remove()
+			case "right", "l":
+				m.imCart = m.imCart.Right()
+			case "left", "h":
+				m.imCart = m.imCart.Left()
 			case "enter":
 				if m.imCartTotal() >= InstamartMin {
 					m.checkout = screens.NewCheckout("Instamart", m.addr, m.imLines)

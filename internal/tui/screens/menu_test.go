@@ -54,11 +54,9 @@ func TestMenuEnterSelectsRestaurant(t *testing.T) {
 	places := repo.Places(addr, catalog.SectionCoffee)
 	usual, ok := repo.Usual(addr)
 	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 338)
+	// cursor starts on the first place (Blue Tokai); Down moves to Third Wave.
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	mm := m2.(Menu)
-	if mm.list.Cursor != 1 {
-		t.Fatalf("down should move cursor to 1, got %d", mm.list.Cursor)
-	}
 	got, ok := mm.Selected()
 	if !ok {
 		t.Fatal("Selected() returned ok=false")

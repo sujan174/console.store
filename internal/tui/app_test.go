@@ -31,7 +31,7 @@ func TestAppEnterOpensRestaurantThenEscBack(t *testing.T) {
 
 func TestSectionSwitchChangesPlaces(t *testing.T) {
 	m := New()
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	view := updated.(Model).View()
 	if !strings.Contains(view, "California Burrito") {
 		t.Errorf("after switching to food, expected a food place; got:\n%s", view)
@@ -42,8 +42,10 @@ func TestSectionSwitchChangesPlaces(t *testing.T) {
 }
 
 func TestUsualPreloadsCartAndJumps(t *testing.T) {
-	m := New() // a1 -> usual is Cold Coffee · Blue Tokai
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	m := New()                                          // a1 -> usual is Cold Coffee · Blue Tokai
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp}) // move onto the usual row
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 	view := m.View()
 	if !strings.Contains(view, "Cold Coffee") {
@@ -134,7 +136,7 @@ func TestCartEditsSyncToRouter(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")}) // cart
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("+")}) // qty 2
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight}) // qty 2
 	m = updated.(Model)
 	if m.cartTotal() != m.cart.Total() {
 		t.Errorf("router total %d != cart total %d", m.cartTotal(), m.cart.Total())
@@ -218,7 +220,12 @@ func TestAddressSwitchFlushesUnserviceableCart(t *testing.T) {
 
 func TestInstamartSeparateCartAndMinimum(t *testing.T) {
 	m := New()
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	// walk coffee -> food -> snacks -> instamart
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(Model)
 	if !strings.Contains(m.View(), "fast lane") {
 		t.Fatalf("expected instamart screen:\n%s", m.View())
@@ -243,7 +250,9 @@ func TestInstamartSeparateCartAndMinimum(t *testing.T) {
 func TestInstamartOrderIDDerivedFromItsOwnCart(t *testing.T) {
 	m := New()
 	seq := []tea.KeyMsg{
-		{Type: tea.KeyRunes, Runes: []rune("i")}, // instamart
+		{Type: tea.KeyRight},                     // coffee -> food
+		{Type: tea.KeyRight},                     // food -> snacks
+		{Type: tea.KeyRight},                     // snacks -> instamart
 		{Type: tea.KeyEnter},                     // add Red Bull (₹125 >= 99)
 		{Type: tea.KeyRunes, Runes: []rune("c")}, // im cart
 		{Type: tea.KeyEnter},                     // checkout
