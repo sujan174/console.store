@@ -41,6 +41,11 @@ func New() Model {
 // buildMenu constructs the menu screen for the current address + section.
 func (m Model) buildMenu() screens.Menu {
 	usual, ok := m.repo.Usual(m.addr)
+	// Only surface the usual when its item belongs to the section being viewed,
+	// so coffee favourites don't bleed into the food/snacks tabs.
+	if ok && usual.Item.Section != m.section {
+		ok = false
+	}
 	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartTotal())
 }
 
@@ -79,6 +84,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "c":
 				m.cart = screens.NewCart(m.cartHeader(), m.lines)
 				m.screen = scrCart
+				return m, nil
+			case "1", "2", "3":
+				idx := map[string]int{"1": 0, "2": 1, "3": 2}[k.String()]
+				m.section = catalog.MenuSections[idx]
+				m.menu = m.buildMenu()
 				return m, nil
 			default:
 				nm, cmd := m.menu.Update(msg)

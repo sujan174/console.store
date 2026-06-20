@@ -29,6 +29,18 @@ func TestAppEnterOpensRestaurantThenEscBack(t *testing.T) {
 	}
 }
 
+func TestSectionSwitchChangesPlaces(t *testing.T) {
+	m := New()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	view := updated.(Model).View()
+	if !strings.Contains(view, "California Burrito") {
+		t.Errorf("after switching to food, expected a food place; got:\n%s", view)
+	}
+	if strings.Contains(view, "Blue Tokai") {
+		t.Error("coffee place should not show under food section")
+	}
+}
+
 func TestAppQuits(t *testing.T) {
 	m := New()
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
