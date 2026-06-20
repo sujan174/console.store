@@ -381,3 +381,36 @@ func TestRestaurantLeftDecrements(t *testing.T) {
 
 // Instamart is no longer a menu lane in the approved 3-tab design, so it is not
 // reachable from the menu. The instamart flow tests were removed with that change.
+
+func TestCmdPaletteOpensAndInstamart(t *testing.T) {
+	m := newAtMenu()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(":")})
+	m = updated.(Model)
+	if !m.cmdOpen {
+		t.Fatal("`:` should open the palette")
+	}
+	for _, r := range "instamart" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if !strings.Contains(m.View(), "fast lane") {
+		t.Errorf(":instamart should open Instamart:\n%s", m.View())
+	}
+}
+
+func TestCmdPaletteHelpStaysOpen(t *testing.T) {
+	m := newAtMenu()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(":")})
+	m = updated.(Model)
+	for _, r := range "help" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if !m.cmdOpen {
+		t.Error("help should keep the palette open")
+	}
+}

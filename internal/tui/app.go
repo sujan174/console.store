@@ -79,6 +79,9 @@ type Model struct {
 	trackStep int
 	trackTick int
 
+	cmdOpen bool
+	cmd     screens.CmdBar
+
 	frame int
 }
 
@@ -261,12 +264,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tick()
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
+		// Command palette captures all keys while open, so letters like `q`
+		// type into the prompt instead of quitting (design lines 743-751).
+		if m.cmdOpen {
+			switch k.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.cmdOpen = false
+				m.cmd = m.cmd.ClearText()
+			case "enter":
+				bar, action := m.cmd.Run()
+				m.cmd = bar
+				switch action {
+				case "instamart":
+					m.cmdOpen = false
+					m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imCartTotal())
+					m.screen = scrInstamart
+				case "clear":
+					// out already cleared in Run; stay open
+				case "close":
+					m.cmdOpen = false
+				}
+			case "backspace":
+				m.cmd = m.cmd.Backspace()
+			default:
+				if k.Type == tea.KeyRunes {
+					m.cmd = m.cmd.Append(string(k.Runes))
+				}
+			}
+			return m, nil
+		}
+
 		switch k.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
 		if m.screen == scrSplash {
 			m.screen = scrMenu
+			return m, nil
+		}
+		// `:` opens the palette from any in-app screen (design line 760).
+		if k.String() == ":" && m.screen != scrSplash {
+			m.cmdOpen = true
+			m.cmd = screens.NewCmdBar()
 			return m, nil
 		}
 		switch m.screen {
@@ -569,5 +610,9 @@ func (m Model) View() string {
 	default: // scrMenu
 		body = m.menu.View()
 	}
-	return body + "\n" + m.statusBar()
+	out := body
+	if m.cmdOpen {
+		out += "\n" + m.cmd.View(m.blinkOn())
+	}
+	return out + "\n" + m.statusBar()
 }
