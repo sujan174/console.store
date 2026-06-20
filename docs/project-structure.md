@@ -33,6 +33,12 @@ console.store/
 │   │       ├── instamart.go   # flat curated grocery list + cart
 │   │       ├── address.go     # address switcher overlay
 │   │       └── errors.go      # empty / error / reauth states
+│   ├── catalog/                 # DATA SEAM — screens depend only on this
+│   │   ├── schema.go            # Section/Address/Item/Place/Usual (DB+Swiggy-ready)
+│   │   ├── repository.go        # Repository interface (swappable backend)
+│   │   └── mem/                 # in-memory curated impl (mock today)
+│   │       ├── data.go          # curated addresses/places/instamart seed
+│   │       └── repo.go          # Repo implementing catalog.Repository
 │   ├── account/
 │   │   ├── service.go         # resolve pubkey↔account↔phone; device binding
 │   │   └── session.go         # 30-day session validity
@@ -66,6 +72,9 @@ console.store/
 ```
 
 ## Package responsibilities & key types
+
+### `internal/catalog` — the data seam
+All screens consume `catalog` types and a `catalog.Repository`; they never touch a concrete data source. Today `catalog/mem` fills it with curated mock data (per-address serviceability via `ServesAddressIDs`). Later a Postgres + Swiggy implementation fills the **same** interface — zero screen changes. Schema is DB/Swiggy-ready now: `Address` carries `Lat/Lng/Full`, `Place`/`Item` carry `SwiggyID`.
 
 ### `internal/tui`
 Elm-architecture (`bubbletea`). Root `app.Model` holds the active screen and global state handle; each screen is its own `tea.Model` returning `tea.Cmd`s. Backend calls are dispatched as `tea.Cmd`s that emit result messages — the TUI stays non-blocking.

@@ -310,3 +310,18 @@ Triggered mid-action on 401. Pause → push link to phone → resume.
 - Every network wait shows a spinner; nothing blocks the UI thread (backend calls are `tea.Cmd`s).
 - No cancellation exists anywhere — the UI never offers a "cancel order" action.
 ```
+
+## Keybindings — mock build (all live over `catalog.Repository`)
+
+These are implemented and working against curated mock data (`internal/catalog/mem`). They swap onto Postgres + Swiggy behind `catalog.Repository` with no screen changes.
+
+| Screen | Keys |
+|--------|------|
+| Menu | `j/k` move · `↵` open place · `u` the usual · `1/2/3` coffee/food/snacks · `i` Instamart · `a` address · `/` search · `c` cart · `q` quit |
+| Restaurant | `j/k` · `↵` add · `/` search · `esc` back · `c` cart |
+| Cart | `j/k` · `+/-` qty · `x` remove · `↵` checkout · `esc` back |
+| Checkout | `↵` place order · `esc` back |
+| Confirm | `esc` back to menu |
+| Instamart | `j/k` · `↵` add · `c` cart (₹99 min) · `esc` back |
+
+Notes: address switch flushes the food cart if the cart's restaurant doesn't serve the new address; Instamart has its own separate cart and a ₹99 minimum before checkout; "the usual" line shows on its matching section but the `u` key works on any section.
