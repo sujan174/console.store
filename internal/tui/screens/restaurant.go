@@ -27,6 +27,9 @@ func NewRestaurant(r mock.Restaurant, cartTotal int) Restaurant {
 
 func (s Restaurant) Selected() mock.Item { return s.r.Items[s.list.Cursor] }
 
+// RestaurantData returns the underlying restaurant (used by the app router).
+func (s Restaurant) RestaurantData() mock.Restaurant { return s.r }
+
 func (s Restaurant) Init() tea.Cmd { return nil }
 
 func (s Restaurant) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
