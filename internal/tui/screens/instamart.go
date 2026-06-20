@@ -28,7 +28,13 @@ func NewInstamart(items []catalog.Item, cartTotal int) Instamart {
 	return Instamart{items: items, cartTotal: cartTotal, list: components.List{Rows: rows}}
 }
 
-func (s Instamart) Selected() catalog.Item { return s.items[s.list.SelectedIndex()] }
+func (s Instamart) Selected() (catalog.Item, bool) {
+	i := s.list.SelectedIndex()
+	if i < 0 {
+		return catalog.Item{}, false
+	}
+	return s.items[i], true
+}
 
 func (s Instamart) WithCartTotal(t int) Instamart { s.cartTotal = t; return s }
 

@@ -30,7 +30,7 @@ func TestRestaurantSelectedItem(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
 	r := NewRestaurant(p, 0)
-	if got := r.Selected().Name; got != "Cold Coffee" {
-		t.Fatalf("Selected() = %s, want Cold Coffee", got)
+	if got, ok := r.Selected(); !ok || got.Name != "Cold Coffee" {
+		t.Fatalf("Selected() = %s (ok=%v), want Cold Coffee", got.Name, ok)
 	}
 }

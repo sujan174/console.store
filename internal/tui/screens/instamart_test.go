@@ -18,7 +18,7 @@ func TestInstamartListsItemsWithFastEta(t *testing.T) {
 	if !strings.Contains(view, "Red Bull") || !strings.Contains(view, "min") {
 		t.Errorf("instamart list missing items or eta:\n%s", view)
 	}
-	if s.Selected().Name != "Red Bull (250ml)" {
-		t.Errorf("first selection = %q", s.Selected().Name)
+	if got, ok := s.Selected(); !ok || got.Name != "Red Bull (250ml)" {
+		t.Errorf("first selection = %q (ok=%v)", got.Name, ok)
 	}
 }

@@ -99,7 +99,10 @@ func TestAddToCartPreservesCursor(t *testing.T) {
 	model := m4.(Model)
 
 	// After add, the restaurant cursor must still point to item 1.
-	got := model.rest.Selected()
+	got, ok := model.rest.Selected()
+	if !ok {
+		t.Fatal("expected a selected item")
+	}
 	want := "Hazelnut Cold Brew" // Blue Tokai index 1
 	if got.Name != want {
 		t.Fatalf("cursor was reset: want selected=%q, got selected=%q", want, got.Name)
@@ -164,6 +167,52 @@ func TestCheckoutFlowPlacesAndResets(t *testing.T) {
 	}
 	if !strings.Contains(m.View(), "console.store") {
 		t.Errorf("should be back on menu:\n%s", m.View())
+	}
+}
+
+func TestSearchEmptyThenEnterDoesNotPanic(t *testing.T) {
+	m := New()
+	seq := []tea.KeyMsg{
+		{Type: tea.KeyEnter},                     // open first place
+		{Type: tea.KeyRunes, Runes: []rune("/")}, // enter search
+		{Type: tea.KeyRunes, Runes: []rune("z")}, // filter -> zero matches
+		{Type: tea.KeyRunes, Runes: []rune("z")},
+		{Type: tea.KeyEnter}, // exit search, filter still empty-result
+		{Type: tea.KeyEnter}, // would panic on Selected() pre-fix
+	}
+	for _, k := range seq {
+		updated, _ := m.Update(k)
+		m = updated.(Model)
+	}
+	// no panic; cart stayed empty because nothing was selectable
+	if m.cartTotal() != 0 {
+		t.Errorf("nothing should have been added, total=%d", m.cartTotal())
+	}
+}
+
+func TestAddressSwitchFlushesUnserviceableCart(t *testing.T) {
+	m := New() // a1 (HSR); Blue Tokai serves a1 but NOT a3
+	// add a Blue Tokai item (first coffee place at a1, first item)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add Cold Coffee
+	m = updated.(Model)
+	if m.cartTotal() == 0 {
+		t.Fatal("expected an item in cart")
+	}
+	// back to menu, then switch to a3 (Indiranagar): esc -> a -> j -> j -> enter
+	for _, k := range []tea.KeyMsg{
+		{Type: tea.KeyEsc},
+		{Type: tea.KeyRunes, Runes: []rune("a")},
+		{Type: tea.KeyRunes, Runes: []rune("j")},
+		{Type: tea.KeyRunes, Runes: []rune("j")},
+		{Type: tea.KeyEnter},
+	} {
+		updated, _ = m.Update(k)
+		m = updated.(Model)
+	}
+	if m.cartTotal() != 0 {
+		t.Errorf("cart should be flushed when restaurant doesn't serve new address, total=%d", m.cartTotal())
 	}
 }
 

@@ -83,6 +83,21 @@ func (m Model) cartTotal() int {
 	return t
 }
 
+// cartRestaurantServes reports whether the cart's restaurant is serviceable at addr.
+func (m Model) cartRestaurantServes(addr catalog.Address) bool {
+	if m.cartRestaurant == "" {
+		return true
+	}
+	for _, section := range catalog.MenuSections {
+		for _, p := range m.repo.Places(addr, section) {
+			if p.Name == m.cartRestaurant {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (m Model) imCartTotal() int {
 	t := 0
 	for _, l := range m.imLines {
@@ -164,8 +179,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrMenu
 				return m, nil
 			case "enter":
+				it, ok := m.rest.Selected()
+				if !ok {
+					return m, nil
+				}
 				wasEmpty := len(m.lines) == 0
-				m.lines = append(m.lines, screens.CartLine{Item: m.rest.Selected(), Qty: 1})
+				m.lines = append(m.lines, screens.CartLine{Item: it, Qty: 1})
 				if wasEmpty {
 					m.cartRestaurant = m.rest.PlaceData().Name
 				}
@@ -214,6 +233,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "enter":
 				m.addr = m.addrScreen.Selected()
+				if !m.cartRestaurantServes(m.addr) {
+					m.lines = nil
+					m.cartRestaurant = ""
+				}
 				m.menu = m.buildMenu()
 				m.screen = scrMenu
 				return m, nil
@@ -247,7 +270,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrMenu
 				return m, nil
 			case "enter":
-				m.imLines = append(m.imLines, screens.CartLine{Item: m.inst.Selected(), Qty: 1})
+				it, ok := m.inst.Selected()
+				if !ok {
+					return m, nil
+				}
+				m.imLines = append(m.imLines, screens.CartLine{Item: it, Qty: 1})
 				m.inst = m.inst.WithCartTotal(m.imCartTotal())
 				return m, nil
 			case "c":

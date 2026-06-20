@@ -26,7 +26,13 @@ func NewRestaurant(p catalog.Place, cartTotal int) Restaurant {
 	return Restaurant{p: p, cartTotal: cartTotal, list: components.List{Rows: rows}}
 }
 
-func (s Restaurant) Selected() catalog.Item { return s.p.Items[s.list.SelectedIndex()] }
+func (s Restaurant) Selected() (catalog.Item, bool) {
+	i := s.list.SelectedIndex()
+	if i < 0 {
+		return catalog.Item{}, false
+	}
+	return s.p.Items[i], true
+}
 
 func (s Restaurant) WithCartTotal(t int) Restaurant { s.cartTotal = t; return s }
 
