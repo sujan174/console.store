@@ -9,6 +9,7 @@ config/local.*
 secrets/
 *.pem
 *.key
+.ssh/
 
 # Go build output
 /sshd
