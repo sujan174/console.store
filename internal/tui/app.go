@@ -151,6 +151,15 @@ func (m Model) qtyMap() map[string]int {
 	return q
 }
 
+// imQtyMap returns current Instamart cart quantities keyed by item ID.
+func (m Model) imQtyMap() map[string]int {
+	q := map[string]int{}
+	for _, l := range m.imLines {
+		q[l.Item.ID] += l.Qty
+	}
+	return q
+}
+
 func orderID(lines []screens.CartLine) string {
 	sum := 0
 	for _, l := range lines {
@@ -279,7 +288,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch action {
 				case "instamart":
 					m.cmdOpen = false
-					m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imCartTotal())
+					m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartTotal())
 					m.screen = scrInstamart
 				case "clear":
 					// out already cleared in Run; stay open
@@ -500,21 +509,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.screen = scrMenu
 				return m, nil
-			case "left", "h":
-				m.section = catalog.SectionSnacks
-				m.menu = m.buildMenu()
-				m.screen = scrMenu
-				return m, nil
-			case "enter":
+			case "enter", "right", "l":
 				it, ok := m.inst.Selected()
 				if !ok {
 					return m, nil
 				}
-				m.imLines = append(m.imLines, screens.CartLine{Item: it, Qty: 1})
-				m.inst = m.inst.WithCartTotal(m.imCartTotal())
+				m.imLines = appendOrInc(m.imLines, it)
+				ci := m.inst.CursorIndex()
+				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartTotal()).WithCursor(ci)
+				return m, nil
+			case "left", "h":
+				it, ok := m.inst.Selected()
+				if !ok {
+					return m, nil
+				}
+				m.imLines = decItem(m.imLines, it.ID)
+				ci := m.inst.CursorIndex()
+				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartTotal()).WithCursor(ci)
 				return m, nil
 			case "c":
-				m.imCart = screens.NewCart("Instamart", m.imLines)
+				m.imCart = screens.NewCart("Instamart", m.imLines).WithEta(screens.InstamartETA)
 				if m.imCartTotal() < InstamartMin {
 					m.imCart = m.imCart.WithMinNotice(fmt.Sprintf("add ₹%d more — ₹%d minimum on Instamart", InstamartMin-m.imCartTotal(), InstamartMin))
 				}

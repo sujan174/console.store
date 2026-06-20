@@ -8,17 +8,25 @@ import (
 	"console.store/internal/tui/screens"
 )
 
-func TestInstamartListsItemsWithFastEta(t *testing.T) {
-	items := []catalog.Item{
-		{ID: "im-red-bull", Name: "Red Bull (250ml)", Price: 125, Section: catalog.SectionInstamart},
-		{ID: "im-lays", Name: "Lay's Classic Salted", Price: 20, Section: catalog.SectionInstamart},
-	}
-	s := screens.NewInstamart(items, 0)
-	view := s.View()
-	if !strings.Contains(view, "Red Bull") || !strings.Contains(view, "min") {
-		t.Errorf("instamart list missing items or eta:\n%s", view)
+func TestInstamartHeaderAndFastLane(t *testing.T) {
+	items := []catalog.Item{{ID: "rb", Name: "Red Bull (250ml)", Price: 125}}
+	s := screens.NewInstamart(items, map[string]int{}, 0)
+	v := s.View()
+	if !strings.Contains(v, "fast lane") || !strings.Contains(v, "Red Bull") {
+		t.Errorf("missing header/items:\n%s", v)
 	}
 	if got, ok := s.Selected(); !ok || got.Name != "Red Bull (250ml)" {
 		t.Errorf("first selection = %q (ok=%v)", got.Name, ok)
+	}
+}
+
+func TestInstamartInCartStepper(t *testing.T) {
+	items := []catalog.Item{{ID: "rb", Name: "Red Bull", Price: 125}}
+	s := screens.NewInstamart(items, map[string]int{"rb": 1}, 125)
+	v := s.View()
+	for _, w := range []string{"✓", "×1", "−", "+"} {
+		if !strings.Contains(v, w) {
+			t.Errorf("missing %q:\n%s", w, v)
+		}
 	}
 }
