@@ -1,0 +1,113 @@
+<h2>Swap the pink — pick the cursor accent</h2>
+<p class="subtitle">Everything else locked. Just the ❯ cursor and ♥ fav color. Three options.</p>
+
+<style>
+.screens { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; margin-top:24px; }
+.screen-label { font-size:12px; color:#888; text-transform:uppercase; letter-spacing:.1em; margin-bottom:10px; }
+.screen-label strong { color:#ccc; }
+.term-window { background:#08080a; border-radius:12px; overflow:hidden; border:1px solid #1c1c20; box-shadow:0 10px 36px rgba(0,0,0,.55); cursor:pointer; border:3px solid transparent; transition:border-color .2s, transform .15s; }
+.term-window:hover { transform:translateY(-3px); }
+.term-window.selected { border-color:#7c6af7; }
+.term-titlebar { display:flex; align-items:center; gap:7px; padding:9px 13px; background:#121215; border-bottom:1px solid #1a1a1e; }
+.dot{width:11px;height:11px;border-radius:50%}.dot-r{background:#ff5f57}.dot-y{background:#febc2e}.dot-g{background:#28c840}
+.win-title{font-size:11px;color:#36363c;margin-left:auto}
+.tb{font-family:'SF Mono','JetBrains Mono','Fira Code',monospace;font-size:11.5px;line-height:2.05;padding:18px 20px;white-space:pre}
+
+.brand{color:#f2f2f7;font-weight:bold}
+.cartchip{color:#ffce5c}
+.dim{color:#52525a}
+.cat-on{color:#ffce5c}
+.cat-off{color:#46464d}
+.item{color:#c4c4cc}
+.price{color:#5ad1c4}
+.eta{color:#9ece6a}
+.selrow{background:#171320;border-radius:4px}
+.seltxt{color:#ffffff}
+.key{color:#34343c}
+.new{color:#9ece6a}
+
+/* A: white cursor */
+.a-cur { color: #ffffff; font-weight:bold; }
+.a-fav { color: #ffffff; }
+
+/* B: violet/lavender */
+.b-cur { color: #a78bfa; font-weight:bold; }
+.b-fav { color: #a78bfa; }
+
+/* C: orange */
+.c-cur { color: #fb923c; font-weight:bold; }
+.c-fav { color: #fb923c; }
+
+.card-label { padding:10px 14px; background:#0e0e11; font-size:12px; color:#777; border-top:1px solid #1a1a1e; }
+.card-label strong { color:#ccc; }
+</style>
+
+<div class="screens">
+
+  <!-- A: White cursor -->
+  <div>
+    <div class="screen-label">A — <strong>White</strong></div>
+    <div class="term-window" data-choice="a" onclick="toggleSelect(this)">
+      <div class="term-titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="win-title">console.store</span></div>
+      <div class="tb"><span class="brand">  console.store</span>             <span class="cartchip">cart · ₹338</span>
+
+  <span class="dim">HSR Layout · 10 min</span>
+
+  <span class="cat-on">coffee</span>   <span class="cat-off">food</span>   <span class="cat-off">snacks</span>
+
+  <span class="selrow"> <span class="a-cur">❯</span> <span class="seltxt">Blue Tokai</span>    <span class="eta">8 min</span>  <span class="a-fav">♥</span> </span>
+    <span class="item">Third Wave</span>    <span class="eta">9 min</span>
+    <span class="item">Sleepy Owl</span>  <span class="eta">11 min</span>
+    <span class="item">Subko</span>       <span class="eta">14 min</span>
+
+  <span class="key">/ search    ↵ open</span>
+</div>
+      <div class="card-label"><strong>A</strong> — pure white · crispest, highest contrast · classic terminal</div>
+    </div>
+  </div>
+
+  <!-- B: Violet -->
+  <div>
+    <div class="screen-label">B — <strong>Violet</strong></div>
+    <div class="term-window" data-choice="b" onclick="toggleSelect(this)">
+      <div class="term-titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="win-title">console.store</span></div>
+      <div class="tb"><span class="brand">  console.store</span>             <span class="cartchip">cart · ₹338</span>
+
+  <span class="dim">HSR Layout · 10 min</span>
+
+  <span class="cat-on">coffee</span>   <span class="cat-off">food</span>   <span class="cat-off">snacks</span>
+
+  <span class="selrow"> <span class="b-cur">❯</span> <span class="seltxt">Blue Tokai</span>    <span class="eta">8 min</span>  <span class="b-fav">♥</span> </span>
+    <span class="item">Third Wave</span>    <span class="eta">9 min</span>
+    <span class="item">Sleepy Owl</span>  <span class="eta">11 min</span>
+    <span class="item">Subko</span>       <span class="eta">14 min</span>
+
+  <span class="key">/ search    ↵ open</span>
+</div>
+      <div class="card-label"><strong>B</strong> — lavender violet · soft, distinct, works with teal + amber</div>
+    </div>
+  </div>
+
+  <!-- C: Orange -->
+  <div>
+    <div class="screen-label">C — <strong>Orange</strong></div>
+    <div class="term-window" data-choice="c" onclick="toggleSelect(this)">
+      <div class="term-titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="win-title">console.store</span></div>
+      <div class="tb"><span class="brand">  console.store</span>             <span class="cartchip">cart · ₹338</span>
+
+  <span class="dim">HSR Layout · 10 min</span>
+
+  <span class="cat-on">coffee</span>   <span class="cat-off">food</span>   <span class="cat-off">snacks</span>
+
+  <span class="selrow"> <span class="c-cur">❯</span> <span class="seltxt">Blue Tokai</span>    <span class="eta">8 min</span>  <span class="c-fav">♥</span> </span>
+    <span class="item">Third Wave</span>    <span class="eta">9 min</span>
+    <span class="item">Sleepy Owl</span>  <span class="eta">11 min</span>
+    <span class="item">Subko</span>       <span class="eta">14 min</span>
+
+  <span class="key">/ search    ↵ open</span>
+</div>
+      <div class="card-label"><strong>C</strong> — warm orange · energetic, bold, pairs with amber cart</div>
+    </div>
+  </div>
+
+</div>

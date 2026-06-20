@@ -1,0 +1,84 @@
+<h2>Simple + cursor + a little color</h2>
+<p class="subtitle">Same clean layout. Added the ❯ cursor and a few accents that glow on black — each color carries one meaning.</p>
+
+<style>
+.screens { display:grid; grid-template-columns:1fr 1fr; gap:26px; margin-top:24px; }
+.screen-label { font-size:12px; color:#888; text-transform:uppercase; letter-spacing:.1em; margin-bottom:10px; }
+.screen-label strong { color:#e89ac8; }
+.term-window { background:#08080a; border-radius:12px; overflow:hidden; border:1px solid #1c1c20; box-shadow:0 10px 36px rgba(0,0,0,.55); }
+.term-titlebar { display:flex; align-items:center; gap:7px; padding:9px 13px; background:#121215; border-bottom:1px solid #1a1a1e; }
+.dot{width:11px;height:11px;border-radius:50%}.dot-r{background:#ff5f57}.dot-y{background:#febc2e}.dot-g{background:#28c840}
+.win-title{font-size:11px;color:#36363c;margin-left:auto}
+.tb{font-family:'SF Mono','JetBrains Mono','Fira Code',monospace;font-size:12px;line-height:2.05;padding:20px 22px;white-space:pre}
+
+.brand{color:#f2f2f7;font-weight:bold;letter-spacing:.03em}
+.cart{color:#ffce5c}
+.dim{color:#52525a}
+.faint{color:#2c2c32}
+.cat-on{color:#ffce5c}
+.cat-off{color:#46464d}
+.item{color:#c4c4cc}
+.price{color:#5ad1c4}
+.eta{color:#9ece6a}
+.cur{color:#e89ac8;font-weight:bold}
+.selrow{background:#171320;border-radius:4px}
+.seltxt{color:#ffffff}
+.fav{color:#f48fb1}
+.new{color:#9ece6a}
+.key{color:#34343c}
+.back{color:#7aa2f7}
+</style>
+
+<div class="screens">
+
+  <!-- STATE 1 -->
+  <div>
+    <div class="screen-label">1 — <strong>pick a place</strong></div>
+    <div class="term-window">
+      <div class="term-titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="win-title">console.store</span></div>
+      <div class="tb"><span class="brand">  console.store</span>                  <span class="cart">cart · ₹338</span>
+
+  <span class="dim">HSR Layout · 10 min</span>
+
+  <span class="cat-on">coffee</span>   <span class="cat-off">food</span>   <span class="cat-off">snacks</span>
+
+  <span class="selrow"> <span class="cur">❯</span> <span class="seltxt">Blue Tokai</span>          <span class="eta">8 min</span>  <span class="fav">♥</span> </span>
+    <span class="item">Third Wave</span>          <span class="eta">9 min</span>
+    <span class="item">Sleepy Owl</span>        <span class="eta">11 min</span>
+    <span class="item">Subko</span>             <span class="eta">14 min</span>
+
+  <span class="key">/ search       ↵ open</span>
+</div>
+    </div>
+  </div>
+
+  <!-- STATE 2 -->
+  <div>
+    <div class="screen-label">2 — <strong>its items</strong></div>
+    <div class="term-window">
+      <div class="term-titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="win-title">console.store</span></div>
+      <div class="tb"><span class="back">  ← blue tokai</span>                 <span class="cart">cart · ₹338</span>
+
+  <span class="dim">8 min</span>
+
+  <span class="selrow"> <span class="cur">❯</span> <span class="seltxt">Cold Coffee</span>          <span class="price">₹149</span> </span>
+    <span class="item">Hazelnut Cold Brew</span>   <span class="price">₹169</span>
+    <span class="item">Vietnamese Cold Brew</span> <span class="price">₹159</span>  <span class="new">new</span>
+    <span class="item">Almond Croissant</span>     <span class="price">₹129</span>
+
+  <span class="key">↵ add          c cart</span>
+</div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:20px;padding:14px 18px;background:#0e0e11;border-radius:8px;border:1px solid #1c1c20;font-size:12px;color:#999;line-height:1.8;">
+  <strong style="color:#e89ac8">Color = meaning:</strong>
+  <span style="color:#e89ac8">❯ pink</span> cursor ·
+  <span style="color:#5ad1c4">teal</span> prices ·
+  <span style="color:#9ece6a">green</span> ETA &amp; "new" ·
+  <span style="color:#ffce5c">amber</span> active category &amp; cart ·
+  <span style="color:#f48fb1">pink ♥</span> favourite ·
+  <span style="color:#7aa2f7">blue</span> back/nav · everything else stays quiet gray.
+</div>

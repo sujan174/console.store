@@ -1,0 +1,85 @@
+<h2>Verified auth — broker-mediated auth-code + PKCE</h2>
+<p class="subtitle">Swiggy's delegated multi-tenant path. Terminal starts, phone finishes, backend brokers. Phone read from the JWT.</p>
+
+<style>
+.flow { font-family:'SF Mono','JetBrains Mono',monospace; margin-top:20px; color:#a9b1d6; font-size:12px; line-height:1.5; }
+.lane { background:#1a1b26; border:1px solid #24283b; border-radius:10px; padding:15px 17px; margin-bottom:13px; }
+.lane h3 { margin:0 0 11px 0; font-size:11.5px; text-transform:uppercase; letter-spacing:.08em; font-family:sans-serif; }
+.row { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
+.node { background:#24283b; border:1px solid #2f3449; border-radius:7px; padding:6px 10px; color:#c0caf5; white-space:nowrap; }
+.arr { color:#565f89; } .gold{color:#e0af68;} .red{color:#f7768e;} .cyan{color:#7dcfff;} .green{color:#9ece6a;} .mag{color:#bb9af7;}
+.ep { color:#7dcfff; font-size:11px; }
+.phone { background:#1f2335; border-color:#3d59a1; }
+.svr { background:#1e2030; border-color:#414868; }
+.note { color:#565f89; font-size:11px; font-family:sans-serif; margin-top:7px; }
+</style>
+
+<div class="flow">
+
+  <div class="lane">
+    <h3 style="color:#7aa2f7">First link — terminal ▸ phone ▸ backend broker</h3>
+    <div class="row" style="margin-bottom:7px">
+      <span class="node">ssh console.store</span><span class="arr">→</span>
+      <span class="node svr">backend: PKCE verifier + state</span><span class="arr">→</span>
+      <span class="node svr">build <span class="ep">/auth/authorize</span> url</span><span class="arr">→</span>
+      <span class="node cyan">terminal shows QR + link</span>
+    </div>
+    <div class="row" style="margin-bottom:7px">
+      <span class="node phone">📱 open on phone</span><span class="arr">→</span>
+      <span class="node phone">Swiggy app / OTP consent</span><span class="arr">→</span>
+      <span class="node">Swiggy 302 → <span class="ep">your callback</span> (code)</span>
+    </div>
+    <div class="row">
+      <span class="node svr">backend <span class="ep">POST /auth/token</span> (code+verifier)</span><span class="arr">→</span>
+      <span class="node gold">JWT token (5-day)</span><span class="arr">→</span>
+      <span class="node mag">decode → phone claim</span><span class="arr">→</span>
+      <span class="node green">phone = account key</span>
+    </div>
+    <div class="row" style="margin-top:7px">
+      <span class="node svr">terminal polls backend</span><span class="arr">→</span>
+      <span class="node green">unlocked ✓</span>
+    </div>
+    <div class="note">DCR via <span class="ep">/auth/register</span> — no manual client_id. No separate console.store OTP (phone comes from JWT). Auth code valid 120s.</div>
+  </div>
+
+  <div class="lane">
+    <h3 style="color:#9ece6a">Same-device return · new-device login</h3>
+    <div class="row" style="margin-bottom:7px">
+      <span class="node">ssh (same device)</span><span class="arr">→</span>
+      <span class="node">pubkey bound</span><span class="arr">→</span>
+      <span class="node green">straight in</span>
+      <span class="note" style="margin:0 0 0 8px">until token expiry</span>
+    </div>
+    <div class="row">
+      <span class="node">ssh (new device)</span><span class="arr">→</span>
+      <span class="node">enter phone</span><span class="arr">→</span>
+      <span class="node phone">📱 tap-link to known phone</span><span class="arr">→</span>
+      <span class="node green">device bound · reuses token</span>
+    </div>
+  </div>
+
+  <div class="lane">
+    <h3 style="color:#e0af68">Re-auth — softer than expected</h3>
+    <div class="row">
+      <span class="node red">token 5-day expiry</span><span class="arr">→</span>
+      <span class="node phone">📱 tap link</span><span class="arr">→</span>
+      <span class="node green">SILENT (no OTP) within 30-day session</span><span class="arr">→</span>
+      <span class="node">full OTP ~monthly</span>
+    </div>
+    <div class="note">v1.1 rolling refresh tokens will remove even the tap.</div>
+  </div>
+
+  <div class="lane" style="border-color:#3d2a3a;background:#1f1a24">
+    <h3 style="color:#f7768e">⚠ confirm on staging (spec risks)</h3>
+    <div class="row" style="gap:14px">
+      <span class="node">1 · terminal-start / phone-finish cross-device actually completes</span>
+      <span class="node">2 · <span class="mag">phone</span> claim present on Builders token (not just <span class="mag">sub</span>)</span>
+    </div>
+    <div class="note">Fallback if (2) fails: keep `sub` as the key + one console.store OTP to capture phone.</div>
+  </div>
+
+</div>
+
+<div style="margin-top:12px;padding:12px 15px;background:#16161e;border:1px solid #24283b;border-radius:8px;color:#565f89;font-size:11.5px;line-height:1.7;font-family:sans-serif">
+  <strong style="color:#7aa2f7">Verdict:</strong> best-fit and Swiggy-blessed (delegated multi-tenant auth). Mechanism = broker auth-code + PKCE (not device grant). All 35 tools work under the one per-user Bearer.
+</div>

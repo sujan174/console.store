@@ -1,0 +1,138 @@
+<h2>Clean main menu · ASCII art as moments</h2>
+<p class="subtitle">Two screens — the everyday UI stays minimal, ASCII art lives in splash/load/confirm screens</p>
+
+<style>
+body { font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace; }
+.screens {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 24px;
+}
+.screen-wrap { display: flex; flex-direction: column; gap: 10px; }
+.screen-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.08em; }
+.screen-label strong { color: #ccc; }
+.term-window {
+  background: #0d0d0d;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #222;
+}
+.term-titlebar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; background: #111;
+  border-bottom: 1px solid #1a1a1a;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot-r{background:#ff5f57}.dot-y{background:#febc2e}.dot-g{background:#28c840}
+.win-title { font-size: 11px; color: #3a3a3a; margin-left: auto; }
+.term-body {
+  font-size: 11px;
+  line-height: 1.7;
+  padding: 14px 16px;
+  white-space: pre;
+  color: #ccc;
+}
+
+/* LOADING SCREEN colors */
+.ls-brand  { color: #ce93d8; }
+.ls-brand2 { color: #f48fb1; }
+.ls-brand3 { color: #ef9a9a; }
+.ls-muted  { color: #333; }
+.ls-dim    { color: #555; }
+.ls-teal   { color: #80cbc4; }
+.ls-yellow { color: #fff176; }
+.ls-spin   { color: #666; }
+
+/* MAIN MENU colors */
+.mm-header  { color: #e0e0e0; font-weight: bold; letter-spacing: 0.05em; }
+.mm-cat     { color: #fff176; }
+.mm-active  { color: #ce93d8; }
+.mm-item    { color: #e0e0e0; }
+.mm-dim     { color: #555; }
+.mm-price   { color: #80cbc4; }
+.mm-tag-fav { color: #f48fb1; }
+.mm-tag-new { color: #a5d6a7; }
+.mm-hint    { color: #333; }
+.mm-cart    { color: #ffd740; }
+.mm-border  { color: #252525; }
+.mm-sel-bg  { background: #1a1a2e; border-radius: 2px; }
+</style>
+
+<div class="screens">
+
+  <!-- LOADING / SPLASH SCREEN -->
+  <div class="screen-wrap">
+    <div class="screen-label">SPLASH / LOADING  <strong>— ASCII art lives here</strong></div>
+    <div class="term-window">
+      <div class="term-titlebar">
+        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+        <span class="win-title">console.store</span>
+      </div>
+      <div class="term-body"><span class="ls-muted">
+
+
+</span><span class="ls-brand">      ██████╗ </span><span class="ls-brand2">██████╗ ███╗  ██╗</span><span class="ls-brand3">███████╗</span>
+<span class="ls-brand">     ██╔════╝ </span><span class="ls-brand2">██╔══██╗████╗ ██║</span><span class="ls-brand3">██╔════╝</span>
+<span class="ls-brand">     ██║      </span><span class="ls-brand2">██║  ██║██╔██╗██║</span><span class="ls-brand3">███████╗</span>
+<span class="ls-brand">     ██║      </span><span class="ls-brand2">██║  ██║██║╚████║</span><span class="ls-brand3">╚════██║</span>
+<span class="ls-brand">     ╚██████╗ </span><span class="ls-brand2">██████╔╝██║ ╚███║</span><span class="ls-brand3">███████║</span>
+<span class="ls-muted">      ╚═════╝ ╚═════╝ ╚═╝  ╚══╝╚══════╝</span>
+
+<span class="ls-dim">               ·  ·  store  ·  ·</span>
+
+<span class="ls-dim">         </span><span class="ls-teal">checking your location</span><span class="ls-dim"> ...</span>
+<span class="ls-dim">         </span><span class="ls-spin">◌</span><span class="ls-dim">  fetching menu</span>
+
+<span class="ls-muted">
+
+
+</span><span class="ls-dim">         bangalore  ·  </span><span class="ls-yellow">10 min</span><span class="ls-dim">  ·  for devs</span>
+</div>
+    </div>
+    <div class="screen-label" style="font-size:11px;color:#444;">Also used on: order confirmed · new drop announcement · maintenance</div>
+  </div>
+
+  <!-- MAIN MENU — clean -->
+  <div class="screen-wrap">
+    <div class="screen-label">MAIN MENU  <strong>— clean, no ASCII</strong></div>
+    <div class="term-window">
+      <div class="term-titlebar">
+        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+        <span class="win-title">console.store</span>
+      </div>
+      <div class="term-body"><span class="mm-header">  console.store</span>  <span class="mm-dim">bangalore · 10 min</span>
+
+<span class="mm-dim">  ─────────────────────────────────────────────</span>
+
+  <span class="mm-cat">drinks</span>  <span class="mm-dim">snacks</span>  <span class="mm-dim">meals</span>  <span class="mm-dim">favourites</span>
+
+<span class="mm-dim">  ─────────────────────────────────────────────</span>
+
+<span class="mm-border">  │</span> <span class="mm-active">▶</span> <span class="mm-item">Blue Tokai Cold Coffee      </span><span class="mm-price">₹149</span>  <span class="mm-tag-fav">♥</span>
+<span class="mm-border">  │</span>   <span class="mm-dim">Third Wave Oat Matcha       </span><span class="mm-price">₹189</span>
+<span class="mm-border">  │</span>   <span class="mm-dim">Sleepy Owl Cold Brew         </span><span class="mm-price">₹129</span>  <span class="mm-tag-new">new</span>
+<span class="mm-border">  │</span>   <span class="mm-dim">Counterculture Espresso      </span><span class="mm-price">₹159</span>
+<span class="mm-border">  │</span>   <span class="mm-dim">Boba Taro Milk Tea           </span><span class="mm-price">₹199</span>
+
+<span class="mm-dim">  ─────────────────────────────────────────────</span>
+  <span class="mm-cart">cart  2 items · ₹338</span>  <span class="mm-dim">→ checkout</span>
+
+<span class="mm-dim">  ─────────────────────────────────────────────</span>
+<span class="mm-hint">  j/k move   enter add   / search   c checkout</span>
+</div>
+    </div>
+    <div class="screen-label" style="font-size:11px;color:#444;">Purple selector · yellow active tab · teal prices · pink hearts · clean borders</div>
+  </div>
+
+</div>
+
+<div style="margin-top:20px; padding: 14px 18px; background:#111; border-radius:8px; border:1px solid #1e1e1e; font-size:12px; color:#777;">
+  <strong style="color:#ce93d8">Color system:</strong>
+  <span style="color:#fff176"> yellow</span> = active category ·
+  <span style="color:#ce93d8"> purple</span> = cursor/selector ·
+  <span style="color:#80cbc4"> teal</span> = prices ·
+  <span style="color:#f48fb1"> pink</span> = favourites/love ·
+  <span style="color:#a5d6a7"> green</span> = new items ·
+  <span style="color:#555"> dim gray</span> = inactive / hints
+</div>

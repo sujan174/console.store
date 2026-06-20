@@ -1,0 +1,71 @@
+<h2>Master-detail food browse — one restaurant, one cart</h2>
+<p class="subtitle">Restaurants left, that restaurant's curated items right. ETA on the restaurant, not per item. Instamart is a separate tab.</p>
+
+<style>
+.wrap { margin-top:22px; max-width:760px; }
+.screen-label { font-size:12px; color:#888; text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; }
+.screen-label strong { color:#ce93d8; }
+.term-window { background:#0d0d0d; border-radius:10px; overflow:hidden; border:1px solid #222; }
+.term-titlebar { display:flex; align-items:center; gap:6px; padding:8px 12px; background:#111; border-bottom:1px solid #1a1a1a; }
+.dot{width:10px;height:10px;border-radius:50%}.dot-r{background:#ff5f57}.dot-y{background:#febc2e}.dot-g{background:#28c840}
+.win-title{font-size:11px;color:#3a3a3a;margin-left:auto}
+.term-body{font-family:'SF Mono','JetBrains Mono','Fira Code',monospace;font-size:11.5px;line-height:1.8;padding:14px 18px;white-space:pre;color:#ccc}
+
+.brand{color:#e0e0e0;font-weight:bold}
+.addr{color:#80cbc4}
+.dim{color:#555}
+.faint{color:#333}
+.border{color:#252525}
+.pane{color:#2a2a2a}
+.cat-on{color:#fff176}
+.cat-off{color:#555}
+.ext{color:#8a9bb5}
+.cur{color:#ce93d8}
+.panehdr{color:#9a8fd8;font-weight:bold}
+.r-on{color:#f0f0f0}
+.r-off{color:#888}
+.item{color:#f0f0f0}
+.itemdim{color:#9a9a9a}
+.price{color:#80cbc4}
+.eta{color:#8a9bb5}
+.fav{color:#f48fb1}
+.new{color:#a5d6a7}
+.added{color:#a5d6a7}
+.cart{color:#ffd740}
+.key{color:#3a3a3a}
+.reorder{color:#ce93d8}
+.sel{color:#fff176}
+</style>
+
+<div class="wrap">
+  <div class="screen-label">FOOD — <strong>master-detail, one screen</strong></div>
+  <div class="term-window">
+    <div class="term-titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="win-title">console.store</span></div>
+    <div class="term-body"><span class="brand">  console.store</span>   <span class="dim">⌖ </span><span class="addr">HSR Layout, Blr</span>   <span class="key">[a] change</span>
+<span class="border">  ──────────────────────────────────────────────────</span>
+<span class="reorder">  ↵ the usual</span>   <span class="item">Cold Coffee · Blue Tokai</span>   <span class="price">₹149</span>
+<span class="border">  ──────────────────────────────────────────────────</span>
+  <span class="cat-on">coffee</span>   <span class="cat-off">food</span>   <span class="cat-off">snacks</span>   <span class="ext">instamart ↗</span>
+<span class="border">  ──────────────────────────────────────────────────</span>
+  <span class="dim">restaurants</span>            <span class="pane">│</span>  <span class="panehdr">BLUE TOKAI</span>  <span class="dim">· HSR · </span><span class="eta">8 min</span>
+                         <span class="pane">│</span>
+<span class="cur">  ▶</span> <span class="r-on">Blue Tokai</span>  <span class="eta">8m</span>  <span class="fav">♥</span>   <span class="pane">│</span>  <span class="cur">▶</span> <span class="item">Cold Coffee</span>            <span class="price">₹149</span> <span class="added">+1</span>
+<span class="faint">  ·</span> <span class="r-off">Third Wave</span>  <span class="eta">9m</span>     <span class="pane">│</span>  <span class="faint">·</span> <span class="itemdim">Hazelnut Cold Brew</span>     <span class="price">₹169</span>
+<span class="faint">  ·</span> <span class="r-off">Sleepy Owl</span> <span class="eta">11m</span>     <span class="pane">│</span>  <span class="faint">·</span> <span class="itemdim">Vietnamese Cold Brew</span>   <span class="price">₹159</span> <span class="new">new</span>
+<span class="faint">  ·</span> <span class="r-off">Subko</span>      <span class="eta">14m</span>     <span class="pane">│</span>  <span class="faint">·</span> <span class="itemdim">Almond Croissant</span>       <span class="price">₹129</span>
+                         <span class="pane">│</span>  <span class="faint">·</span> <span class="itemdim">Banana Bread Slice</span>     <span class="price">₹99</span>
+<span class="border">  ──────────────────────────────────────────────────</span>
+  <span class="cart">cart  2 · ₹338</span>  <span class="dim">· Blue Tokai ·</span> <span class="eta">~8 min</span>   <span class="sel">→ checkout</span>
+<span class="border">  ──────────────────────────────────────────────────</span>
+<span class="key">  j/k restaurant   → items   ↵ add   / search   c cart</span>
+</div>
+  </div>
+
+  <div style="margin-top:16px;padding:14px 18px;background:#111;border-radius:8px;border:1px solid #1e1e1e;font-size:12px;color:#888;line-height:1.7;">
+    <strong style="color:#ce93d8">How it reads:</strong>
+    <span style="color:#fff176">j/k</span> moves restaurants (left), each shows its <span style="color:#8a9bb5">ETA</span> ·
+    <span style="color:#fff176">→</span> jumps into that restaurant's curated items (right) · <span style="color:#fff176">↵</span> adds ·
+    cart locks to one restaurant (<span style="color:#ffd740">shown in cart bar</span>) · adding from a different restaurant prompts
+    <span style="color:#f48fb1">"start a new cart?"</span> · <span style="color:#8a9bb5">instamart ↗</span> opens a separate flat list + separate cart.
+  </div>
+</div>
