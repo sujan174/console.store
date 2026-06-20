@@ -1,4 +1,4 @@
-# console.store — documentation
+# console.store — documentationTokyo Night
 
 A terminal-native (SSH) food & snack ordering shop for developers in India. Curated experience on top of Swiggy's Builders Club MCP APIs, with a Tokyo Night TUI.
 
@@ -26,7 +26,7 @@ Users `ssh console.store`. A Charm/`wish` SSH server renders a `bubbletea` TUI t
 
 ## Tech stack
 
-- **Language:** Go
+- **Language:** Go (Golang)
 - **SSH server:** [`charmbracelet/wish`](https://github.com/charmbracelet/wish)
 - **TUI framework:** [`charmbracelet/bubbletea`](https://github.com/charmbracelet/bubbletea) (Elm architecture)
 - **Styling:** [`charmbracelet/lipgloss`](https://github.com/charmbracelet/lipgloss)
