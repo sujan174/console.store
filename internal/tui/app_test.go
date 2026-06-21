@@ -287,7 +287,8 @@ func TestTrackingFlowAdvancesAndEscResets(t *testing.T) {
 	}
 
 	// drive ticks: trackStep should advance and cap at 3
-	for i := 0; i < 120; i++ {
+	// trackTick%70==0 triggers step advance; 3 steps need 3*70=210 ticks.
+	for i := 0; i < 215; i++ {
 		updated, _ := m.Update(tickMsg(time.Now()))
 		m = updated.(Model)
 	}
@@ -466,5 +467,11 @@ func TestCmdPaletteHelpStaysOpen(t *testing.T) {
 	m = updated.(Model)
 	if !m.cmdOpen {
 		t.Error("help should keep the palette open")
+	}
+}
+
+func TestTickInterval(t *testing.T) {
+	if tickInterval != 60*time.Millisecond {
+		t.Errorf("tickInterval = %v, want 60ms", tickInterval)
 	}
 }
