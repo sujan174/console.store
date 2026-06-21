@@ -15,7 +15,7 @@ func TestMenuHeaderShowsBrandAndCart(t *testing.T) {
 	addr := repo.Addresses()[0]
 	places := repo.Places(addr, catalog.SectionCoffee)
 	usual, ok := repo.Usual(addr)
-	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 338)
+	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, "cart · ₹338")
 	out := m.View()
 	if !strings.Contains(out, "console.store") {
 		t.Fatal("missing brand")
@@ -33,7 +33,7 @@ func TestMenuShowsUsualLine(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a usual at the first address")
 	}
-	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 0)
+	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, "")
 	out := m.View()
 	if !strings.Contains(out, "the usual") {
 		t.Fatal("missing the usual line")
@@ -49,7 +49,7 @@ func TestMenuShowsUsualLine(t *testing.T) {
 
 func TestMenuNoUsualHidesUsualLine(t *testing.T) {
 	places := []catalog.Place{{ID: "x", Name: "X", ETA: "10 min"}}
-	m := NewMenu(places, catalog.Address{Line: "HSR"}, catalog.SectionCoffee, catalog.Usual{}, false, 0)
+	m := NewMenu(places, catalog.Address{Line: "HSR"}, catalog.SectionCoffee, catalog.Usual{}, false, "")
 	if strings.Contains(m.View(), "the usual") {
 		t.Fatal("usual line should be hidden when hasUsual is false")
 	}
@@ -60,7 +60,7 @@ func TestMenuShowsThreeTabs(t *testing.T) {
 	addr := repo.Addresses()[0]
 	places := repo.Places(addr, catalog.SectionCoffee)
 	usual, ok := repo.Usual(addr)
-	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 0)
+	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, "")
 	out := m.View()
 	for _, tab := range []string{"coffee", "food", "snacks"} {
 		if !strings.Contains(out, tab) {
@@ -77,7 +77,7 @@ func TestMenuPlacesOnly(t *testing.T) {
 	addr := repo.Addresses()[0]
 	places := repo.Places(addr, catalog.SectionCoffee)
 	usual, ok := repo.Usual(addr)
-	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 0)
+	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, "")
 	// cursor starts on the first place (no usual row offset)
 	got, ok := m.Selected()
 	if !ok {
@@ -93,7 +93,7 @@ func TestMenuSearchFiltersList(t *testing.T) {
 		{ID: "blue-tokai", Name: "Blue Tokai", ETA: "35-45 min"},
 		{ID: "third-wave", Name: "Third Wave", ETA: "30-40 min"},
 	}
-	m := NewMenu(places, catalog.Address{Line: "HSR"}, catalog.SectionCoffee, catalog.Usual{}, false, 0)
+	m := NewMenu(places, catalog.Address{Line: "HSR"}, catalog.SectionCoffee, catalog.Usual{}, false, "")
 	for _, r := range []rune{'/', 'w', 'a', 'v', 'e'} {
 		key := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
 		nm, _ := m.Update(key)
@@ -113,7 +113,7 @@ func TestMenuEnterSelectsRestaurant(t *testing.T) {
 	addr := repo.Addresses()[0]
 	places := repo.Places(addr, catalog.SectionCoffee)
 	usual, ok := repo.Usual(addr)
-	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, 338)
+	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, "cart · ₹338")
 	// cursor starts on the first place (Blue Tokai); Down moves to Third Wave.
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	mm := m2.(Menu)

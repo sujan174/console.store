@@ -15,15 +15,15 @@ import (
 const InstamartETA = "~12 min"
 
 type Instamart struct {
-	items     []catalog.Item
-	cartTotal int
-	list      components.List
+	items    []catalog.Item
+	cartChip string
+	list     components.List
 }
 
 // NewInstamart builds the Instamart fast-lane screen, rendering in-cart checks
 // and inline qty steppers from the current cart quantities (keyed by item ID),
 // mirroring the restyled restaurant screen.
-func NewInstamart(items []catalog.Item, qtyByItemID map[string]int, cartTotal int) Instamart {
+func NewInstamart(items []catalog.Item, qtyByItemID map[string]int, cartChip string) Instamart {
 	rows := make([]components.Row, 0, len(items))
 	for _, it := range items {
 		qty := qtyByItemID[it.ID]
@@ -44,7 +44,7 @@ func NewInstamart(items []catalog.Item, qtyByItemID map[string]int, cartTotal in
 
 		rows = append(rows, components.Row{Left: name, Right: right, BarGreen: qty > 0})
 	}
-	return Instamart{items: items, cartTotal: cartTotal, list: components.List{Rows: rows}}
+	return Instamart{items: items, cartChip: cartChip, list: components.List{Rows: rows}}
 }
 
 func (s Instamart) Selected() (catalog.Item, bool) {
@@ -55,7 +55,7 @@ func (s Instamart) Selected() (catalog.Item, bool) {
 	return s.items[i], true
 }
 
-func (s Instamart) WithCartTotal(t int) Instamart { s.cartTotal = t; return s }
+func (s Instamart) WithCartChip(c string) Instamart { s.cartChip = c; return s }
 
 // CursorIndex returns the current list cursor so the router can preserve it
 // across a rebuild (NewInstamart resets the cursor to 0).
@@ -84,7 +84,7 @@ func (s Instamart) View() string {
 
 	header := justify(
 		theme.PriceStyle.Render("← instamart"),
-		theme.CartStyle.Render(fmt.Sprintf("cart · ₹%d", s.cartTotal)),
+		theme.CartStyle.Render(s.cartChip),
 		w,
 	)
 	b.WriteString("  " + header + "\n")

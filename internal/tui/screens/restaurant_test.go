@@ -14,7 +14,7 @@ func despace(s string) string { return strings.ReplaceAll(s, " ", "") }
 func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
-	r := NewRestaurant(p, map[string]int{}, 338)
+	r := NewRestaurant(p, map[string]int{}, "")
 	out := r.View()
 	if !strings.Contains(out, "blue tokai") {
 		t.Fatal("missing restaurant name header")
@@ -30,7 +30,7 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 func TestRestaurantShowsDetailStrip(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
-	r := NewRestaurant(p, map[string]int{}, 0) // cursor on item 0 (Cold Coffee)
+	r := NewRestaurant(p, map[string]int{}, "") // cursor on item 0 (Cold Coffee)
 	out := r.View()
 	if strings.Contains(out, "◆") {
 		t.Error("the ◆ diamond marker should be gone")
@@ -46,7 +46,7 @@ func TestRestaurantShowsDetailStrip(t *testing.T) {
 func TestRestaurantDetailOnlyOnSelectedRow(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
-	r := NewRestaurant(p, map[string]int{}, 0)
+	r := NewRestaurant(p, map[string]int{}, "")
 	out := r.View()
 	// Hazelnut's description must NOT show while Cold Coffee is selected.
 	if strings.Contains(out, "16h steeped · hazelnut") {
@@ -57,7 +57,7 @@ func TestRestaurantDetailOnlyOnSelectedRow(t *testing.T) {
 func TestRestaurantSelectedItem(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
-	r := NewRestaurant(p, map[string]int{}, 0)
+	r := NewRestaurant(p, map[string]int{}, "")
 	if got, ok := r.Selected(); !ok || got.Name != "Cold Coffee" {
 		t.Fatalf("Selected() = %s (ok=%v), want Cold Coffee", got.Name, ok)
 	}
@@ -67,7 +67,7 @@ func TestRestaurantInCartRowShowsStepper(t *testing.T) {
 	p := catalog.Place{Name: "Blue Tokai", ETA: "35-45 min", Items: []catalog.Item{
 		{ID: "x", Name: "Cold Coffee", Price: 149},
 	}}
-	s := NewRestaurant(p, map[string]int{"x": 2}, 298)
+	s := NewRestaurant(p, map[string]int{"x": 2}, "")
 	v := s.View()
 	for _, want := range []string{"×2", "−", "+", "₹149"} {
 		if !strings.Contains(despace(v), want) {
@@ -78,7 +78,7 @@ func TestRestaurantInCartRowShowsStepper(t *testing.T) {
 
 func TestRestaurantNotInCartShowsPlainPrice(t *testing.T) {
 	p := catalog.Place{Name: "X", ETA: "30 min", Items: []catalog.Item{{ID: "y", Name: "Tea", Price: 50}}}
-	s := NewRestaurant(p, map[string]int{}, 0)
+	s := NewRestaurant(p, map[string]int{}, "")
 	if strings.Contains(s.View(), "×") {
 		t.Error("no stepper when not in cart")
 	}

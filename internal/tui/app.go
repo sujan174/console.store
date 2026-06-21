@@ -112,7 +112,7 @@ func (m Model) buildMenu() screens.Menu {
 	if ok && usual.Item.Section != m.section {
 		ok = false
 	}
-	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartTotal())
+	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartChip())
 }
 
 var menuTabs = []catalog.Section{catalog.SectionCoffee, catalog.SectionFood, catalog.SectionSnacks}
@@ -218,6 +218,33 @@ func (m Model) cartTotal() int {
 	return t
 }
 
+// cartCount is the total quantity of items in the food cart.
+func (m Model) cartCount() int {
+	n := 0
+	for _, l := range m.lines {
+		n += l.Qty
+	}
+	return n
+}
+
+// imCartCount is the total quantity of items in the Instamart cart.
+func (m Model) imCartCount() int {
+	n := 0
+	for _, l := range m.imLines {
+		n += l.Qty
+	}
+	return n
+}
+
+// cartChipStr formats the top-right cart chip: "🛒 cart · <n> · ₹<total>".
+func cartChipStr(count, total int) string {
+	return fmt.Sprintf("🛒 cart · %d · ₹%d", count, total)
+}
+
+// cartChip / imCartChip are the formatted chips for the food / Instamart carts.
+func (m Model) cartChip() string   { return cartChipStr(m.cartCount(), m.cartTotal()) }
+func (m Model) imCartChip() string { return cartChipStr(m.imCartCount(), m.imCartTotal()) }
+
 // cartRestaurantServes reports whether the cart's restaurant is serviceable at addr.
 func (m Model) cartRestaurantServes(addr catalog.Address) bool {
 	if m.cartRestaurant == "" {
@@ -302,7 +329,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch action {
 				case "instamart":
 					m.cmdOpen = false
-					m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartTotal())
+					m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartChip())
 					m.screen = scrInstamart
 				case "clear":
 					// out already cleared in Run; stay open
@@ -343,7 +370,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch k.String() {
 			case "enter":
 				if p, ok := m.menu.Selected(); ok {
-					m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartTotal())
+					m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip())
 					m.screen = scrRestaurant
 				}
 				return m, nil
@@ -382,7 +409,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.cartRestaurant = p.Name
 						}
 					}
-					m.menu = m.menu.WithCartTotal(m.cartTotal())
+					m.menu = m.menu.WithCartChip(m.cartChip())
 				}
 				return m, nil
 			case "c":
@@ -418,9 +445,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if wasEmpty {
 					m.cartRestaurant = m.rest.PlaceData().Name
 				}
-				m.menu = m.menu.WithCartTotal(m.cartTotal())
+				m.menu = m.menu.WithCartChip(m.cartChip())
 				ci := m.rest.CursorIndex()
-				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartTotal()).WithCursor(ci)
+				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithCursor(ci)
 				return m, nil
 			case "left", "h":
 				it, ok := m.rest.Selected()
@@ -431,9 +458,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(m.lines) == 0 {
 					m.cartRestaurant = ""
 				}
-				m.menu = m.menu.WithCartTotal(m.cartTotal())
+				m.menu = m.menu.WithCartChip(m.cartChip())
 				ci := m.rest.CursorIndex()
-				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartTotal()).WithCursor(ci)
+				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithCursor(ci)
 				return m, nil
 			case "c":
 				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta())
@@ -466,7 +493,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// keep router's authoritative lines in sync with cart edits
 			m.lines = m.cart.Lines()
-			m.menu = m.menu.WithCartTotal(m.cartTotal())
+			m.menu = m.menu.WithCartChip(m.cartChip())
 			return m, nil
 		case scrAddress:
 			switch k.String() {
@@ -534,7 +561,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.imLines = appendOrInc(m.imLines, it)
 				ci := m.inst.CursorIndex()
-				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartTotal()).WithCursor(ci)
+				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartChip()).WithCursor(ci)
 				return m, nil
 			case "left", "h":
 				it, ok := m.inst.Selected()
@@ -543,7 +570,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.imLines = decItem(m.imLines, it.ID)
 				ci := m.inst.CursorIndex()
-				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartTotal()).WithCursor(ci)
+				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartChip()).WithCursor(ci)
 				return m, nil
 			case "c":
 				m.imCart = screens.NewCart("Instamart", m.imLines).WithEta(screens.InstamartETA)

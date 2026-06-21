@@ -10,7 +10,7 @@ import (
 
 func TestInstamartHeaderAndFastLane(t *testing.T) {
 	items := []catalog.Item{{ID: "rb", Name: "Red Bull (250ml)", Price: 125}}
-	s := screens.NewInstamart(items, map[string]int{}, 0)
+	s := screens.NewInstamart(items, map[string]int{}, "")
 	v := s.View()
 	if !strings.Contains(v, "fast lane") || !strings.Contains(strings.ReplaceAll(v, " ", ""), "RedBull") {
 		t.Errorf("missing header/items:\n%s", v)
@@ -22,7 +22,7 @@ func TestInstamartHeaderAndFastLane(t *testing.T) {
 
 func TestInstamartInCartStepper(t *testing.T) {
 	items := []catalog.Item{{ID: "rb", Name: "Red Bull", Price: 125}}
-	s := screens.NewInstamart(items, map[string]int{"rb": 1}, 125)
+	s := screens.NewInstamart(items, map[string]int{"rb": 1}, "")
 	v := s.View()
 	for _, w := range []string{"×1", "−", "+"} {
 		if !strings.Contains(v, w) {

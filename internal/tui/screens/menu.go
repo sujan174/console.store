@@ -18,12 +18,12 @@ type Menu struct {
 	section   catalog.Section
 	usual     catalog.Usual
 	hasUsual  bool
-	cartTotal int
+	cartChip  string
 	list      components.List
 	searching bool
 }
 
-func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartTotal int) Menu {
+func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartChip string) Menu {
 	rows := make([]components.Row, len(places))
 	for i, p := range places {
 		rows[i] = components.Row{
@@ -37,7 +37,7 @@ func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Secti
 		section:   section,
 		usual:     usual,
 		hasUsual:  hasUsual,
-		cartTotal: cartTotal,
+		cartChip:  cartChip,
 		list:      components.List{Rows: rows, Cursor: 0},
 	}
 }
@@ -52,7 +52,7 @@ func (m Menu) Selected() (catalog.Place, bool) {
 }
 
 // WithCartTotal returns a copy with an updated cart total, preserving the cursor.
-func (m Menu) WithCartTotal(t int) Menu { m.cartTotal = t; return m }
+func (m Menu) WithCartChip(s string) Menu { m.cartChip = s; return m }
 
 func (m Menu) Init() tea.Cmd { return nil }
 
@@ -110,7 +110,7 @@ func (m Menu) View() string {
 	// header row: brand (left) · cart total (right)
 	header := justify(
 		theme.BrandStyle.Render("console.store"),
-		theme.CartStyle.Render(fmt.Sprintf("cart · ₹%d", m.cartTotal)),
+		theme.CartStyle.Render(m.cartChip),
 		w,
 	)
 	b.WriteString("  " + header + "\n")

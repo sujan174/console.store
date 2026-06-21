@@ -13,14 +13,14 @@ import (
 
 type Restaurant struct {
 	p         catalog.Place
-	cartTotal int
+	cartChip  string
 	list      components.List
 	searching bool
 }
 
 // NewRestaurant builds the restaurant screen, rendering in-cart checks and
 // inline qty steppers from the current cart quantities (keyed by item ID).
-func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) Restaurant {
+func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartChip string) Restaurant {
 	rows := make([]components.Row, 0, len(p.Items))
 	for _, it := range p.Items {
 		qty := qtyByItemID[it.ID]
@@ -45,7 +45,7 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) R
 
 		rows = append(rows, components.Row{Left: left, Right: right, BarGreen: qty > 0})
 	}
-	return Restaurant{p: p, cartTotal: cartTotal, list: components.List{Rows: rows}}
+	return Restaurant{p: p, cartChip: cartChip, list: components.List{Rows: rows}}
 }
 
 // itemDetail builds the fixed metadata strip for the highlighted item:
@@ -78,7 +78,7 @@ func (s Restaurant) Selected() (catalog.Item, bool) {
 	return s.p.Items[i], true
 }
 
-func (s Restaurant) WithCartTotal(t int) Restaurant { s.cartTotal = t; return s }
+func (s Restaurant) WithCartChip(c string) Restaurant { s.cartChip = c; return s }
 
 // PlaceData returns the underlying place (used by the app router).
 func (s Restaurant) PlaceData() catalog.Place { return s.p }
@@ -136,7 +136,7 @@ func (s Restaurant) View() string {
 
 	header := justify(
 		theme.PriceStyle.Render("← "+strings.ToLower(s.p.Name)),
-		theme.CartStyle.Render(fmt.Sprintf("cart · ₹%d", s.cartTotal)),
+		theme.CartStyle.Render(s.cartChip),
 		w,
 	)
 	b.WriteString("  " + header + "\n")
