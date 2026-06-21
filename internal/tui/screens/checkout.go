@@ -144,8 +144,31 @@ func (c Checkout) confirmView() string {
 	b.WriteString("  " + theme.DimStyle.Render(fmt.Sprintf("pay ₹%d to rider (cash/UPI)", c.toPay())) + "\n")
 	b.WriteString("  " + theme.FavStyle.Render("can't be cancelled now") + "\n\n")
 
+	b.WriteString(c.speedReceipt())
+
 	b.WriteString("  " + theme.GreenStyle.Render("↵") + " " + theme.FaintStyle.Render("track") +
 		"     " + theme.CursorStyle.Render("esc") + " " + theme.FaintStyle.Render("back to menu"))
+	return b.String()
+}
+
+// Speed-receipt dummies. The "mastery flex" pillar: prove how fast the order
+// was vs. tapping a phone app. TODO: wire to real per-order measurement —
+// keystroke count + elapsed time from menu-open to "order placed", tracked in
+// the root model; session best held in-memory (no cross-session persistence yet).
+const (
+	dummyOrderSecs   = 2.1 // TODO: elapsed time of this order
+	dummyOrderKeys   = 4   // TODO: keystrokes for this order
+	dummySessionBest = 1.8 // TODO: fastest order this session (in-memory)
+	phoneAppAvgLabel = "~45s"
+)
+
+// speedReceipt renders the post-order speed flex. Values are placeholders.
+func (c Checkout) speedReceipt() string {
+	var b strings.Builder
+	b.WriteString("  " + theme.GoldStyle.Render(fmt.Sprintf("⚡ ordered in %.1fs · %d keystrokes", dummyOrderSecs, dummyOrderKeys)) + "\n")
+	b.WriteString("     " + theme.DimStyle.Render(fmt.Sprintf("this session best %.1fs  ·  phone app %s", dummySessionBest, phoneAppAvgLabel)) + "\n")
+	b.WriteString("  " + theme.FaintStyle.Render(strings.Repeat("─", 44)) + "\n")
+	b.WriteString("  " + theme.DimStyle.Render("flex it:  ") + theme.BrandStyle.Render("ssh console.store") + "\n\n")
 	return b.String()
 }
 

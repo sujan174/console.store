@@ -16,17 +16,16 @@ import (
 const version = "v1.4"
 
 type Menu struct {
-	places      []catalog.Place
-	address     catalog.Address
-	section     catalog.Section
-	usual       catalog.Usual
-	hasUsual    bool
-	cartChip    string
-	trending    catalog.Trending
-	hasTrending bool
-	counts      map[catalog.Section]int
-	list        components.List
-	searching   bool
+	places    []catalog.Place
+	address   catalog.Address
+	section   catalog.Section
+	usual     catalog.Usual
+	hasUsual  bool
+	cartChip  string
+	statsFunc func() (online, orders int) // nil = no stats box
+	counts    map[catalog.Section]int
+	list      components.List
+	searching bool
 }
 
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartChip string) Menu {
@@ -38,13 +37,13 @@ func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Secti
 		}
 	}
 	return Menu{
-		places:    places,
-		address:   addr,
-		section:   section,
-		usual:     usual,
-		hasUsual:  hasUsual,
-		cartChip:  cartChip,
-		list:      components.List{Rows: rows, Cursor: 0},
+		places:   places,
+		address:  addr,
+		section:  section,
+		usual:    usual,
+		hasUsual: hasUsual,
+		cartChip: cartChip,
+		list:     components.List{Rows: rows, Cursor: 0},
 	}
 }
 
@@ -63,9 +62,9 @@ func (m Menu) WithCartChip(s string) Menu { m.cartChip = s; return m }
 // WithMaxRows sets the list viewport height (rows). 0 = show all.
 func (m Menu) WithMaxRows(n int) Menu { m.list.MaxRows = n; return m }
 
-// WithTrending sets the hero "trending now" pick.
-func (m Menu) WithTrending(t catalog.Trending, ok bool) Menu {
-	m.trending, m.hasTrending = t, ok
+// WithStats sets the live-stats provider for the hero box.
+func (m Menu) WithStats(f func() (online, orders int)) Menu {
+	m.statsFunc = f
 	return m
 }
 
@@ -121,14 +120,6 @@ func justify(left, right string, width int) string {
 	return left + strings.Repeat(" ", pad) + right
 }
 
-// etaTail turns "30-40 min" into "~40 min".
-func etaTail(eta string) string {
-	if i := strings.LastIndex(eta, "-"); i >= 0 {
-		return "~" + strings.TrimSpace(eta[i+1:])
-	}
-	return eta
-}
-
 // heroBox renders a rounded titled card spanning width w:
 //
 //	╭─ <title> ───────────────╮
@@ -165,15 +156,14 @@ func (m Menu) View() string {
 		theme.FaintStyle.Render(" ⌄")
 	b.WriteString("  " + justify(brand, deliver, w) + "\n")
 
-	// hero card: trending now
-	if m.hasTrending {
+	// hero card: live app stats
+	if m.statsFunc != nil {
+		online, orders := m.statsFunc()
 		b.WriteString("\n") // gap before the hero card
-		left := "🔥 " + theme.BrightStyle.Render(m.trending.Item.Name) +
-			theme.DimStyle.Render(fmt.Sprintf("  ·  %d today", m.trending.Count))
-		right := theme.DimStyle.Render(etaTail(m.trending.ETA)) + "   " +
-			theme.PriceStyle.Render(fmt.Sprintf("₹%d", m.trending.Item.Price)) + "  " +
-			theme.CursorStyle.Render("→")
-		b.WriteString(heroBox("trending now", left, right, w))
+		left := "👥 " + theme.BrightStyle.Render(fmt.Sprintf("%d", online)) +
+			theme.DimStyle.Render(" online")
+		right := theme.DimStyle.Render(fmt.Sprintf("%d orders today", orders))
+		b.WriteString(heroBox("live", left, right, w))
 	}
 
 	b.WriteString("\n")

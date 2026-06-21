@@ -3,14 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
-
-	"io"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -18,12 +18,18 @@ import (
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/charmbracelet/wish/logging"
+	"github.com/muesli/termenv"
 
 	consoletui "console.store/internal/tui"
 	"console.store/internal/tui/render"
 	"console.store/internal/tui/theme"
-	"github.com/muesli/termenv"
 )
+
+// activeSessions is the count of currently connected SSH clients.
+var activeSessions int64
+
+// mockOrdersToday is a fixed daily count (replaced by real data when backend exists).
+const mockOrdersToday = 47
 
 const host, port = "127.0.0.1", "2222"
 
@@ -40,7 +46,19 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	truecolor := renderer.ColorProfile() == termenv.TrueColor
 	caps := render.DetectCaps(pty.Term, s.Environ(), truecolor)
 
-	return consoletui.New(caps), []tea.ProgramOption{tea.WithAltScreen()}
+	statsFunc := func() (online, orders int) {
+		return int(atomic.LoadInt64(&activeSessions)), mockOrdersToday
+	}
+	return consoletui.New(caps, statsFunc), []tea.ProgramOption{tea.WithAltScreen()}
+}
+
+// sessionCounterMiddleware increments/decrements activeSessions for the session lifetime.
+func sessionCounterMiddleware(next ssh.Handler) ssh.Handler {
+	return func(s ssh.Session) {
+		atomic.AddInt64(&activeSessions, 1)
+		defer atomic.AddInt64(&activeSessions, -1)
+		next(s)
+	}
 }
 
 // canvasMiddleware sets the client terminal's default background to the design
@@ -65,6 +83,7 @@ func main() {
 			bubbletea.Middleware(teaHandler),
 			logging.Middleware(),
 			canvasMiddleware,
+			sessionCounterMiddleware,
 		),
 	)
 	if err != nil {

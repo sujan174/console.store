@@ -34,9 +34,6 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartChip string)
 			nameStyle = theme.BrightStyle
 		}
 		left := nameStyle.Render(it.Name)
-		if it.Tag != "" {
-			left += "  " + theme.GreenStyle.Render(it.Tag)
-		}
 
 		price := theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price))
 		right := price
@@ -149,12 +146,8 @@ func (s Restaurant) View() string {
 
 	b.WriteString("\n") // top padding
 
-	// row 1: ← back  <name> ★            deliver to ⊕ <addr>
-	star := ""
-	if s.p.Fav {
-		star = " " + theme.GoldStyle.Render("★")
-	}
-	left := theme.PriceStyle.Render("← back") + "  " + theme.BrightStyle.Bold(true).Render(s.p.Name) + star
+	// row 1: esc  <name>            deliver to ⊕ <addr>
+	left := theme.PriceStyle.Render("esc") + "  " + theme.BrightStyle.Bold(true).Render(s.p.Name)
 	right := theme.DimStyle.Render("deliver to ") + theme.CursorStyle.Render("⊕ ") + theme.BrightStyle.Render(s.addr.Line)
 	b.WriteString("  " + justify(left, right, w) + "\n")
 

@@ -89,16 +89,17 @@ type Model struct {
 	cmdOpen bool
 	cmd     screens.CmdBar
 
-	frame int
-	w, h  int // terminal size from WindowSizeMsg
-	caps  render.Caps
+	frame     int
+	w, h      int // terminal size from WindowSizeMsg
+	caps      render.Caps
+	statsFunc func() (online, orders int)
 }
 
-func New(caps render.Caps) Model {
+func New(caps render.Caps, statsFunc func() (online, orders int)) Model {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps}
+	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps, statsFunc: statsFunc}
 	m.splash = screens.NewSplash().WithCaps(caps)
 	m.menu = m.buildMenu()
 	return m
@@ -116,9 +117,8 @@ func (m Model) buildMenu() screens.Menu {
 	for _, sec := range catalog.MenuSections {
 		counts[sec] = len(m.repo.Places(m.addr, sec))
 	}
-	trending, hasTrending := m.repo.Trending(m.addr)
 	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartChip()).
-		WithTrending(trending, hasTrending).
+		WithStats(m.statsFunc).
 		WithCounts(counts)
 }
 

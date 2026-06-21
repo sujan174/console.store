@@ -18,13 +18,13 @@ func despace(s string) string { return strings.ReplaceAll(s, " ", "") }
 // newAtMenu returns a Model that has dismissed the splash and is on the menu,
 // so flow tests can drive menu interactions directly.
 func newAtMenu() Model {
-	m := New(render.Caps{})
+	m := New(render.Caps{}, nil)
 	m.screen = scrMenu
 	return m
 }
 
 func TestStatusBarOnMenuNotSplash(t *testing.T) {
-	m := New(render.Caps{}) // splash
+	m := New(render.Caps{}, nil) // splash
 	if strings.Contains(m.View(), "⊙ linked") {
 		t.Error("splash must not show the status bar")
 	}
@@ -36,7 +36,7 @@ func TestStatusBarOnMenuNotSplash(t *testing.T) {
 }
 
 func TestStartsOnSplashThenKeyToMenu(t *testing.T) {
-	m := New(render.Caps{})
+	m := New(render.Caps{}, nil)
 	if m.screen != scrSplash {
 		t.Fatalf("app should start on splash, got screen %d", m.screen)
 	}
@@ -49,7 +49,7 @@ func TestStartsOnSplashThenKeyToMenu(t *testing.T) {
 }
 
 func TestSplashAutoConnectsAfterTicks(t *testing.T) {
-	m := New(render.Caps{})
+	m := New(render.Caps{}, nil)
 	for i := 0; i < 200 && m.screen == scrSplash; i++ {
 		updated, _ := m.Update(tickMsg(time.Now()))
 		m = updated.(Model)
@@ -60,7 +60,7 @@ func TestSplashAutoConnectsAfterTicks(t *testing.T) {
 }
 
 func TestTickAdvancesFrame(t *testing.T) {
-	m := New(render.Caps{})
+	m := New(render.Caps{}, nil)
 	f0 := m.frame
 	updated, cmd := m.Update(tickMsg(time.Now()))
 	m = updated.(Model)
@@ -160,7 +160,7 @@ func TestAddressSwitchReFiltersMenu(t *testing.T) {
 }
 
 func TestAppQuits(t *testing.T) {
-	m := New(render.Caps{})
+	m := New(render.Caps{}, nil)
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if cmd == nil {
 		t.Fatal("ctrl-c should return a quit command")
