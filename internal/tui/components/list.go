@@ -41,10 +41,11 @@ type Row struct {
 
 // List is a single-column selectable list with a > cursor and highlighted row.
 type List struct {
-	Rows   []Row
-	Cursor int
-	Width  int // total render width; 0 -> 50
-	filter string
+	Rows    []Row
+	Cursor  int
+	Width   int // total render width; 0 -> 50
+	MaxRows int // viewport height in rows; 0 -> show all (no scrolling)
+	filter  string
 }
 
 // SetFilter sets the case-insensitive substring filter and clamps the cursor.
@@ -111,8 +112,49 @@ func (l List) View() string {
 	if width == 0 {
 		width = ContentWidth()
 	}
+	vis := l.VisibleRows()
+
+	// Viewport: when there are more rows than fit (MaxRows), show a window that
+	// keeps the cursor visible, leaving a line for an "↑/↓ N more" indicator on
+	// each side that is off-screen. This keeps the header and footer fixed.
+	start, end := 0, len(vis)
+	moreAbove, moreBelow := 0, 0
+	if l.MaxRows > 0 && len(vis) > l.MaxRows {
+		rows := l.MaxRows
+		start = l.Cursor - rows/2
+		if start < 0 {
+			start = 0
+		}
+		if start > len(vis)-rows {
+			start = len(vis) - rows
+		}
+		end = start + rows
+		moreAbove = start
+		moreBelow = len(vis) - end
+		// Reserve a row for each visible indicator by trimming the window edge.
+		if moreAbove > 0 {
+			start++
+			moreAbove = start
+		}
+		if moreBelow > 0 {
+			end--
+			moreBelow = len(vis) - end
+		}
+		// Cursor must stay inside the trimmed window.
+		if l.Cursor < start {
+			start = l.Cursor
+		}
+		if l.Cursor >= end {
+			end = l.Cursor + 1
+		}
+	}
+
 	var b strings.Builder
-	for i, r := range l.VisibleRows() {
+	if moreAbove > 0 {
+		b.WriteString(strings.Repeat(" ", margin) + theme.FaintStyle.Render(fmt.Sprintf("↑ %d more", moreAbove)) + "\n")
+	}
+	for i := start; i < end; i++ {
+		r := vis[i]
 		right := r.Right
 		// rightGutter keeps the price/ETA column a little off the right edge.
 		const rightGutter = 2
@@ -144,6 +186,9 @@ func (l List) View() string {
 			}
 			b.WriteString(lead + theme.FaintStyle.Render("  ") + theme.ItemStyle.Render(body) + "\n")
 		}
+	}
+	if moreBelow > 0 {
+		b.WriteString(strings.Repeat(" ", margin) + theme.FaintStyle.Render(fmt.Sprintf("↓ %d more", moreBelow)) + "\n")
 	}
 	return b.String()
 }

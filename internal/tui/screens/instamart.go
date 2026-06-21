@@ -57,6 +57,9 @@ func (s Instamart) Selected() (catalog.Item, bool) {
 
 func (s Instamart) WithCartChip(c string) Instamart { s.cartChip = c; return s }
 
+// WithMaxRows sets the list viewport height (rows). 0 = show all.
+func (s Instamart) WithMaxRows(n int) Instamart { s.list.MaxRows = n; return s }
+
 // CursorIndex returns the current list cursor so the router can preserve it
 // across a rebuild (NewInstamart resets the cursor to 0).
 func (s Instamart) CursorIndex() int { return s.list.Cursor }

@@ -80,6 +80,9 @@ func (s Restaurant) Selected() (catalog.Item, bool) {
 
 func (s Restaurant) WithCartChip(c string) Restaurant { s.cartChip = c; return s }
 
+// WithMaxRows sets the list viewport height (rows). 0 = show all.
+func (s Restaurant) WithMaxRows(n int) Restaurant { s.list.MaxRows = n; return s }
+
 // PlaceData returns the underlying place (used by the app router).
 func (s Restaurant) PlaceData() catalog.Place { return s.p }
 

@@ -54,6 +54,9 @@ func (m Menu) Selected() (catalog.Place, bool) {
 // WithCartTotal returns a copy with an updated cart total, preserving the cursor.
 func (m Menu) WithCartChip(s string) Menu { m.cartChip = s; return m }
 
+// WithMaxRows sets the list viewport height (rows). 0 = show all.
+func (m Menu) WithMaxRows(n int) Menu { m.list.MaxRows = n; return m }
+
 func (m Menu) Init() tea.Cmd { return nil }
 
 func (m Menu) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

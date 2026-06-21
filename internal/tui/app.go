@@ -646,6 +646,20 @@ func (m Model) statusBar() string {
 	return components.StatusBar(m.addr.Line, m.screenLabel(), hint, "12.4", m.blinkOn())
 }
 
+// listRows is the list viewport height: the window height minus the screen's
+// fixed chrome (header + detail + footer). 0 when the size is unknown (show
+// all). This keeps the header and footer on screen no matter how long the list
+// or how short the window.
+func (m Model) listRows(chrome int) int {
+	if m.h == 0 {
+		return 0
+	}
+	if n := m.h - chrome; n >= 3 {
+		return n
+	}
+	return 3
+}
+
 func (m Model) View() string {
 	// Splash is centered in the viewport (design lines 196-228). We render on
 	// the terminal's own background — wrapping the frame in a lipgloss
@@ -662,7 +676,7 @@ func (m Model) View() string {
 	var body string
 	switch m.screen {
 	case scrRestaurant:
-		body = m.rest.View()
+		body = m.rest.WithMaxRows(m.listRows(14)).View()
 	case scrCart:
 		body = m.cart.View()
 	case scrAddress:
@@ -672,11 +686,11 @@ func (m Model) View() string {
 	case scrTracking:
 		body = m.track.View(m.trackStep, m.spin())
 	case scrInstamart:
-		body = m.inst.View()
+		body = m.inst.WithMaxRows(m.listRows(11)).View()
 	case scrImCart:
 		body = m.imCart.View()
 	default: // scrMenu
-		body = m.menu.View()
+		body = m.menu.WithMaxRows(m.listRows(11)).View()
 	}
 
 	// The footer — the screen's hint line + optional command palette + status
