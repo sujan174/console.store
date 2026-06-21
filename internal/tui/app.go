@@ -686,7 +686,7 @@ func (m Model) View() string {
 	var body string
 	switch m.screen {
 	case scrRestaurant:
-		body = m.rest.WithMaxRows(m.listRows(12)).View()
+		body = m.rest.WithMaxRows(m.listRows(14)).View()
 	case scrCart:
 		body = m.cart.View()
 	case scrAddress:
@@ -700,7 +700,7 @@ func (m Model) View() string {
 	case scrImCart:
 		body = m.imCart.View()
 	default: // scrMenu
-		body = m.menu.WithMaxRows(m.listRows(11)).View()
+		body = m.menu.WithMaxRows(m.listRows(13)).View()
 	}
 
 	// The footer — the screen's hint line + optional command palette + status

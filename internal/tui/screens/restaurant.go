@@ -147,6 +147,8 @@ func (s Restaurant) View() string {
 	var b strings.Builder
 	w := components.ContentWidth()
 
+	b.WriteString("\n") // top padding
+
 	// row 1: ← back  <name> ★            deliver to ⊕ <addr>
 	star := ""
 	if s.p.Fav {
@@ -166,6 +168,7 @@ func (s Restaurant) View() string {
 
 	// most-ordered hero card
 	if top, ok := s.topItem(); ok {
+		b.WriteString("\n") // gap before the hero card
 		hl := theme.GoldStyle.Render("★ ") + theme.BrightStyle.Render(top.Name)
 		if top.Desc != "" {
 			hl += "  " + theme.DimStyle.Render(top.Desc)

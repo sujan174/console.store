@@ -156,6 +156,8 @@ func (m Menu) View() string {
 	var b strings.Builder
 	w := components.ContentWidth()
 
+	b.WriteString("\n") // top padding
+
 	// row 1: brand + version  |  deliver to ⊕ <addr> · <label> ⌄
 	brand := theme.BrandStyle.Render("console.store") + " " + theme.FaintStyle.Render(version)
 	deliver := theme.DimStyle.Render("deliver to ") + theme.CursorStyle.Render("⊕ ") +
@@ -165,6 +167,7 @@ func (m Menu) View() string {
 
 	// hero card: trending now
 	if m.hasTrending {
+		b.WriteString("\n") // gap before the hero card
 		left := "🔥 " + theme.BrightStyle.Render(m.trending.Item.Name) +
 			theme.DimStyle.Render(fmt.Sprintf("  ·  %d today", m.trending.Count))
 		right := theme.DimStyle.Render(etaTail(m.trending.ETA)) + "   " +
