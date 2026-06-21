@@ -3,6 +3,8 @@ package screens
 import (
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"console.store/internal/tui/render"
 	"console.store/internal/tui/theme"
 )
@@ -65,13 +67,38 @@ func (s Splash) View() string {
 	if logo == "" { // defensive: WithCaps not called (e.g. bare NewSplash)
 		logo = render.Logo(s.caps, 64)
 	}
-	for _, l := range strings.Split(strings.TrimRight(logo, "\n"), "\n") {
+	logoLines := strings.Split(strings.TrimRight(logo, "\n"), "\n")
+	logoW := 0
+	for _, l := range logoLines {
+		if x := lipgloss.Width(l); x > logoW {
+			logoW = x
+		}
+	}
+	// center centres a (possibly styled) line within the logo's width so every
+	// element stacks under the wordmark; the whole block is then centred in the
+	// viewport by the root View.
+	center := func(s string) string {
+		if pad := (logoW - lipgloss.Width(s)) / 2; pad > 0 {
+			return strings.Repeat(" ", pad) + s
+		}
+		return s
+	}
+
+	// Settled connect line (one line, not the streamed boot) — design: a single
+	// "✓ connected" handshake above the mark.
+	conn := theme.DimStyle.Render("guest@blr ~ % ssh console.store   ") +
+		theme.GreenStyle.Render("✓ connected") + theme.FaintStyle.Render(" · 14ms")
+	b.WriteString("  " + center(conn) + "\n\n")
+
+	for _, l := range logoLines {
 		b.WriteString("  " + l + "\n")
 	}
+	// gold ".store" suffix, right-aligned under the wordmark (design accent).
+	if storePad := logoW - lipgloss.Width(".store"); storePad > 0 {
+		b.WriteString("  " + strings.Repeat(" ", storePad) + theme.GoldStyle.Render(".store") + "\n")
+	}
 	b.WriteString("\n")
-	b.WriteString("  " + theme.GreenStyle.Render(s.tagline) + " " + theme.PriceStyle.Render(s.spin) + "\n\n")
-	b.WriteString("  " + theme.DimStyle.Render("bangalore · coffee, food & snacks · ") +
-		theme.GreenStyle.Render("247") + theme.DimStyle.Render(" devs online") + "\n\n")
-	b.WriteString("  " + theme.FaintStyle.Render("press any key to connect") + theme.CursorStyle.Render("▋") + "\n")
+	b.WriteString("  " + center(theme.DimStyle.Render("coffee · food · snacks")) + "\n\n")
+	b.WriteString("  " + center(theme.FaintStyle.Render("press any key to connect")+theme.CursorStyle.Render(" ▋")) + "\n")
 	return b.String()
 }
