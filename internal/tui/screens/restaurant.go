@@ -25,18 +25,14 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) R
 	for _, it := range p.Items {
 		qty := qtyByItemID[it.ID]
 
-		// columns: check (✓ when in cart) · veg ◆ (green veg / red non-veg) · name
+		// columns: check (✓ when in cart) · name
 		check := "  "
 		nameStyle := theme.ItemStyle
 		if qty > 0 {
 			check = theme.GreenStyle.Render("✓ ")
 			nameStyle = theme.BrightStyle
 		}
-		veg := theme.GreenStyle.Render("◆ ")
-		if !it.Veg {
-			veg = theme.FavStyle.Render("◆ ")
-		}
-		left := check + veg + nameStyle.Render(it.Name)
+		left := check + nameStyle.Render(it.Name)
 
 		price := theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price))
 		right := price
@@ -47,16 +43,21 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) R
 			right = stepper + price
 		}
 
-		rows = append(rows, components.Row{Left: left, Right: right, Tag: it.Tag, BarGreen: qty > 0, Detail: itemDetail(it)})
+		rows = append(rows, components.Row{Left: left, Right: right, Tag: it.Tag, BarGreen: qty > 0})
 	}
 	return Restaurant{p: p, cartTotal: cartTotal, list: components.List{Rows: rows}}
 }
 
-// itemDetail builds the metadata sub-row shown under the selected item:
-// "★ 4.8   180 kcal   blended double espresso · lightly sweet"
-// (rating gold, kcal dim, description blue). Empty fields are omitted.
+// itemDetail builds the fixed metadata strip for the highlighted item:
+// "veg  ★ 4.8  180 kcal  blended double espresso · lightly sweet"
+// (veg green / non-veg red, rating gold, kcal dim, description blue). Empty
+// fields are omitted.
 func itemDetail(it catalog.Item) string {
-	var parts []string
+	veg := theme.GreenStyle.Render("veg")
+	if !it.Veg {
+		veg = theme.FavStyle.Render("non-veg")
+	}
+	parts := []string{veg}
 	if it.Rating > 0 {
 		parts = append(parts, theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", it.Rating)))
 	}
@@ -66,7 +67,7 @@ func itemDetail(it catalog.Item) string {
 	if it.Desc != "" {
 		parts = append(parts, theme.CursorStyle.Render(it.Desc))
 	}
-	return strings.Join(parts, "   ")
+	return strings.Join(parts, "  ")
 }
 
 func (s Restaurant) Selected() (catalog.Item, bool) {
@@ -142,6 +143,13 @@ func (s Restaurant) View() string {
 	b.WriteString("  " + theme.EtaStyle.Render(s.p.ETA) + "\n")
 	b.WriteString("  " + components.Divider())
 	b.WriteString(s.list.View())
+	b.WriteString("\n")
+	// Fixed detail strip for the highlighted item — stable position so the rows
+	// above don't shift as the cursor moves.
+	if it, ok := s.Selected(); ok {
+		b.WriteString(components.DashRule())
+		b.WriteString("  " + itemDetail(it) + "\n")
+	}
 	b.WriteString("\n")
 	b.WriteString(components.Hint("↑↓", "move", "↵/→", "add", "←", "remove", "esc", "back", "c", "cart"))
 	return b.String()

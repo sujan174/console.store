@@ -101,7 +101,7 @@ func (c Checkout) summaryView() string {
 		lipgloss.NewStyle().
 			Foreground(lipgloss.Color(theme.Bright)).
 			Background(lipgloss.Color(theme.SelRowBg)).
-			Render(padTo(" ❯ place order ", components.FrameWidth()-1))
+			Render(padTo(" > place order ", components.FrameWidth()-1))
 	b.WriteString(bar + "\n\n")
 
 	b.WriteString("  " + theme.FavStyle.Render("no online payment — pay the rider on delivery") + "\n")

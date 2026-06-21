@@ -23,10 +23,9 @@ type Row struct {
 	Tag      string // "new" -> green
 	Fav      bool   // -> red ♥
 	BarGreen bool   // green left-bar when in-cart but not the cursor row
-	Detail   string // pre-styled metadata line, shown only under the cursor row
 }
 
-// List is a single-column selectable list with a ❯ cursor and highlighted row.
+// List is a single-column selectable list with a > cursor and highlighted row.
 type List struct {
 	Rows   []Row
 	Cursor int
@@ -107,26 +106,22 @@ func (l List) View() string {
 		}
 		body := r.Left + strings.Repeat(" ", pad) + right
 		if i == l.Cursor {
-			// Full-bleed selected row: blue ▌ border at col 0, then a blue ❯
-			// chevron and uniformly-bright text on the selected-row background
-			// (design line 845 + 257). Every piece is background-aware so the
-			// highlight is one continuous strip with no colour-reset banding.
+			// Full-bleed selected row: blue ▌ border at col 0, then a blue >
+			// cursor and uniformly-bright text on the selected-row background.
+			// Every piece is background-aware so the highlight is one continuous
+			// strip with no colour-reset banding.
 			selBg := lipgloss.Color(theme.SelRowBg)
-			chevron := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Cursor)).Background(selBg).Render("❯ ")
+			chevron := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Cursor)).Background(selBg).Render("> ")
 			bright := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Bright)).Background(selBg)
 			lead := bright.Render(strings.Repeat(" ", margin-1))
 			text := bright.Render(stripANSI(body))
 			// pad the remainder of the row with the selected-row background
-			used := margin - 1 + lipgloss.Width("❯ ") + lipgloss.Width(stripANSI(body))
+			used := margin - 1 + lipgloss.Width("> ") + lipgloss.Width(stripANSI(body))
 			tail := ""
 			if rest := FrameWidth() - 1 - used; rest > 0 {
 				tail = bright.Render(strings.Repeat(" ", rest))
 			}
 			b.WriteString(theme.CursorStyle.Render("▌") + lead + chevron + text + tail + "\n")
-			if r.Detail != "" {
-				// metadata sub-row, indented to sit under the item name.
-				b.WriteString(strings.Repeat(" ", margin+6) + r.Detail + "\n")
-			}
 		} else {
 			// idle row: a chevron slot keeps names aligned with the selected row.
 			lead := strings.Repeat(" ", margin)

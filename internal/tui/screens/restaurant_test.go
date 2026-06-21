@@ -27,18 +27,18 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	}
 }
 
-func TestRestaurantShowsVegMarkerAndDetail(t *testing.T) {
+func TestRestaurantShowsDetailStrip(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
 	r := NewRestaurant(p, map[string]int{}, 0) // cursor on item 0 (Cold Coffee)
 	out := r.View()
-	if !strings.Contains(out, "◆") {
-		t.Error("expected veg/non-veg ◆ marker on rows")
+	if strings.Contains(out, "◆") {
+		t.Error("the ◆ diamond marker should be gone")
 	}
-	// The selected item (Cold Coffee) shows its metadata detail row.
-	for _, want := range []string{"★ 4.8", "180 kcal", "blended double espresso · lightly sweet"} {
+	// The highlighted item (Cold Coffee, veg) shows its fixed detail strip.
+	for _, want := range []string{"veg", "★ 4.8", "180 kcal", "blended double espresso · lightly sweet"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("selected item missing detail %q:\n%s", want, out)
+			t.Errorf("detail strip missing %q:\n%s", want, out)
 		}
 	}
 }
