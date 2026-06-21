@@ -123,9 +123,9 @@ func (l List) View() string {
 		body := r.Left + strings.Repeat(" ", pad) + right
 		if i == l.Cursor {
 			// Selection: blue ▌ border + > cursor on the subtle selected-row
-			// background. The NAME brightens to near-white; the right column
+			// background. The NAME brightens to pure white; the right column
 			// (price/ETA) keeps its own colour.
-			brightName := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Bright)).Render(stripANSI(r.Left))
+			brightName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(stripANSI(r.Left))
 			selBody := brightName + strings.Repeat(" ", pad) + right
 			cursor := theme.CursorStyle.Render("> ")
 			lead := strings.Repeat(" ", margin-1)
