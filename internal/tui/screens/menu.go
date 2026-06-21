@@ -154,13 +154,15 @@ func (m Menu) View() string {
 		b.WriteString("  " + theme.CursorStyle.Render("/"+m.list.Filter()) + "\n")
 	}
 
+	b.WriteString("\n") // padding above the list
+
 	if len(m.places) == 0 && !m.hasUsual {
 		b.WriteString("  " + theme.DimStyle.Render("no curated spots deliver here right now") + "\n")
 	} else {
 		b.WriteString(m.list.View())
 	}
 
-	b.WriteString("\n")
+	b.WriteString("\n\n") // padding below the list
 
 	hint := components.Hint("↑↓", "move", "←→", "category", "↵", "open", "a", "address", "c", "cart") +
 		"   " + theme.PurpleStyle.Render(":") + " " + theme.FaintStyle.Render("cmd")

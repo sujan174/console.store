@@ -90,8 +90,9 @@ func (s Instamart) View() string {
 	b.WriteString("  " + header + "\n")
 	b.WriteString("  " + theme.EtaStyle.Render(InstamartETA+" · fast lane") + "\n")
 	b.WriteString("  " + components.Divider())
+	b.WriteString("\n") // padding above the list
 	b.WriteString(s.list.View())
-	b.WriteString("\n")
+	b.WriteString("\n\n") // padding below the list
 	b.WriteString(components.Hint("↑↓", "move", "↵/→", "add", "←", "remove", "c", "cart", "esc", "back"))
 	return b.String()
 }

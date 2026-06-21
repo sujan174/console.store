@@ -1,6 +1,7 @@
 package components
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -11,10 +12,25 @@ import (
 
 var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
-// stripANSI removes SGR colour codes so a string can be re-styled cleanly.
-// Wrapping already-coloured text in a Background leaves gaps where the inner
-// resets fire; the selected row is uniformly bright anyway (design line 845).
+// stripANSI removes SGR colour codes (used only for display-width maths).
 func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
+
+// withBg paints a continuous background behind an already-coloured string
+// WITHOUT changing any foreground colours. Naively wrapping styled text in a
+// Background tears at each inner reset (which clears the bg); here we re-assert
+// the bg immediately after every reset, so the highlight is seamless and every
+// element keeps its own colour (price stays green, etc.).
+func withBg(s, hex string) string {
+	open := bgSeq(hex)
+	return open + strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+open) + "\x1b[0m"
+}
+
+// bgSeq is the truecolor background SGR for a #rrggbb hex.
+func bgSeq(hex string) string {
+	var r, g, b int
+	fmt.Sscanf(hex, "#%02x%02x%02x", &r, &g, &b)
+	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, b)
+}
 
 // Row is one line: Left label, Right meta (eta/price), optional Tag (new), Fav marker.
 type Row struct {
@@ -100,22 +116,18 @@ func (l List) View() string {
 		}
 		body := r.Left + strings.Repeat(" ", pad) + right
 		if i == l.Cursor {
-			// Full-bleed selected row: blue ▌ border at col 0, then a blue >
-			// cursor and uniformly-bright text on the selected-row background.
-			// Every piece is background-aware so the highlight is one continuous
-			// strip with no colour-reset banding.
-			selBg := lipgloss.Color(theme.SelRowBg)
-			chevron := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Cursor)).Background(selBg).Render("> ")
-			bright := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Bright)).Background(selBg)
-			lead := bright.Render(strings.Repeat(" ", margin-1))
-			text := bright.Render(stripANSI(body))
-			// pad the remainder of the row with the selected-row background
-			used := margin - 1 + lipgloss.Width("> ") + lipgloss.Width(stripANSI(body))
+			// Subtle selection: a blue ▌ border + > cursor on the selected-row
+			// background. The row's own colours are PRESERVED (price stays green
+			// etc.) — withBg paints the highlight without recolouring anything.
+			cursor := theme.CursorStyle.Render("> ")
+			lead := strings.Repeat(" ", margin-1)
+			used := (margin - 1) + lipgloss.Width("> ") + lipgloss.Width(stripANSI(body))
 			tail := ""
 			if rest := FrameWidth() - 1 - used; rest > 0 {
-				tail = bright.Render(strings.Repeat(" ", rest))
+				tail = strings.Repeat(" ", rest)
 			}
-			b.WriteString(theme.CursorStyle.Render("▌") + lead + chevron + text + tail + "\n")
+			inner := theme.CursorStyle.Render("▌") + lead + cursor + body + tail
+			b.WriteString(withBg(inner, theme.SelRowBg) + "\n")
 		} else {
 			// idle row: a chevron slot keeps names aligned with the selected row.
 			lead := strings.Repeat(" ", margin)

@@ -13,6 +13,7 @@ const (
 	Div      = "#232539" // section dividers / screen top borders
 	Div2     = "#2c2e44" // dashed bill rules, modal border
 	Text     = "#a9b1d6" // default
+	ItemText = "#9aa5c4" // list item names — a touch muted vs Text
 	Bright   = "#c0caf5" // headings, selected text
 	Dim      = "#565f89" // secondary / labels
 	Faint    = "#3b3b5a" // deep hints / idle bullets
@@ -32,7 +33,7 @@ func Fg(hex string) lipgloss.Style { return fg(hex) }
 var (
 	BrandStyle   = fg(Bright).Bold(true)
 	TextStyle    = fg(Text)
-	ItemStyle    = fg(Text)
+	ItemStyle    = fg(ItemText)
 	BrightStyle  = fg(Bright)
 	DimStyle     = fg(Dim)
 	FaintStyle   = fg(Faint)

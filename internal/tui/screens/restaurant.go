@@ -142,8 +142,9 @@ func (s Restaurant) View() string {
 	b.WriteString("  " + header + "\n")
 	b.WriteString("  " + theme.EtaStyle.Render(s.p.ETA) + "\n")
 	b.WriteString("  " + components.Divider())
+	b.WriteString("\n") // padding above the list
 	b.WriteString(s.list.View())
-	b.WriteString("\n")
+	b.WriteString("\n\n") // padding below the list
 	// Fixed detail strip for the highlighted item — stable position so the rows
 	// above don't shift as the cursor moves.
 	if it, ok := s.Selected(); ok {
