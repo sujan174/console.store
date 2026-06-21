@@ -25,14 +25,14 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) R
 	for _, it := range p.Items {
 		qty := qtyByItemID[it.ID]
 
-		// columns: check (✓ when in cart) · name
-		check := "  "
+		// in-cart items read brighter; the green left-bar + stepper already
+		// signal "in cart", so no extra ✓ column (keeps the cursor→name gap
+		// identical to the menu).
 		nameStyle := theme.ItemStyle
 		if qty > 0 {
-			check = theme.GreenStyle.Render("✓ ")
 			nameStyle = theme.BrightStyle
 		}
-		left := check + nameStyle.Render(it.Name)
+		left := nameStyle.Render(it.Name)
 
 		price := theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price))
 		right := price

@@ -24,7 +24,7 @@ func TestInstamartInCartStepper(t *testing.T) {
 	items := []catalog.Item{{ID: "rb", Name: "Red Bull", Price: 125}}
 	s := screens.NewInstamart(items, map[string]int{"rb": 1}, 125)
 	v := s.View()
-	for _, w := range []string{"✓", "×1", "−", "+"} {
+	for _, w := range []string{"×1", "−", "+"} {
 		if !strings.Contains(v, w) {
 			t.Errorf("missing %q:\n%s", w, v)
 		}

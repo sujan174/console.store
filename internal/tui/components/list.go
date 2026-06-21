@@ -92,7 +92,9 @@ func (l List) View() string {
 	var b strings.Builder
 	for i, r := range l.VisibleRows() {
 		right := r.Right
-		pad := width - lipgloss.Width(r.Left) - lipgloss.Width(right)
+		// rightGutter keeps the price/ETA column a little off the right edge.
+		const rightGutter = 2
+		pad := width - rightGutter - lipgloss.Width(r.Left) - lipgloss.Width(right)
 		if pad < 1 {
 			pad = 1
 		}

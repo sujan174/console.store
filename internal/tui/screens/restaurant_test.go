@@ -60,13 +60,13 @@ func TestRestaurantSelectedItem(t *testing.T) {
 	}
 }
 
-func TestRestaurantInCartRowShowsCheckAndStepper(t *testing.T) {
+func TestRestaurantInCartRowShowsStepper(t *testing.T) {
 	p := catalog.Place{Name: "Blue Tokai", ETA: "35-45 min", Items: []catalog.Item{
 		{ID: "x", Name: "Cold Coffee", Price: 149},
 	}}
 	s := NewRestaurant(p, map[string]int{"x": 2}, 298)
 	v := s.View()
-	for _, want := range []string{"✓", "×2", "−", "+", "₹149"} {
+	for _, want := range []string{"×2", "−", "+", "₹149"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("missing %q:\n%s", want, v)
 		}
