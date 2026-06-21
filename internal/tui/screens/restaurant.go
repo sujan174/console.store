@@ -13,6 +13,7 @@ import (
 
 type Restaurant struct {
 	p         catalog.Place
+	addr      catalog.Address
 	cartChip  string
 	list      components.List
 	searching bool
@@ -33,6 +34,9 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartChip string)
 			nameStyle = theme.BrightStyle
 		}
 		left := nameStyle.Render(it.Name)
+		if it.Tag != "" {
+			left += "  " + theme.GreenStyle.Render(it.Tag)
+		}
 
 		price := theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price))
 		right := price
@@ -48,26 +52,29 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartChip string)
 	return Restaurant{p: p, cartChip: cartChip, list: components.List{Rows: rows}}
 }
 
-// itemDetail builds the fixed metadata strip for the highlighted item:
-// "veg  ★ 4.8  180 kcal  blended double espresso · lightly sweet"
-// (veg green / non-veg red, rating gold, kcal dim, description blue). Empty
-// fields are omitted.
-func itemDetail(it catalog.Item) string {
-	veg := theme.GreenStyle.Render("veg")
-	if !it.Veg {
-		veg = theme.FavStyle.Render("non-veg")
+// topItem is the restaurant's "most ordered" hero pick (highest-rated item).
+func (s Restaurant) topItem() (catalog.Item, bool) {
+	if len(s.p.Items) == 0 {
+		return catalog.Item{}, false
 	}
-	parts := []string{veg}
-	if it.Rating > 0 {
-		parts = append(parts, theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", it.Rating)))
+	best := s.p.Items[0]
+	for _, it := range s.p.Items[1:] {
+		if it.Rating > best.Rating {
+			best = it
+		}
 	}
-	if it.Kcal > 0 {
-		parts = append(parts, theme.DimStyle.Render(fmt.Sprintf("%d kcal", it.Kcal)))
+	return best, true
+}
+
+// vegCount is the number of vegetarian items on the menu.
+func (s Restaurant) vegCount() int {
+	n := 0
+	for _, it := range s.p.Items {
+		if it.Veg {
+			n++
+		}
 	}
-	if it.Desc != "" {
-		parts = append(parts, theme.CursorStyle.Render(it.Desc))
-	}
-	return strings.Join(parts, "  ")
+	return n
 }
 
 func (s Restaurant) Selected() (catalog.Item, bool) {
@@ -79,6 +86,9 @@ func (s Restaurant) Selected() (catalog.Item, bool) {
 }
 
 func (s Restaurant) WithCartChip(c string) Restaurant { s.cartChip = c; return s }
+
+// WithAddr sets the delivery address shown in the header.
+func (s Restaurant) WithAddr(a catalog.Address) Restaurant { s.addr = a; return s }
 
 // WithMaxRows sets the list viewport height (rows). 0 = show all.
 func (s Restaurant) WithMaxRows(n int) Restaurant { s.list.MaxRows = n; return s }
@@ -137,23 +147,53 @@ func (s Restaurant) View() string {
 	var b strings.Builder
 	w := components.ContentWidth()
 
-	header := justify(
-		theme.PriceStyle.Render("← "+strings.ToLower(s.p.Name)),
-		theme.CartStyle.Render(s.cartChip),
-		w,
-	)
-	b.WriteString("  " + header + "\n")
-	b.WriteString("  " + theme.EtaStyle.Render(s.p.ETA) + "\n")
-	b.WriteString("  " + components.Divider())
-	b.WriteString("\n\n") // padding above the list
-	b.WriteString(s.list.View())
-	b.WriteString("\n\n\n") // padding below the list
-	// Fixed detail strip for the highlighted item — stable position so the rows
-	// above don't shift as the cursor moves.
-	if it, ok := s.Selected(); ok {
-		b.WriteString(components.DashRule())
-		b.WriteString("  " + itemDetail(it) + "\n")
+	// row 1: ← back  <name> ★            deliver to ⊕ <addr>
+	star := ""
+	if s.p.Fav {
+		star = " " + theme.GoldStyle.Render("★")
 	}
+	left := theme.PriceStyle.Render("← back") + "  " + theme.BrightStyle.Bold(true).Render(s.p.Name) + star
+	right := theme.DimStyle.Render("deliver to ") + theme.CursorStyle.Render("⊕ ") + theme.BrightStyle.Render(s.addr.Line)
+	b.WriteString("  " + justify(left, right, w) + "\n")
+
+	// row 2 meta: ★ 4.6 · 35-45 min · coffee · 10 items
+	dot := theme.FaintStyle.Render("  ·  ")
+	meta := theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", s.p.Rating)) + dot +
+		theme.DimStyle.Render(s.p.ETA) + dot +
+		theme.DimStyle.Render(string(s.p.Section)) + dot +
+		theme.DimStyle.Render(fmt.Sprintf("%d items", len(s.p.Items)))
+	b.WriteString("  " + meta + "\n")
+
+	// most-ordered hero card
+	if top, ok := s.topItem(); ok {
+		hl := theme.GoldStyle.Render("★ ") + theme.BrightStyle.Render(top.Name)
+		if top.Desc != "" {
+			hl += "  " + theme.DimStyle.Render(top.Desc)
+		}
+		hr := theme.PriceStyle.Render(fmt.Sprintf("₹%d", top.Price)) + "  " + theme.CursorStyle.Render("→")
+		b.WriteString(heroBox("most ordered", hl, hr, w))
+	}
+
+	b.WriteString("\n")
+
+	// filter row: all 10 │ veg 9   ⌄ filter            🛒 cart empty
+	allTab := theme.Fg(theme.Gold).Underline(true).Render("all") + theme.DimStyle.Render(fmt.Sprintf(" %d", len(s.p.Items)))
+	vegTab := theme.CatOffStyle.Render("veg") + theme.DimStyle.Render(fmt.Sprintf(" %d", s.vegCount()))
+	sep := theme.Fg(theme.Div2).Render(" │ ")
+	filters := allTab + sep + vegTab + "   " + theme.FaintStyle.Render("⌄ filter")
+	cartStyle := theme.CartStyle
+	if strings.Contains(s.cartChip, "empty") {
+		cartStyle = theme.DimStyle
+	}
+	b.WriteString("  " + justify(filters, cartStyle.Render(s.cartChip), w) + "\n")
+
+	// search prompt (when active)
+	if s.searching || s.list.Filter() != "" {
+		b.WriteString("  " + theme.CursorStyle.Render("/"+s.list.Filter()) + "\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(s.list.View())
 	b.WriteString("\n")
 	b.WriteString(components.Hint("↑↓", "move", "↵/→", "add", "←", "remove", "esc", "back", "c", "cart"))
 	return b.String()

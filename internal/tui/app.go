@@ -380,7 +380,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch k.String() {
 			case "enter":
 				if p, ok := m.menu.Selected(); ok {
-					m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip())
+					m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
 					m.screen = scrRestaurant
 				}
 				return m, nil
@@ -457,7 +457,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.menu = m.menu.WithCartChip(m.cartChip())
 				ci := m.rest.CursorIndex()
-				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithCursor(ci)
+				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithAddr(m.addr).WithCursor(ci)
 				return m, nil
 			case "left", "h":
 				it, ok := m.rest.Selected()
@@ -470,7 +470,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.menu = m.menu.WithCartChip(m.cartChip())
 				ci := m.rest.CursorIndex()
-				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithCursor(ci)
+				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithAddr(m.addr).WithCursor(ci)
 				return m, nil
 			case "c":
 				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta())
@@ -686,7 +686,7 @@ func (m Model) View() string {
 	var body string
 	switch m.screen {
 	case scrRestaurant:
-		body = m.rest.WithMaxRows(m.listRows(14)).View()
+		body = m.rest.WithMaxRows(m.listRows(12)).View()
 	case scrCart:
 		body = m.cart.View()
 	case scrAddress:

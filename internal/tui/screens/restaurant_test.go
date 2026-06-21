@@ -16,7 +16,7 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	p, _ := repo.Menu("blue-tokai")
 	r := NewRestaurant(p, map[string]int{}, "")
 	out := r.View()
-	if !strings.Contains(out, "blue tokai") {
+	if !strings.Contains(out, "Blue Tokai") {
 		t.Fatal("missing restaurant name header")
 	}
 	if !strings.Contains(out, "35-45 min") {
@@ -27,30 +27,19 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	}
 }
 
-func TestRestaurantShowsDetailStrip(t *testing.T) {
-	repo := mem.New()
-	p, _ := repo.Menu("blue-tokai")
-	r := NewRestaurant(p, map[string]int{}, "") // cursor on item 0 (Cold Coffee)
-	out := r.View()
-	if strings.Contains(out, "◆") {
-		t.Error("the ◆ diamond marker should be gone")
-	}
-	// The highlighted item (Cold Coffee, veg) shows its fixed detail strip.
-	for _, want := range []string{"veg", "★ 4.8", "180 kcal", "blended double espresso · lightly sweet"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("detail strip missing %q:\n%s", want, out)
-		}
-	}
-}
-
-func TestRestaurantDetailOnlyOnSelectedRow(t *testing.T) {
+func TestRestaurantShowsMostOrderedBox(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
 	r := NewRestaurant(p, map[string]int{}, "")
 	out := r.View()
-	// Hazelnut's description must NOT show while Cold Coffee is selected.
-	if strings.Contains(out, "16h steeped · hazelnut") {
-		t.Error("non-selected item detail leaked into the view")
+	if strings.Contains(out, "◆") {
+		t.Error("the ◆ diamond marker should be gone")
+	}
+	// Hero card shows the most-ordered item (Cold Coffee, highest rated) + desc.
+	for _, want := range []string{"most ordered", "Cold Coffee", "blended double espresso · lightly sweet", "10 items"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("most-ordered box missing %q:\n%s", want, out)
+		}
 	}
 }
 
