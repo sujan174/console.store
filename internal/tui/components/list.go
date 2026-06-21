@@ -107,9 +107,6 @@ func (l List) View() string {
 	}
 	var b strings.Builder
 	for i, r := range l.VisibleRows() {
-		if i > 0 {
-			b.WriteString("\n") // one blank line between rows (terminal's only gap increment)
-		}
 		right := r.Right
 		// rightGutter keeps the price/ETA column a little off the right edge.
 		const rightGutter = 2
