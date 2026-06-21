@@ -63,3 +63,11 @@ type Usual struct {
 	Item    Item
 	Label   string // "Cold Coffee · Blue Tokai"
 }
+
+// Trending is the hero "trending now" pick for an address.
+type Trending struct {
+	PlaceID string
+	Item    Item
+	Count   int    // orders today
+	ETA     string // delivery window of its place
+}

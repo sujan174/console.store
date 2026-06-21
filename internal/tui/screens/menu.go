@@ -12,15 +12,21 @@ import (
 	"console.store/internal/tui/theme"
 )
 
+// version is the build tag shown next to the brand in the header.
+const version = "v1.4"
+
 type Menu struct {
-	places    []catalog.Place
-	address   catalog.Address
-	section   catalog.Section
-	usual     catalog.Usual
-	hasUsual  bool
-	cartChip  string
-	list      components.List
-	searching bool
+	places      []catalog.Place
+	address     catalog.Address
+	section     catalog.Section
+	usual       catalog.Usual
+	hasUsual    bool
+	cartChip    string
+	trending    catalog.Trending
+	hasTrending bool
+	counts      map[catalog.Section]int
+	list        components.List
+	searching   bool
 }
 
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartChip string) Menu {
@@ -56,6 +62,15 @@ func (m Menu) WithCartChip(s string) Menu { m.cartChip = s; return m }
 
 // WithMaxRows sets the list viewport height (rows). 0 = show all.
 func (m Menu) WithMaxRows(n int) Menu { m.list.MaxRows = n; return m }
+
+// WithTrending sets the hero "trending now" pick.
+func (m Menu) WithTrending(t catalog.Trending, ok bool) Menu {
+	m.trending, m.hasTrending = t, ok
+	return m
+}
+
+// WithCounts sets the per-section place counts shown on the tab bar.
+func (m Menu) WithCounts(c map[catalog.Section]int) Menu { m.counts = c; return m }
 
 func (m Menu) Init() tea.Cmd { return nil }
 
@@ -106,38 +121,62 @@ func justify(left, right string, width int) string {
 	return left + strings.Repeat(" ", pad) + right
 }
 
+// etaTail turns "30-40 min" into "~40 min".
+func etaTail(eta string) string {
+	if i := strings.LastIndex(eta, "-"); i >= 0 {
+		return "~" + strings.TrimSpace(eta[i+1:])
+	}
+	return eta
+}
+
+// heroBox renders a rounded titled card spanning width w:
+//
+//	╭─ <title> ───────────────╮
+//	│ <left>          <right> │
+//	╰─────────────────────────╯
+func heroBox(title, left, right string, w int) string {
+	bd := theme.Fg(theme.Div2)
+	topUsed := lipgloss.Width("╭─ ") + lipgloss.Width(title) + lipgloss.Width(" ") + 1
+	fill := w - topUsed
+	if fill < 0 {
+		fill = 0
+	}
+	top := bd.Render("╭─ ") + theme.FaintStyle.Render(title) + bd.Render(" "+strings.Repeat("─", fill)+"╮")
+	inner := w - 4
+	gap := inner - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		gap = 1
+	}
+	mid := bd.Render("│ ") + left + strings.Repeat(" ", gap) + right + bd.Render(" │")
+	bot := bd.Render("╰" + strings.Repeat("─", w-2) + "╯")
+	return "  " + top + "\n  " + mid + "\n  " + bot + "\n"
+}
+
 func (m Menu) View() string {
 	var b strings.Builder
 	w := components.ContentWidth()
 
-	// header row: brand (left) · cart total (right)
-	header := justify(
-		theme.BrandStyle.Render("console.store"),
-		theme.CartStyle.Render(m.cartChip),
-		w,
-	)
-	b.WriteString("  " + header + "\n")
+	// row 1: brand + version  |  deliver to ⊕ <addr> · <label> ⌄
+	brand := theme.BrandStyle.Render("console.store") + " " + theme.FaintStyle.Render(version)
+	deliver := theme.DimStyle.Render("deliver to ") + theme.CursorStyle.Render("⊕ ") +
+		theme.BrightStyle.Render(m.address.Line) + theme.DimStyle.Render(" · "+m.address.Label) +
+		theme.FaintStyle.Render(" ⌄")
+	b.WriteString("  " + justify(brand, deliver, w) + "\n")
 
-	// address row: address line (left) · [a] (right)
-	addrRow := justify(
-		theme.DimStyle.Render(m.address.Line),
-		theme.FaintStyle.Render("[a]"),
-		w,
-	)
-	b.WriteString("  " + addrRow + "\n")
-
-	b.WriteString("  " + components.Divider())
-
-	// usual line: ↵ the usual   <label>            ₹<price>
-	if m.hasUsual {
-		left := theme.PurpleStyle.Render("↵ the usual") + "   " + theme.ItemStyle.Render(m.usual.Label)
-		right := theme.PriceStyle.Render(fmt.Sprintf("₹%d", m.usual.Item.Price))
-		b.WriteString("  " + justify(left, right, w) + "\n")
+	// hero card: trending now
+	if m.hasTrending {
+		left := "🔥 " + theme.BrightStyle.Render(m.trending.Item.Name) +
+			theme.DimStyle.Render(fmt.Sprintf("  ·  %d today", m.trending.Count))
+		right := theme.DimStyle.Render(etaTail(m.trending.ETA)) + "   " +
+			theme.PriceStyle.Render(fmt.Sprintf("₹%d", m.trending.Item.Price)) + "  " +
+			theme.CursorStyle.Render("→")
+		b.WriteString(heroBox("trending now", left, right, w))
 	}
 
 	b.WriteString("\n")
 
-	// tabs row, table-style with │ separators: coffee │ food │ quick snacks
+	// tab bar with per-section counts + cart chip:
+	//   coffee 4 │ food 5 │ quick snacks 5            🛒 cart empty
 	labels := map[catalog.Section]string{
 		catalog.SectionCoffee: "coffee",
 		catalog.SectionFood:   "food",
@@ -145,14 +184,19 @@ func (m Menu) View() string {
 	}
 	var tabs []string
 	for _, s := range catalog.MenuSections {
+		cnt := theme.DimStyle.Render(fmt.Sprintf(" %d", m.counts[s]))
 		if s == m.section {
-			tabs = append(tabs, theme.CatOnStyle.Render(labels[s]))
+			tabs = append(tabs, theme.Fg(theme.Gold).Underline(true).Render(labels[s])+cnt)
 		} else {
-			tabs = append(tabs, theme.CatOffStyle.Render(labels[s]))
+			tabs = append(tabs, theme.CatOffStyle.Render(labels[s])+cnt)
 		}
 	}
 	sep := theme.Fg(theme.Div2).Render(" │ ")
-	b.WriteString("  " + strings.Join(tabs, sep) + "\n")
+	cartStyle := theme.CartStyle
+	if strings.Contains(m.cartChip, "empty") {
+		cartStyle = theme.DimStyle
+	}
+	b.WriteString("  " + justify(strings.Join(tabs, sep), cartStyle.Render(m.cartChip), w) + "\n")
 
 	b.WriteString("\n")
 

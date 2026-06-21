@@ -112,7 +112,14 @@ func (m Model) buildMenu() screens.Menu {
 	if ok && usual.Item.Section != m.section {
 		ok = false
 	}
-	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartChip())
+	counts := map[catalog.Section]int{}
+	for _, sec := range catalog.MenuSections {
+		counts[sec] = len(m.repo.Places(m.addr, sec))
+	}
+	trending, hasTrending := m.repo.Trending(m.addr)
+	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartChip()).
+		WithTrending(trending, hasTrending).
+		WithCounts(counts)
 }
 
 var menuTabs = []catalog.Section{catalog.SectionCoffee, catalog.SectionFood, catalog.SectionSnacks}
@@ -236,8 +243,11 @@ func (m Model) imCartCount() int {
 	return n
 }
 
-// cartChipStr formats the top-right cart chip: "🛒 cart · <n> · ₹<total>".
+// cartChipStr formats the cart chip: "🛒 cart empty" or "🛒 cart · <n> · ₹<total>".
 func cartChipStr(count, total int) string {
+	if count == 0 {
+		return "🛒 cart empty"
+	}
 	return fmt.Sprintf("🛒 cart · %d · ₹%d", count, total)
 }
 

@@ -306,3 +306,12 @@ var usualPin = struct {
 	PlaceID string
 	ItemID  string
 }{PlaceID: "blue-tokai", ItemID: "bt-cold-coffee"}
+
+// trendingPin is the editorial "trending now" hero pick. Third Wave serves all
+// addresses, so it's a safe default; the repo falls back to the top-rated
+// serviceable item if it's ever unavailable.
+var trendingPin = struct {
+	PlaceID string
+	ItemID  string
+	Count   int
+}{PlaceID: "third-wave", ItemID: "tw-cold-brew", Count: 320}

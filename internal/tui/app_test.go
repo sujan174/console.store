@@ -89,7 +89,7 @@ func TestAppEnterOpensRestaurantThenEscBack(t *testing.T) {
 	}
 	// esc back to menu
 	m3, _ := m2.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if !strings.Contains(m3.View(), "the usual") {
+	if !strings.Contains(m3.View(), "deliver to") {
 		t.Fatal("esc should return to menu")
 	}
 }

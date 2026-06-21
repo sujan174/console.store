@@ -67,6 +67,32 @@ func (r *Repo) Usual(addr catalog.Address) (catalog.Usual, bool) {
 	return catalog.Usual{}, false
 }
 
+func (r *Repo) Trending(addr catalog.Address) (catalog.Trending, bool) {
+	// Prefer the editorial pin when it's serviceable here.
+	if p, ok := r.Menu(trendingPin.PlaceID); ok && serves(p, addr.ID) {
+		for _, it := range p.Items {
+			if it.ID == trendingPin.ItemID {
+				return catalog.Trending{PlaceID: p.ID, Item: it, Count: trendingPin.Count, ETA: p.ETA}, true
+			}
+		}
+	}
+	// Fallback: the top-rated item among serviceable places.
+	var best catalog.Trending
+	found := false
+	for _, p := range r.places {
+		if !serves(p, addr.ID) {
+			continue
+		}
+		for _, it := range p.Items {
+			if !found || it.Rating > best.Item.Rating {
+				best = catalog.Trending{PlaceID: p.ID, Item: it, Count: 200, ETA: p.ETA}
+				found = true
+			}
+		}
+	}
+	return best, found
+}
+
 func (r *Repo) InstamartItems(addr catalog.Address) []catalog.Item {
 	return r.instamart
 }

@@ -12,6 +12,8 @@ type Repository interface {
 	Menu(placeID string) (Place, bool)
 	// Usual returns the pinned reorder for addr, if one is serviceable.
 	Usual(addr Address) (Usual, bool)
+	// Trending returns the hero "trending now" pick for addr, if serviceable.
+	Trending(addr Address) (Trending, bool)
 	// InstamartItems returns the flat curated Instamart list for addr.
 	InstamartItems(addr Address) []Item
 }

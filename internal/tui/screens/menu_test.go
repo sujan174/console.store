@@ -25,25 +25,24 @@ func TestMenuHeaderShowsBrandAndCart(t *testing.T) {
 	}
 }
 
-func TestMenuShowsUsualLine(t *testing.T) {
+func TestMenuShowsTrendingBox(t *testing.T) {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
 	places := repo.Places(addr, catalog.SectionCoffee)
-	usual, ok := repo.Usual(addr)
+	tr, ok := repo.Trending(addr)
 	if !ok {
-		t.Fatal("expected a usual at the first address")
+		t.Fatal("expected a trending pick at the first address")
 	}
-	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, "")
+	m := NewMenu(places, addr, catalog.SectionCoffee, catalog.Usual{}, false, "").WithTrending(tr, ok)
 	out := m.View()
-	if !strings.Contains(out, "the usual") {
-		t.Fatal("missing the usual line")
+	if !strings.Contains(out, "trending now") {
+		t.Fatalf("missing trending box title:\n%s", out)
 	}
-	if !strings.Contains(out, usual.Label) {
-		t.Fatalf("missing usual label %q:\n%s", usual.Label, out)
+	if !strings.Contains(out, tr.Item.Name) {
+		t.Fatalf("missing trending item %q:\n%s", tr.Item.Name, out)
 	}
-	priceStr := "₹" + itoa(usual.Item.Price)
-	if !strings.Contains(out, priceStr) {
-		t.Fatalf("missing usual price %q:\n%s", priceStr, out)
+	if !strings.Contains(out, "₹"+itoa(tr.Item.Price)) {
+		t.Fatalf("missing trending price:\n%s", out)
 	}
 }
 
