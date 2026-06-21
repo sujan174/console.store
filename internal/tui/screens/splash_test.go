@@ -18,8 +18,8 @@ func TestSplashBootPhaseStreamsLines(t *testing.T) {
 func TestSplashLogoPhase(t *testing.T) {
 	s := screens.NewSplash().WithBoot(screens.BootLineCount, "⠋", "warming the kitchen …")
 	v := s.View()
-	if !strings.Contains(v, "press any key to connect") {
-		t.Errorf("logo phase should prompt to connect:\n%s", v)
+	if !strings.Contains(v, "go to shop") {
+		t.Errorf("logo phase should show the go-to-shop button:\n%s", v)
 	}
 	if !strings.Contains(v, "connected") {
 		t.Errorf("settled splash should show the ✓ connected line:\n%s", v)

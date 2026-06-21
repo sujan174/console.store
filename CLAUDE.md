@@ -21,9 +21,15 @@ gofmt -w <file>                   # format
 
 Go 1.26. No Makefile, no linter config — `go vet` + `gofmt` are the bar.
 
-## Docs vs reality — read this first
+## Docs — what's there now
 
-`docs/` describes the **full planned product**: a 6-component backend (OAuth broker, account service, Swiggy MCP client, curation store, session/order state, encrypted token store) and packages `internal/{auth,swiggy,account,session,curation,store}` plus `cmd/broker`. **None of those packages exist.** Treat docs as design intent, not a map of the code. What actually exists:
+`docs/` holds **only the Swiggy Builders Club application package** — the program console.store will broker orders through. It is design intent for the *integration/approval*, not a map of the code:
+
+- `docs/README.md` — concept/use-case + index
+- `docs/security.md` — the detailed security plan (delegated auth, token storage, order integrity); the core artifact Swiggy reviews
+- `docs/builders-application.md` — submission details (servers, scope, redirect URI, demo run-sheet, open items)
+
+**The planned backend** (OAuth broker, account/session services, Swiggy MCP client, encrypted token store; packages `internal/{auth,swiggy,account,session,store}` plus `cmd/broker`) **does not exist** — `docs/security.md` frames it as commitments/design, built later at the staging gate. Today only the TUI + in-memory mock exist:
 
 ```
 cmd/sshd/main.go        wish SSH server; binds lipgloss color profile + OSC 11 bg to each session
@@ -59,6 +65,6 @@ When the docs and the code disagree, the code wins. Don't scaffold the planned b
 
 ## Conventions
 
-- Comments frequently cite the design script (`design line NNN`) as the source of truth for copy, spacing, and bill math. When changing UI, check the referenced design doc under `docs/` rather than guessing.
+- Comments frequently cite the design script (`design line NNN`). That design spec has been removed from the repo; treat the existing rendered copy/spacing in the code and its tests as the source of truth — don't chase the deleted line numbers.
 - Keep packages single-responsibility; split a file when it does too much (existing pattern: one screen per file).
-- The canonical design spec is `docs/superpowers/specs/2026-06-20-console-store-design.md`; `docs/README.md` indexes the rest.
+- `docs/` now covers only the Builders Club application package (see *Docs* above); there is no in-repo TUI design spec anymore.

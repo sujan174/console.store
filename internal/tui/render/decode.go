@@ -16,8 +16,9 @@ const DecodeSteps = 13
 const glitchChars = `01<>/\{}[]#%&$*+=`
 
 const (
-	decodeEdgeHex  = "#7aa2f7" // bright cyan-blue render head
-	decodeGlitchHx = "#565f89" // dim glitch noise
+	decodeEdgeHex    = "#7aa2f7" // bright cyan-blue render head
+	decodeGlitchHex  = "#565f89" // dim glitch noise
+	decodeGradBotHex = "#bb9af7" // gradient bottom (violet)
 )
 
 // DecodeWordmark renders the block wordmark mid-decode. step is decode progress
@@ -33,21 +34,21 @@ func DecodeWordmark(caps Caps, step, frame int) string {
 		return Logo(caps, 64)
 	}
 
-	W := 0
+	w := 0
 	for _, ln := range asciiLogo {
-		if r := len([]rune(ln)); r > W {
-			W = r
+		if r := len([]rune(ln)); r > w {
+			w = r
 		}
 	}
-	resolved := step * W / DecodeSteps
+	resolved := step * w / DecodeSteps
 	if step >= DecodeSteps {
-		resolved = W
+		resolved = w
 	}
 
-	top, _ := colorful.Hex("#7aa2f7")
-	bot, _ := colorful.Hex("#bb9af7")
+	top, _ := colorful.Hex(decodeEdgeHex)
+	bot, _ := colorful.Hex(decodeGradBotHex)
 	edge := lipgloss.NewStyle().Foreground(lipgloss.Color(decodeEdgeHex))
-	glitch := lipgloss.NewStyle().Foreground(lipgloss.Color(decodeGlitchHx))
+	glitch := lipgloss.NewStyle().Foreground(lipgloss.Color(decodeGlitchHex))
 	n := len(asciiLogo)
 
 	var out strings.Builder
@@ -60,7 +61,7 @@ func DecodeWordmark(caps Caps, step, frame int) string {
 		lineHex := top.BlendLab(bot, frac).Clamped().Hex()
 		grad := lipgloss.NewStyle().Foreground(lipgloss.Color(lineHex))
 
-		for x := 0; x < W; x++ {
+		for x := 0; x < w; x++ {
 			r := ' '
 			if x < len(runes) {
 				r = runes[x]

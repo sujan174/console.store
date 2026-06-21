@@ -9,6 +9,7 @@ import (
 
 	"console.store/internal/catalog"
 	"console.store/internal/tui/render"
+	"console.store/internal/tui/screens"
 )
 
 // despace strips spaces so assertions survive the list's letter-spacing
@@ -48,14 +49,25 @@ func TestStartsOnSplashThenKeyToMenu(t *testing.T) {
 	}
 }
 
-func TestSplashAutoConnectsAfterTicks(t *testing.T) {
+func TestSplashHoldsUntilKey(t *testing.T) {
 	m := New(render.Caps{}, nil)
-	for i := 0; i < 200 && m.screen == scrSplash; i++ {
+	// Ticks brew the boot sequence but never leave the splash — it's a landing
+	// screen now; the user must pick "go to shop".
+	for i := 0; i < 200; i++ {
 		updated, _ := m.Update(tickMsg(time.Now()))
 		m = updated.(Model)
 	}
-	if m.screen == scrSplash {
-		t.Error("splash should auto-advance to menu after enough ticks")
+	if m.screen != scrSplash {
+		t.Errorf("splash should hold until a key, got screen %d", m.screen)
+	}
+	if m.bootStep < screens.BootLineCount {
+		t.Errorf("boot should have finished streaming, bootStep=%d", m.bootStep)
+	}
+	// enter activates the selected home item -> menu
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.screen != scrMenu {
+		t.Errorf("enter on settled splash should go to menu, got %d", m.screen)
 	}
 }
 

@@ -80,7 +80,7 @@ type Model struct {
 
 	splash   screens.Splash
 	bootStep int
-	bootHold int
+	homeSel  int // selected home-menu item on the splash
 
 	track     screens.Tracking
 	trackStep int
@@ -192,15 +192,10 @@ func (m Model) Init() tea.Cmd { return tick() }
 // onTick advances time-based screen state; extended by later tasks.
 func (m Model) onTick() Model {
 	if m.screen == scrSplash {
-		if m.bootStep < screens.BootLineCount {
-			if m.frame%6 == 0 {
-				m.bootStep++
-			}
-		} else {
-			m.bootHold++
-			if m.bootHold > 37 { // ~2.2s hold on the logo, then connect
-				m.screen = scrMenu
-			}
+		// Brew the handshake, then settle on the home screen and wait for the
+		// user to pick "go to shop" (no auto-advance — the splash is a landing).
+		if m.bootStep < screens.BootLineCount && m.frame%6 == 0 {
+			m.bootStep++
 		}
 	}
 	if m.screen == scrTracking {
@@ -361,7 +356,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if m.screen == scrSplash {
-			m.screen = scrMenu
+			// Settled home: arrows move the menu cursor; any other key (↵
+			// included) activates the selection. Today every item lands on the
+			// shop, and a key during the boot brew skips straight in.
+			switch k.String() {
+			case "up", "k":
+				if m.homeSel > 0 {
+					m.homeSel--
+				}
+			case "down", "j":
+				if m.homeSel < screens.ItemCount()-1 {
+					m.homeSel++
+				}
+			default:
+				m.screen = scrMenu
+			}
 			return m, nil
 		}
 		// `:` opens the palette from any in-app screen (design line 760).
@@ -676,7 +685,8 @@ func (m Model) View() string {
 	// Background tears on inner colour resets (banding), and a dark terminal
 	// already provides the #15161f-ish canvas.
 	if m.screen == scrSplash {
-		sp := m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/27)%len(screens.Taglines)]).View()
+		sp := m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/27)%len(screens.Taglines)]).
+			WithFrame(m.frame).WithSelection(m.homeSel).View()
 		if m.w == 0 || m.h == 0 {
 			return sp
 		}

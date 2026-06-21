@@ -43,6 +43,16 @@ func TestDecodeDeterministic(t *testing.T) {
 	}
 }
 
+func TestDecodeFlatColorResolves(t *testing.T) {
+	out := DecodeWordmark(Caps{Truecolor: false}, DecodeSteps, 0)
+	if !strings.Contains(out, "█") {
+		t.Fatalf("flat-color settled wordmark should contain block glyphs:\n%s", out)
+	}
+	if strings.ContainsAny(out, glitchChars) {
+		t.Fatalf("settled wordmark should have no glitch chars:\n%s", out)
+	}
+}
+
 func TestDecodeKittySettles(t *testing.T) {
 	// On the Kitty bitmap path the bloom can't be glyph-decoded; it returns the
 	// settled logo regardless of step.
