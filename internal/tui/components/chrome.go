@@ -33,6 +33,24 @@ func FrameWidth() int { return frameWidth }
 // ContentWidth is the text area width between the gutters.
 func ContentWidth() int { return frameWidth - 2*margin }
 
+// LetterSpace inserts one space between consecutive runes, giving list text a
+// roomier, letter-spaced look (terminals have no real letter-spacing, so a
+// space is the only available gap). Existing spaces widen accordingly.
+func LetterSpace(s string) string {
+	r := []rune(s)
+	if len(r) < 2 {
+		return s
+	}
+	var b strings.Builder
+	for i, c := range r {
+		if i > 0 {
+			b.WriteRune(' ')
+		}
+		b.WriteRune(c)
+	}
+	return b.String()
+}
+
 // PadTo right-pads s with spaces to the given display width.
 func PadTo(s string, width int) string {
 	if pad := width - lipgloss.Width(s); pad > 0 {

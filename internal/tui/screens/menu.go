@@ -26,7 +26,10 @@ type Menu struct {
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartTotal int) Menu {
 	rows := make([]components.Row, len(places))
 	for i, p := range places {
-		rows[i] = components.Row{Left: theme.ItemStyle.Render(p.Name), Right: theme.EtaStyle.Render(p.ETA)}
+		rows[i] = components.Row{
+			Left:  theme.ItemStyle.Render(components.LetterSpace(p.Name)),
+			Right: theme.EtaStyle.Render(components.LetterSpace(p.ETA)),
+		}
 	}
 	return Menu{
 		places:    places,
@@ -154,7 +157,7 @@ func (m Menu) View() string {
 		b.WriteString("  " + theme.CursorStyle.Render("/"+m.list.Filter()) + "\n")
 	}
 
-	b.WriteString("\n") // padding above the list
+	b.WriteString("\n\n") // padding above the list
 
 	if len(m.places) == 0 && !m.hasUsual {
 		b.WriteString("  " + theme.DimStyle.Render("no curated spots deliver here right now") + "\n")
@@ -162,7 +165,7 @@ func (m Menu) View() string {
 		b.WriteString(m.list.View())
 	}
 
-	b.WriteString("\n\n") // padding below the list
+	b.WriteString("\n\n\n") // padding below the list
 
 	hint := components.Hint("↑↓", "move", "←→", "category", "↵", "open", "a", "address", "c", "cart") +
 		"   " + theme.PurpleStyle.Render(":") + " " + theme.FaintStyle.Render("cmd")

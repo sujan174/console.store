@@ -11,6 +11,10 @@ import (
 	"console.store/internal/tui/render"
 )
 
+// despace strips spaces so assertions survive the list's letter-spacing
+// (which only inserts spaces between glyphs).
+func despace(s string) string { return strings.ReplaceAll(s, " ", "") }
+
 // newAtMenu returns a Model that has dismissed the splash and is on the menu,
 // so flow tests can drive menu interactions directly.
 func newAtMenu() Model {
@@ -71,7 +75,7 @@ func TestTickAdvancesFrame(t *testing.T) {
 func TestAppStartsOnMenu(t *testing.T) {
 	m := newAtMenu()
 	out := m.View()
-	if !strings.Contains(out, "console.store") || !strings.Contains(out, "Blue Tokai") {
+	if !strings.Contains(out, "console.store") || !strings.Contains(despace(out), "BlueTokai") {
 		t.Fatal("app should start on menu with places")
 	}
 }
@@ -94,10 +98,10 @@ func TestSectionSwitchChangesPlaces(t *testing.T) {
 	m := newAtMenu()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	view := updated.(Model).View()
-	if !strings.Contains(view, "California Burrito") {
+	if !strings.Contains(despace(view), "CaliforniaBurrito") {
 		t.Errorf("after switching to food, expected a food place; got:\n%s", view)
 	}
-	if strings.Contains(view, "Blue Tokai") {
+	if strings.Contains(despace(view), "BlueTokai") {
 		t.Error("coffee place should not show under food section")
 	}
 }
@@ -150,7 +154,7 @@ func TestAddressSwitchReFiltersMenu(t *testing.T) {
 	if !strings.Contains(view, "Indiranagar") {
 		t.Errorf("menu header should show new address Indiranagar:\n%s", view)
 	}
-	if !strings.Contains(view, "Subko") {
+	if !strings.Contains(despace(view), "Subko") {
 		t.Errorf("Subko should be serviceable at Indiranagar:\n%s", view)
 	}
 }

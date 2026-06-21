@@ -8,6 +8,9 @@ import (
 	"console.store/internal/catalog/mem"
 )
 
+// despace strips spaces so assertions survive the list's letter-spacing.
+func despace(s string) string { return strings.ReplaceAll(s, " ", "") }
+
 func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
@@ -19,7 +22,7 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	if !strings.Contains(out, "35-45 min") {
 		t.Fatal("missing delivery window")
 	}
-	if !strings.Contains(out, "Cold Coffee") || !strings.Contains(out, "₹149") {
+	if !strings.Contains(despace(out), "ColdCoffee") || !strings.Contains(despace(out), "₹149") {
 		t.Fatal("missing item + price")
 	}
 }
@@ -67,7 +70,7 @@ func TestRestaurantInCartRowShowsStepper(t *testing.T) {
 	s := NewRestaurant(p, map[string]int{"x": 2}, 298)
 	v := s.View()
 	for _, want := range []string{"×2", "−", "+", "₹149"} {
-		if !strings.Contains(v, want) {
+		if !strings.Contains(despace(v), want) {
 			t.Errorf("missing %q:\n%s", want, v)
 		}
 	}

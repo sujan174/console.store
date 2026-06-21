@@ -32,9 +32,9 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) R
 		if qty > 0 {
 			nameStyle = theme.BrightStyle
 		}
-		left := nameStyle.Render(it.Name)
+		left := nameStyle.Render(components.LetterSpace(it.Name))
 
-		price := theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price))
+		price := theme.PriceStyle.Render(components.LetterSpace(fmt.Sprintf("₹%d", it.Price)))
 		right := price
 		if qty > 0 {
 			stepper := theme.FavStyle.Render("−") + " " +
@@ -142,9 +142,9 @@ func (s Restaurant) View() string {
 	b.WriteString("  " + header + "\n")
 	b.WriteString("  " + theme.EtaStyle.Render(s.p.ETA) + "\n")
 	b.WriteString("  " + components.Divider())
-	b.WriteString("\n") // padding above the list
+	b.WriteString("\n\n") // padding above the list
 	b.WriteString(s.list.View())
-	b.WriteString("\n\n") // padding below the list
+	b.WriteString("\n\n\n") // padding below the list
 	// Fixed detail strip for the highlighted item — stable position so the rows
 	// above don't shift as the cursor moves.
 	if it, ok := s.Selected(); ok {

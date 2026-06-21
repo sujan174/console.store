@@ -12,7 +12,7 @@ func TestInstamartHeaderAndFastLane(t *testing.T) {
 	items := []catalog.Item{{ID: "rb", Name: "Red Bull (250ml)", Price: 125}}
 	s := screens.NewInstamart(items, map[string]int{}, 0)
 	v := s.View()
-	if !strings.Contains(v, "fast lane") || !strings.Contains(v, "Red Bull") {
+	if !strings.Contains(v, "fast lane") || !strings.Contains(strings.ReplaceAll(v, " ", ""), "RedBull") {
 		t.Errorf("missing header/items:\n%s", v)
 	}
 	if got, ok := s.Selected(); !ok || got.Name != "Red Bull (250ml)" {

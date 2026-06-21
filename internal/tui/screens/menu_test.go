@@ -100,10 +100,10 @@ func TestMenuSearchFiltersList(t *testing.T) {
 		m = nm.(Menu)
 	}
 	view := m.View()
-	if strings.Contains(view, "Blue Tokai") {
+	if strings.Contains(despace(view), "BlueTokai") {
 		t.Errorf("Blue Tokai should be filtered out:\n%s", view)
 	}
-	if !strings.Contains(view, "Third Wave") {
+	if !strings.Contains(despace(view), "ThirdWave") {
 		t.Errorf("Third Wave should remain:\n%s", view)
 	}
 }

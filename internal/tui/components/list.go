@@ -58,19 +58,25 @@ func (l *List) SetFilter(q string) {
 // Filter returns the current filter string.
 func (l *List) Filter() string { return l.filter }
 
-// VisibleRows returns rows matching the filter (all rows if empty).
+// VisibleRows returns rows matching the filter (all rows if empty). Matching
+// ignores ANSI colour codes AND spaces, so it still works against the display's
+// letter-spacing (e.g. "wave" matches the rendered "W a v e").
 func (l List) VisibleRows() []Row {
 	if l.filter == "" {
 		return l.Rows
 	}
+	q := flatten(l.filter)
 	var out []Row
 	for _, r := range l.Rows {
-		if strings.Contains(strings.ToLower(r.Left), l.filter) {
+		if strings.Contains(flatten(stripANSI(r.Left)), q) {
 			out = append(out, r)
 		}
 	}
 	return out
 }
+
+// flatten lowercases and removes spaces for letter-spacing-insensitive matching.
+func flatten(s string) string { return strings.ReplaceAll(strings.ToLower(s), " ", "") }
 
 // SelectedIndex returns the index into Rows of the currently selected visible row.
 func (l List) SelectedIndex() int {
