@@ -11,6 +11,7 @@ import (
 	"console.store/internal/catalog"
 	"console.store/internal/catalog/mem"
 	"console.store/internal/tui/components"
+	"console.store/internal/tui/render"
 	"console.store/internal/tui/screens"
 )
 
@@ -85,14 +86,15 @@ type Model struct {
 
 	frame int
 	w, h  int // terminal size from WindowSizeMsg
+	caps  render.Caps
 }
 
-func New() Model {
+func New(caps render.Caps) Model {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash}
-	m.splash = screens.NewSplash()
+	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps}
+	m.splash = screens.NewSplash().WithCaps(caps)
 	m.menu = m.buildMenu()
 	return m
 }

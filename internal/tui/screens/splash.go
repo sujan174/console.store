@@ -3,6 +3,7 @@ package screens
 import (
 	"strings"
 
+	"console.store/internal/tui/render"
 	"console.store/internal/tui/theme"
 )
 
@@ -18,16 +19,6 @@ var bootLines = []struct{ Text, Color string }{
 // BootLineCount is exported so the router knows when boot is done.
 const BootLineCount = 5
 
-// logo is the ASCII wordmark shown after boot (design lines 211-216).
-var logo = []string{
-	`██████╗ ██████╗ ███╗  ██╗███████╗ ██████╗ ██╗     ███████╗`,
-	`██╔════╝██╔═══██╗████╗ ██║██╔════╝██╔═══██╗██║     ██╔════╝`,
-	`██║     ██║   ██║██╔██╗██║███████╗██║   ██║██║     █████╗  `,
-	`██║     ██║   ██║██║╚████║╚════██║██║   ██║██║     ██╔══╝  `,
-	`╚██████╗╚██████╔╝██║ ╚███║███████║╚██████╔╝███████╗███████╗`,
-	` ╚═════╝ ╚═════╝ ╚═╝  ╚══╝╚══════╝ ╚═════╝ ╚══════╝╚══════╝`,
-}
-
 // Taglines rotate on the splash (design line 535).
 var Taglines = []string{"fetching your grub …", "compiling your cravings …", "warming the kitchen …", "git pull origin coffee …"}
 
@@ -35,9 +26,13 @@ type Splash struct {
 	bootStep int
 	spin     string
 	tagline  string
+	caps     render.Caps
 }
 
 func NewSplash() Splash { return Splash{} }
+
+// WithCaps sets the terminal capabilities used to pick the logo backend.
+func (s Splash) WithCaps(c render.Caps) Splash { s.caps = c; return s }
 
 // WithBoot returns a copy reflecting the current boot step, spinner, tagline.
 func (s Splash) WithBoot(step int, spin, tagline string) Splash {
@@ -58,8 +53,8 @@ func (s Splash) View() string {
 		b.WriteString("  " + theme.CursorStyle.Render(s.spin+" establishing session …") + "\n")
 		return b.String()
 	}
-	for _, l := range logo {
-		b.WriteString("  " + theme.CursorStyle.Render(l) + "\n")
+	for _, l := range strings.Split(strings.TrimRight(render.Logo(s.caps, 64), "\n"), "\n") {
+		b.WriteString("  " + l + "\n")
 	}
 	b.WriteString("\n")
 	b.WriteString("  " + theme.GreenStyle.Render(s.tagline) + " " + theme.PriceStyle.Render(s.spin) + "\n\n")
