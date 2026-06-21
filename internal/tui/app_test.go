@@ -8,18 +8,19 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"console.store/internal/catalog"
+	"console.store/internal/tui/render"
 )
 
 // newAtMenu returns a Model that has dismissed the splash and is on the menu,
 // so flow tests can drive menu interactions directly.
 func newAtMenu() Model {
-	m := New()
+	m := New(render.Caps{})
 	m.screen = scrMenu
 	return m
 }
 
 func TestStatusBarOnMenuNotSplash(t *testing.T) {
-	m := New() // splash
+	m := New(render.Caps{}) // splash
 	if strings.Contains(m.View(), "⊙ linked") {
 		t.Error("splash must not show the status bar")
 	}
@@ -31,7 +32,7 @@ func TestStatusBarOnMenuNotSplash(t *testing.T) {
 }
 
 func TestStartsOnSplashThenKeyToMenu(t *testing.T) {
-	m := New()
+	m := New(render.Caps{})
 	if m.screen != scrSplash {
 		t.Fatalf("app should start on splash, got screen %d", m.screen)
 	}
@@ -44,7 +45,7 @@ func TestStartsOnSplashThenKeyToMenu(t *testing.T) {
 }
 
 func TestSplashAutoConnectsAfterTicks(t *testing.T) {
-	m := New()
+	m := New(render.Caps{})
 	for i := 0; i < 200 && m.screen == scrSplash; i++ {
 		updated, _ := m.Update(tickMsg(time.Now()))
 		m = updated.(Model)
@@ -55,7 +56,7 @@ func TestSplashAutoConnectsAfterTicks(t *testing.T) {
 }
 
 func TestTickAdvancesFrame(t *testing.T) {
-	m := New()
+	m := New(render.Caps{})
 	f0 := m.frame
 	updated, cmd := m.Update(tickMsg(time.Now()))
 	m = updated.(Model)
@@ -146,7 +147,7 @@ func TestAddressSwitchReFiltersMenu(t *testing.T) {
 }
 
 func TestAppQuits(t *testing.T) {
-	m := New()
+	m := New(render.Caps{})
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if cmd == nil {
 		t.Fatal("ctrl-c should return a quit command")
@@ -286,7 +287,8 @@ func TestTrackingFlowAdvancesAndEscResets(t *testing.T) {
 	}
 
 	// drive ticks: trackStep should advance and cap at 3
-	for i := 0; i < 120; i++ {
+	// trackTick%70==0 triggers step advance; 3 steps need 3*70=210 ticks.
+	for i := 0; i < 215; i++ {
 		updated, _ := m.Update(tickMsg(time.Now()))
 		m = updated.(Model)
 	}
@@ -465,5 +467,11 @@ func TestCmdPaletteHelpStaysOpen(t *testing.T) {
 	m = updated.(Model)
 	if !m.cmdOpen {
 		t.Error("help should keep the palette open")
+	}
+}
+
+func TestTickInterval(t *testing.T) {
+	if tickInterval != 60*time.Millisecond {
+		t.Errorf("tickInterval = %v, want 60ms", tickInterval)
 	}
 }

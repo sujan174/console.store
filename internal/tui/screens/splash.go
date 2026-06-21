@@ -3,6 +3,7 @@ package screens
 import (
 	"strings"
 
+	"console.store/internal/tui/render"
 	"console.store/internal/tui/theme"
 )
 
@@ -18,26 +19,28 @@ var bootLines = []struct{ Text, Color string }{
 // BootLineCount is exported so the router knows when boot is done.
 const BootLineCount = 5
 
-// logo is the ASCII wordmark shown after boot (design lines 211-216).
-var logo = []string{
-	`██████╗ ██████╗ ███╗  ██╗███████╗ ██████╗ ██╗     ███████╗`,
-	`██╔════╝██╔═══██╗████╗ ██║██╔════╝██╔═══██╗██║     ██╔════╝`,
-	`██║     ██║   ██║██╔██╗██║███████╗██║   ██║██║     █████╗  `,
-	`██║     ██║   ██║██║╚████║╚════██║██║   ██║██║     ██╔══╝  `,
-	`╚██████╗╚██████╔╝██║ ╚███║███████║╚██████╔╝███████╗███████╗`,
-	` ╚═════╝ ╚═════╝ ╚═╝  ╚══╝╚══════╝ ╚═════╝ ╚══════╝╚══════╝`,
-}
-
 // Taglines rotate on the splash (design line 535).
 var Taglines = []string{"fetching your grub …", "compiling your cravings …", "warming the kitchen …", "git pull origin coffee …"}
 
 type Splash struct {
-	bootStep int
-	spin     string
-	tagline  string
+	bootStep  int
+	spin      string
+	tagline   string
+	caps      render.Caps
+	logoCache string // render.Logo is constant per session; computed once here
 }
 
 func NewSplash() Splash { return Splash{} }
+
+// WithCaps sets the terminal capabilities and precomputes the logo. The logo is
+// invariant for the session, so caching it here avoids re-rendering (and, on the
+// Kitty path, re-encoding a PNG) on every ~60ms animation tick. The cache rides
+// through the value-copy WithBoot returns.
+func (s Splash) WithCaps(c render.Caps) Splash {
+	s.caps = c
+	s.logoCache = render.Logo(c, 64)
+	return s
+}
 
 // WithBoot returns a copy reflecting the current boot step, spinner, tagline.
 func (s Splash) WithBoot(step int, spin, tagline string) Splash {
@@ -58,8 +61,12 @@ func (s Splash) View() string {
 		b.WriteString("  " + theme.CursorStyle.Render(s.spin+" establishing session …") + "\n")
 		return b.String()
 	}
-	for _, l := range logo {
-		b.WriteString("  " + theme.CursorStyle.Render(l) + "\n")
+	logo := s.logoCache
+	if logo == "" { // defensive: WithCaps not called (e.g. bare NewSplash)
+		logo = render.Logo(s.caps, 64)
+	}
+	for _, l := range strings.Split(strings.TrimRight(logo, "\n"), "\n") {
+		b.WriteString("  " + l + "\n")
 	}
 	b.WriteString("\n")
 	b.WriteString("  " + theme.GreenStyle.Render(s.tagline) + " " + theme.PriceStyle.Render(s.spin) + "\n\n")

@@ -69,14 +69,41 @@ func StatusBar(addr, screen, hint, latency string, blink bool) string {
 	sp := func(n int) string {
 		return lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", n))
 	}
-	left := seg(theme.Green, "⊙ linked") + seg(theme.Faint, " · ") +
-		seg(theme.Dim, addr+" · home") + seg(theme.Faint, " · ") + seg(theme.Dim, screen)
 	cur := sp(1)
 	if blink {
 		cur = seg(theme.Cursor, "▋")
 	}
-	right := seg(theme.Dim, hint) + seg(theme.Faint, " · ↑"+latency+"ms ") + cur
-	gap := frameWidth - 2*margin - lipgloss.Width(left) - lipgloss.Width(right)
+
+	// Left segment at three verbosity tiers; right segment at three. We pick the
+	// richest pair that fits the interior so the bar NEVER exceeds the frame
+	// (an over-wide bar wraps past the last column → a phantom "second column").
+	leftFull := seg(theme.Green, "⊙ linked") + seg(theme.Faint, " · ") +
+		seg(theme.Dim, addr+" · home") + seg(theme.Faint, " · ") + seg(theme.Dim, screen)
+	leftMid := seg(theme.Green, "⊙ linked") + seg(theme.Faint, " · ") + seg(theme.Dim, screen)
+	leftTiny := seg(theme.Green, "⊙ linked")
+
+	rightFull := seg(theme.Dim, hint) + seg(theme.Faint, " · ↑"+latency+"ms ") + cur
+	rightMid := seg(theme.Faint, "↑"+latency+"ms ") + cur
+	rightTiny := cur
+
+	avail := frameWidth - 2*margin
+	fits := func(l, r string) bool {
+		return lipgloss.Width(l)+1+lipgloss.Width(r) <= avail
+	}
+	var left, right string
+	switch {
+	case fits(leftFull, rightFull):
+		left, right = leftFull, rightFull
+	case fits(leftFull, rightMid):
+		left, right = leftFull, rightMid
+	case fits(leftMid, rightMid):
+		left, right = leftMid, rightMid
+	case fits(leftMid, rightTiny):
+		left, right = leftMid, rightTiny
+	default:
+		left, right = leftTiny, rightTiny
+	}
+	gap := avail - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1
 	}

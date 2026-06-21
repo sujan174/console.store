@@ -11,6 +11,7 @@ import (
 	"console.store/internal/catalog"
 	"console.store/internal/catalog/mem"
 	"console.store/internal/tui/components"
+	"console.store/internal/tui/render"
 	"console.store/internal/tui/screens"
 )
 
@@ -32,8 +33,13 @@ func toPay(itemTotal int) int {
 
 type tickMsg time.Time
 
+// tickInterval drives all animation. 60ms (~16fps) keeps the braille spinner
+// liquid without flooding the SSH pipe; frame-derived cadences below are scaled
+// to hold their real-time speed.
+const tickInterval = 60 * time.Millisecond
+
 func tick() tea.Cmd {
-	return tea.Tick(110*time.Millisecond, func(t time.Time) tea.Msg { return tickMsg(t) })
+	return tea.Tick(tickInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 // spinFrames is the braille spinner (design line 536).
@@ -85,14 +91,15 @@ type Model struct {
 
 	frame int
 	w, h  int // terminal size from WindowSizeMsg
+	caps  render.Caps
 }
 
-func New() Model {
+func New(caps render.Caps) Model {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash}
-	m.splash = screens.NewSplash()
+	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps}
+	m.splash = screens.NewSplash().WithCaps(caps)
 	m.menu = m.buildMenu()
 	return m
 }
@@ -179,19 +186,19 @@ func (m Model) Init() tea.Cmd { return tick() }
 func (m Model) onTick() Model {
 	if m.screen == scrSplash {
 		if m.bootStep < screens.BootLineCount {
-			if m.frame%3 == 0 {
+			if m.frame%6 == 0 {
 				m.bootStep++
 			}
 		} else {
 			m.bootHold++
-			if m.bootHold > 20 { // ~2.2s hold on the logo, then connect
+			if m.bootHold > 37 { // ~2.2s hold on the logo, then connect
 				m.screen = scrMenu
 			}
 		}
 	}
 	if m.screen == scrTracking {
 		m.trackTick++
-		if m.trackTick%38 == 0 && m.trackStep < 3 {
+		if m.trackTick%70 == 0 && m.trackStep < 3 {
 			m.trackStep++
 		}
 	}
@@ -201,7 +208,7 @@ func (m Model) onTick() Model {
 func (m Model) spin() string { return spinFrames[m.frame%len(spinFrames)] }
 
 // blinkOn reports the on-phase of a ~1s cursor blink.
-func (m Model) blinkOn() bool { return (m.frame/5)%2 == 0 }
+func (m Model) blinkOn() bool { return (m.frame/9)%2 == 0 }
 
 func (m Model) cartTotal() int {
 	t := 0
@@ -440,7 +447,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "enter":
 				if len(m.lines) > 0 {
-					m.checkout = screens.NewCheckout(m.cartHeader(), m.addr, m.lines)
+					m.checkout = screens.NewCheckout(m.cartHeader(), m.addr, m.lines, m.cartEta())
 					m.screen = scrCheckout
 					return m, nil
 				}
@@ -561,7 +568,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.imCart = m.imCart.Left()
 			case "enter":
 				if m.imCartTotal() >= InstamartMin {
-					m.checkout = screens.NewCheckout("Instamart", m.addr, m.imLines)
+					m.checkout = screens.NewCheckout("Instamart", m.addr, m.imLines, screens.InstamartETA)
 					m.screen = scrCheckout
 					return m, nil
 				}
@@ -604,7 +611,7 @@ func (m Model) screenLabel() string {
 
 // statusBar renders the bottom bar for the current frame/screen.
 func (m Model) statusBar() string {
-	hint := statusHints[(m.frame/15)%len(statusHints)]
+	hint := statusHints[(m.frame/27)%len(statusHints)]
 	return components.StatusBar(m.addr.Line, m.screenLabel(), hint, "12.4", m.blinkOn())
 }
 
@@ -614,7 +621,7 @@ func (m Model) View() string {
 	// Background tears on inner colour resets (banding), and a dark terminal
 	// already provides the #15161f-ish canvas.
 	if m.screen == scrSplash {
-		sp := m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/15)%len(screens.Taglines)]).View()
+		sp := m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/27)%len(screens.Taglines)]).View()
 		if m.w == 0 || m.h == 0 {
 			return sp
 		}

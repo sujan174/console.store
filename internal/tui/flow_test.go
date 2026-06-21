@@ -7,10 +7,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
+
+	"console.store/internal/tui/render"
 )
 
 func TestFlowMenuToCart(t *testing.T) {
-	tm := teatest.NewTestModel(t, New(), teatest.WithInitialTermSize(80, 24))
+	tm := teatest.NewTestModel(t, New(render.Caps{}), teatest.WithInitialTermSize(80, 24))
 
 	// dismiss the splash -> menu
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})

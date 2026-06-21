@@ -20,7 +20,9 @@ import (
 	"github.com/charmbracelet/wish/logging"
 
 	consoletui "console.store/internal/tui"
+	"console.store/internal/tui/render"
 	"console.store/internal/tui/theme"
+	"github.com/muesli/termenv"
 )
 
 const host, port = "127.0.0.1", "2222"
@@ -33,7 +35,12 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	// so the Tokyo Night palette actually reaches the client.
 	renderer := bubbletea.MakeRenderer(s)
 	lipgloss.SetColorProfile(renderer.ColorProfile())
-	return consoletui.New(), []tea.ProgramOption{tea.WithAltScreen()}
+
+	pty, _, _ := s.Pty()
+	truecolor := renderer.ColorProfile() == termenv.TrueColor
+	caps := render.DetectCaps(pty.Term, s.Environ(), truecolor)
+
+	return consoletui.New(caps), []tea.ProgramOption{tea.WithAltScreen()}
 }
 
 // canvasMiddleware sets the client terminal's default background to the design
