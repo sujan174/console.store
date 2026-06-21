@@ -23,6 +23,7 @@ type Row struct {
 	Tag      string // "new" -> green
 	Fav      bool   // -> red ♥
 	BarGreen bool   // green left-bar when in-cart but not the cursor row
+	Detail   string // pre-styled metadata line, shown only under the cursor row
 }
 
 // List is a single-column selectable list with a ❯ cursor and highlighted row.
@@ -122,6 +123,10 @@ func (l List) View() string {
 				tail = bright.Render(strings.Repeat(" ", rest))
 			}
 			b.WriteString(theme.CursorStyle.Render("▌") + lead + chevron + text + tail + "\n")
+			if r.Detail != "" {
+				// metadata sub-row, indented to sit under the item name.
+				b.WriteString(strings.Repeat(" ", margin+6) + r.Detail + "\n")
+			}
 		} else {
 			// idle row: a chevron slot keeps names aligned with the selected row.
 			lead := strings.Repeat(" ", margin)

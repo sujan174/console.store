@@ -27,6 +27,33 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	}
 }
 
+func TestRestaurantShowsVegMarkerAndDetail(t *testing.T) {
+	repo := mem.New()
+	p, _ := repo.Menu("blue-tokai")
+	r := NewRestaurant(p, map[string]int{}, 0) // cursor on item 0 (Cold Coffee)
+	out := r.View()
+	if !strings.Contains(out, "◆") {
+		t.Error("expected veg/non-veg ◆ marker on rows")
+	}
+	// The selected item (Cold Coffee) shows its metadata detail row.
+	for _, want := range []string{"★ 4.8", "180 kcal", "blended double espresso · lightly sweet"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("selected item missing detail %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRestaurantDetailOnlyOnSelectedRow(t *testing.T) {
+	repo := mem.New()
+	p, _ := repo.Menu("blue-tokai")
+	r := NewRestaurant(p, map[string]int{}, 0)
+	out := r.View()
+	// Hazelnut's description must NOT show while Cold Coffee is selected.
+	if strings.Contains(out, "16h steeped · hazelnut") {
+		t.Error("non-selected item detail leaked into the view")
+	}
+}
+
 func TestRestaurantSelectedItem(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")

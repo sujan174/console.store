@@ -25,12 +25,18 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) R
 	for _, it := range p.Items {
 		qty := qtyByItemID[it.ID]
 
-		var name string
+		// columns: check (✓ when in cart) · veg ◆ (green veg / red non-veg) · name
+		check := "  "
+		nameStyle := theme.ItemStyle
 		if qty > 0 {
-			name = theme.GreenStyle.Render("✓ ") + theme.BrightStyle.Render(it.Name)
-		} else {
-			name = theme.ItemStyle.Render(it.Name)
+			check = theme.GreenStyle.Render("✓ ")
+			nameStyle = theme.BrightStyle
 		}
+		veg := theme.GreenStyle.Render("◆ ")
+		if !it.Veg {
+			veg = theme.FavStyle.Render("◆ ")
+		}
+		left := check + veg + nameStyle.Render(it.Name)
 
 		price := theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price))
 		right := price
@@ -41,9 +47,26 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) R
 			right = stepper + price
 		}
 
-		rows = append(rows, components.Row{Left: name, Right: right, Tag: it.Tag, BarGreen: qty > 0})
+		rows = append(rows, components.Row{Left: left, Right: right, Tag: it.Tag, BarGreen: qty > 0, Detail: itemDetail(it)})
 	}
 	return Restaurant{p: p, cartTotal: cartTotal, list: components.List{Rows: rows}}
+}
+
+// itemDetail builds the metadata sub-row shown under the selected item:
+// "★ 4.8   180 kcal   blended double espresso · lightly sweet"
+// (rating gold, kcal dim, description blue). Empty fields are omitted.
+func itemDetail(it catalog.Item) string {
+	var parts []string
+	if it.Rating > 0 {
+		parts = append(parts, theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", it.Rating)))
+	}
+	if it.Kcal > 0 {
+		parts = append(parts, theme.DimStyle.Render(fmt.Sprintf("%d kcal", it.Kcal)))
+	}
+	if it.Desc != "" {
+		parts = append(parts, theme.CursorStyle.Render(it.Desc))
+	}
+	return strings.Join(parts, "   ")
 }
 
 func (s Restaurant) Selected() (catalog.Item, bool) {

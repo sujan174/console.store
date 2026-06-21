@@ -35,6 +35,9 @@ type Item struct {
 	Price    int    // whole rupees
 	Tag      string // "", "new"
 	Veg      bool
+	Desc     string  // one-line flavour/ingredient note (shown on selection)
+	Kcal     int     // calories; 0 = unknown
+	Rating   float64 // out of 5; 0 = unknown
 	Section  Section
 }
 
