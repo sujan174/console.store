@@ -91,6 +91,9 @@ func (l List) View() string {
 	}
 	var b strings.Builder
 	for i, r := range l.VisibleRows() {
+		if i > 0 {
+			b.WriteString("\n") // breathing room between rows
+		}
 		right := r.Right
 		pad := width - lipgloss.Width(r.Left) - lipgloss.Width(right)
 		if pad < 1 {

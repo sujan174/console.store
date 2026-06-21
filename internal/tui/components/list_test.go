@@ -54,16 +54,22 @@ func TestListColumnAlignmentByDisplayWidth(t *testing.T) {
 		Width:  50,
 	}
 	// Since cursor -1 won't match any index, both rows render as non-selected.
+	// Rows are separated by blank spacing lines, so compare the non-empty ones.
 	out2 := l2.View()
-	lines2 := strings.Split(strings.TrimRight(out2, "\n"), "\n")
-	if len(lines2) < 2 {
-		t.Fatalf("expected 2 lines, got %d: %q", len(lines2), out2)
+	var content []string
+	for _, ln := range strings.Split(out2, "\n") {
+		if strings.TrimSpace(ln) != "" {
+			content = append(content, ln)
+		}
 	}
-	w0 := lipgloss.Width(lines2[0])
-	w1 := lipgloss.Width(lines2[1])
+	if len(content) < 2 {
+		t.Fatalf("expected 2 content lines, got %d: %q", len(content), out2)
+	}
+	w0 := lipgloss.Width(content[0])
+	w1 := lipgloss.Width(content[1])
 	if w0 != w1 {
 		t.Errorf("display widths differ: row0=%d, row1=%d\nrow0: %q\nrow1: %q",
-			w0, w1, lines2[0], lines2[1])
+			w0, w1, content[0], content[1])
 	}
 }
 

@@ -667,21 +667,5 @@ func (m Model) View() string {
 	if gap < 1 {
 		gap = 1
 	}
-	full := body + strings.Repeat("\n", gap) + bottom
-	return indentLines(full, components.FrameOffset(m.w))
-}
-
-// indentLines left-pads every line by n spaces, centring the fixed-width card
-// on the (wider) terminal. The padding is plain space → the OSC-11 canvas
-// colour shows through, so the card floats on the dark page.
-func indentLines(s string, n int) string {
-	if n <= 0 {
-		return s
-	}
-	pad := strings.Repeat(" ", n)
-	lines := strings.Split(s, "\n")
-	for i, ln := range lines {
-		lines[i] = pad + ln
-	}
-	return strings.Join(lines, "\n")
+	return body + strings.Repeat("\n", gap) + bottom
 }
