@@ -679,20 +679,47 @@ func (m Model) View() string {
 		body = m.menu.View()
 	}
 
-	// The command palette and status bar are pinned to the bottom of the
-	// viewport (design: cmd palette + status bar sit below a flex:1 content area).
-	bottom := ""
-	if m.cmdOpen {
-		bottom += m.cmd.View(m.blinkOn()) + "\n"
+	// The footer — the screen's hint line + optional command palette + status
+	// bar — is pinned to the bottom. The hint is the screen's last rendered
+	// line; lift it out so it sits WITH the status bar instead of floating
+	// after the content with a large void between them.
+	content, hint := splitHint(body)
+
+	footer := ""
+	if hint != "" {
+		footer += hint + "\n\n"
 	}
-	bottom += m.statusBar()
+	if m.cmdOpen {
+		footer += m.cmd.View(m.blinkOn()) + "\n"
+	}
+	footer += m.statusBar()
 
 	if m.w == 0 || m.h == 0 {
-		return body + "\n" + bottom
+		return content + "\n" + footer
 	}
-	gap := m.h - lipgloss.Height(body) - lipgloss.Height(bottom)
+	gap := m.h - lipgloss.Height(content) - lipgloss.Height(footer)
 	if gap < 1 {
 		gap = 1
 	}
-	return body + strings.Repeat("\n", gap) + bottom
+	return content + strings.Repeat("\n", gap) + footer
+}
+
+// splitHint separates a screen body into its content and its trailing footer
+// hint (the last non-empty line). Trailing blank padding is trimmed from the
+// content so the over-padding below a list doesn't survive.
+func splitHint(body string) (content, hint string) {
+	lines := strings.Split(body, "\n")
+	last := len(lines) - 1
+	for last >= 0 && strings.TrimSpace(lines[last]) == "" {
+		last--
+	}
+	if last < 0 {
+		return body, ""
+	}
+	hint = lines[last]
+	c := lines[:last]
+	for len(c) > 0 && strings.TrimSpace(c[len(c)-1]) == "" {
+		c = c[:len(c)-1]
+	}
+	return strings.Join(c, "\n"), hint
 }
