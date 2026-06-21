@@ -134,11 +134,11 @@ func (m Menu) View() string {
 
 	b.WriteString("\n")
 
-	// tabs row: coffee  food  snacks
+	// tabs row, table-style with │ separators: coffee │ food │ quick snacks
 	labels := map[catalog.Section]string{
 		catalog.SectionCoffee: "coffee",
 		catalog.SectionFood:   "food",
-		catalog.SectionSnacks: "snacks",
+		catalog.SectionSnacks: "quick snacks",
 	}
 	var tabs []string
 	for _, s := range catalog.MenuSections {
@@ -148,7 +148,8 @@ func (m Menu) View() string {
 			tabs = append(tabs, theme.CatOffStyle.Render(labels[s]))
 		}
 	}
-	b.WriteString("  " + strings.Join(tabs, "   ") + "\n")
+	sep := theme.Fg(theme.Div2).Render("  │  ")
+	b.WriteString("  " + strings.Join(tabs, sep) + "\n")
 
 	b.WriteString("\n")
 
