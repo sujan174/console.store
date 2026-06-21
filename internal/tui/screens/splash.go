@@ -9,21 +9,6 @@ import (
 	"console.store/internal/tui/theme"
 )
 
-// bootLines stream during the splash boot phase (design lines 539-545).
-var bootLines = []struct{ Text, Color string }{
-	{"guest@laptop ~ % ssh console.store", theme.Text},
-	{"  ⊙ resolving console.store … 12.4ms", theme.Dim},
-	{"  ⊙ tls handshake … ed25519 ✓", theme.Dim},
-	{"  ⊙ auth guest@hsr-layout … ok", theme.Green},
-	{"  ⊙ 247 devs online · kitchen warm ☕", theme.Price},
-}
-
-// BootLineCount is exported so the router knows when boot is done.
-const BootLineCount = 5
-
-// Taglines rotate on the splash (design line 535).
-var Taglines = []string{"fetching your grub …", "compiling your cravings …", "warming the kitchen …", "git pull origin coffee …"}
-
 // steamFrames animate rising steam above the cup (settled phase). Each frame is
 // two stacked lines; cycling them makes the wisps drift up and apart.
 var steamFrames = [][]string{
@@ -39,13 +24,11 @@ var steamFrames = [][]string{
 var homeItems = []string{"go to shop"}
 
 type Splash struct {
-	bootStep  int
-	spin      string
-	tagline   string
-	frame     int // animation frame (steam)
-	sel       int // selected home item
-	caps      render.Caps
-	logoCache string // render.Logo is constant per session; computed once here
+	decodeStep int // decode progress (0..render.DecodeSteps)
+	frame      int // animation frame (steam + glitch shimmer)
+	sel        int // selected home item
+	caps       render.Caps
+	logoCache  string // render.Logo is constant per session; computed once here
 }
 
 func NewSplash() Splash { return Splash{} }
@@ -53,20 +36,15 @@ func NewSplash() Splash { return Splash{} }
 // WithCaps sets the terminal capabilities and precomputes the logo. The logo is
 // invariant for the session, so caching it here avoids re-rendering (and, on the
 // Kitty path, re-encoding a PNG) on every ~60ms animation tick. The cache rides
-// through the value-copy WithBoot returns.
+// through the value-copy WithDecode returns.
 func (s Splash) WithCaps(c render.Caps) Splash {
 	s.caps = c
 	s.logoCache = render.Logo(c, 64)
 	return s
 }
 
-// WithBoot returns a copy reflecting the current boot step, spinner, tagline.
-func (s Splash) WithBoot(step int, spin, tagline string) Splash {
-	s.bootStep = step
-	s.spin = spin
-	s.tagline = tagline
-	return s
-}
+// WithDecode returns a copy reflecting the current decode step.
+func (s Splash) WithDecode(step int) Splash { s.decodeStep = step; return s }
 
 // WithFrame sets the animation frame (drives the steam cadence).
 func (s Splash) WithFrame(f int) Splash { s.frame = f; return s }
@@ -142,23 +120,26 @@ func (s Splash) View() string {
 	var b strings.Builder
 	b.WriteString("\n\n")
 
-	// boot phase: stream the handshake lines while the cup brews beside them.
-	if s.bootStep < BootLineCount {
-		var stream []string
-		for i := 0; i < s.bootStep && i < len(bootLines); i++ {
-			ln := bootLines[i]
-			stream = append(stream, theme.Fg(ln.Color).Render(ln.Text))
+	// decode phase: glitch-resolve the wordmark, subtitle beneath.
+	if s.decodeStep < render.DecodeSteps {
+		art := render.DecodeWordmark(s.caps, s.decodeStep, s.frame)
+		artLines := strings.Split(strings.TrimRight(art, "\n"), "\n")
+		w := 0
+		for _, l := range artLines {
+			if x := lipgloss.Width(l); x > w {
+				w = x
+			}
 		}
-		stream = append(stream, theme.CursorStyle.Render(s.spin+" brewing your session …"))
-		fill := s.bootStep
-		if fill > 3 {
-			fill = 3
-		}
-		row := lipgloss.JoinHorizontal(lipgloss.Center,
-			coffeeBlock(s.frame, fill, false), "   ", strings.Join(stream, "\n"))
-		for _, l := range strings.Split(row, "\n") {
+		for _, l := range artLines {
 			b.WriteString("  " + l + "\n")
 		}
+		b.WriteString("\n")
+		sub := theme.DimStyle.Render("coffee · food · snacks")
+		pad := (w - lipgloss.Width(sub)) / 2
+		if pad < 0 {
+			pad = 0
+		}
+		b.WriteString("  " + strings.Repeat(" ", pad) + sub + "\n")
 		return b.String()
 	}
 

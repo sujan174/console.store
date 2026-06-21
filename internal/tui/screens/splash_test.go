@@ -7,16 +7,19 @@ import (
 	"console.store/internal/tui/screens"
 )
 
-func TestSplashBootPhaseStreamsLines(t *testing.T) {
-	s := screens.NewSplash().WithBoot(2, "⠋", "warming the kitchen …")
+func TestSplashDecodePhase(t *testing.T) {
+	s := screens.NewSplash().WithDecode(2)
 	v := s.View()
-	if !strings.Contains(v, "ssh console.store") {
-		t.Errorf("boot phase should show first boot line:\n%s", v)
+	if strings.Contains(v, "tls handshake") || strings.Contains(v, "devs online") {
+		t.Errorf("decode phase must not show the old fake boot logs:\n%s", v)
+	}
+	if !strings.Contains(v, "coffee · food · snacks") {
+		t.Errorf("decode phase should show the section subtitle:\n%s", v)
 	}
 }
 
 func TestSplashLogoPhase(t *testing.T) {
-	s := screens.NewSplash().WithBoot(screens.BootLineCount, "⠋", "warming the kitchen …")
+	s := screens.NewSplash().WithDecode(99) // past DecodeSteps -> settled
 	v := s.View()
 	if !strings.Contains(v, "go to shop") {
 		t.Errorf("logo phase should show the go-to-shop button:\n%s", v)
