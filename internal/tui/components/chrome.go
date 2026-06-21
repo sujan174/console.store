@@ -9,23 +9,41 @@ import (
 )
 
 // InnerWidth is the default content column width used before a window size
-// is known. Once the SSH session reports its size the root calls
-// SetFrameWidth and the UI renders full-bleed to the terminal width.
+// is known.
 const InnerWidth = 60
 
-// margin is the left/right text gutter inside the full-bleed frame.
+// margin is the left/right text gutter inside the frame.
 const margin = 2
 
-// frameWidth is the full-bleed width (dividers, status bar, selected rows
-// span this). It tracks the terminal width at runtime.
+// MaxFrame caps the content column. The design is a fixed-width card, not a
+// full-bleed sheet — on a wide terminal the column stays this wide and is
+// centred on the dark canvas (see FrameOffset) rather than stretching edge to
+// edge (which marooned prices/ETAs far to the right).
+const MaxFrame = 70
+
+// frameWidth is the card width (dividers, status bar, selected rows span this).
+// It tracks the terminal width up to MaxFrame.
 var frameWidth = InnerWidth + 2*margin
 
-// SetFrameWidth sets the full-bleed width from the terminal size.
+// SetFrameWidth sets the card width from the terminal size, clamped to
+// [24, MaxFrame].
 func SetFrameWidth(w int) {
 	if w < 24 {
 		w = 24
 	}
+	if w > MaxFrame {
+		w = MaxFrame
+	}
 	frameWidth = w
+}
+
+// FrameOffset is the left padding that centres the card on a terminal of the
+// given width (0 when the terminal is no wider than the card).
+func FrameOffset(termWidth int) int {
+	if off := (termWidth - frameWidth) / 2; off > 0 {
+		return off
+	}
+	return 0
 }
 
 // FrameWidth is the current full-bleed width (edge to edge).
