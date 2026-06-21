@@ -9,7 +9,6 @@ import (
 
 	"console.store/internal/catalog"
 	"console.store/internal/tui/render"
-	"console.store/internal/tui/screens"
 )
 
 // despace strips spaces so assertions survive the list's letter-spacing
@@ -41,17 +40,23 @@ func TestStartsOnSplashThenKeyToMenu(t *testing.T) {
 	if m.screen != scrSplash {
 		t.Fatalf("app should start on splash, got screen %d", m.screen)
 	}
-	// a key advances splash -> menu
+	// a key during the decode skips it and settles the home landing (still splash)
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	m = updated.(Model)
+	if m.screen != scrSplash {
+		t.Fatalf("key during decode should settle home, not leave splash; got %d", m.screen)
+	}
+	// from the settled home, activating go-to-shop -> menu
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = updated.(Model)
 	if !strings.Contains(m.View(), "console.store") {
-		t.Errorf("after key, should be on menu:\n%s", m.View())
+		t.Errorf("after activating, should be on menu:\n%s", m.View())
 	}
 }
 
 func TestSplashHoldsUntilKey(t *testing.T) {
 	m := New(render.Caps{}, nil)
-	// Ticks brew the boot sequence but never leave the splash — it's a landing
+	// Ticks resolve the decode but never leave the splash — it's a landing
 	// screen now; the user must pick "go to shop".
 	for i := 0; i < 200; i++ {
 		updated, _ := m.Update(tickMsg(time.Now()))
@@ -60,8 +65,8 @@ func TestSplashHoldsUntilKey(t *testing.T) {
 	if m.screen != scrSplash {
 		t.Errorf("splash should hold until a key, got screen %d", m.screen)
 	}
-	if m.bootStep < screens.BootLineCount {
-		t.Errorf("boot should have finished streaming, bootStep=%d", m.bootStep)
+	if m.decodeStep < render.DecodeSteps {
+		t.Errorf("decode should have finished, decodeStep=%d", m.decodeStep)
 	}
 	// enter activates the selected home item -> menu
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})

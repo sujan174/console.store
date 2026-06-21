@@ -78,9 +78,9 @@ type Model struct {
 	imLines []screens.CartLine
 	imCart  screens.Cart
 
-	splash   screens.Splash
-	bootStep int
-	homeSel  int // selected home-menu item on the splash
+	splash     screens.Splash
+	decodeStep int
+	homeSel    int // selected home-menu item on the splash
 
 	track     screens.Tracking
 	trackStep int
@@ -192,10 +192,9 @@ func (m Model) Init() tea.Cmd { return tick() }
 // onTick advances time-based screen state; extended by later tasks.
 func (m Model) onTick() Model {
 	if m.screen == scrSplash {
-		// Brew the handshake, then settle on the home screen and wait for the
-		// user to pick "go to shop" (no auto-advance — the splash is a landing).
-		if m.bootStep < screens.BootLineCount && m.frame%6 == 0 {
-			m.bootStep++
+		// Resolve the decode; then hold on the home landing for a keypress.
+		if m.decodeStep < render.DecodeSteps {
+			m.decodeStep++
 		}
 	}
 	if m.screen == scrTracking {
@@ -356,9 +355,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if m.screen == scrSplash {
-			// Settled home: arrows move the menu cursor; any other key (↵
-			// included) activates the selection. Today every item lands on the
-			// shop, and a key during the boot brew skips straight in.
+			// A key during the decode skips it and settles the home landing.
+			if m.decodeStep < render.DecodeSteps {
+				m.decodeStep = render.DecodeSteps
+				return m, nil
+			}
+			// Settled home: arrows move the cursor; any other key activates the
+			// selection (every item lands on the shop today).
 			switch k.String() {
 			case "up", "k":
 				if m.homeSel > 0 {
@@ -685,8 +688,7 @@ func (m Model) View() string {
 	// Background tears on inner colour resets (banding), and a dark terminal
 	// already provides the #15161f-ish canvas.
 	if m.screen == scrSplash {
-		sp := m.splash.WithBoot(m.bootStep, m.spin(), screens.Taglines[(m.frame/27)%len(screens.Taglines)]).
-			WithFrame(m.frame).WithSelection(m.homeSel).View()
+		sp := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSelection(m.homeSel).View()
 		if m.w == 0 || m.h == 0 {
 			return sp
 		}
