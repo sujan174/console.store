@@ -37,9 +37,8 @@ var (
 	DimStyle     = fg(Dim)
 	FaintStyle   = fg(Faint)
 	CursorStyle  = fg(Cursor).Bold(true)
-	PriceStyle   = fg(Price)
-	EtaStyle     = fg(Green)
-	NewStyle     = fg(Green)
+	PriceStyle   = fg(Green) // prices are green
+	EtaStyle     = fg(Dim)   // delivery times are subtle, not loud
 	GreenStyle   = fg(Green)
 	CartStyle    = fg(Gold)
 	GoldStyle    = fg(Gold)

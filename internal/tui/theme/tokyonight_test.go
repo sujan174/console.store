@@ -34,8 +34,8 @@ func TestPaletteWiredToStyles(t *testing.T) {
 	if got := CursorStyle.GetForeground(); got != lipgloss.Color(Cursor) {
 		t.Fatalf("CursorStyle fg = %v, want %v", got, Cursor)
 	}
-	if got := PriceStyle.GetForeground(); got != lipgloss.Color(Price) {
-		t.Fatalf("PriceStyle fg = %v, want %v", got, Price)
+	if got := PriceStyle.GetForeground(); got != lipgloss.Color(Green) {
+		t.Fatalf("PriceStyle fg = %v, want %v (prices are green)", got, Green)
 	}
 	if got := PurpleStyle.GetForeground(); got != lipgloss.Color(Purple) {
 		t.Fatalf("PurpleStyle fg = %v, want %v", got, Purple)

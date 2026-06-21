@@ -22,9 +22,6 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	if !strings.Contains(out, "Cold Coffee") || !strings.Contains(out, "₹149") {
 		t.Fatal("missing item + price")
 	}
-	if !strings.Contains(out, "new") {
-		t.Fatal("missing new tag on Vietnamese Cold Brew")
-	}
 }
 
 func TestRestaurantShowsDetailStrip(t *testing.T) {

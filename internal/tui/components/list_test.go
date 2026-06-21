@@ -31,7 +31,7 @@ func TestListCursorMovesAndClamps(t *testing.T) {
 func TestListColumnAlignmentByDisplayWidth(t *testing.T) {
 	l := List{
 		Rows: []Row{
-			{Left: "Cold Coffee", Right: "₹149", Fav: true},
+			{Left: "Cold Coffee", Right: "₹149"},
 			{Left: "Almond Croissant", Right: "₹129"},
 		},
 		Cursor: 0, // first row is selected; we test the non-selected rows
@@ -47,7 +47,7 @@ func TestListColumnAlignmentByDisplayWidth(t *testing.T) {
 	// to compare widths — use a list with cursor out of range of both rows being compared.
 	l2 := List{
 		Rows: []Row{
-			{Left: "Cold Coffee", Right: "₹149", Fav: true},
+			{Left: "Cold Coffee", Right: "₹149"},
 			{Left: "Almond Croissant", Right: "₹129"},
 		},
 		Cursor: -1, // intentionally invalid so neither row is selected

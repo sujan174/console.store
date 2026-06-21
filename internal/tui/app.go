@@ -348,14 +348,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "right", "l":
-				i := sectionIndex(m.section)
-				m.section = menuTabs[(i+1)%len(menuTabs)]
-				m.menu = m.buildMenu()
+				// non-cyclable: clamp at the last tab (snacks)
+				if i := sectionIndex(m.section); i < len(menuTabs)-1 {
+					m.section = menuTabs[i+1]
+					m.menu = m.buildMenu()
+				}
 				return m, nil
 			case "left", "h":
-				i := sectionIndex(m.section)
-				m.section = menuTabs[(i+len(menuTabs)-1)%len(menuTabs)]
-				m.menu = m.buildMenu()
+				// non-cyclable: clamp at the first tab (coffee)
+				if i := sectionIndex(m.section); i > 0 {
+					m.section = menuTabs[i-1]
+					m.menu = m.buildMenu()
+				}
 				return m, nil
 			case "1":
 				m.section = catalog.SectionCoffee

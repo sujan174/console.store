@@ -43,7 +43,7 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) R
 			right = stepper + price
 		}
 
-		rows = append(rows, components.Row{Left: left, Right: right, Tag: it.Tag, BarGreen: qty > 0})
+		rows = append(rows, components.Row{Left: left, Right: right, BarGreen: qty > 0})
 	}
 	return Restaurant{p: p, cartTotal: cartTotal, list: components.List{Rows: rows}}
 }

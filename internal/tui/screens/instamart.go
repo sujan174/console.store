@@ -44,7 +44,7 @@ func NewInstamart(items []catalog.Item, qtyByItemID map[string]int, cartTotal in
 			right = stepper + price
 		}
 
-		rows = append(rows, components.Row{Left: name, Right: right, Tag: it.Tag, BarGreen: qty > 0})
+		rows = append(rows, components.Row{Left: name, Right: right, BarGreen: qty > 0})
 	}
 	return Instamart{items: items, cartTotal: cartTotal, list: components.List{Rows: rows}}
 }

@@ -118,12 +118,21 @@ func TestUsualAddsToCartStaysOnMenu(t *testing.T) {
 	}
 }
 
-func TestSectionWrapLeft(t *testing.T) {
-	m := newAtMenu() // starts on coffee
+func TestSectionsAreNonCyclable(t *testing.T) {
+	// left from coffee (first tab) stays on coffee — no wrap to snacks.
+	m := newAtMenu()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
-	m = updated.(Model)
+	if updated.(Model).section != catalog.SectionCoffee {
+		t.Fatalf("left from coffee should clamp to coffee, got %q", updated.(Model).section)
+	}
+	// right from snacks (last tab) stays on snacks — no wrap to coffee.
+	m = newAtMenu()
+	for i := 0; i < 5; i++ { // mash right past the end
+		u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+		m = u.(Model)
+	}
 	if m.section != catalog.SectionSnacks {
-		t.Fatalf("left-arrow from coffee should wrap to snacks, got %q", m.section)
+		t.Fatalf("right past snacks should clamp to snacks, got %q", m.section)
 	}
 }
 

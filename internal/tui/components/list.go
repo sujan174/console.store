@@ -20,9 +20,7 @@ func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
 type Row struct {
 	Left     string
 	Right    string
-	Tag      string // "new" -> green
-	Fav      bool   // -> red ♥
-	BarGreen bool   // green left-bar when in-cart but not the cursor row
+	BarGreen bool // green left-bar when in-cart but not the cursor row
 }
 
 // List is a single-column selectable list with a > cursor and highlighted row.
@@ -94,12 +92,6 @@ func (l List) View() string {
 	var b strings.Builder
 	for i, r := range l.VisibleRows() {
 		right := r.Right
-		if r.Tag != "" {
-			right += "  " + theme.NewStyle.Render(r.Tag)
-		}
-		if r.Fav {
-			right += "  " + theme.FavStyle.Render("♥")
-		}
 		pad := width - lipgloss.Width(r.Left) - lipgloss.Width(right)
 		if pad < 1 {
 			pad = 1

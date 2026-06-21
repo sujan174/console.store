@@ -26,7 +26,7 @@ type Menu struct {
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartTotal int) Menu {
 	rows := make([]components.Row, len(places))
 	for i, p := range places {
-		rows[i] = components.Row{Left: p.Name, Right: p.ETA, Fav: p.Fav}
+		rows[i] = components.Row{Left: p.Name, Right: theme.EtaStyle.Render(p.ETA)}
 	}
 	return Menu{
 		places:    places,
@@ -151,7 +151,7 @@ func (m Menu) View() string {
 
 	// search prompt (when active)
 	if m.searching || m.list.Filter() != "" {
-		b.WriteString("  " + theme.PriceStyle.Render("/"+m.list.Filter()) + "\n")
+		b.WriteString("  " + theme.CursorStyle.Render("/"+m.list.Filter()) + "\n")
 	}
 
 	if len(m.places) == 0 && !m.hasUsual {
