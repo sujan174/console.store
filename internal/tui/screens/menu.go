@@ -148,7 +148,7 @@ func (m Menu) View() string {
 			tabs = append(tabs, theme.CatOffStyle.Render(labels[s]))
 		}
 	}
-	sep := theme.Fg(theme.Div2).Render("  │  ")
+	sep := theme.Fg(theme.Div2).Render(" │ ")
 	b.WriteString("  " + strings.Join(tabs, sep) + "\n")
 
 	b.WriteString("\n")
