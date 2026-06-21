@@ -28,12 +28,12 @@ func NewInstamart(items []catalog.Item, qtyByItemID map[string]int, cartTotal in
 	for _, it := range items {
 		qty := qtyByItemID[it.ID]
 
-		name := theme.ItemStyle.Render(components.LetterSpace(it.Name))
+		name := theme.ItemStyle.Render(it.Name)
 		if qty > 0 {
-			name = theme.BrightStyle.Render(components.LetterSpace(it.Name))
+			name = theme.BrightStyle.Render(it.Name)
 		}
 
-		price := theme.PriceStyle.Render(components.LetterSpace(fmt.Sprintf("₹%d", it.Price)))
+		price := theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price))
 		right := price
 		if qty > 0 {
 			stepper := theme.FavStyle.Render("−") + " " +

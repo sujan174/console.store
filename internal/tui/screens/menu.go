@@ -27,8 +27,8 @@ func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Secti
 	rows := make([]components.Row, len(places))
 	for i, p := range places {
 		rows[i] = components.Row{
-			Left:  theme.ItemStyle.Render(components.LetterSpace(p.Name)),
-			Right: theme.EtaStyle.Render(components.LetterSpace(p.ETA)),
+			Left:  theme.ItemStyle.Render(p.Name),
+			Right: theme.EtaStyle.Render(p.ETA),
 		}
 	}
 	return Menu{

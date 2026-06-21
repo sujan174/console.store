@@ -32,9 +32,9 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartTotal int) R
 		if qty > 0 {
 			nameStyle = theme.BrightStyle
 		}
-		left := nameStyle.Render(components.LetterSpace(it.Name))
+		left := nameStyle.Render(it.Name)
 
-		price := theme.PriceStyle.Render(components.LetterSpace(fmt.Sprintf("₹%d", it.Price)))
+		price := theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price))
 		right := price
 		if qty > 0 {
 			stepper := theme.FavStyle.Render("−") + " " +
