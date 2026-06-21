@@ -120,8 +120,10 @@ func (s Splash) View() string {
 	var b strings.Builder
 	b.WriteString("\n\n")
 
-	// decode phase: glitch-resolve the wordmark, subtitle beneath.
-	if s.decodeStep < render.DecodeSteps {
+	// decode phase: glitch-resolve the wordmark, subtitle beneath. The Kitty
+	// graphics path renders a non-text bitmap that can't be glyph-decoded (and
+	// would break width math here), so it skips straight to the settled view.
+	if s.decodeStep < render.DecodeSteps && !(s.caps.KittyGraphics && render.KittyFlag) {
 		art := render.DecodeWordmark(s.caps, s.decodeStep, s.frame)
 		artLines := strings.Split(strings.TrimRight(art, "\n"), "\n")
 		w := 0
