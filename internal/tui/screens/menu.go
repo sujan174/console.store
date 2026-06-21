@@ -158,8 +158,6 @@ func (m Menu) View() string {
 		b.WriteString("  " + theme.CursorStyle.Render("/"+m.list.Filter()) + "\n")
 	}
 
-	b.WriteString("\n\n") // padding above the list
-
 	if len(m.places) == 0 && !m.hasUsual {
 		b.WriteString("  " + theme.DimStyle.Render("no curated spots deliver here right now") + "\n")
 	} else {
