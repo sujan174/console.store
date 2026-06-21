@@ -122,17 +122,19 @@ func (l List) View() string {
 		}
 		body := r.Left + strings.Repeat(" ", pad) + right
 		if i == l.Cursor {
-			// Subtle selection: a blue ▌ border + > cursor on the selected-row
-			// background. The row's own colours are PRESERVED (price stays green
-			// etc.) — withBg paints the highlight without recolouring anything.
+			// Selection: blue ▌ border + > cursor on the subtle selected-row
+			// background. The NAME brightens to near-white; the right column
+			// (price/ETA) keeps its own colour.
+			brightName := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Bright)).Render(stripANSI(r.Left))
+			selBody := brightName + strings.Repeat(" ", pad) + right
 			cursor := theme.CursorStyle.Render("> ")
 			lead := strings.Repeat(" ", margin-1)
-			used := (margin - 1) + lipgloss.Width("> ") + lipgloss.Width(stripANSI(body))
+			used := (margin - 1) + lipgloss.Width("> ") + lipgloss.Width(stripANSI(selBody))
 			tail := ""
 			if rest := FrameWidth() - 1 - used; rest > 0 {
 				tail = strings.Repeat(" ", rest)
 			}
-			inner := theme.CursorStyle.Render("▌") + lead + cursor + body + tail
+			inner := theme.CursorStyle.Render("▌") + lead + cursor + selBody + tail
 			b.WriteString(withBg(inner, theme.SelRowBg) + "\n")
 		} else {
 			// idle row: a chevron slot keeps names aligned with the selected row.
