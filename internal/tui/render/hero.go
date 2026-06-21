@@ -1,6 +1,7 @@
 package render
 
 import (
+	"image/color"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -30,6 +31,13 @@ var asciiLogo = []string{
 // non-truecolor terminals it falls back to the flat block-art. (Kitty graphics
 // — real gaussian bloom — is layered on later behind a flag.)
 func Logo(caps Caps, w int) string {
+	if caps.KittyGraphics && KittyFlag {
+		bm := boxArtBitmap()
+		img := GlowImage(bm, color.RGBA{122, 162, 247, 255}, 8) // #7aa2f7 blue bloom
+		// Reserve bm.H text rows so the surrounding layout accounts for the
+		// image's vertical footprint (the image is scaled into bm.W×bm.H cells).
+		return KittyImage(img, bm.W, bm.H) + strings.Repeat("\n", bm.H)
+	}
 	if caps.Truecolor {
 		return GradientText(asciiLogo, "#7aa2f7", "#bb9af7")
 	}
