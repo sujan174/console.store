@@ -26,7 +26,9 @@ func (b Bitmap) At(x, y int) bool {
 
 // Wordmark rasterizes text with the deterministic 7x13 basic font into a
 // Bitmap. Deterministic output makes it unit-testable and identical across
-// runs and platforms.
+// runs and platforms. (A general building block — the splash logo uses the
+// bold block-art via boxArtBitmap; Wordmark/HalfBlock back planned dynamic
+// hero art such as the confirmed-order screen.)
 func Wordmark(text string) Bitmap {
 	face := basicfont.Face7x13
 	w := 7 * len([]rune(text))

@@ -34,8 +34,10 @@ func Logo(caps Caps, w int) string {
 	if caps.KittyGraphics && KittyFlag {
 		bm := boxArtBitmap()
 		img := GlowImage(bm, color.RGBA{122, 162, 247, 255}, 8) // #7aa2f7 blue bloom
-		// Reserve bm.H text rows so the surrounding layout accounts for the
-		// image's vertical footprint (the image is scaled into bm.W×bm.H cells).
+		// Reserve rows for the image's vertical footprint (it is scaled into
+		// bm.W×bm.H cells). NOTE: whether the placement already advances the
+		// cursor by r rows is terminal-dependent — this newline count must be
+		// tuned against a real Kitty/Ghostty client when KittyFlag is enabled.
 		return KittyImage(img, bm.W, bm.H) + strings.Repeat("\n", bm.H)
 	}
 	if caps.Truecolor {
@@ -66,7 +68,9 @@ func GradientText(lines []string, top, bottom string) string {
 
 // boxArtBitmap converts the block-art wordmark into a 1-bit Bitmap (any
 // non-space rune is a lit pixel) so the Kitty backend rasterizes and blurs the
-// SAME bold shape as the text path.
+// SAME bold shape as the text path. asciiLogo uses only narrow (single-cell)
+// runes, so the rune index equals the display column; this would need a
+// display-width pass if wide runes (CJK/emoji) were ever introduced.
 func boxArtBitmap() Bitmap {
 	h := len(asciiLogo)
 	w := 0

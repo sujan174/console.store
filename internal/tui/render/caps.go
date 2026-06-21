@@ -13,7 +13,8 @@ type Caps struct {
 }
 
 // kittyTerms are TERM values that natively speak the Kitty graphics protocol.
-var kittyTerms = []string{"xterm-ghostty", "ghostty", "xterm-kitty", "kitty", "wezterm"}
+// (WezTerm keeps TERM=xterm-256color and is detected via TERM_PROGRAM below.)
+var kittyTerms = []string{"xterm-ghostty", "ghostty", "xterm-kitty", "kitty"}
 
 // kittyTermPrograms are TERM_PROGRAM values (set by some emulators that keep a
 // generic TERM) that speak the Kitty graphics protocol.

@@ -23,7 +23,9 @@ const kittyChunk = 4096
 // 4096 base64 bytes are split into m=1 continuation chunks.
 func KittyImage(img image.Image, cols, rows int) string {
 	var buf bytes.Buffer
-	_ = png.Encode(&buf, img)
+	if err := png.Encode(&buf, img); err != nil || buf.Len() == 0 {
+		return "" // empty/invalid image -> emit nothing rather than a broken APC
+	}
 	payload := base64.StdEncoding.EncodeToString(buf.Bytes())
 
 	var b strings.Builder

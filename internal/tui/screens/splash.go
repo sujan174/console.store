@@ -23,16 +23,24 @@ const BootLineCount = 5
 var Taglines = []string{"fetching your grub …", "compiling your cravings …", "warming the kitchen …", "git pull origin coffee …"}
 
 type Splash struct {
-	bootStep int
-	spin     string
-	tagline  string
-	caps     render.Caps
+	bootStep  int
+	spin      string
+	tagline   string
+	caps      render.Caps
+	logoCache string // render.Logo is constant per session; computed once here
 }
 
 func NewSplash() Splash { return Splash{} }
 
-// WithCaps sets the terminal capabilities used to pick the logo backend.
-func (s Splash) WithCaps(c render.Caps) Splash { s.caps = c; return s }
+// WithCaps sets the terminal capabilities and precomputes the logo. The logo is
+// invariant for the session, so caching it here avoids re-rendering (and, on the
+// Kitty path, re-encoding a PNG) on every ~60ms animation tick. The cache rides
+// through the value-copy WithBoot returns.
+func (s Splash) WithCaps(c render.Caps) Splash {
+	s.caps = c
+	s.logoCache = render.Logo(c, 64)
+	return s
+}
 
 // WithBoot returns a copy reflecting the current boot step, spinner, tagline.
 func (s Splash) WithBoot(step int, spin, tagline string) Splash {
@@ -53,7 +61,11 @@ func (s Splash) View() string {
 		b.WriteString("  " + theme.CursorStyle.Render(s.spin+" establishing session …") + "\n")
 		return b.String()
 	}
-	for _, l := range strings.Split(strings.TrimRight(render.Logo(s.caps, 64), "\n"), "\n") {
+	logo := s.logoCache
+	if logo == "" { // defensive: WithCaps not called (e.g. bare NewSplash)
+		logo = render.Logo(s.caps, 64)
+	}
+	for _, l := range strings.Split(strings.TrimRight(logo, "\n"), "\n") {
 		b.WriteString("  " + l + "\n")
 	}
 	b.WriteString("\n")
