@@ -84,6 +84,7 @@ type Model struct {
 
 	splash       screens.Splash
 	decodeStep   int
+	splashTick   int // ticks since the splash was (re)entered; phases the shimmer
 	homeSel      int // selected home-menu item on the splash
 	lastEscFrame int // frame of the previous Esc (for double-Esc home detection)
 
@@ -197,10 +198,11 @@ func (m Model) Init() tea.Cmd { return tick() }
 // onTick advances time-based screen state; extended by later tasks.
 func (m Model) onTick() Model {
 	if m.screen == scrSplash {
-		// Resolve the decode; then hold on the home landing for a keypress.
+		// Resolve the decode, then keep ticking so the idle shimmer animates.
 		if m.decodeStep < render.DecodeSteps {
 			m.decodeStep++
 		}
+		m.splashTick++
 	}
 	if m.screen == scrTracking {
 		m.trackTick++
@@ -216,6 +218,7 @@ func (m Model) onTick() Model {
 func (m Model) toSplash() Model {
 	m.screen = scrSplash
 	m.decodeStep = 0
+	m.splashTick = 0
 	m.homeSel = 0
 	m.cmdOpen = false
 	return m
@@ -388,13 +391,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// fall through to per-screen single-Esc handling
 		}
 		if m.screen == scrSplash {
-			// A key during the decode skips it and settles the home landing.
-			if m.decodeStep < render.DecodeSteps {
-				m.decodeStep = render.DecodeSteps
-				return m, nil
-			}
-			// Settled home: arrows move the cursor; any other key activates the
-			// selection (every item lands on the shop today).
+			// The decode plays on its own; the user never has to wait for it.
+			// Arrows move the cursor; any other key activates the selection and
+			// goes straight to the shop — even mid-animation.
 			switch k.String() {
 			case "up", "k":
 				if m.homeSel > 0 {
@@ -721,8 +720,8 @@ func (m Model) View() string {
 	// Background tears on inner colour resets (banding), and a dark terminal
 	// already provides the #15161f-ish canvas.
 	if m.screen == scrSplash {
-		sp := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSelection(m.homeSel).
-			WithStats(m.statsFunc).View()
+		sp := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSplashTick(m.splashTick).
+			WithSelection(m.homeSel).WithStats(m.statsFunc).View()
 		if m.w == 0 || m.h == 0 {
 			return sp
 		}
