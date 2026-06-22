@@ -38,6 +38,10 @@ type tickMsg time.Time
 // to hold their real-time speed.
 const tickInterval = 60 * time.Millisecond
 
+// escDoubleWindow is how many frames (~0.7s at the 60ms tick) may separate two
+// Esc presses for them to count as a double-Esc "home" gesture.
+const escDoubleWindow = 12
+
 func tick() tea.Cmd {
 	return tea.Tick(tickInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
@@ -78,9 +82,10 @@ type Model struct {
 	imLines []screens.CartLine
 	imCart  screens.Cart
 
-	splash     screens.Splash
-	decodeStep int
-	homeSel    int // selected home-menu item on the splash
+	splash       screens.Splash
+	decodeStep   int
+	homeSel      int // selected home-menu item on the splash
+	lastEscFrame int // frame of the previous Esc (for double-Esc home detection)
 
 	track     screens.Tracking
 	trackStep int
@@ -99,7 +104,7 @@ func New(caps render.Caps, statsFunc func() (online, orders int)) Model {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps, statsFunc: statsFunc}
+	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps, statsFunc: statsFunc, lastEscFrame: -escDoubleWindow - 1}
 	m.splash = screens.NewSplash().WithCaps(caps)
 	m.menu = m.buildMenu()
 	return m
@@ -203,6 +208,16 @@ func (m Model) onTick() Model {
 			m.trackStep++
 		}
 	}
+	return m
+}
+
+// toSplash returns to the splash and replays the decode from the start. It is a
+// visual "home" gesture (double-Esc) — cart, address, and section are preserved.
+func (m Model) toSplash() Model {
+	m.screen = scrSplash
+	m.decodeStep = 0
+	m.homeSel = 0
+	m.cmdOpen = false
 	return m
 }
 
@@ -353,6 +368,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch k.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
+		}
+		// Double-Esc returns to the splash and replays the loading animation. It
+		// is a deliberate "home" gesture, recognised only on the menu root where
+		// Esc is otherwise a no-op. On every sub-screen Esc means "back one
+		// level", so the timer is cleared there — walking back up the stack with
+		// repeated Esc must never teleport home. Cart/address are preserved.
+		if k.String() == "esc" {
+			if m.screen == scrMenu && !m.menu.Searching() {
+				if m.frame-m.lastEscFrame <= escDoubleWindow {
+					m = m.toSplash()
+					m.lastEscFrame = -escDoubleWindow - 1
+					return m, nil
+				}
+				m.lastEscFrame = m.frame
+				return m, nil
+			}
+			m.lastEscFrame = -escDoubleWindow - 1
+			// fall through to per-screen single-Esc handling
 		}
 		if m.screen == scrSplash {
 			// A key during the decode skips it and settles the home landing.
@@ -634,7 +667,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // statusHints rotate in the status bar (design line 925).
-var statusHints = []string{"type : for commands", "247 devs online", "DEVFRIDAY −₹50", "ssh console.store"}
+var statusHints = []string{"type : for commands", "247 devs online", "DEVFRIDAY −₹50", "esc esc · home", "ssh console.store"}
 
 // screenLabel maps the current screen to the status-bar label (design line 836).
 func (m Model) screenLabel() string {

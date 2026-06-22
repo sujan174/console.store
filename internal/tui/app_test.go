@@ -500,6 +500,78 @@ func TestCmdPaletteHelpStaysOpen(t *testing.T) {
 	}
 }
 
+// TestDoubleEscReturnsToSplash presses Esc twice on the menu root in quick
+// succession (no ticks between) and asserts the second Esc returns to the splash
+// and replays the decode, while the cart is preserved.
+func TestDoubleEscReturnsToSplash(t *testing.T) {
+	m := newAtMenu()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open restaurant
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add an item
+	m = updated.(Model)
+	if m.cartTotal() == 0 {
+		t.Fatal("expected an item in the cart")
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // restaurant -> menu (walks back)
+	m = updated.(Model)
+	if m.screen != scrMenu {
+		t.Fatalf("esc should walk back to menu, got screen %d", m.screen)
+	}
+	// now on the menu root: two quick escs are the deliberate home gesture
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // arm
+	m = updated.(Model)
+	if m.screen != scrMenu {
+		t.Fatalf("first esc on menu should stay (arm only), got screen %d", m.screen)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // fire -> splash
+	m = updated.(Model)
+	if m.screen != scrSplash {
+		t.Fatalf("double esc on menu should return to splash, got screen %d", m.screen)
+	}
+	if m.decodeStep != 0 {
+		t.Errorf("decode should replay from 0, got decodeStep=%d", m.decodeStep)
+	}
+	if m.cartTotal() == 0 {
+		t.Error("cart should be preserved across a double-esc home")
+	}
+}
+
+// TestEscWalkBackDoesNotTeleportHome is the reported glitch: from a sub-screen,
+// Esc (back to menu) immediately followed by another Esc must NOT jump to the
+// splash — the back-step Esc must not arm the home gesture.
+func TestEscWalkBackDoesNotTeleportHome(t *testing.T) {
+	m := newAtMenu()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open restaurant
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // restaurant -> menu
+	m = updated.(Model)
+	if m.screen != scrMenu {
+		t.Fatalf("esc should walk back to menu, got screen %d", m.screen)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // must stay on menu, not teleport
+	m = updated.(Model)
+	if m.screen != scrMenu {
+		t.Errorf("esc after walking back must NOT jump home, got screen %d", m.screen)
+	}
+}
+
+// TestSlowEscDoesNotReturnToSplash verifies a second Esc on the menu after the
+// double-esc window has elapsed does not jump home.
+func TestSlowEscDoesNotReturnToSplash(t *testing.T) {
+	m := newAtMenu()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // arm on menu
+	m = updated.(Model)
+	for i := 0; i < escDoubleWindow+1; i++ { // let the window lapse
+		updated, _ = m.Update(tickMsg(time.Now()))
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // slow esc — re-arms, no home
+	m = updated.(Model)
+	if m.screen != scrMenu {
+		t.Errorf("slow second esc should not return to splash, got screen %d", m.screen)
+	}
+}
+
 func TestTickInterval(t *testing.T) {
 	if tickInterval != 60*time.Millisecond {
 		t.Errorf("tickInterval = %v, want 60ms", tickInterval)
