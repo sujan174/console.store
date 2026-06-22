@@ -688,7 +688,8 @@ func (m Model) View() string {
 	// Background tears on inner colour resets (banding), and a dark terminal
 	// already provides the #15161f-ish canvas.
 	if m.screen == scrSplash {
-		sp := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSelection(m.homeSel).View()
+		sp := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSelection(m.homeSel).
+			WithStats(m.statsFunc).View()
 		if m.w == 0 || m.h == 0 {
 			return sp
 		}
