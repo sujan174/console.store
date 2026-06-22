@@ -26,9 +26,9 @@ type Splash struct {
 	decodeStep int // decode progress (0..render.DecodeSteps)
 	frame      int // global animation frame (decode flicker + prompt cursor blink)
 	splashTick int // ticks since the splash was (re)entered; phases the shimmer
-	sel       int // selected home item (seam for future multi-item home)
-	caps      render.Caps
-	logoCache string // render.Logo is constant per session; computed once here
+	sel        int // selected home item (seam for future multi-item home)
+	caps       render.Caps
+	logoCache  string // render.Logo is constant per session; computed once here
 }
 
 func NewSplash() Splash { return Splash{} }
@@ -81,10 +81,32 @@ func padRight(lines []string, width int) {
 	}
 }
 
+// brandUnderE renders the gold "store.in" mark right-aligned to the wordmark's
+// width so it sits beneath the trailing "E" of CONSOLE, on its own line. It is
+// bold and letter-spaced to read a little larger than the surrounding copy.
+func brandUnderE(logoLines []string) string {
+	brand := theme.GoldStyle.Bold(true).Render(letterspace("store.in"))
+	pad := blockWidth(logoLines) - lipgloss.Width(brand)
+	if pad < 0 {
+		pad = 0
+	}
+	return strings.Repeat(" ", pad) + brand
+}
+
+// letterspace inserts a single space between runes, giving short labels a
+// larger, more deliberate feel in the fixed terminal grid.
+func letterspace(s string) string {
+	parts := make([]string, 0, len(s))
+	for _, r := range s {
+		parts = append(parts, string(r))
+	}
+	return strings.Join(parts, " ")
+}
+
 // sshLine is the top prompt — the command the user just "ran" to arrive here.
 func sshLine() string {
 	return strings.Repeat(" ", promptIndent) +
-		theme.DimStyle.Render("~ % ssh ") + theme.TextStyle.Render("console.store")
+		theme.DimStyle.Render("~ % ssh ") + theme.TextStyle.Render("consolestore.in")
 }
 
 // tagline is the banner's one-line descriptor, inset under the wordmark.
@@ -100,7 +122,7 @@ func (s Splash) prompt() string {
 		cur = "▉"
 	}
 	return strings.Repeat(" ", promptIndent) +
-		theme.BrandStyle.Render("console.store") + " " +
+		theme.BrandStyle.Render("consolestore.in") + " " +
 		theme.CursorStyle.Render("▸") + " " +
 		theme.DimStyle.Render("press ↵ to enter") +
 		theme.CursorStyle.Render(cur) +
@@ -147,10 +169,10 @@ func (s Splash) view() string {
 		logo = render.ShimmerWordmark(s.caps, sweep)
 	}
 	logoLines := strings.Split(strings.TrimRight(logo, "\n"), "\n")
-	// Gold ".store" rides the wordmark's baseline — one accent, inline.
-	if n := len(logoLines); n > 0 {
-		logoLines[n-1] = logoLines[n-1] + "   " + theme.GoldStyle.Render(".store")
-	}
+	// Gold "store.in" tucks onto its own line under the trailing "E" of the
+	// wordmark — bold + letter-spaced so it reads a touch larger than the
+	// tagline below it.
+	logoLines = append(logoLines, brandUnderE(logoLines))
 
 	lines := []string{sshLine(), "", ""}
 	for _, l := range logoLines {

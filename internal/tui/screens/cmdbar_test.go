@@ -20,7 +20,7 @@ func TestCmdHelpLists(t *testing.T) {
 
 func TestCmdNeofetch(t *testing.T) {
 	c, _ := screens.NewCmdBar().WithText("neofetch").Run()
-	if !strings.Contains(c.View(false), "guest@console.store") {
+	if !strings.Contains(c.View(false), "guest@consolestore.in") {
 		t.Errorf("neofetch banner missing")
 	}
 }
@@ -45,7 +45,7 @@ func TestCmdClearWipesOutput(t *testing.T) {
 	if action != "clear" {
 		t.Errorf("clear action=%q want clear", action)
 	}
-	if strings.Contains(c.View(false), "guest@console.store") {
+	if strings.Contains(c.View(false), "guest@consolestore.in") {
 		t.Errorf("clear should wipe prior output:\n%s", c.View(false))
 	}
 }
@@ -55,7 +55,7 @@ func TestCmdExitCloses(t *testing.T) {
 	if action != "close" {
 		t.Errorf("exit action=%q want close", action)
 	}
-	if !strings.Contains(c.View(false), "connection to console.store closed") {
+	if !strings.Contains(c.View(false), "connection to consolestore.in closed") {
 		t.Errorf("exit message missing")
 	}
 }

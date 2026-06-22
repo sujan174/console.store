@@ -17,7 +17,7 @@ func TestMenuHeaderShowsBrandAndCart(t *testing.T) {
 	usual, ok := repo.Usual(addr)
 	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, "cart · ₹338")
 	out := m.View()
-	if !strings.Contains(out, "console.store") {
+	if !strings.Contains(out, "consolestore.in") {
 		t.Fatal("missing brand")
 	}
 	if !strings.Contains(out, "cart · ₹338") {

@@ -407,8 +407,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.menu = m.menu.WithCartChip(m.cartChip())
 					if m.screen == scrRestaurant {
 						ci := m.rest.CursorIndex()
+						info := m.rest.InfoOpen()
 						m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).
-							WithAddr(m.addr).WithCursor(ci)
+							WithAddr(m.addr).WithCursor(ci).WithInfo(info)
 					}
 				}
 				m.conflictOpen = false
@@ -570,7 +571,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.menu = m.menu.WithCartChip(m.cartChip())
 				ci := m.rest.CursorIndex()
-				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithAddr(m.addr).WithCursor(ci)
+				info := m.rest.InfoOpen()
+				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithAddr(m.addr).WithCursor(ci).WithInfo(info)
 				return m, nil
 			case "left", "h":
 				it, ok := m.rest.Selected()
@@ -583,7 +585,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.menu = m.menu.WithCartChip(m.cartChip())
 				ci := m.rest.CursorIndex()
-				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithAddr(m.addr).WithCursor(ci)
+				info := m.rest.InfoOpen()
+				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithAddr(m.addr).WithCursor(ci).WithInfo(info)
 				return m, nil
 			case "c":
 				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta())
@@ -616,6 +619,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// keep router's authoritative lines in sync with cart edits
 			m.lines = m.cart.Lines()
+			// emptying the cart here must also release the restaurant binding —
+			// otherwise the stale name lingers on the next cart view (and would
+			// wrongly trigger a cart-conflict against a different restaurant).
+			if len(m.lines) == 0 {
+				m.cartRestaurant = ""
+			}
 			m.menu = m.menu.WithCartChip(m.cartChip())
 			return m, nil
 		case scrAddress:
@@ -735,7 +744,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // statusHints rotate in the status bar (design line 925).
-var statusHints = []string{"type : for commands", "247 devs online", "DEVFRIDAY −₹50", "esc esc · home", "ssh console.store"}
+var statusHints = []string{"type : for commands", "247 devs online", "DEVFRIDAY −₹50", "esc esc · home", "ssh consolestore.in"}
 
 // screenLabel maps the current screen to the status-bar label (design line 836).
 func (m Model) screenLabel() string {
@@ -808,9 +817,15 @@ func (m Model) View() string {
 	}
 
 	var body string
+	infoPanel := "" // restaurant detail panel ('i'); pinned above the hints below
 	switch m.screen {
 	case scrRestaurant:
-		body = m.rest.WithMaxRows(m.listRows(14)).View()
+		chrome := 14
+		if m.rest.InfoOpen() {
+			infoPanel = m.rest.InfoView(components.ContentWidth())
+			chrome += lipgloss.Height(infoPanel) + 1
+		}
+		body = m.rest.WithMaxRows(m.listRows(chrome)).View()
 	case scrCart:
 		body = m.cart.View()
 	case scrAddress:
@@ -834,6 +849,9 @@ func (m Model) View() string {
 	content, hint := splitHint(body)
 
 	footer := ""
+	if infoPanel != "" {
+		footer += infoPanel + "\n"
+	}
 	if hint != "" {
 		footer += hint + "\n\n"
 	}

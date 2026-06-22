@@ -24,13 +24,13 @@ func TestSplashLogoPhase(t *testing.T) {
 	if !strings.Contains(v, "press ↵ to enter") {
 		t.Errorf("settled splash should show the enter prompt:\n%s", v)
 	}
-	if !strings.Contains(v, "ssh ") || !strings.Contains(v, "console.store") {
+	if !strings.Contains(v, "ssh ") || !strings.Contains(v, "consolestore.in") {
 		t.Errorf("settled splash should show the ssh prompt line:\n%s", v)
 	}
 	if !strings.Contains(v, "coffee · food · snacks") {
 		t.Errorf("settled splash should show the section subtitle:\n%s", v)
 	}
-	if !strings.Contains(v, ".store") {
-		t.Errorf("settled splash should show the gold .store suffix:\n%s", v)
+	if !strings.Contains(v, "s t o r e . i n") {
+		t.Errorf("settled splash should show the gold letter-spaced store.in mark:\n%s", v)
 	}
 }

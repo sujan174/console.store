@@ -91,8 +91,8 @@ func (c CmdBar) Run() (CmdBar, string) {
 		}
 	case "neofetch":
 		out = []CmdLine{
-			{"      ▟▙       guest@console.store", B},
-			{"     ▟██▙      ───────────────────", D},
+			{"      ▟▙       guest@consolestore.in", B},
+			{"     ▟██▙      ─────────────────────", D},
 			{"     ▜██▛      host    bangalore · IN", T},
 			{"      ▜▛       uptime  3d 4h · load 0.07", T},
 			{"               online  247 devs ☕", T},
@@ -153,7 +153,7 @@ func (c CmdBar) Run() (CmdBar, string) {
 		action = "instamart"
 	case "exit", "quit", ":q":
 		out = []CmdLine{
-			{"connection to console.store closed.", D},
+			{"connection to consolestore.in closed.", D},
 		}
 		action = "close"
 	default:

@@ -168,7 +168,7 @@ func (c Checkout) speedReceipt() string {
 	b.WriteString("  " + theme.GoldStyle.Render(fmt.Sprintf("⚡ ordered in %.1fs · %d keystrokes", dummyOrderSecs, dummyOrderKeys)) + "\n")
 	b.WriteString("     " + theme.DimStyle.Render(fmt.Sprintf("this session best %.1fs  ·  phone app %s", dummySessionBest, phoneAppAvgLabel)) + "\n")
 	b.WriteString("  " + theme.FaintStyle.Render(strings.Repeat("─", 44)) + "\n")
-	b.WriteString("  " + theme.DimStyle.Render("flex it:  ") + theme.BrandStyle.Render("ssh console.store") + "\n\n")
+	b.WriteString("  " + theme.DimStyle.Render("flex it:  ") + theme.BrandStyle.Render("ssh consolestore.in") + "\n\n")
 	return b.String()
 }
 

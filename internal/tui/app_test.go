@@ -87,10 +87,69 @@ func TestTickAdvancesFrame(t *testing.T) {
 	}
 }
 
+// keyRunes builds a rune key-press (e.g. keyRunes("c")).
+func keyRunes(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
+
+// enterFirstRestaurantWithItem drives menu → restaurant → add one item, returning
+// the model with a non-empty cart bound to a restaurant.
+func enterFirstRestaurantWithItem(t *testing.T) Model {
+	t.Helper()
+	m := newAtMenu()
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open first restaurant
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add first item
+	m = u.(Model)
+	if len(m.lines) == 0 || m.cartRestaurant == "" {
+		t.Fatalf("precondition failed: lines=%d cartRestaurant=%q", len(m.lines), m.cartRestaurant)
+	}
+	return m
+}
+
+// Emptying the cart from the CART screen must release the restaurant binding so a
+// later visit shows a truly empty cart — not a stale "cart · {restaurant}".
+func TestEmptyingCartViaCartScreenClearsRestaurant(t *testing.T) {
+	m := enterFirstRestaurantWithItem(t)
+	rest := m.cartRestaurant
+
+	u, _ := m.Update(keyRunes("c")) // open cart
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft}) // remove the only line
+	m = u.(Model)
+
+	if len(m.lines) != 0 {
+		t.Fatalf("cart should be empty, lines=%d", len(m.lines))
+	}
+	if m.cartRestaurant != "" {
+		t.Fatalf("cartRestaurant should be cleared, got %q", m.cartRestaurant)
+	}
+
+	// Re-enter via menu and confirm no stale restaurant name leaks into the view.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = u.(Model)
+	u, _ = m.Update(keyRunes("c"))
+	m = u.(Model)
+	if v := m.View(); strings.Contains(v, rest) {
+		t.Errorf("empty cart still shows stale restaurant %q:\n%s", rest, v)
+	}
+}
+
+// Emptying the cart from the RESTAURANT screen must likewise clear the binding.
+func TestEmptyingCartViaRestaurantScreenClearsRestaurant(t *testing.T) {
+	m := enterFirstRestaurantWithItem(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft}) // remove the only line
+	m = u.(Model)
+	if len(m.lines) != 0 {
+		t.Fatalf("cart should be empty, lines=%d", len(m.lines))
+	}
+	if m.cartRestaurant != "" {
+		t.Errorf("cartRestaurant should be cleared, got %q", m.cartRestaurant)
+	}
+}
+
 func TestAppStartsOnMenu(t *testing.T) {
 	m := newAtMenu()
 	out := m.View()
-	if !strings.Contains(out, "console.store") || !strings.Contains(despace(out), "BlueTokai") {
+	if !strings.Contains(out, "consolestore.in") || !strings.Contains(despace(out), "BlueTokai") {
 		t.Fatal("app should start on menu with places")
 	}
 }
@@ -132,7 +191,7 @@ func TestUsualAddsToCartStaysOnMenu(t *testing.T) {
 	if m.screen != scrMenu {
 		t.Errorf("pressing u should stay on the menu, got screen %d", m.screen)
 	}
-	if !strings.Contains(m.View(), "console.store") {
+	if !strings.Contains(m.View(), "consolestore.in") {
 		t.Errorf("should still render the menu:\n%s", m.View())
 	}
 }
@@ -291,7 +350,7 @@ func TestCheckoutFlowPlacesAndResets(t *testing.T) {
 	if m.cartTotal() != 0 {
 		t.Errorf("cart should be empty after confirm, total=%d", m.cartTotal())
 	}
-	if !strings.Contains(m.View(), "console.store") {
+	if !strings.Contains(m.View(), "consolestore.in") {
 		t.Errorf("should be back on menu:\n%s", m.View())
 	}
 }
@@ -329,7 +388,7 @@ func TestTrackingFlowAdvancesAndEscResets(t *testing.T) {
 	if m.cartTotal() != 0 {
 		t.Errorf("cart should be empty after esc, total=%d", m.cartTotal())
 	}
-	if !strings.Contains(m.View(), "console.store") {
+	if !strings.Contains(m.View(), "consolestore.in") {
 		t.Errorf("should be back on menu:\n%s", m.View())
 	}
 }

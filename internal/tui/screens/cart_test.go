@@ -60,6 +60,23 @@ func TestCartEmptyMessage(t *testing.T) {
 	}
 }
 
+// An empty cart must not display a stale restaurant binding (or ETA) in its
+// header, even if one was passed in — e.g. the last line was just removed
+// on-screen. It falls back to the neutral "your order" label.
+func TestCartEmptyDropsRestaurantHeader(t *testing.T) {
+	c := screens.NewCart("Blue Tokai", nil).WithEta("~45 min")
+	v := c.View()
+	if strings.Contains(v, "Blue Tokai") {
+		t.Errorf("empty cart should not show the restaurant name:\n%s", v)
+	}
+	if strings.Contains(v, "~45 min") {
+		t.Errorf("empty cart should not show an ETA:\n%s", v)
+	}
+	if !strings.Contains(v, "your order") {
+		t.Errorf("empty cart should fall back to 'your order':\n%s", v)
+	}
+}
+
 func TestCartIncrementDecrementRemove(t *testing.T) {
 	lines := []screens.CartLine{
 		{Item: catalog.Item{Name: "Cold Coffee", Price: 149}, Qty: 1},

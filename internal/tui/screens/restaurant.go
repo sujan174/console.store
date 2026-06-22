@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"console.store/internal/catalog"
 	"console.store/internal/tui/components"
@@ -17,6 +18,7 @@ type Restaurant struct {
 	cartChip  string
 	list      components.List
 	searching bool
+	infoOpen  bool // 'i' toggles the detail panel for the selected item
 }
 
 // NewRestaurant builds the restaurant screen, rendering in-cart checks and
@@ -100,6 +102,13 @@ func (s Restaurant) CursorIndex() int { return s.list.Cursor }
 // WithCursor restores a previously captured cursor position.
 func (s Restaurant) WithCursor(i int) Restaurant { s.list.Cursor = i; return s }
 
+// InfoOpen reports whether the detail panel is showing (so the router can
+// preserve it across a NewRestaurant rebuild).
+func (s Restaurant) InfoOpen() bool { return s.infoOpen }
+
+// WithInfo restores the detail-panel open/closed state.
+func (s Restaurant) WithInfo(open bool) Restaurant { s.infoOpen = open; return s }
+
 func (s Restaurant) Init() tea.Cmd { return nil }
 
 func (s Restaurant) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -129,6 +138,8 @@ func (s Restaurant) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch k.String() {
 	case "/":
 		s.searching = true
+	case "i":
+		s.infoOpen = !s.infoOpen
 	case "j", "down":
 		s.list.Down()
 	case "k", "up":
@@ -191,6 +202,144 @@ func (s Restaurant) View() string {
 	b.WriteString("\n")
 	b.WriteString(s.list.View())
 	b.WriteString("\n")
-	b.WriteString(components.Hint("↑↓", "move", "↵/→", "add", "←", "remove", "esc", "back", "c", "cart"))
+	b.WriteString(components.Hint("↑↓", "move", "↵/→", "add", "←", "remove", "i", "info", "esc", "back", "c", "cart"))
 	return b.String()
+}
+
+// InfoView renders the bordered detail panel for the currently selected item,
+// shown above the keyboard hints when the user presses 'i'. It returns "" when
+// the panel is closed or nothing is selected.
+//
+// The richer fields (allergens, spice, prep, serving) are dummy data derived
+// from the item name/description for now — they'll come from the live Swiggy
+// menu once the integration lands.
+func (s Restaurant) InfoView(w int) string {
+	if !s.infoOpen {
+		return ""
+	}
+	it, ok := s.Selected()
+	if !ok {
+		return ""
+	}
+
+	dot := theme.FaintStyle.Render("  ·  ")
+	inner := w - 4
+	if inner < 1 {
+		inner = 1
+	}
+
+	desc := it.Desc
+	if desc == "" {
+		desc = "no description available"
+	}
+	if r := []rune(desc); len(r) > inner {
+		desc = string(r[:inner-1]) + "…"
+	}
+
+	veg := theme.GreenStyle.Render("veg")
+	if !it.Veg {
+		veg = theme.FavStyle.Render("non-veg")
+	}
+	kcal := theme.DimStyle.Render("— kcal")
+	if it.Kcal > 0 {
+		kcal = theme.DimStyle.Render(fmt.Sprintf("%d kcal", it.Kcal))
+	}
+	stats := theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", it.Rating)) + dot +
+		kcal + dot + veg + dot + theme.DimStyle.Render("serves 1")
+
+	label := func(k, v string) string {
+		return theme.DimStyle.Render(k+" · ") + theme.FaintStyle.Render(v)
+	}
+	row2 := label("allergens", itemAllergens(it)) + dot + label("spice", itemSpice(it))
+	row3 := label("prep", itemPrep(it)) + dot + label("portion", "regular")
+
+	lines := []string{
+		theme.ItemStyle.Render(desc),
+		"",
+		stats,
+		row2,
+		row3,
+	}
+	title := theme.FaintStyle.Render("details") + theme.DimStyle.Render(" · ") + theme.BrightStyle.Render(it.Name)
+	return infoBox(title, lines, w)
+}
+
+// infoBox renders a rounded titled card with multiple body lines spanning
+// width w. Its top and bottom borders separate the detail panel from the list
+// above and the keyboard hints below.
+//
+//	╭─ <title> ───────────────────╮
+//	│ <line 1>                    │
+//	│ <line 2>                    │
+//	╰─────────────────────────────╯
+func infoBox(title string, lines []string, w int) string {
+	bd := theme.Fg(theme.Div2)
+	topUsed := lipgloss.Width("╭─ ") + lipgloss.Width(title) + lipgloss.Width(" ") + 1
+	fill := w - topUsed
+	if fill < 0 {
+		fill = 0
+	}
+	inner := w - 4
+	if inner < 0 {
+		inner = 0
+	}
+
+	var b strings.Builder
+	b.WriteString("  " + bd.Render("╭─ ") + title + bd.Render(" "+strings.Repeat("─", fill)+"╮") + "\n")
+	for _, ln := range lines {
+		b.WriteString("  " + bd.Render("│ ") + components.PadTo(ln, inner) + bd.Render(" │") + "\n")
+	}
+	b.WriteString("  " + bd.Render("╰"+strings.Repeat("─", w-2)+"╯"))
+	return b.String()
+}
+
+// itemBlob is the lowercased name + description used to infer the dummy detail
+// fields below.
+func itemBlob(it catalog.Item) string {
+	return strings.ToLower(it.Name + " " + it.Desc)
+}
+
+// itemAllergens infers a dummy allergen list from the item's name/description.
+func itemAllergens(it catalog.Item) string {
+	s := itemBlob(it)
+	groups := []struct {
+		allergen string
+		keys     []string
+	}{
+		{"dairy", []string{"milk", "cream", "cheese", "latte", "mocha", "chai", "yogurt", "butter", "oat", "parfait", "fudge", "brownie", "cappuccino", "cortado", "flat white", "horchata", "cotija"}},
+		{"nuts", []string{"almond", "walnut", "hazelnut", "peanut", "cashew", "nut"}},
+		{"gluten", []string{"bread", "croissant", "bun", "toast", "sandwich", "muffin", "cake", "loaf", "brownie", "burrito", "taco", "nacho", "quesadilla", "churro", "cookie", "poppers", "wheat"}},
+		{"egg", []string{"egg", "mayo"}},
+		{"soy", []string{"soy", "tofu"}},
+	}
+	var out []string
+	for _, g := range groups {
+		for _, k := range g.keys {
+			if strings.Contains(s, k) {
+				out = append(out, g.allergen)
+				break
+			}
+		}
+	}
+	if len(out) == 0 {
+		return "none listed"
+	}
+	return strings.Join(out, ", ")
+}
+
+// itemSpice infers a dummy spice level from the item's name/description.
+func itemSpice(it catalog.Item) string {
+	s := itemBlob(it)
+	for _, k := range []string{"jalape", "chilli", "chili", "peri", "spicy", "masala", "pepper", "salsa"} {
+		if strings.Contains(s, k) {
+			return "medium"
+		}
+	}
+	return "mild"
+}
+
+// itemPrep returns a dummy prep-time window, stable per item name.
+func itemPrep(it catalog.Item) string {
+	lo := 8 + len(it.Name)%6
+	return fmt.Sprintf("%d-%d min", lo, lo+5)
 }

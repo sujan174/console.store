@@ -124,9 +124,20 @@ func (c Cart) View() string {
 	w := components.ContentWidth()
 
 	// Header: "cart · {restaurant}" (brand) … "{eta}" (eta), 2-space indent.
+	// An empty cart carries no restaurant binding, so fall back to the neutral
+	// "your order" label (and drop the ETA) rather than leaving a stale
+	// "cart · {restaurant}" once everything is removed.
+	title := "cart · your order"
+	eta := ""
+	if len(c.lines) > 0 {
+		eta = c.eta
+		if c.restaurant != "" {
+			title = "cart · " + c.restaurant
+		}
+	}
 	header := justify(
-		theme.BrandStyle.Render("cart · "+c.restaurant),
-		theme.EtaStyle.Render(c.eta),
+		theme.BrandStyle.Render(title),
+		theme.EtaStyle.Render(eta),
 		w,
 	)
 	b.WriteString("  " + header + "\n")

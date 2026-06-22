@@ -143,7 +143,7 @@ func (m Menu) View() string {
 	b.WriteString("\n") // top padding
 
 	// row 1: brand + version  |  deliver to ⊕ <addr> · <label> ⌄
-	brand := theme.BrandStyle.Render("console.store") + " " + theme.FaintStyle.Render(version)
+	brand := theme.BrandStyle.Render("consolestore.in") + " " + theme.FaintStyle.Render(version)
 	deliver := theme.DimStyle.Render("deliver to ") + theme.CursorStyle.Render("⊕ ") +
 		theme.BrightStyle.Render(m.address.Line) + theme.DimStyle.Render(" · "+m.address.Label) +
 		theme.FaintStyle.Render(" ⌄")
