@@ -575,3 +575,102 @@ func TestTickInterval(t *testing.T) {
 		t.Errorf("tickInterval = %v, want 60ms", tickInterval)
 	}
 }
+
+// openSecondRestaurantWithFirstInCart drives: open Blue Tokai, add its first
+// item, esc to menu, move to the 2nd place, open it. Returns the model sitting
+// in the 2nd restaurant with the 1st restaurant's item in the cart, plus the
+// 2nd restaurant's name (read from the model, not hardcoded, so the test is
+// robust to seed/serviceability ordering).
+func openSecondRestaurantWithFirstInCart(t *testing.T) (Model, string) {
+	t.Helper()
+	m := newAtMenu()
+	step := func(k tea.KeyMsg) { u, _ := m.Update(k); m = u.(Model) }
+
+	step(tea.KeyMsg{Type: tea.KeyEnter})                     // open Blue Tokai
+	step(tea.KeyMsg{Type: tea.KeyEnter})                     // add first item
+	first := m.cartRestaurant
+	if first == "" || len(m.lines) == 0 {
+		t.Fatalf("setup: expected an item in the cart from %q", first)
+	}
+	step(tea.KeyMsg{Type: tea.KeyEsc})                       // back to menu
+	step(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}) // 2nd place
+	step(tea.KeyMsg{Type: tea.KeyEnter})                     // open it
+	if m.screen != scrRestaurant {
+		t.Fatalf("setup: expected to be in a restaurant, got screen %d", m.screen)
+	}
+	second := m.rest.PlaceData().Name
+	if second == first {
+		t.Fatalf("setup: needed a different 2nd restaurant, both were %q", first)
+	}
+	return m, first
+}
+
+func TestCrossRestaurantAddOpensConflict(t *testing.T) {
+	m, first := openSecondRestaurantWithFirstInCart(t)
+	before := len(m.lines)
+
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add from 2nd restaurant
+	m = u.(Model)
+
+	if !m.conflictOpen {
+		t.Fatal("adding from a different restaurant should open the conflict modal")
+	}
+	if len(m.lines) != before {
+		t.Fatalf("cart must be untouched while the modal is open: was %d, now %d", before, len(m.lines))
+	}
+	if m.cartRestaurant != first {
+		t.Fatalf("cart restaurant must stay %q while modal open, got %q", first, m.cartRestaurant)
+	}
+}
+
+func TestConflictConfirmStartsNewCart(t *testing.T) {
+	m, _ := openSecondRestaurantWithFirstInCart(t)
+	second := m.rest.PlaceData().Name
+
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // trigger conflict
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}) // confirm
+	m = u.(Model)
+
+	if m.conflictOpen {
+		t.Fatal("confirm should close the modal")
+	}
+	if m.cartRestaurant != second {
+		t.Fatalf("new cart restaurant should be %q, got %q", second, m.cartRestaurant)
+	}
+	if len(m.lines) != 1 {
+		t.Fatalf("new cart should hold exactly the one new item, got %d lines", len(m.lines))
+	}
+}
+
+func TestConflictCancelKeepsCart(t *testing.T) {
+	m, first := openSecondRestaurantWithFirstInCart(t)
+	before := len(m.lines)
+
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // trigger conflict
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}) // cancel
+	m = u.(Model)
+
+	if m.conflictOpen {
+		t.Fatal("cancel should close the modal")
+	}
+	if m.cartRestaurant != first {
+		t.Fatalf("cancel must keep the original cart restaurant %q, got %q", first, m.cartRestaurant)
+	}
+	if len(m.lines) != before {
+		t.Fatalf("cancel must leave the cart untouched: was %d, now %d", before, len(m.lines))
+	}
+}
+
+func TestSameRestaurantNoConflict(t *testing.T) {
+	m := newAtMenu()
+	step := func(k tea.KeyMsg) { u, _ := m.Update(k); m = u.(Model) }
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add first item
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add again, same restaurant
+
+	if m.conflictOpen {
+		t.Fatal("adding from the same restaurant must not open the modal")
+	}
+}

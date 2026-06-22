@@ -78,6 +78,13 @@ type Model struct {
 	lines          []screens.CartLine
 	cartRestaurant string
 
+	// conflict modal: shown when adding an item from a restaurant other than
+	// the one the cart holds (Swiggy allows one restaurant per cart).
+	conflictOpen bool
+	conflict     screens.CartConflict
+	pendingItem  catalog.Item // item awaiting the start-new-cart confirmation
+	pendingRest  string       // its restaurant name
+
 	inst    screens.Instamart
 	imLines []screens.CartLine
 	imCart  screens.Cart
@@ -162,6 +169,20 @@ func decItem(lines []screens.CartLine, id string) []screens.CartLine {
 		}
 	}
 	return lines
+}
+
+// conflictsWithCart reports whether adding from restaurant rest would mix two
+// restaurants in one cart — a non-empty cart bound to a different restaurant.
+func (m Model) conflictsWithCart(rest string) bool {
+	return len(m.lines) > 0 && m.cartRestaurant != "" && m.cartRestaurant != rest
+}
+
+// startNewCart clears the food cart and seeds it with a single item from rest —
+// the Swiggy one-restaurant-per-cart resolution.
+func (m Model) startNewCart(item catalog.Item, rest string) Model {
+	m.lines = []screens.CartLine{{Item: item, Qty: 1}}
+	m.cartRestaurant = rest
+	return m
 }
 
 // qtyMap returns current cart quantities keyed by item ID.
@@ -368,6 +389,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// While the conflict modal is open it captures all keys: `y` starts the
+		// new cart, anything else (n / esc / etc.) cancels with the cart intact.
+		// ctrl+c still quits. Enter does NOT confirm — Enter is what triggered
+		// the conflict, so a double-tap must never wipe the cart.
+		if m.conflictOpen {
+			switch k.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "y":
+				m = m.startNewCart(m.pendingItem, m.pendingRest)
+				m.conflictOpen = false
+				m.menu = m.menu.WithCartChip(m.cartChip())
+				if m.screen == scrRestaurant {
+					ci := m.rest.CursorIndex()
+					m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).
+						WithAddr(m.addr).WithCursor(ci)
+				}
+			default:
+				m.conflictOpen = false
+			}
+			return m, nil
+		}
+
 		switch k.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -456,12 +500,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "u":
 				if usual, ok := m.repo.Usual(m.addr); ok {
+					rest := ""
+					if p, ok := m.repo.Menu(usual.PlaceID); ok {
+						rest = p.Name
+					}
+					if m.conflictsWithCart(rest) {
+						m.pendingItem = usual.Item
+						m.pendingRest = rest
+						m.conflict = screens.NewCartConflict(m.cartRestaurant, rest, usual.Item.Name)
+						m.conflictOpen = true
+						return m, nil
+					}
 					wasEmpty := len(m.lines) == 0
 					m.lines = appendOrInc(m.lines, usual.Item)
 					if wasEmpty {
-						if p, ok := m.repo.Menu(usual.PlaceID); ok {
-							m.cartRestaurant = p.Name
-						}
+						m.cartRestaurant = rest
 					}
 					m.menu = m.menu.WithCartChip(m.cartChip())
 				}
@@ -494,10 +547,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !ok {
 					return m, nil
 				}
+				rest := m.rest.PlaceData().Name
+				if m.conflictsWithCart(rest) {
+					m.pendingItem = it
+					m.pendingRest = rest
+					m.conflict = screens.NewCartConflict(m.cartRestaurant, rest, it.Name)
+					m.conflictOpen = true
+					return m, nil
+				}
 				wasEmpty := len(m.lines) == 0
 				m.lines = appendOrInc(m.lines, it)
 				if wasEmpty {
-					m.cartRestaurant = m.rest.PlaceData().Name
+					m.cartRestaurant = rest
 				}
 				m.menu = m.menu.WithCartChip(m.cartChip())
 				ci := m.rest.CursorIndex()
@@ -726,6 +787,16 @@ func (m Model) View() string {
 			return sp
 		}
 		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, sp)
+	}
+
+	// The conflict modal takes over the viewport, centered. It is rare and
+	// blocking, so context behind it is not needed.
+	if m.conflictOpen {
+		dialog := m.conflict.View()
+		if m.w == 0 || m.h == 0 {
+			return dialog
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, dialog)
 	}
 
 	var body string
