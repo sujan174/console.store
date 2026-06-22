@@ -12,7 +12,7 @@ import (
 )
 
 func TestFlowMenuToCart(t *testing.T) {
-	tm := teatest.NewTestModel(t, New(render.Caps{}, nil), teatest.WithInitialTermSize(80, 24))
+	tm := teatest.NewTestModel(t, New(render.Caps{}), teatest.WithInitialTermSize(80, 24))
 
 	// skip the decode -> home landing, then activate go-to-shop -> menu
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})

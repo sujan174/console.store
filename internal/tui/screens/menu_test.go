@@ -25,23 +25,6 @@ func TestMenuHeaderShowsBrandAndCart(t *testing.T) {
 	}
 }
 
-func TestMenuShowsStatsBox(t *testing.T) {
-	repo := mem.New()
-	addr := repo.Addresses()[0]
-	places := repo.Places(addr, catalog.SectionCoffee)
-	m := NewMenu(places, addr, catalog.SectionCoffee, catalog.Usual{}, false, "").
-		WithStats(func() (int, int) { return 3, 47 })
-	out := m.View()
-	if !strings.Contains(out, "live") {
-		t.Fatalf("missing stats box title:\n%s", out)
-	}
-	if !strings.Contains(out, "3") {
-		t.Fatalf("missing online count:\n%s", out)
-	}
-	if !strings.Contains(out, "47 orders today") {
-		t.Fatalf("missing orders count:\n%s", out)
-	}
-}
 
 func TestMenuNoUsualHidesUsualLine(t *testing.T) {
 	places := []catalog.Place{{ID: "x", Name: "X", ETA: "10 min"}}

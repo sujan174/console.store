@@ -103,17 +103,16 @@ type Model struct {
 	cmdOpen bool
 	cmd     screens.CmdBar
 
-	frame     int
-	w, h      int // terminal size from WindowSizeMsg
-	caps      render.Caps
-	statsFunc func() (online, orders int)
+	frame int
+	w, h  int // terminal size from WindowSizeMsg
+	caps  render.Caps
 }
 
-func New(caps render.Caps, statsFunc func() (online, orders int)) Model {
+func New(caps render.Caps) Model {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps, statsFunc: statsFunc, lastEscFrame: -escDoubleWindow - 1}
+	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1}
 	m.splash = screens.NewSplash().WithCaps(caps)
 	m.menu = m.buildMenu()
 	return m
@@ -132,7 +131,6 @@ func (m Model) buildMenu() screens.Menu {
 		counts[sec] = len(m.repo.Places(m.addr, sec))
 	}
 	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartChip()).
-		WithStats(m.statsFunc).
 		WithCounts(counts)
 }
 
@@ -792,7 +790,7 @@ func (m Model) View() string {
 	// already provides the #15161f-ish canvas.
 	if m.screen == scrSplash {
 		sp := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSplashTick(m.splashTick).
-			WithSelection(m.homeSel).WithStats(m.statsFunc).View()
+			WithSelection(m.homeSel).View()
 		if m.w == 0 || m.h == 0 {
 			return sp
 		}

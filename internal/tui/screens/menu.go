@@ -22,7 +22,6 @@ type Menu struct {
 	usual     catalog.Usual
 	hasUsual  bool
 	cartChip  string
-	statsFunc func() (online, orders int) // nil = no stats box
 	counts    map[catalog.Section]int
 	list      components.List
 	searching bool
@@ -61,12 +60,6 @@ func (m Menu) WithCartChip(s string) Menu { m.cartChip = s; return m }
 
 // WithMaxRows sets the list viewport height (rows). 0 = show all.
 func (m Menu) WithMaxRows(n int) Menu { m.list.MaxRows = n; return m }
-
-// WithStats sets the live-stats provider for the hero box.
-func (m Menu) WithStats(f func() (online, orders int)) Menu {
-	m.statsFunc = f
-	return m
-}
 
 // WithCounts sets the per-section place counts shown on the tab bar.
 func (m Menu) WithCounts(c map[catalog.Section]int) Menu { m.counts = c; return m }
@@ -155,16 +148,6 @@ func (m Menu) View() string {
 		theme.BrightStyle.Render(m.address.Line) + theme.DimStyle.Render(" · "+m.address.Label) +
 		theme.FaintStyle.Render(" ⌄")
 	b.WriteString("  " + justify(brand, deliver, w) + "\n")
-
-	// hero card: live app stats
-	if m.statsFunc != nil {
-		online, orders := m.statsFunc()
-		b.WriteString("\n") // gap before the hero card
-		left := "👥 " + theme.BrightStyle.Render(fmt.Sprintf("%d", online)) +
-			theme.DimStyle.Render(" online")
-		right := theme.DimStyle.Render(fmt.Sprintf("%d orders today", orders))
-		b.WriteString(heroBox("live", left, right, w))
-	}
 
 	b.WriteString("\n")
 

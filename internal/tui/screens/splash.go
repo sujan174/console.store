@@ -26,10 +26,9 @@ type Splash struct {
 	decodeStep int // decode progress (0..render.DecodeSteps)
 	frame      int // global animation frame (decode flicker + prompt cursor blink)
 	splashTick int // ticks since the splash was (re)entered; phases the shimmer
-	sel        int // selected home item (seam for future multi-item home)
-	caps       render.Caps
-	logoCache  string // render.Logo is constant per session; computed once here
-	statsFunc  func() (online, orders int)
+	sel       int // selected home item (seam for future multi-item home)
+	caps      render.Caps
+	logoCache string // render.Logo is constant per session; computed once here
 }
 
 func NewSplash() Splash { return Splash{} }
@@ -56,9 +55,6 @@ func (s Splash) WithSplashTick(n int) Splash { s.splashTick = n; return s }
 
 // WithSelection sets the highlighted home item.
 func (s Splash) WithSelection(i int) Splash { s.sel = i; return s }
-
-// WithStats wires the live-stats provider (reserved for future home copy).
-func (s Splash) WithStats(f func() (online, orders int)) Splash { s.statsFunc = f; return s }
 
 // ItemCount is the number of home items (for cursor bounds in the router).
 func ItemCount() int { return len(homeItems) }
