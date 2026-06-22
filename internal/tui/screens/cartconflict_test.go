@@ -39,7 +39,8 @@ func TestCartConflictFocusMovesHighlight(t *testing.T) {
 	// focus 1: the ▌ bar moves to "keep current".
 	v1 := base.WithFocus(1).View()
 	bar := strings.Index(v1, "▌")
-	if !(bar > strings.Index(v1, "start new") && bar < strings.Index(v1, "keep current")) {
-		t.Errorf("focus 1: ▌ should sit on 'keep current':\n%s", v1)
+	startEnd := strings.Index(v1, "start new") + len("start new")
+	if !(bar > startEnd && bar < strings.Index(v1, "keep current")) {
+		t.Errorf("focus 1: ▌ should sit on 'keep current', after 'start new':\n%s", v1)
 	}
 }
