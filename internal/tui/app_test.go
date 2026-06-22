@@ -700,3 +700,37 @@ func TestSameRestaurantNoConflict(t *testing.T) {
 		t.Fatal("adding from the same restaurant must not open the modal")
 	}
 }
+
+// TestUsualCrossRestaurantOpensConflict exercises the menu "usual" add-path
+// through the conflict modal (the restaurant add-path is covered elsewhere). A
+// cart seeded from a different restaurant, then pressing "u" (whose usual is a
+// Blue Tokai item) must open the modal focused on keep-current, cart untouched.
+func TestUsualCrossRestaurantOpensConflict(t *testing.T) {
+	m := newAtMenu()
+	step := func(k tea.KeyMsg) { u, _ := m.Update(k); m = u.(Model) }
+
+	step(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}) // 2nd coffee place
+	step(tea.KeyMsg{Type: tea.KeyEnter})                     // open it
+	second := m.rest.PlaceData().Name
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add its first item
+	step(tea.KeyMsg{Type: tea.KeyEsc})   // back to menu
+	if len(m.lines) == 0 || m.cartRestaurant != second {
+		t.Fatalf("setup: expected cart seeded from %q, got %d lines / %q", second, len(m.lines), m.cartRestaurant)
+	}
+
+	before := len(m.lines)
+	step(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")}) // usual belongs to Blue Tokai
+
+	if !m.conflictOpen {
+		t.Fatal("pressing u with a different restaurant in the cart should open the conflict modal")
+	}
+	if m.conflictSel != 1 {
+		t.Fatalf("usual conflict should open focused on keep-current (1), got %d", m.conflictSel)
+	}
+	if m.cartRestaurant != second {
+		t.Fatalf("cart restaurant must stay %q while modal open, got %q", second, m.cartRestaurant)
+	}
+	if len(m.lines) != before {
+		t.Fatalf("cart must be untouched while modal open: was %d, now %d", before, len(m.lines))
+	}
+}

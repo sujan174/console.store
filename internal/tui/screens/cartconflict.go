@@ -21,7 +21,8 @@ type CartConflict struct {
 }
 
 // NewCartConflict builds the modal for adding item from incoming while the cart
-// holds items from current. Focus defaults to 0; the root sets it via WithFocus.
+// holds items from current. The root sets the focused button via WithFocus
+// before every render, so the zero-value focus is never shown.
 func NewCartConflict(current, incoming, item string) CartConflict {
 	return CartConflict{current: current, incoming: incoming, item: item}
 }
