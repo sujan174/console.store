@@ -643,6 +643,26 @@ func TestConflictConfirmStartsNewCart(t *testing.T) {
 	}
 }
 
+func TestConflictConfirmAcceptsCapitalY(t *testing.T) {
+	m, _ := openSecondRestaurantWithFirstInCart(t)
+	second := m.rest.PlaceData().Name
+
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // trigger conflict
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Y")}) // confirm with Shift+Y
+	m = u.(Model)
+
+	if m.conflictOpen {
+		t.Fatal("capital Y should close the modal")
+	}
+	if m.cartRestaurant != second {
+		t.Fatalf("capital Y should start the new cart at %q, got %q", second, m.cartRestaurant)
+	}
+	if len(m.lines) != 1 {
+		t.Fatalf("capital Y should leave exactly the one new item, got %d lines", len(m.lines))
+	}
+}
+
 func TestConflictCancelKeepsCart(t *testing.T) {
 	m, first := openSecondRestaurantWithFirstInCart(t)
 	before := len(m.lines)

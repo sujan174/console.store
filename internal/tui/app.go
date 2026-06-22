@@ -397,7 +397,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch k.String() {
 			case "ctrl+c":
 				return m, tea.Quit
-			case "y":
+			case "y", "Y":
 				m = m.startNewCart(m.pendingItem, m.pendingRest)
 				m.conflictOpen = false
 				m.menu = m.menu.WithCartChip(m.cartChip())
