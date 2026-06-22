@@ -82,6 +82,7 @@ type Model struct {
 	// the one the cart holds (Swiggy allows one restaurant per cart).
 	conflictOpen bool
 	conflict     screens.CartConflict
+	conflictSel  int          // focused button: 0 = start new, 1 = keep current
 	pendingItem  catalog.Item // item awaiting the start-new-cart confirmation
 	pendingRest  string       // its restaurant name
 
@@ -389,24 +390,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// While the conflict modal is open it captures all keys: `y` starts the
-		// new cart, anything else (n / esc / etc.) cancels with the cart intact.
-		// ctrl+c still quits. Enter does NOT confirm — Enter is what triggered
-		// the conflict, so a double-tap must never wipe the cart.
+		// While the conflict modal is open it captures all keys: ← → move focus
+		// between "start new" and "keep current", Enter confirms the focused
+		// button. esc cancels (cart intact); ctrl+c quits; any other key is a
+		// no-op so a stray press can neither dismiss the modal nor wipe the cart.
+		// Default focus is "keep current", so a reflexive Enter is always safe.
 		if m.conflictOpen {
 			switch k.String() {
 			case "ctrl+c":
 				return m, tea.Quit
-			case "y", "Y":
-				m = m.startNewCart(m.pendingItem, m.pendingRest)
-				m.conflictOpen = false
-				m.menu = m.menu.WithCartChip(m.cartChip())
-				if m.screen == scrRestaurant {
-					ci := m.rest.CursorIndex()
-					m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).
-						WithAddr(m.addr).WithCursor(ci)
+			case "left", "h":
+				m.conflictSel = 0
+			case "right", "l":
+				m.conflictSel = 1
+			case "enter":
+				if m.conflictSel == 0 { // start new
+					m = m.startNewCart(m.pendingItem, m.pendingRest)
+					m.menu = m.menu.WithCartChip(m.cartChip())
+					if m.screen == scrRestaurant {
+						ci := m.rest.CursorIndex()
+						m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).
+							WithAddr(m.addr).WithCursor(ci)
+					}
 				}
-			default:
+				m.conflictOpen = false
+			case "esc":
 				m.conflictOpen = false
 			}
 			return m, nil
@@ -508,6 +516,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.pendingItem = usual.Item
 						m.pendingRest = rest
 						m.conflict = screens.NewCartConflict(m.cartRestaurant, rest, usual.Item.Name)
+						m.conflictSel = 1
 						m.conflictOpen = true
 						return m, nil
 					}
@@ -552,6 +561,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.pendingItem = it
 					m.pendingRest = rest
 					m.conflict = screens.NewCartConflict(m.cartRestaurant, rest, it.Name)
+					m.conflictSel = 1
 					m.conflictOpen = true
 					return m, nil
 				}
@@ -792,7 +802,7 @@ func (m Model) View() string {
 	// The conflict modal takes over the viewport, centered. It is rare and
 	// blocking, so context behind it is not needed.
 	if m.conflictOpen {
-		dialog := m.conflict.View()
+		dialog := m.conflict.WithFocus(m.conflictSel).View()
 		if m.w == 0 || m.h == 0 {
 			return dialog
 		}

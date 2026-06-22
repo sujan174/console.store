@@ -586,8 +586,8 @@ func openSecondRestaurantWithFirstInCart(t *testing.T) (Model, string) {
 	m := newAtMenu()
 	step := func(k tea.KeyMsg) { u, _ := m.Update(k); m = u.(Model) }
 
-	step(tea.KeyMsg{Type: tea.KeyEnter})                     // open Blue Tokai
-	step(tea.KeyMsg{Type: tea.KeyEnter})                     // add first item
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add first item
 	first := m.cartRestaurant
 	if first == "" || len(m.lines) == 0 {
 		t.Fatalf("setup: expected an item in the cart from %q", first)
@@ -621,6 +621,9 @@ func TestCrossRestaurantAddOpensConflict(t *testing.T) {
 	if m.cartRestaurant != first {
 		t.Fatalf("cart restaurant must stay %q while modal open, got %q", first, m.cartRestaurant)
 	}
+	if m.conflictSel != 1 {
+		t.Fatalf("modal should open focused on keep-current (1), got conflictSel=%d", m.conflictSel)
+	}
 }
 
 func TestConflictConfirmStartsNewCart(t *testing.T) {
@@ -629,7 +632,9 @@ func TestConflictConfirmStartsNewCart(t *testing.T) {
 
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // trigger conflict
 	m = u.(Model)
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}) // confirm
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft}) // focus "start new"
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm
 	m = u.(Model)
 
 	if m.conflictOpen {
@@ -643,23 +648,24 @@ func TestConflictConfirmStartsNewCart(t *testing.T) {
 	}
 }
 
-func TestConflictConfirmAcceptsCapitalY(t *testing.T) {
-	m, _ := openSecondRestaurantWithFirstInCart(t)
-	second := m.rest.PlaceData().Name
+func TestConflictEnterOnDefaultKeepsCart(t *testing.T) {
+	m, first := openSecondRestaurantWithFirstInCart(t)
+	before := len(m.lines)
 
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // trigger conflict
 	m = u.(Model)
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Y")}) // confirm with Shift+Y
+	// default focus is "keep current"; a reflexive Enter must not wipe the cart.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = u.(Model)
 
 	if m.conflictOpen {
-		t.Fatal("capital Y should close the modal")
+		t.Fatal("enter should close the modal")
 	}
-	if m.cartRestaurant != second {
-		t.Fatalf("capital Y should start the new cart at %q, got %q", second, m.cartRestaurant)
+	if m.cartRestaurant != first {
+		t.Fatalf("default-focus enter must keep restaurant %q, got %q", first, m.cartRestaurant)
 	}
-	if len(m.lines) != 1 {
-		t.Fatalf("capital Y should leave exactly the one new item, got %d lines", len(m.lines))
+	if len(m.lines) != before {
+		t.Fatalf("default-focus enter must leave the cart untouched: was %d, now %d", before, len(m.lines))
 	}
 }
 
@@ -669,11 +675,11 @@ func TestConflictCancelKeepsCart(t *testing.T) {
 
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // trigger conflict
 	m = u.(Model)
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}) // cancel
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // cancel
 	m = u.(Model)
 
 	if m.conflictOpen {
-		t.Fatal("cancel should close the modal")
+		t.Fatal("esc should close the modal")
 	}
 	if m.cartRestaurant != first {
 		t.Fatalf("cancel must keep the original cart restaurant %q, got %q", first, m.cartRestaurant)
