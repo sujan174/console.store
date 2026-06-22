@@ -21,11 +21,11 @@ func TestSplashDecodePhase(t *testing.T) {
 func TestSplashLogoPhase(t *testing.T) {
 	s := screens.NewSplash().WithDecode(99) // past DecodeSteps -> settled
 	v := s.View()
-	if !strings.Contains(v, "go to shop") {
-		t.Errorf("logo phase should show the go-to-shop button:\n%s", v)
+	if !strings.Contains(v, "press ↵ to enter") {
+		t.Errorf("settled splash should show the enter prompt:\n%s", v)
 	}
-	if !strings.Contains(v, "connected") {
-		t.Errorf("settled splash should show the ✓ connected line:\n%s", v)
+	if !strings.Contains(v, "ssh ") || !strings.Contains(v, "console.store") {
+		t.Errorf("settled splash should show the ssh prompt line:\n%s", v)
 	}
 	if !strings.Contains(v, "coffee · food · snacks") {
 		t.Errorf("settled splash should show the section subtitle:\n%s", v)

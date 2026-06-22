@@ -40,17 +40,15 @@ func TestStartsOnSplashThenKeyToMenu(t *testing.T) {
 	if m.screen != scrSplash {
 		t.Fatalf("app should start on splash, got screen %d", m.screen)
 	}
-	// a key during the decode skips it and settles the home landing (still splash)
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	m = updated.(Model)
-	if m.screen != scrSplash {
-		t.Fatalf("key during decode should settle home, not leave splash; got %d", m.screen)
+	// Enter mid-animation (decode not finished) goes straight to the shop —
+	// no waiting for the animation, no two-step settle-then-press.
+	if m.decodeStep >= render.DecodeSteps {
+		t.Fatalf("precondition: decode should still be running, got %d", m.decodeStep)
 	}
-	// from the settled home, activating go-to-shop -> menu
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
-	if !strings.Contains(m.View(), "console.store") {
-		t.Errorf("after activating, should be on menu:\n%s", m.View())
+	if m.screen != scrMenu {
+		t.Fatalf("enter during decode should go straight to the shop, got screen %d", m.screen)
 	}
 }
 
