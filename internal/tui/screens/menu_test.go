@@ -25,7 +25,6 @@ func TestMenuHeaderShowsBrandAndCart(t *testing.T) {
 	}
 }
 
-
 func TestMenuNoUsualHidesUsualLine(t *testing.T) {
 	places := []catalog.Place{{ID: "x", Name: "X", ETA: "10 min"}}
 	m := NewMenu(places, catalog.Address{Line: "HSR"}, catalog.SectionCoffee, catalog.Usual{}, false, "")

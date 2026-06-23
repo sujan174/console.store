@@ -44,11 +44,11 @@ func (c Checkout) OrderID() string { return c.orderID }
 // Lines returns the order's cart lines (used to derive the order id).
 func (c Checkout) Lines() []CartLine { return c.lines }
 
-// Total is the bare item total.
+// Total is the bare item total (including each line's selected add-ons).
 func (c Checkout) Total() int {
 	t := 0
 	for _, l := range c.lines {
-		t += l.Item.Price * l.Qty
+		t += l.UnitPrice() * l.Qty
 	}
 	return t
 }

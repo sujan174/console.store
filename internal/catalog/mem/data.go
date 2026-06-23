@@ -2,6 +2,24 @@ package mem
 
 import "console.store/internal/catalog"
 
+// coffeeAddOns / foodAddOns are reusable customization sets shared across items
+// (read-only; the selection state lives per-order, not on the catalog). Items
+// without an AddOns set are added straight to the cart with no popup.
+var coffeeAddOns = []catalog.AddOn{
+	{ID: "no-sugar", Name: "No sugar", Price: 0},
+	{ID: "extra-shot", Name: "Extra espresso shot", Price: 40},
+	{ID: "oat-milk", Name: "Oat milk swap", Price: 30},
+	{ID: "whipped-cream", Name: "Whipped cream", Price: 25},
+	{ID: "hazelnut-syrup", Name: "Hazelnut syrup", Price: 20},
+}
+
+var foodAddOns = []catalog.AddOn{
+	{ID: "extra-cheese", Name: "Extra cheese", Price: 40},
+	{ID: "extra-guac", Name: "Extra guacamole", Price: 60},
+	{ID: "jalapenos", Name: "Pickled jalapeños", Price: 20},
+	{ID: "no-onion", Name: "No onion", Price: 0},
+}
+
 // addresses is the signed-in user's saved set (mock).
 var addresses = []catalog.Address{
 	{ID: "a1", Label: "home", City: "Bangalore", Line: "HSR Layout", Full: "221, 5th Main, HSR Layout, Bangalore 560102", Lat: 12.9116, Lng: 77.6389},
@@ -16,11 +34,11 @@ var places = []catalog.Place{
 	{ID: "blue-tokai", Name: "Blue Tokai", City: "Bangalore", Section: catalog.SectionCoffee, ETA: "35-45 min", Fav: true, Rating: 4.6,
 		ServesAddressIDs: []string{"a1", "a2"}, Items: []catalog.Item{
 			{ID: "bt-cold-coffee", Name: "Cold Coffee", Price: 149, Veg: true, Desc: "blended double espresso · lightly sweet", Kcal: 180, Rating: 4.8, Section: catalog.SectionCoffee},
-			{ID: "bt-hazelnut", Name: "Hazelnut Cold Brew", Price: 169, Veg: true, Desc: "16h steeped · hazelnut · no sugar", Kcal: 120, Rating: 4.7, Section: catalog.SectionCoffee},
+			{ID: "bt-hazelnut", Name: "Hazelnut Cold Brew", Price: 169, Veg: true, Desc: "16h steeped · hazelnut · no sugar", Kcal: 120, Rating: 4.7, Section: catalog.SectionCoffee, AddOns: coffeeAddOns},
 			{ID: "bt-viet", Name: "Vietnamese Cold Brew", Price: 159, Tag: "new", Veg: true, Desc: "robusta · condensed milk · intense", Kcal: 160, Rating: 4.5, Section: catalog.SectionCoffee},
 			{ID: "bt-croissant", Name: "Almond Croissant", Price: 129, Veg: true, Desc: "flaky · frangipane · toasted almonds", Kcal: 430, Rating: 4.6, Section: catalog.SectionCoffee},
 			{ID: "bt-banana", Name: "Banana Bread Slice", Price: 99, Veg: true, Desc: "walnut · moist · baked daily", Kcal: 290, Rating: 4.4, Section: catalog.SectionCoffee},
-			{ID: "bt-latte", Name: "Oat Milk Latte", Price: 179, Veg: true, Desc: "single origin · oat milk · no dairy", Kcal: 140, Rating: 4.5, Section: catalog.SectionCoffee},
+			{ID: "bt-latte", Name: "Oat Milk Latte", Price: 179, Veg: true, Desc: "single origin · oat milk · no dairy", Kcal: 140, Rating: 4.5, Section: catalog.SectionCoffee, AddOns: coffeeAddOns},
 			{ID: "bt-americano", Name: "Americano", Price: 119, Veg: true, Desc: "double shot · hot or iced · bright", Kcal: 10, Rating: 4.4, Section: catalog.SectionCoffee},
 			{ID: "bt-chai", Name: "Masala Chai", Price: 99, Veg: true, Desc: "ginger · cardamom · whole milk · frothy", Kcal: 120, Rating: 4.6, Section: catalog.SectionCoffee},
 			{ID: "bt-brownie", Name: "Chocolate Fudge Brownie", Price: 119, Veg: true, Desc: "dark chocolate · fudgy · sea salt finish", Kcal: 380, Rating: 4.7, Section: catalog.SectionCoffee},
@@ -37,7 +55,7 @@ var places = []catalog.Place{
 			{ID: "tw-muffin", Name: "Blueberry Muffin", Price: 89, Veg: true, Desc: "wild blueberry · streusel top · moist crumb", Kcal: 320, Rating: 4.3, Section: catalog.SectionCoffee},
 			{ID: "tw-granola", Name: "Granola Parfait", Price: 149, Veg: true, Desc: "house granola · greek yogurt · seasonal fruit", Kcal: 280, Rating: 4.4, Section: catalog.SectionCoffee},
 			{ID: "tw-avocado-toast", Name: "Avocado Toast", Price: 199, Veg: true, Desc: "sourdough · smashed avocado · chilli flakes", Kcal: 350, Rating: 4.5, Section: catalog.SectionCoffee},
-			{ID: "tw-cappuccino", Name: "Cappuccino", Price: 129, Veg: true, Desc: "double shot · velvety foam · dusted cocoa", Kcal: 110, Rating: 4.6, Section: catalog.SectionCoffee},
+			{ID: "tw-cappuccino", Name: "Cappuccino", Price: 129, Veg: true, Desc: "double shot · velvety foam · dusted cocoa", Kcal: 110, Rating: 4.6, Section: catalog.SectionCoffee, AddOns: coffeeAddOns},
 		}},
 	{ID: "sleepy-owl", Name: "Sleepy Owl", City: "Bangalore", Section: catalog.SectionCoffee, ETA: "40-50 min", Rating: 4.3,
 		ServesAddressIDs: []string{"a2", "a3"}, Items: []catalog.Item{
@@ -107,7 +125,7 @@ var places = []catalog.Place{
 	// ---- food ----
 	{ID: "california-burrito", Name: "California Burrito", City: "Bangalore", Section: catalog.SectionFood, ETA: "35-45 min", Rating: 4.4,
 		ServesAddressIDs: []string{"a1", "a2"}, Items: []catalog.Item{
-			{ID: "cb-chicken-burrito", Name: "Chicken Burrito", Price: 289, Desc: "grilled chicken · rice · beans · salsa", Kcal: 640, Rating: 4.6, Section: catalog.SectionFood},
+			{ID: "cb-chicken-burrito", Name: "Chicken Burrito", Price: 289, Desc: "grilled chicken · rice · beans · salsa", Kcal: 640, Rating: 4.6, Section: catalog.SectionFood, AddOns: foodAddOns},
 			{ID: "cb-veg-bowl", Name: "Veg Burrito Bowl", Price: 249, Veg: true, Desc: "cilantro rice · beans · guac · no tortilla", Kcal: 520, Rating: 4.5, Section: catalog.SectionFood},
 			{ID: "cb-nachos", Name: "Loaded Nachos", Price: 179, Veg: true, Desc: "cheese · jalapeño · beans · sour cream", Kcal: 480, Rating: 4.3, Section: catalog.SectionFood},
 			{ID: "cb-chicken-quesadilla", Name: "Chicken Quesadilla", Price: 259, Veg: false, Desc: "flour tortilla · spiced chicken · cheddar · salsa", Kcal: 580, Rating: 4.5, Section: catalog.SectionFood},

@@ -146,6 +146,116 @@ func TestEmptyingCartViaRestaurantScreenClearsRestaurant(t *testing.T) {
 	}
 }
 
+// openCustomizeForHazelnut enters Blue Tokai, selects the customizable Hazelnut
+// Cold Brew (item index 1), and presses add — leaving the customise modal open.
+func openCustomizeForHazelnut(t *testing.T) Model {
+	t.Helper()
+	m := newAtMenu()
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // to Hazelnut Cold Brew
+	m = u.(Model)
+	sel, _ := m.rest.Selected()
+	if len(sel.AddOns) == 0 {
+		t.Fatalf("precondition: %q should be customizable", sel.Name)
+	}
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add -> opens modal
+	m = u.(Model)
+	if !m.customizeOpen {
+		t.Fatal("adding a customizable item should open the customise modal")
+	}
+	return m
+}
+
+func TestCustomizableAddOpensModalAndAppliesAddOns(t *testing.T) {
+	m := openCustomizeForHazelnut(t)
+	// Nothing added yet — the modal hasn't been confirmed.
+	if m.cartCount() != 0 {
+		t.Fatalf("cart should be empty until confirm, count=%d", m.cartCount())
+	}
+	// Toggle "Extra espresso shot" (+40): it's add-on index 1.
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = u.(Model)
+	u, _ = m.Update(keyRunes(" "))
+	m = u.(Model)
+	// Confirm.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+
+	if m.customizeOpen {
+		t.Fatal("confirm should close the modal")
+	}
+	if m.cartCount() != 1 {
+		t.Fatalf("cart count = %d, want 1", m.cartCount())
+	}
+	if m.cartTotal() != 169+40 {
+		t.Errorf("cart total = %d, want %d (base 169 + shot 40)", m.cartTotal(), 169+40)
+	}
+	if m.cartRestaurant != "Blue Tokai" {
+		t.Errorf("cartRestaurant = %q, want Blue Tokai", m.cartRestaurant)
+	}
+}
+
+func TestCustomizeEscCancelsAddsNothing(t *testing.T) {
+	m := openCustomizeForHazelnut(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = u.(Model)
+	if m.customizeOpen {
+		t.Fatal("esc should close the modal")
+	}
+	if m.cartCount() != 0 {
+		t.Errorf("esc must not add anything, count=%d", m.cartCount())
+	}
+}
+
+func TestSameAddOnsStackDifferentAddOnsSplit(t *testing.T) {
+	// First add: Hazelnut + Extra shot.
+	m := openCustomizeForHazelnut(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown}) // to Extra shot
+	m = u.(Model)
+	u, _ = m.Update(keyRunes(" ")) // select
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm
+	m = u.(Model)
+
+	// Second add: identical selection -> should stack (qty 2, one line).
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // re-add -> modal
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = u.(Model)
+	u, _ = m.Update(keyRunes(" "))
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+	if len(m.lines) != 1 || m.lines[0].Qty != 2 {
+		t.Fatalf("identical customisation should stack: lines=%d qty=%d", len(m.lines), m.lines[0].Qty)
+	}
+
+	// Third add: different selection (no add-ons) -> separate line.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // modal
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm with nothing selected
+	m = u.(Model)
+	if len(m.lines) != 2 {
+		t.Fatalf("different customisation should be a new line: lines=%d", len(m.lines))
+	}
+}
+
+func TestNonCustomizableAddsDirectly(t *testing.T) {
+	m := newAtMenu()
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // Blue Tokai
+	m = u.(Model)
+	// Item index 0 (Cold Coffee) has no add-ons.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add
+	m = u.(Model)
+	if m.customizeOpen {
+		t.Fatal("non-customizable item should not open the modal")
+	}
+	if m.cartCount() != 1 {
+		t.Errorf("non-customizable item should add directly, count=%d", m.cartCount())
+	}
+}
+
 func TestAppStartsOnMenu(t *testing.T) {
 	m := newAtMenu()
 	out := m.View()

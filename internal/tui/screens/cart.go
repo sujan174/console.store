@@ -2,6 +2,7 @@ package screens
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,8 +22,45 @@ const (
 )
 
 type CartLine struct {
-	Item catalog.Item
-	Qty  int
+	Item   catalog.Item
+	Qty    int
+	AddOns []catalog.AddOn // selected customizations for this line
+}
+
+// UnitPrice is the per-unit price including any selected add-ons.
+func (l CartLine) UnitPrice() int {
+	p := l.Item.Price
+	for _, a := range l.AddOns {
+		p += a.Price
+	}
+	return p
+}
+
+// Key returns the cart-line identity: item id + its sorted add-on ids. Two lines
+// share a key (and so stack) only when the item AND the chosen add-ons match.
+func (l CartLine) Key() string { return LineKey(l.Item, l.AddOns) }
+
+// LineKey computes the stacking key for an item plus a set of add-ons. Add-on
+// ids are sorted so selection order never produces a duplicate line.
+func LineKey(item catalog.Item, addons []catalog.AddOn) string {
+	ids := make([]string, len(addons))
+	for i, a := range addons {
+		ids[i] = a.ID
+	}
+	sort.Strings(ids)
+	return item.ID + "|" + strings.Join(ids, ",")
+}
+
+// AddOnSummary is a short comma-joined list of add-on names (for the cart line).
+func AddOnSummary(addons []catalog.AddOn) string {
+	if len(addons) == 0 {
+		return ""
+	}
+	names := make([]string, len(addons))
+	for i, a := range addons {
+		names[i] = a.Name
+	}
+	return strings.Join(names, ", ")
 }
 
 type Cart struct {
@@ -63,7 +101,7 @@ func (c Cart) toPay() int { return billToPay(c.Total()) }
 func (c Cart) Total() int {
 	t := 0
 	for _, l := range c.lines {
-		t += l.Item.Price * l.Qty
+		t += l.UnitPrice() * l.Qty
 	}
 	return t
 }
@@ -151,12 +189,19 @@ func (c Cart) View() string {
 		return b.String()
 	}
 
-	// Line rows reuse the List full-bleed selected bar.
+	// Line rows reuse the List full-bleed selected bar. Customised lines carry a
+	// faint add-on summary after the name so the same item with different add-ons
+	// reads as distinct.
 	list := components.List{Cursor: c.cursor}
 	for _, l := range c.lines {
+		left := l.Item.Name
+		if s := AddOnSummary(l.AddOns); s != "" {
+			left += theme.FaintStyle.Render("  + " + s)
+		}
+		left += theme.DimStyle.Render(fmt.Sprintf("    x%d", l.Qty))
 		list.Rows = append(list.Rows, components.Row{
-			Left:  l.Item.Name + theme.DimStyle.Render(fmt.Sprintf("    x%d", l.Qty)),
-			Right: theme.PriceStyle.Render(fmt.Sprintf("₹%d", l.Item.Price*l.Qty)),
+			Left:  left,
+			Right: theme.PriceStyle.Render(fmt.Sprintf("₹%d", l.UnitPrice()*l.Qty)),
 		})
 	}
 	b.WriteString(list.View())

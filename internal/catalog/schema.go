@@ -27,6 +27,15 @@ type Address struct {
 	Lng   float64
 }
 
+// AddOn is an optional customization for an item (a Swiggy "addon"). Price is
+// the extra rupees it adds; 0 = free (e.g. "no sugar"). Each add-on is an
+// independent toggle.
+type AddOn struct {
+	ID    string
+	Name  string
+	Price int // extra rupees; 0 = free
+}
+
 // Item is one orderable item. SwiggyID maps to a live menu item later.
 type Item struct {
 	ID       string
@@ -39,6 +48,7 @@ type Item struct {
 	Kcal     int     // calories; 0 = unknown
 	Rating   float64 // out of 5; 0 = unknown
 	Section  Section
+	AddOns   []AddOn // optional customizations; empty = not customizable
 }
 
 // Place is a restaurant/store. SwiggyID maps to a live restaurant id.

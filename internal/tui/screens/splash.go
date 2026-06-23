@@ -23,10 +23,11 @@ const (
 )
 
 type Splash struct {
-	decodeStep int // decode progress (0..render.DecodeSteps)
-	frame      int // global animation frame (decode flicker + prompt cursor blink)
-	splashTick int // ticks since the splash was (re)entered; phases the shimmer
-	sel        int // selected home item (seam for future multi-item home)
+	decodeStep int    // decode progress (0..render.DecodeSteps)
+	frame      int    // global animation frame (decode flicker + prompt cursor blink)
+	splashTick int    // ticks since the splash was (re)entered; phases the shimmer
+	sel        int    // selected home item (seam for future multi-item home)
+	phrase     string // Minecraft-style splash line shown by the wordmark
 	caps       render.Caps
 	logoCache  string // render.Logo is constant per session; computed once here
 }
@@ -56,6 +57,9 @@ func (s Splash) WithSplashTick(n int) Splash { s.splashTick = n; return s }
 // WithSelection sets the highlighted home item.
 func (s Splash) WithSelection(i int) Splash { s.sel = i; return s }
 
+// WithPhrase sets the Minecraft-style splash line shown by the wordmark.
+func (s Splash) WithPhrase(p string) Splash { s.phrase = p; return s }
+
 // ItemCount is the number of home items (for cursor bounds in the router).
 func ItemCount() int { return len(homeItems) }
 
@@ -79,6 +83,49 @@ func padRight(lines []string, width int) {
 			lines[i] = l + strings.Repeat(" ", d)
 		}
 	}
+}
+
+// phraseBox renders the Minecraft-style splash line inside a dotted border whose
+// bright "sparks" march around the perimeter (driven by frame), right-aligned to
+// the wordmark's right edge so it hugs the top-right of CONSOLE without widening
+// the centred block. Returns the three fully-indented lines, or nil when there
+// is no phrase.
+func phraseBox(phrase string, frame, wmW int) []string {
+	if phrase == "" {
+		return nil
+	}
+	w := lipgloss.Width(phrase) + 4 // text + a space of padding + a border cell each side
+
+	dim := theme.Fg("#8a6d3b")               // muted gold — the resting dots
+	bright := theme.Fg("#f9d99a").Bold(true) // the travelling sparks
+
+	const gap = 4     // one bright spark every `gap` cells
+	step := frame / 3 // advance ~every 180ms so the sparks march, not strobe
+
+	// cell renders the border glyph at clockwise perimeter index i: a bright
+	// star on the marching beat, otherwise a dim dot.
+	cell := func(i int) string {
+		if ((i+step)%gap+gap)%gap == 0 {
+			return bright.Render("*")
+		}
+		return dim.Render("·")
+	}
+
+	// Clockwise perimeter indices: top 0..w-1, right side = w, bottom (right to
+	// left) = w+1..2w, left side = 2w+1.
+	var top, bot strings.Builder
+	for c := 0; c < w; c++ {
+		top.WriteString(cell(c))
+		bot.WriteString(cell(2*w - c))
+	}
+	mid := cell(2*w+1) + " " + theme.Fg(theme.Gold).Bold(true).Render(phrase) + " " + cell(w)
+
+	pad := wmW - w
+	if pad < 0 {
+		pad = 0
+	}
+	lead := strings.Repeat(" ", bodyIndent+pad)
+	return []string{lead + top.String(), lead + mid, lead + bot.String()}
 }
 
 // brandUnderE renders the gold "store.in" mark right-aligned to the wordmark's
@@ -111,7 +158,7 @@ func sshLine() string {
 
 // tagline is the banner's one-line descriptor, inset under the wordmark.
 func tagline() string {
-	return strings.Repeat(" ", bodyIndent) + theme.DimStyle.Render("coffee · food · snacks")
+	return strings.Repeat(" ", bodyIndent) + theme.DimStyle.Render("coffee · food · quick snacks")
 }
 
 // prompt is the settled call-to-action: a live shell prompt with a blinking
@@ -174,7 +221,16 @@ func (s Splash) view() string {
 	// tagline below it.
 	logoLines = append(logoLines, brandUnderE(logoLines))
 
-	lines := []string{sshLine(), "", ""}
+	// The bordered splash phrase hugs the top-right of the wordmark
+	// (Minecraft-style), appearing once the logo has settled. A blank line below
+	// it keeps it clear of CONSOLE.
+	box := phraseBox(s.phrase, s.frame, blockWidth(logoLines))
+
+	lines := []string{sshLine(), ""}
+	if len(box) > 0 {
+		lines = append(lines, box...)
+	}
+	lines = append(lines, "")
 	for _, l := range logoLines {
 		lines = append(lines, ind+l)
 	}

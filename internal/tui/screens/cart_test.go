@@ -77,6 +77,49 @@ func TestCartEmptyDropsRestaurantHeader(t *testing.T) {
 	}
 }
 
+func TestCartLineAddOnsPriceAndKey(t *testing.T) {
+	whip := catalog.AddOn{ID: "whip", Name: "Whipped cream", Price: 25}
+	shot := catalog.AddOn{ID: "shot", Name: "Extra shot", Price: 40}
+	item := catalog.Item{ID: "cap", Name: "Cappuccino", Price: 129}
+
+	plain := screens.CartLine{Item: item, Qty: 1}
+	custom := screens.CartLine{Item: item, Qty: 1, AddOns: []catalog.AddOn{whip, shot}}
+
+	if plain.UnitPrice() != 129 {
+		t.Errorf("plain unit price = %d, want 129", plain.UnitPrice())
+	}
+	if custom.UnitPrice() != 194 {
+		t.Errorf("custom unit price = %d, want 194", custom.UnitPrice())
+	}
+
+	// Distinct add-on sets -> distinct keys; order of add-ons must not matter.
+	if plain.Key() == custom.Key() {
+		t.Error("plain and customised lines must not share a key")
+	}
+	k1 := screens.LineKey(item, []catalog.AddOn{whip, shot})
+	k2 := screens.LineKey(item, []catalog.AddOn{shot, whip})
+	if k1 != k2 {
+		t.Errorf("add-on order changed the key: %q vs %q", k1, k2)
+	}
+}
+
+func TestCartShowsAddOnSummaryAndAdjustedPrice(t *testing.T) {
+	item := catalog.Item{ID: "cap", Name: "Cappuccino", Price: 129}
+	c := screens.NewCart("Third Wave", []screens.CartLine{
+		{Item: item, Qty: 2, AddOns: []catalog.AddOn{{ID: "whip", Name: "Whipped cream", Price: 25}}},
+	})
+	v := c.View()
+	if !strings.Contains(v, "Whipped cream") {
+		t.Errorf("cart should list the add-on:\n%s", v)
+	}
+	if !strings.Contains(v, "₹308") { // (129+25) * 2
+		t.Errorf("cart line total should include add-ons (₹308):\n%s", v)
+	}
+	if c.Total() != 308 {
+		t.Errorf("cart total = %d, want 308", c.Total())
+	}
+}
+
 func TestCartIncrementDecrementRemove(t *testing.T) {
 	lines := []screens.CartLine{
 		{Item: catalog.Item{Name: "Cold Coffee", Price: 149}, Qty: 1},

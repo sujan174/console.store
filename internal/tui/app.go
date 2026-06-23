@@ -78,13 +78,19 @@ type Model struct {
 	lines          []screens.CartLine
 	cartRestaurant string
 
+	// customize modal: shown when adding an item that has add-ons (Swiggy's
+	// "customise" sheet). Owns its own cursor + selection state.
+	customizeOpen bool
+	customize     screens.Customize
+
 	// conflict modal: shown when adding an item from a restaurant other than
 	// the one the cart holds (Swiggy allows one restaurant per cart).
-	conflictOpen bool
-	conflict     screens.CartConflict
-	conflictSel  int          // focused button: 0 = start new, 1 = keep current
-	pendingItem  catalog.Item // item awaiting the start-new-cart confirmation
-	pendingRest  string       // its restaurant name
+	conflictOpen  bool
+	conflict      screens.CartConflict
+	conflictSel   int             // focused button: 0 = start new, 1 = keep current
+	pendingItem   catalog.Item    // item awaiting the start-new-cart confirmation
+	pendingAddOns []catalog.AddOn // its chosen add-ons
+	pendingRest   string          // its restaurant name
 
 	inst    screens.Instamart
 	imLines []screens.CartLine
@@ -92,9 +98,10 @@ type Model struct {
 
 	splash       screens.Splash
 	decodeStep   int
-	splashTick   int // ticks since the splash was (re)entered; phases the shimmer
-	homeSel      int // selected home-menu item on the splash
-	lastEscFrame int // frame of the previous Esc (for double-Esc home detection)
+	splashTick   int    // ticks since the splash was (re)entered; phases the shimmer
+	splashPhrase string // Minecraft-style splash line, re-rolled each time we land
+	homeSel      int    // selected home-menu item on the splash
+	lastEscFrame int    // frame of the previous Esc (for double-Esc home detection)
 
 	track     screens.Tracking
 	trackStep int
@@ -114,6 +121,7 @@ func New(caps render.Caps) Model {
 	section := catalog.SectionCoffee
 	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1}
 	m.splash = screens.NewSplash().WithCaps(caps)
+	m.splashPhrase = screens.RandomPhrase("")
 	m.menu = m.buildMenu()
 	return m
 }
@@ -146,19 +154,23 @@ func sectionIndex(s catalog.Section) int {
 }
 
 // appendOrInc adds item to lines, incrementing the qty if it is already present.
-func appendOrInc(lines []screens.CartLine, item catalog.Item) []screens.CartLine {
+func appendOrInc(lines []screens.CartLine, item catalog.Item, addons []catalog.AddOn) []screens.CartLine {
+	key := screens.LineKey(item, addons)
 	for i := range lines {
-		if lines[i].Item.ID == item.ID {
+		if lines[i].Key() == key {
 			lines[i].Qty++
 			return lines
 		}
 	}
-	return append(lines, screens.CartLine{Item: item, Qty: 1})
+	return append(lines, screens.CartLine{Item: item, Qty: 1, AddOns: addons})
 }
 
-// decItem decrements the qty of item id in lines, removing the line at qty 0.
-func decItem(lines []screens.CartLine, id string) []screens.CartLine {
-	for i := range lines {
+// decLastByItem decrements the most recently added line of item id (the last
+// matching line), removing it at qty 0. The restaurant inline stepper uses this:
+// several customised variants of one item can coexist, and removing the latest
+// add is the least surprising undo. Per-variant control lives in the cart.
+func decLastByItem(lines []screens.CartLine, id string) []screens.CartLine {
+	for i := len(lines) - 1; i >= 0; i-- {
 		if lines[i].Item.ID == id {
 			lines[i].Qty--
 			if lines[i].Qty <= 0 {
@@ -176,11 +188,59 @@ func (m Model) conflictsWithCart(rest string) bool {
 	return len(m.lines) > 0 && m.cartRestaurant != "" && m.cartRestaurant != rest
 }
 
-// startNewCart clears the food cart and seeds it with a single item from rest —
-// the Swiggy one-restaurant-per-cart resolution.
-func (m Model) startNewCart(item catalog.Item, rest string) Model {
-	m.lines = []screens.CartLine{{Item: item, Qty: 1}}
+// startNewCart clears the food cart and seeds it with a single item (and its
+// chosen add-ons) from rest — the Swiggy one-restaurant-per-cart resolution.
+func (m Model) startNewCart(item catalog.Item, addons []catalog.AddOn, rest string) Model {
+	m.lines = []screens.CartLine{{Item: item, Qty: 1, AddOns: addons}}
 	m.cartRestaurant = rest
+	return m
+}
+
+// beginAdd starts adding item from rest. If the item is customizable it opens
+// the customise modal (the add is finished on confirm); otherwise it adds the
+// item straight away. Centralising this keeps the restaurant-add, usual-add and
+// modal-confirm paths in one place.
+func (m Model) beginAdd(item catalog.Item, rest string) Model {
+	if len(item.AddOns) > 0 {
+		m.customize = screens.NewCustomize(item)
+		m.customizeOpen = true
+		m.pendingRest = rest
+		return m
+	}
+	return m.commitAdd(item, nil, rest)
+}
+
+// commitAdd adds item (with its chosen add-ons) from rest to the cart, raising
+// the cart-conflict modal first when the cart belongs to another restaurant.
+func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, rest string) Model {
+	if m.conflictsWithCart(rest) {
+		m.pendingItem = item
+		m.pendingAddOns = addons
+		m.pendingRest = rest
+		m.conflict = screens.NewCartConflict(m.cartRestaurant, rest, item.Name)
+		m.conflictSel = 1
+		m.conflictOpen = true
+		return m
+	}
+	wasEmpty := len(m.lines) == 0
+	m.lines = appendOrInc(m.lines, item, addons)
+	if wasEmpty {
+		m.cartRestaurant = rest
+	}
+	return m
+}
+
+// refreshAfterAdd re-syncs the chips and the live restaurant stepper after a
+// cart change (a no-op for the conflict/customize paths, which haven't committed
+// yet). Returns the updated model.
+func (m Model) refreshAfterAdd() Model {
+	m.menu = m.menu.WithCartChip(m.cartChip())
+	if m.screen == scrRestaurant {
+		ci := m.rest.CursorIndex()
+		info := m.rest.InfoOpen()
+		m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).
+			WithAddr(m.addr).WithCursor(ci).WithInfo(info)
+	}
 	return m
 }
 
@@ -241,6 +301,8 @@ func (m Model) toSplash() Model {
 	m.splashTick = 0
 	m.homeSel = 0
 	m.cmdOpen = false
+	// Re-roll the splash phrase so returning home shows a fresh one-liner.
+	m.splashPhrase = screens.RandomPhrase(m.splashPhrase)
 	return m
 }
 
@@ -252,7 +314,7 @@ func (m Model) blinkOn() bool { return (m.frame/9)%2 == 0 }
 func (m Model) cartTotal() int {
 	t := 0
 	for _, l := range m.lines {
-		t += l.Item.Price * l.Qty
+		t += l.UnitPrice() * l.Qty
 	}
 	return t
 }
@@ -305,7 +367,7 @@ func (m Model) cartRestaurantServes(addr catalog.Address) bool {
 func (m Model) imCartTotal() int {
 	t := 0
 	for _, l := range m.imLines {
-		t += l.Item.Price * l.Qty
+		t += l.UnitPrice() * l.Qty
 	}
 	return t
 }
@@ -403,18 +465,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.conflictSel = 1
 			case "enter":
 				if m.conflictSel == 0 { // start new
-					m = m.startNewCart(m.pendingItem, m.pendingRest)
-					m.menu = m.menu.WithCartChip(m.cartChip())
-					if m.screen == scrRestaurant {
-						ci := m.rest.CursorIndex()
-						info := m.rest.InfoOpen()
-						m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).
-							WithAddr(m.addr).WithCursor(ci).WithInfo(info)
-					}
+					m = m.startNewCart(m.pendingItem, m.pendingAddOns, m.pendingRest)
+					m = m.refreshAfterAdd()
 				}
 				m.conflictOpen = false
 			case "esc":
 				m.conflictOpen = false
+			}
+			return m, nil
+		}
+
+		// The customise modal captures all keys while open: ↑↓ move over add-ons,
+		// space/←→ toggle the focused one, Enter adds the item with the chosen set
+		// (then the cart-conflict check still applies), esc cancels.
+		if m.customizeOpen {
+			switch k.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.customizeOpen = false
+			case "up", "k":
+				m.customize = m.customize.Up()
+			case "down", "j":
+				m.customize = m.customize.Down()
+			case " ", "space", "left", "right", "h", "l", "x":
+				m.customize = m.customize.Toggle()
+			case "enter":
+				item := m.customize.Item()
+				addons := m.customize.SelectedAddOns()
+				m.customizeOpen = false
+				m = m.commitAdd(item, addons, m.pendingRest)
+				if !m.conflictOpen { // committed directly (no restaurant clash)
+					m = m.refreshAfterAdd()
+				}
 			}
 			return m, nil
 		}
@@ -511,20 +594,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if p, ok := m.repo.Menu(usual.PlaceID); ok {
 						rest = p.Name
 					}
-					if m.conflictsWithCart(rest) {
-						m.pendingItem = usual.Item
-						m.pendingRest = rest
-						m.conflict = screens.NewCartConflict(m.cartRestaurant, rest, usual.Item.Name)
-						m.conflictSel = 1
-						m.conflictOpen = true
-						return m, nil
+					m = m.beginAdd(usual.Item, rest)
+					if !m.customizeOpen && !m.conflictOpen {
+						m.menu = m.menu.WithCartChip(m.cartChip())
 					}
-					wasEmpty := len(m.lines) == 0
-					m.lines = appendOrInc(m.lines, usual.Item)
-					if wasEmpty {
-						m.cartRestaurant = rest
-					}
-					m.menu = m.menu.WithCartChip(m.cartChip())
 				}
 				return m, nil
 			case "c":
@@ -555,38 +628,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !ok {
 					return m, nil
 				}
-				rest := m.rest.PlaceData().Name
-				if m.conflictsWithCart(rest) {
-					m.pendingItem = it
-					m.pendingRest = rest
-					m.conflict = screens.NewCartConflict(m.cartRestaurant, rest, it.Name)
-					m.conflictSel = 1
-					m.conflictOpen = true
-					return m, nil
+				m = m.beginAdd(it, m.rest.PlaceData().Name)
+				if m.customizeOpen || m.conflictOpen {
+					return m, nil // a modal will finish the add
 				}
-				wasEmpty := len(m.lines) == 0
-				m.lines = appendOrInc(m.lines, it)
-				if wasEmpty {
-					m.cartRestaurant = rest
-				}
-				m.menu = m.menu.WithCartChip(m.cartChip())
-				ci := m.rest.CursorIndex()
-				info := m.rest.InfoOpen()
-				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithAddr(m.addr).WithCursor(ci).WithInfo(info)
+				m = m.refreshAfterAdd()
 				return m, nil
 			case "left", "h":
 				it, ok := m.rest.Selected()
 				if !ok {
 					return m, nil
 				}
-				m.lines = decItem(m.lines, it.ID)
+				m.lines = decLastByItem(m.lines, it.ID)
 				if len(m.lines) == 0 {
 					m.cartRestaurant = ""
 				}
-				m.menu = m.menu.WithCartChip(m.cartChip())
-				ci := m.rest.CursorIndex()
-				info := m.rest.InfoOpen()
-				m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).WithAddr(m.addr).WithCursor(ci).WithInfo(info)
+				m = m.refreshAfterAdd()
 				return m, nil
 			case "c":
 				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta())
@@ -691,7 +748,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !ok {
 					return m, nil
 				}
-				m.imLines = appendOrInc(m.imLines, it)
+				m.imLines = appendOrInc(m.imLines, it, nil)
 				ci := m.inst.CursorIndex()
 				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartChip()).WithCursor(ci)
 				return m, nil
@@ -700,7 +757,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !ok {
 					return m, nil
 				}
-				m.imLines = decItem(m.imLines, it.ID)
+				m.imLines = decLastByItem(m.imLines, it.ID)
 				ci := m.inst.CursorIndex()
 				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartChip()).WithCursor(ci)
 				return m, nil
@@ -799,15 +856,22 @@ func (m Model) View() string {
 	// already provides the #15161f-ish canvas.
 	if m.screen == scrSplash {
 		sp := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSplashTick(m.splashTick).
-			WithSelection(m.homeSel).View()
+			WithSelection(m.homeSel).WithPhrase(m.splashPhrase).View()
 		if m.w == 0 || m.h == 0 {
 			return sp
 		}
 		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, sp)
 	}
 
-	// The conflict modal takes over the viewport, centered. It is rare and
-	// blocking, so context behind it is not needed.
+	// The customise / conflict modals take over the viewport, centered. They are
+	// blocking, so the context behind them is not needed.
+	if m.customizeOpen {
+		dialog := m.customize.View()
+		if m.w == 0 || m.h == 0 {
+			return dialog
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, dialog)
+	}
 	if m.conflictOpen {
 		dialog := m.conflict.WithFocus(m.conflictSel).View()
 		if m.w == 0 || m.h == 0 {
