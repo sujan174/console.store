@@ -155,8 +155,6 @@ func (s Restaurant) View() string {
 	var b strings.Builder
 	w := components.ContentWidth()
 
-	b.WriteString("\n") // top padding
-
 	// row 1: esc  <name>            deliver to ⊕ <addr>
 	left := theme.PriceStyle.Render("esc") + "  " + theme.BrightStyle.Bold(true).Render(s.p.Name)
 	right := theme.DimStyle.Render("deliver to ") + theme.CursorStyle.Render("⊕ ") + theme.BrightStyle.Render(s.addr.Line)

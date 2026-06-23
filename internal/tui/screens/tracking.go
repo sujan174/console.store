@@ -19,37 +19,71 @@ func NewTracking(place, addrLine, orderID string) Tracking {
 	return Tracking{place: place, addrLine: addrLine, orderID: orderID}
 }
 
-// trackSteps are the timeline rows (reference line 894).
+// trackSteps are the timeline rows. The order is "delivered" once trackStep
+// reaches len(trackSteps) (all four marked done).
 var trackSteps = []string{"order confirmed", "preparing …", "out for delivery", "delivered"}
 
-// trackQuips are the rider status quips indexed by min(trackStep,3) (reference 919-922).
+// trackQuips are the rider status quips indexed by min(trackStep,3).
 var trackQuips = []string{"picking up your order", "weaving through traffic", "almost at your gate", "knock knock"}
 
-// progressBar renders the dotted route with a solid green portion and a 🛵 at
-// the current fraction (reference 403-409).
-func progressBar(step int) string {
+// wheelSpin are the rotating wheel glyphs (quarter-turns) cycled per frame so
+// the courier's wheels appear to spin.
+var wheelSpin = []string{"◐", "◓", "◑", "◒"}
+
+// routeScene renders the 3-row animated courier: a rider on a two-wheeler riding
+// the road from the restaurant (left) to the delivery address (right). The
+// wheels spin and speed streaks flow each frame; once delivered the bike parks
+// at the destination with its wheels still. No emoji — pure box/line glyphs.
+func routeScene(step, frame, w int) []string {
+	if w < 16 {
+		w = 16
+	}
+	const spriteW = 5
+	delivered := step >= len(trackSteps)
+
 	pct := step
 	if pct > 3 {
 		pct = 3
 	}
-	w := components.ContentWidth()
-	filled := pct * w / 3
-	var b strings.Builder
-	for i := 0; i < w; i++ {
-		if i == filled && filled < w {
-			b.WriteString("🛵")
-		} else if i < filled {
-			b.WriteString(theme.GreenStyle.Render("━"))
-		} else {
-			b.WriteString(theme.FaintStyle.Render("─"))
-		}
+	x := pct * (w - spriteW) / 3 // left column of the 5-wide sprite
+
+	wheel := "O" // parked
+	if !delivered {
+		wheel = wheelSpin[(frame/2)%len(wheelSpin)]
 	}
-	return b.String()
+
+	// Row 2 — the road: green where travelled, the bike chassis + spinning
+	// wheels, faint track ahead.
+	rightLen := w - x - spriteW
+	if rightLen < 0 {
+		rightLen = 0
+	}
+	road := theme.GreenStyle.Render(strings.Repeat("═", x)) +
+		theme.PriceStyle.Render(wheel) + theme.GreenStyle.Render("═══") + theme.PriceStyle.Render(wheel) +
+		theme.FaintStyle.Render(strings.Repeat("─", rightLen))
+
+	// Rows 0/1 — the rider, hunched over the chassis (col x+1).
+	head := strings.Repeat(" ", x+1) + theme.BrightStyle.Render("_o")
+	body := strings.Repeat(" ", x+1) + theme.BrightStyle.Render(`-\<`)
+
+	// Speed streaks flowing behind the bike while moving.
+	if !delivered && x >= 3 {
+		streak := []rune("~  ~")
+		for i := range streak {
+			if (i+frame/2)%2 == 0 {
+				streak[i] = ' '
+			}
+		}
+		body = strings.Repeat(" ", x-3) + theme.FaintStyle.Render(string(streak)) + theme.BrightStyle.Render(`-\<`)
+	}
+
+	return []string{head, body, road}
 }
 
-func (t Tracking) View(trackStep int, spin string) string {
+func (t Tracking) View(trackStep, frame int, spin string) string {
 	var b strings.Builder
 	w := components.ContentWidth()
+	delivered := trackStep >= len(trackSteps)
 
 	// header: ← tracking · {orderId}  …  {place}
 	b.WriteString("  " + justify(
@@ -58,15 +92,18 @@ func (t Tracking) View(trackStep int, spin string) string {
 	b.WriteString(components.Divider())
 	b.WriteString("\n")
 
-	// route endpoints: ☕ {place}  …  {addr.line} ⌂
+	// route endpoints (text labels, no emoji): {place}  …  {addr.line}
 	b.WriteString("  " + justify(
-		theme.GoldStyle.Render("☕ "+t.place),
-		theme.PriceStyle.Render(t.addrLine+" ⌂"), w) + "\n")
+		theme.GoldStyle.Render(t.place),
+		theme.PriceStyle.Render(t.addrLine), w) + "\n")
 
-	// animated route map: ● ━━━🛵──── ⌂
-	b.WriteString("  " + theme.GreenStyle.Render("●") + progressBar(trackStep) + theme.PriceStyle.Render("⌂") + "\n\n")
+	// animated courier scene (3 rows)
+	for _, line := range routeScene(trackStep, frame, w) {
+		b.WriteString("  " + line + "\n")
+	}
+	b.WriteString("\n")
 
-	// step rows (reference 894-901)
+	// step rows
 	for i, label := range trackSteps {
 		var mark, text string
 		switch {
@@ -84,12 +121,17 @@ func (t Tracking) View(trackStep int, spin string) string {
 	}
 	b.WriteString("\n")
 
-	// ETA row
-	b.WriteString("  " + theme.DimStyle.Render(padTo("ETA", 6)) + theme.GreenStyle.Render("~32 min") + "\n")
-
-	// rider line: rider · Imran · KA 05 1234 · {quip}
-	quip := trackQuips[min(trackStep, 3)]
-	b.WriteString("  " + theme.DimStyle.Render("rider · Imran · KA 05 1234 · ") + theme.GreenStyle.Render(quip) + "\n\n")
+	if delivered {
+		// status + the delivered note.
+		b.WriteString("  " + theme.DimStyle.Render(padTo("status", 7)) + theme.GreenStyle.Render("delivered ✓") + "\n")
+		b.WriteString("  " + theme.DimStyle.Render("rider · Imran · KA 05 1234 · ") + theme.GreenStyle.Render("handed over") + "\n\n")
+		b.WriteString("  " + theme.GreenStyle.Bold(true).Render("enjoy your order!") + "\n")
+		b.WriteString("  " + theme.DimStyle.Render("rate the delivery & rider later in the app when possible — thank you!") + "\n\n")
+	} else {
+		b.WriteString("  " + theme.DimStyle.Render(padTo("ETA", 7)) + theme.GreenStyle.Render("~32 min") + "\n")
+		quip := trackQuips[min(trackStep, len(trackQuips)-1)]
+		b.WriteString("  " + theme.DimStyle.Render("rider · Imran · KA 05 1234 · ") + theme.GreenStyle.Render(quip) + "\n\n")
+	}
 
 	b.WriteString(components.Hint("esc", "back to menu"))
 	return b.String()

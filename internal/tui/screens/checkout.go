@@ -58,9 +58,9 @@ func (c Checkout) toPay() int { return billToPay(c.Total()) }
 
 func (c Checkout) Init() tea.Cmd { return nil }
 
-func (c Checkout) View() string {
+func (c Checkout) View(frame int) string {
 	if c.placed {
-		return c.confirmView()
+		return c.confirmView(frame)
 	}
 	return c.summaryView()
 }
@@ -110,18 +110,28 @@ func (c Checkout) summaryView() string {
 	return b.String()
 }
 
-func (c Checkout) confirmView() string {
+func (c Checkout) confirmView(frame int) string {
 	var b strings.Builder
 
-	// steam
-	b.WriteString("  " + theme.GreenStyle.Render("˜ ˷ ˜") + "\n")
+	// A steaming coffee cup marks the placed order. The steam wisps waver each
+	// frame; the mug has a clear C-handle on the right and a saucer beneath, so
+	// it reads as a cup (not a battery).
+	steam := []string{"     ( (", "      ) )"}
+	if (frame/8)%2 == 1 {
+		steam = []string{"      ) )", "     ( ("}
+	}
+	for _, s := range steam {
+		b.WriteString("  " + theme.DimStyle.Render(s) + "\n")
+	}
 
-	// coffee cup (reference 368-371)
 	cup := []string{
-		"╭────────╮",
-		"│ ▒▒▒▒▒▒ │╮",
-		"│ ▒▒▒▒▒▒ │╯",
-		"╰────────╯",
+		"   ╭───────╮",
+		"   │~~~~~~~│╮",
+		"   │▒▒▒▒▒▒▒│ )",
+		"   │▒▒▒▒▒▒▒│ )",
+		"   │▒▒▒▒▒▒▒│╯",
+		"   ╰───────╯",
+		"  ╰─────────╯",
 	}
 	for _, line := range cup {
 		b.WriteString("  " + theme.GoldStyle.Render(line) + "\n")

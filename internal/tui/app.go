@@ -286,7 +286,9 @@ func (m Model) onTick() Model {
 	}
 	if m.screen == scrTracking {
 		m.trackTick++
-		if m.trackTick%70 == 0 && m.trackStep < 3 {
+		// Advance through all four timeline steps; the final step (== 4) marks the
+		// order delivered and reveals the thank-you note.
+		if m.trackTick%70 == 0 && m.trackStep < 4 {
 			m.trackStep++
 		}
 	}
@@ -884,7 +886,7 @@ func (m Model) View() string {
 	infoPanel := "" // restaurant detail panel ('i'); pinned above the hints below
 	switch m.screen {
 	case scrRestaurant:
-		chrome := 14
+		chrome := 14 + screens.BrandHeaderLines
 		if m.rest.InfoOpen() {
 			infoPanel = m.rest.InfoView(components.ContentWidth())
 			chrome += lipgloss.Height(infoPanel) + 1
@@ -895,15 +897,15 @@ func (m Model) View() string {
 	case scrAddress:
 		body = m.addrScreen.View()
 	case scrCheckout, scrConfirm:
-		body = m.checkout.View()
+		body = m.checkout.View(m.frame)
 	case scrTracking:
-		body = m.track.View(m.trackStep, m.spin())
+		body = m.track.View(m.trackStep, m.frame, m.spin())
 	case scrInstamart:
-		body = m.inst.WithMaxRows(m.listRows(11)).View()
+		body = m.inst.WithMaxRows(m.listRows(11 + screens.BrandHeaderLines)).View()
 	case scrImCart:
 		body = m.imCart.View()
 	default: // scrMenu
-		body = m.menu.WithMaxRows(m.listRows(13)).View()
+		body = m.menu.WithMaxRows(m.listRows(13 + screens.BrandHeaderLines)).View()
 	}
 
 	// The footer — the screen's hint line + optional command palette + status
@@ -911,6 +913,10 @@ func (m Model) View() string {
 	// line; lift it out so it sits WITH the status bar instead of floating
 	// after the content with a large void between them.
 	content, hint := splitHint(body)
+
+	// Centered brand logo at the top of every post-landing screen, with a gap
+	// below it (the splash has its own big wordmark, so it is excluded above).
+	content = screens.BrandBanner(components.FrameWidth()) + content
 
 	footer := ""
 	if infoPanel != "" {

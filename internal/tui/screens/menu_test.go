@@ -10,18 +10,30 @@ import (
 	"console.store/internal/catalog/mem"
 )
 
-func TestMenuHeaderShowsBrandAndCart(t *testing.T) {
+func TestMenuHeaderShowsAddressAndCart(t *testing.T) {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
 	places := repo.Places(addr, catalog.SectionCoffee)
 	usual, ok := repo.Usual(addr)
 	m := NewMenu(places, addr, catalog.SectionCoffee, usual, ok, "cart · ₹338")
 	out := m.View()
-	if !strings.Contains(out, "consolestore.in") {
-		t.Fatal("missing brand")
+	// The brand logo now lives in the root banner, not the menu header; the menu
+	// header shows the delivery address.
+	if !strings.Contains(out, "deliver to") || !strings.Contains(out, addr.Line) {
+		t.Fatalf("missing delivery address header:\n%s", out)
 	}
 	if !strings.Contains(out, "cart · ₹338") {
 		t.Fatalf("missing cart total:\n%s", out)
+	}
+}
+
+func TestBrandBannerShowsLogoAndVersion(t *testing.T) {
+	out := BrandBanner(80)
+	if !strings.Contains(out, "consolestore.in") {
+		t.Errorf("brand banner should show the wordmark:\n%s", out)
+	}
+	if !strings.Contains(out, Version) {
+		t.Errorf("brand banner should show the version %q:\n%s", Version, out)
 	}
 }
 

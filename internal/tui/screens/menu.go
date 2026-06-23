@@ -12,8 +12,8 @@ import (
 	"console.store/internal/tui/theme"
 )
 
-// version is the build tag shown next to the brand in the header.
-const version = "v1.4"
+// Version is the build tag shown under the brand logo (rendered by the root).
+const Version = "v1.4"
 
 type Menu struct {
 	places    []catalog.Place
@@ -140,14 +140,12 @@ func (m Menu) View() string {
 	var b strings.Builder
 	w := components.ContentWidth()
 
-	b.WriteString("\n") // top padding
-
-	// row 1: brand + version  |  deliver to ⊕ <addr> · <label> ⌄
-	brand := theme.BrandStyle.Render("consolestore.in") + " " + theme.FaintStyle.Render(version)
+	// row 1: deliver to ⊕ <addr> · <label> ⌄  (the brand logo is rendered as a
+	// centered banner above every screen by the root, so it isn't repeated here).
 	deliver := theme.DimStyle.Render("deliver to ") + theme.CursorStyle.Render("⊕ ") +
 		theme.BrightStyle.Render(m.address.Line) + theme.DimStyle.Render(" · "+m.address.Label) +
 		theme.FaintStyle.Render(" ⌄")
-	b.WriteString("  " + justify(brand, deliver, w) + "\n")
+	b.WriteString("  " + justify("", deliver, w) + "\n")
 
 	b.WriteString("\n")
 
