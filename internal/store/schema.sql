@@ -76,6 +76,7 @@ BEGIN
     END IF;
 END$$;
 
+GRANT USAGE ON SCHEMA public TO console_broker;
 GRANT SELECT, INSERT, UPDATE, DELETE ON accounts, ssh_pubkeys, swiggy_tokens TO console_broker;
 GRANT EXECUTE ON FUNCTION find_or_create_account(text) TO console_broker;
 GRANT EXECUTE ON FUNCTION account_for_pubkey(text) TO console_broker;
