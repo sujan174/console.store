@@ -82,8 +82,7 @@ func (c CmdBar) Run() (CmdBar, string) {
 			{"  whoami     who you are", D},
 			{"  streak     your morning run", D},
 			{"  uptime     server uptime", D},
-			{"  instamart  fast lane", D},
-			{"  sl         choo choo", D},
+				{"  sl         choo choo", D},
 			{"  sudo …     go on, try it", D},
 			{"  vim        enter (you can leave)", D},
 			{"  42         the answer", D},
@@ -146,11 +145,6 @@ func (c CmdBar) Run() (CmdBar, string) {
 		out = []CmdLine{
 			{"tip: press : anywhere for the command palette.", D},
 		}
-	case "instamart":
-		out = []CmdLine{
-			{"opening instamart fast lane …", G},
-		}
-		action = "instamart"
 	case "exit", "quit", ":q":
 		out = []CmdLine{
 			{"connection to consolestore.in closed.", D},

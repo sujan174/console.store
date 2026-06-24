@@ -455,10 +455,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				bar, action := m.cmd.Run()
 				m.cmd = bar
 				switch action {
-				case "instamart":
-					m.cmdOpen = false
-					m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartChip())
-					m.screen = scrInstamart
 				case "clear":
 					// out already cleared in Run; stay open
 				case "close":

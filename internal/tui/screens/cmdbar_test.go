@@ -25,12 +25,6 @@ func TestCmdNeofetch(t *testing.T) {
 	}
 }
 
-func TestCmdInstamartAction(t *testing.T) {
-	_, action := screens.NewCmdBar().WithText("instamart").Run()
-	if action != "instamart" {
-		t.Errorf("action=%q want instamart", action)
-	}
-}
 
 func TestCmdUnknown(t *testing.T) {
 	c, _ := screens.NewCmdBar().WithText("zzz").Run()
