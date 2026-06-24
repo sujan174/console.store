@@ -113,29 +113,6 @@ func justify(left, right string, width int) string {
 	return left + strings.Repeat(" ", pad) + right
 }
 
-// heroBox renders a rounded titled card spanning width w:
-//
-//	╭─ <title> ───────────────╮
-//	│ <left>          <right> │
-//	╰─────────────────────────╯
-func heroBox(title, left, right string, w int) string {
-	bd := theme.Fg(theme.Div2)
-	topUsed := lipgloss.Width("╭─ ") + lipgloss.Width(title) + lipgloss.Width(" ") + 1
-	fill := w - topUsed
-	if fill < 0 {
-		fill = 0
-	}
-	top := bd.Render("╭─ ") + theme.FaintStyle.Render(title) + bd.Render(" "+strings.Repeat("─", fill)+"╮")
-	inner := w - 4
-	gap := inner - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 {
-		gap = 1
-	}
-	mid := bd.Render("│ ") + left + strings.Repeat(" ", gap) + right + bd.Render(" │")
-	bot := bd.Render("╰" + strings.Repeat("─", w-2) + "╯")
-	return "  " + top + "\n  " + mid + "\n  " + bot + "\n"
-}
-
 func (m Menu) View() string {
 	var b strings.Builder
 	w := components.ContentWidth()

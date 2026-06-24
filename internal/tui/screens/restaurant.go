@@ -84,7 +84,7 @@ func (s Restaurant) quickLook(w int) string {
 	return infoBox(title, lines, w)
 }
 
-// topItem is the restaurant's "most ordered" hero pick (highest-rated item).
+// topItem returns the highest-rated item, used as the popular pick in the quick-look card.
 func (s Restaurant) topItem() (catalog.Item, bool) {
 	if len(s.p.Items) == 0 {
 		return catalog.Item{}, false
