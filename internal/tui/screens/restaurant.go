@@ -51,6 +51,39 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartChip string)
 	return Restaurant{p: p, cartChip: cartChip, list: components.List{Rows: rows}}
 }
 
+// quickLook renders the ╭─ quick look ─╮ card shown below the item list.
+// Returns "" when the place has no items (no popular pick to show).
+func (s Restaurant) quickLook(w int) string {
+	top, ok := s.topItem()
+	if !ok {
+		return ""
+	}
+
+	inner := w - 4
+	if inner < 1 {
+		inner = 1
+	}
+
+	var lines []string
+
+	if s.p.Description != "" {
+		desc := s.p.Description
+		if r := []rune(desc); len(r) > inner {
+			desc = string(r[:inner-1]) + "…"
+		}
+		lines = append(lines, theme.DimStyle.Render(desc))
+	}
+
+	popular := theme.GoldStyle.Render("★ popular") +
+		"   " +
+		theme.BrightStyle.Render(top.Name) +
+		theme.DimStyle.Render(fmt.Sprintf(" · ₹%d", top.Price))
+	lines = append(lines, popular)
+
+	title := theme.FaintStyle.Render("quick look")
+	return infoBox(title, lines, w)
+}
+
 // topItem is the restaurant's "most ordered" hero pick (highest-rated item).
 func (s Restaurant) topItem() (catalog.Item, bool) {
 	if len(s.p.Items) == 0 {
@@ -168,17 +201,6 @@ func (s Restaurant) View() string {
 		theme.DimStyle.Render(fmt.Sprintf("%d items", len(s.p.Items)))
 	b.WriteString("  " + meta + "\n")
 
-	// most-ordered hero card
-	if top, ok := s.topItem(); ok {
-		b.WriteString("\n") // gap before the hero card
-		hl := theme.GoldStyle.Render("★ ") + theme.BrightStyle.Render(top.Name)
-		if top.Desc != "" {
-			hl += "  " + theme.DimStyle.Render(top.Desc)
-		}
-		hr := theme.PriceStyle.Render(fmt.Sprintf("₹%d", top.Price)) + "  " + theme.CursorStyle.Render("→")
-		b.WriteString(heroBox("most ordered", hl, hr, w))
-	}
-
 	b.WriteString("\n")
 
 	// filter row: all 10 │ veg 9   ⌄ filter            🛒 cart empty
@@ -200,6 +222,9 @@ func (s Restaurant) View() string {
 	b.WriteString("\n")
 	b.WriteString(s.list.View())
 	b.WriteString("\n")
+	if ql := s.quickLook(w); ql != "" {
+		b.WriteString(ql + "\n")
+	}
 	b.WriteString(components.Hint("↑↓", "move", "↵/→", "add", "←", "remove", "i", "info", "esc", "back", "c", "cart"))
 	return b.String()
 }

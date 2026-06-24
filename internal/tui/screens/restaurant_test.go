@@ -32,19 +32,37 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	}
 }
 
-func TestRestaurantShowsMostOrderedBox(t *testing.T) {
+func TestRestaurantShowsQuickLookCard(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
 	r := NewRestaurant(p, map[string]int{}, "")
 	out := r.View()
-	if strings.Contains(out, "◆") {
-		t.Error("the ◆ diamond marker should be gone")
-	}
-	// Hero card shows the most-ordered item (Cold Coffee, highest rated) + desc.
-	for _, want := range []string{"most ordered", "Cold Coffee", "blended double espresso · lightly sweet", "10 items"} {
+
+	// Card title and key content
+	for _, want := range []string{
+		"quick look",
+		"Third-wave roastery",
+		"popular",
+		"Cold Coffee",
+		"₹149",
+	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("most-ordered box missing %q:\n%s", want, out)
+			t.Errorf("quick-look card missing %q:\n%s", want, out)
 		}
+	}
+
+	// Old hero card must be gone
+	if strings.Contains(out, "most ordered") {
+		t.Error("old 'most ordered' box must not appear")
+	}
+}
+
+func TestRestaurantQuickLookAbsentWhenNoItems(t *testing.T) {
+	p := catalog.Place{Name: "Empty", ETA: "10 min", Items: nil}
+	r := NewRestaurant(p, map[string]int{}, "")
+	out := r.View()
+	if strings.Contains(out, "quick look") {
+		t.Error("quick look card must not appear when place has no items")
 	}
 }
 

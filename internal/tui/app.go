@@ -886,7 +886,7 @@ func (m Model) View() string {
 	infoPanel := "" // restaurant detail panel ('i'); pinned above the hints below
 	switch m.screen {
 	case scrRestaurant:
-		chrome := 14 + screens.BrandHeaderLines
+		chrome := 15 + screens.BrandHeaderLines
 		if m.rest.InfoOpen() {
 			infoPanel = m.rest.InfoView(components.ContentWidth())
 			chrome += lipgloss.Height(infoPanel) + 1
