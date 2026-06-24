@@ -873,6 +873,89 @@ func TestSameRestaurantNoConflict(t *testing.T) {
 	}
 }
 
+// TestSnacksCrossPlaceNoConflict verifies that adding items from two different
+// snack places does not open the conflict modal — the whole snacks section
+// shares one cart.
+func TestSnacksCrossPlaceNoConflict(t *testing.T) {
+	m := newAtMenu()
+	step := func(k tea.KeyMsg) { u, _ := m.Update(k); m = u.(Model) }
+
+	// Navigate to Snacks tab (press "3")
+	step(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	if m.section != catalog.SectionSnacks {
+		t.Fatal("setup: expected snacks section")
+	}
+
+	// Open first snack place and add an item
+	step(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.screen != scrRestaurant {
+		t.Fatal("setup: expected restaurant screen")
+	}
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add first item
+	first := m.cartRestaurant
+	if first == "" || len(m.lines) == 0 {
+		t.Fatalf("setup: expected item in cart from %q", first)
+	}
+
+	// Back to menu, move to second snack place, open it
+	step(tea.KeyMsg{Type: tea.KeyEsc})
+	step(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	step(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.screen != scrRestaurant {
+		t.Fatal("setup: expected second restaurant screen")
+	}
+	second := m.rest.PlaceData().Name
+	if second == first {
+		t.Skipf("only one snack place available at this address (%q), skipping cross-place test", first)
+	}
+
+	// Add from second snack place — must NOT conflict
+	step(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.conflictOpen {
+		t.Fatal("adding from a different snack place must NOT open the conflict modal")
+	}
+	if len(m.lines) < 2 {
+		t.Fatalf("expected at least 2 cart lines after adding from 2 snack places, got %d", len(m.lines))
+	}
+}
+
+// TestSnacksToFoodConflicts verifies that switching from a snacks cart to a food
+// restaurant DOES trigger the conflict modal.
+func TestSnacksToFoodConflicts(t *testing.T) {
+	m := newAtMenu()
+	step := func(k tea.KeyMsg) { u, _ := m.Update(k); m = u.(Model) }
+
+	// Add from snacks
+	step(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")}) // snacks tab
+	step(tea.KeyMsg{Type: tea.KeyEnter})                     // open first snack place
+	if m.screen != scrRestaurant {
+		t.Fatal("setup: expected restaurant screen")
+	}
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add item
+	if len(m.lines) == 0 {
+		t.Fatal("setup: expected item in snacks cart")
+	}
+
+	// Switch to food tab and try to add
+	step(tea.KeyMsg{Type: tea.KeyEsc})                       // back to menu
+	step(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")}) // food tab
+	step(tea.KeyMsg{Type: tea.KeyEnter})                     // open first food place
+	if m.screen != scrRestaurant {
+		t.Fatal("setup: expected food restaurant screen")
+	}
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // try to add (may open customize modal if item has add-ons)
+	if m.customizeOpen {
+		// The selected item is customizable — confirm the customize modal so
+		// commitAdd is reached and the conflict check fires.
+		step(tea.KeyMsg{Type: tea.KeyEnter})
+	}
+
+	if !m.conflictOpen {
+		t.Fatal("adding from food restaurant when snacks cart is active must open conflict modal")
+	}
+}
+
 // TestUsualCrossRestaurantOpensConflict exercises the menu "usual" add-path
 // through the conflict modal (the restaurant add-path is covered elsewhere). A
 // cart seeded from a different restaurant, then pressing "u" (whose usual is a

@@ -77,6 +77,7 @@ type Model struct {
 	checkout       screens.Checkout
 	lines          []screens.CartLine
 	cartRestaurant string
+	cartSection    catalog.Section // "" for non-snacks; SectionSnacks when snacks cart
 
 	// customize modal: shown when adding an item that has add-ons (Swiggy's
 	// "customise" sheet). Owns its own cursor + selection state.
@@ -91,6 +92,7 @@ type Model struct {
 	pendingItem   catalog.Item    // item awaiting the start-new-cart confirmation
 	pendingAddOns []catalog.AddOn // its chosen add-ons
 	pendingRest   string          // its restaurant name
+	pendingSection catalog.Section
 
 	inst    screens.Instamart
 	imLines []screens.CartLine
@@ -182,41 +184,53 @@ func decLastByItem(lines []screens.CartLine, id string) []screens.CartLine {
 	return lines
 }
 
-// conflictsWithCart reports whether adding from restaurant rest would mix two
-// restaurants in one cart — a non-empty cart bound to a different restaurant.
-func (m Model) conflictsWithCart(rest string) bool {
-	return len(m.lines) > 0 && m.cartRestaurant != "" && m.cartRestaurant != rest
+// conflictsWithCart reports whether adding from restaurant rest (in section) would
+// mix incompatible carts. All SectionSnacks places share one cart; everything else
+// is scoped to a single named restaurant.
+func (m Model) conflictsWithCart(rest string, section catalog.Section) bool {
+	if len(m.lines) == 0 || m.cartRestaurant == "" {
+		return false
+	}
+	if m.cartSection == catalog.SectionSnacks && section == catalog.SectionSnacks {
+		return false
+	}
+	return m.cartRestaurant != rest
 }
 
 // startNewCart clears the food cart and seeds it with a single item (and its
-// chosen add-ons) from rest — the Swiggy one-restaurant-per-cart resolution.
-func (m Model) startNewCart(item catalog.Item, addons []catalog.AddOn, rest string) Model {
+// chosen add-ons) from rest — the one-restaurant-per-cart resolution for
+// non-snacks; for snacks the section acts as the cart owner.
+func (m Model) startNewCart(item catalog.Item, addons []catalog.AddOn, rest string, section catalog.Section) Model {
 	m.lines = []screens.CartLine{{Item: item, Qty: 1, AddOns: addons}}
 	m.cartRestaurant = rest
+	m.cartSection = section
 	return m
 }
 
-// beginAdd starts adding item from rest. If the item is customizable it opens
-// the customise modal (the add is finished on confirm); otherwise it adds the
+// beginAdd starts adding item from rest (section). If the item is customizable it
+// opens the customise modal (the add is finished on confirm); otherwise it adds the
 // item straight away. Centralising this keeps the restaurant-add, usual-add and
 // modal-confirm paths in one place.
-func (m Model) beginAdd(item catalog.Item, rest string) Model {
+func (m Model) beginAdd(item catalog.Item, rest string, section catalog.Section) Model {
 	if len(item.AddOns) > 0 {
 		m.customize = screens.NewCustomize(item)
 		m.customizeOpen = true
 		m.pendingRest = rest
+		m.pendingSection = section
 		return m
 	}
-	return m.commitAdd(item, nil, rest)
+	return m.commitAdd(item, nil, rest, section)
 }
 
-// commitAdd adds item (with its chosen add-ons) from rest to the cart, raising
-// the cart-conflict modal first when the cart belongs to another restaurant.
-func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, rest string) Model {
-	if m.conflictsWithCart(rest) {
+// commitAdd adds item (with its chosen add-ons) from rest (section) to the cart,
+// raising the cart-conflict modal first when the cart belongs to an incompatible
+// owner (different restaurant outside the snacks section).
+func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, rest string, section catalog.Section) Model {
+	if m.conflictsWithCart(rest, section) {
 		m.pendingItem = item
 		m.pendingAddOns = addons
 		m.pendingRest = rest
+		m.pendingSection = section
 		m.conflict = screens.NewCartConflict(m.cartRestaurant, rest, item.Name)
 		m.conflictSel = 1
 		m.conflictOpen = true
@@ -226,6 +240,7 @@ func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, rest string)
 	m.lines = appendOrInc(m.lines, item, addons)
 	if wasEmpty {
 		m.cartRestaurant = rest
+		m.cartSection = section
 	}
 	return m
 }
@@ -351,10 +366,14 @@ func cartChipStr(count, total int) string {
 func (m Model) cartChip() string   { return cartChipStr(m.cartCount(), m.cartTotal()) }
 func (m Model) imCartChip() string { return cartChipStr(m.imCartCount(), m.imCartTotal()) }
 
-// cartRestaurantServes reports whether the cart's restaurant is serviceable at addr.
+// cartRestaurantServes reports whether the cart's restaurant/section is serviceable
+// at addr. For snacks, any non-empty snack catalogue at the new address is enough.
 func (m Model) cartRestaurantServes(addr catalog.Address) bool {
 	if m.cartRestaurant == "" {
 		return true
+	}
+	if m.cartSection == catalog.SectionSnacks {
+		return len(m.repo.Places(addr, catalog.SectionSnacks)) > 0
 	}
 	for _, section := range catalog.MenuSections {
 		for _, p := range m.repo.Places(addr, section) {
@@ -379,6 +398,9 @@ const InstamartMin = 99
 
 func (m Model) cartHeader() string {
 	if m.cartRestaurant != "" {
+		if m.cartSection == catalog.SectionSnacks {
+			return "quick snacks"
+		}
 		return m.cartRestaurant
 	}
 	return "your order"
@@ -467,7 +489,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.conflictSel = 1
 			case "enter":
 				if m.conflictSel == 0 { // start new
-					m = m.startNewCart(m.pendingItem, m.pendingAddOns, m.pendingRest)
+					m = m.startNewCart(m.pendingItem, m.pendingAddOns, m.pendingRest, m.pendingSection)
 					m = m.refreshAfterAdd()
 				}
 				m.conflictOpen = false
@@ -496,7 +518,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				item := m.customize.Item()
 				addons := m.customize.SelectedAddOns()
 				m.customizeOpen = false
-				m = m.commitAdd(item, addons, m.pendingRest)
+				m = m.commitAdd(item, addons, m.pendingRest, m.pendingSection)
 				if !m.conflictOpen { // committed directly (no restaurant clash)
 					m = m.refreshAfterAdd()
 				}
@@ -593,10 +615,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "u":
 				if usual, ok := m.repo.Usual(m.addr); ok {
 					rest := ""
+					var sec catalog.Section
 					if p, ok := m.repo.Menu(usual.PlaceID); ok {
 						rest = p.Name
+						sec = p.Section
 					}
-					m = m.beginAdd(usual.Item, rest)
+					m = m.beginAdd(usual.Item, rest, sec)
 					if !m.customizeOpen && !m.conflictOpen {
 						m.menu = m.menu.WithCartChip(m.cartChip())
 					}
@@ -630,7 +654,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !ok {
 					return m, nil
 				}
-				m = m.beginAdd(it, m.rest.PlaceData().Name)
+				m = m.beginAdd(it, m.rest.PlaceData().Name, m.rest.PlaceData().Section)
 				if m.customizeOpen || m.conflictOpen {
 					return m, nil // a modal will finish the add
 				}
@@ -644,6 +668,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lines = decLastByItem(m.lines, it.ID)
 				if len(m.lines) == 0 {
 					m.cartRestaurant = ""
+					m.cartSection = ""
 				}
 				m = m.refreshAfterAdd()
 				return m, nil
@@ -683,6 +708,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// wrongly trigger a cart-conflict against a different restaurant).
 			if len(m.lines) == 0 {
 				m.cartRestaurant = ""
+				m.cartSection = ""
 			}
 			m.menu = m.menu.WithCartChip(m.cartChip())
 			return m, nil
@@ -696,6 +722,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !m.cartRestaurantServes(m.addr) {
 					m.lines = nil
 					m.cartRestaurant = ""
+					m.cartSection = ""
 				}
 				m.menu = m.buildMenu()
 				m.screen = scrMenu
@@ -727,6 +754,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lines = nil
 				m.imLines = nil
 				m.cartRestaurant = ""
+				m.cartSection = ""
 				m.menu = m.buildMenu()
 				m.screen = scrMenu
 				return m, nil
@@ -736,6 +764,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lines = nil
 				m.imLines = nil
 				m.cartRestaurant = ""
+				m.cartSection = ""
 				m.screen = scrMenu
 				m.menu = m.buildMenu()
 				return m, nil
