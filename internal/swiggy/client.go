@@ -8,6 +8,12 @@ import (
 	"sync"
 )
 
+// FoodBaseURL is the Swiggy MCP endpoint for the Food (restaurant) vertical.
+const FoodBaseURL = "https://mcp.swiggy.com/food"
+
+// InstamartBaseURL is the Swiggy MCP endpoint for the Instamart (grocery) vertical.
+const InstamartBaseURL = "https://mcp.swiggy.com/im"
+
 type TokenSource interface {
 	Token(ctx context.Context) (string, error)
 }

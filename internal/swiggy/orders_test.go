@@ -85,6 +85,137 @@ func TestPlaceFoodOrderSuppressesDuplicateAfter5xx(t *testing.T) {
 	}
 }
 
+// TestPlaceFoodOrderFailsClosedOnPreSnapshotAuthError verifies that when the
+// pre-snapshot (get_food_orders) returns HTTP 401, PlaceFoodOrder returns
+// ErrTokenExpired and never calls place_food_order.
+func TestPlaceFoodOrderFailsClosedOnPreSnapshotAuthError(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	var placeCalls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var msg struct {
+			ID     any    `json:"id"`
+			Method string `json:"method"`
+			Params struct {
+				Name string `json:"name"`
+			} `json:"params"`
+		}
+		decodeJSON(r, &msg)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case msg.Method == "initialize":
+			w.Header().Set("Mcp-Session-Id", "s")
+			encodeResult(w, msg.ID, map[string]any{"protocolVersion": "2025-06-18"})
+		case msg.Method == "notifications/initialized":
+			w.WriteHeader(202)
+		case msg.Params.Name == "get_food_orders":
+			// 401 → ErrTokenExpired; pre-snapshot must fail closed.
+			w.WriteHeader(401)
+			w.Write([]byte("unauthorized"))
+		case msg.Params.Name == "place_food_order":
+			atomic.AddInt32(&placeCalls, 1)
+			encodeResult(w, msg.ID, map[string]any{"orderId": "shouldneverland", "status": "PLACED"})
+		}
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
+	_, err := c.PlaceFoodOrder(context.Background(), PlaceFoodOrderRequest{AddressID: "a1"})
+	if err != ErrTokenExpired {
+		t.Fatalf("err = %v, want ErrTokenExpired", err)
+	}
+	if got := atomic.LoadInt32(&placeCalls); got != 0 {
+		t.Fatalf("place_food_order called %d times, want 0 (fail closed)", got)
+	}
+}
+
+// TestPlaceFoodOrderPicksNewOrderNotPreExisting verifies the verify-before-retry
+// diff: pre-snapshot has "old1", place 503s, post-read has "old1"+"new2" —
+// the returned order must be "new2", and place must be called exactly once.
+func TestPlaceFoodOrderPicksNewOrderNotPreExisting(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	var placeCalls int32
+	var orders atomic.Value
+	// Pre-snapshot: one pre-existing order.
+	orders.Store([]map[string]any{{"orderId": "old1", "status": "PLACED"}})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var msg struct {
+			ID     any    `json:"id"`
+			Method string `json:"method"`
+			Params struct {
+				Name string `json:"name"`
+			} `json:"params"`
+		}
+		decodeJSON(r, &msg)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case msg.Method == "initialize":
+			w.Header().Set("Mcp-Session-Id", "s")
+			encodeResult(w, msg.ID, map[string]any{"protocolVersion": "2025-06-18"})
+		case msg.Method == "notifications/initialized":
+			w.WriteHeader(202)
+		case msg.Params.Name == "get_food_orders":
+			encodeResult(w, msg.ID, map[string]any{"structuredContent": orders.Load()})
+		case msg.Params.Name == "place_food_order":
+			atomic.AddInt32(&placeCalls, 1)
+			// Order lands server-side; response 503s.
+			orders.Store([]map[string]any{
+				{"orderId": "old1", "status": "PLACED"},
+				{"orderId": "new2", "status": "PLACED"},
+			})
+			w.WriteHeader(503)
+			w.Write([]byte("gateway timeout"))
+		}
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
+	o, err := c.PlaceFoodOrder(context.Background(), PlaceFoodOrderRequest{AddressID: "a1"})
+	if err != nil {
+		t.Fatalf("expected verify-before-retry success, got err %v", err)
+	}
+	if o.ID != "new2" {
+		t.Fatalf("order = %+v, want new2 (not pre-existing old1)", o)
+	}
+	if got := atomic.LoadInt32(&placeCalls); got != 1 {
+		t.Fatalf("place_food_order called %d times, want exactly 1", got)
+	}
+}
+
+// TestPlaceFoodOrderGenuineFailureSurfacesError verifies that when pre-snapshot
+// succeeds empty, place 503s, and no new order appears on re-read, PlaceFoodOrder
+// returns a non-nil error (the original transient error), not a phantom success.
+func TestPlaceFoodOrderGenuineFailureSurfacesError(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var msg struct {
+			ID     any    `json:"id"`
+			Method string `json:"method"`
+			Params struct {
+				Name string `json:"name"`
+			} `json:"params"`
+		}
+		decodeJSON(r, &msg)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case msg.Method == "initialize":
+			w.Header().Set("Mcp-Session-Id", "s")
+			encodeResult(w, msg.ID, map[string]any{"protocolVersion": "2025-06-18"})
+		case msg.Method == "notifications/initialized":
+			w.WriteHeader(202)
+		case msg.Params.Name == "get_food_orders":
+			// Always return empty — order never lands.
+			encodeResult(w, msg.ID, map[string]any{"structuredContent": []map[string]any{}})
+		case msg.Params.Name == "place_food_order":
+			w.WriteHeader(503)
+			w.Write([]byte("upstream unavailable"))
+		}
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
+	o, err := c.PlaceFoodOrder(context.Background(), PlaceFoodOrderRequest{AddressID: "a1"})
+	if err == nil {
+		t.Fatalf("expected error on genuine 503 failure, got order %+v", o)
+	}
+}
+
 func decodeJSON(r *http.Request, v any) { json.NewDecoder(r.Body).Decode(v) }
 func encodeResult(w http.ResponseWriter, id any, result any) {
 	json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
