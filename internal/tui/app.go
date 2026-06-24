@@ -86,12 +86,12 @@ type Model struct {
 
 	// conflict modal: shown when adding an item from a restaurant other than
 	// the one the cart holds (Swiggy allows one restaurant per cart).
-	conflictOpen  bool
-	conflict      screens.CartConflict
-	conflictSel   int             // focused button: 0 = start new, 1 = keep current
-	pendingItem   catalog.Item    // item awaiting the start-new-cart confirmation
-	pendingAddOns []catalog.AddOn // its chosen add-ons
-	pendingRest   string          // its restaurant name
+	conflictOpen   bool
+	conflict       screens.CartConflict
+	conflictSel    int             // focused button: 0 = start new, 1 = keep current
+	pendingItem    catalog.Item    // item awaiting the start-new-cart confirmation
+	pendingAddOns  []catalog.AddOn // its chosen add-ons
+	pendingRest    string          // its restaurant name
 	pendingSection catalog.Section
 
 	inst    screens.Instamart

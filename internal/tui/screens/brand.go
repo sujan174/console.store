@@ -25,6 +25,7 @@ func BrandBanner(width int) string {
 	}
 	const name = "consolestore.in"
 	headline := theme.BrandStyle.Render(name) + "  " + theme.FaintStyle.Render(Version)
-	rule := theme.GoldStyle.Render(strings.Repeat("─", lipgloss.Width(name)))
+	// Rule spans the whole headline (brand + version), not just the wordmark.
+	rule := theme.GoldStyle.Render(strings.Repeat("─", lipgloss.Width(headline)))
 	return center(headline) + "\n" + center(rule) + "\n"
 }
