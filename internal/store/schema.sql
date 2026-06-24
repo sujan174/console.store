@@ -1,4 +1,9 @@
 -- accounts / pubkeys / tokens, with RLS scoped by the app.current_account GUC.
+--
+-- PRODUCTION COMMITMENT: the schema-owner/migrate role MUST be a non-superuser
+-- in production. FORCE ROW LEVEL SECURITY ensures even the owner is subject to
+-- RLS policies. The dev docker-compose owner stays superuser — that is fine for
+-- local/CI only.
 
 CREATE TABLE IF NOT EXISTS accounts (
     id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -25,6 +30,13 @@ ALTER TABLE accounts      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ssh_pubkeys   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE swiggy_tokens ENABLE ROW LEVEL SECURITY;
 
+-- FORCE RLS so even the table owner (when running as a non-superuser in
+-- production) cannot bypass policies. Superusers still bypass FORCE RLS, so
+-- this is defence-in-depth: it kicks in the moment the owner is demoted.
+ALTER TABLE accounts      FORCE ROW LEVEL SECURITY;
+ALTER TABLE ssh_pubkeys   FORCE ROW LEVEL SECURITY;
+ALTER TABLE swiggy_tokens FORCE ROW LEVEL SECURITY;
+
 -- Scope every row to the account id in the app.current_account GUC.
 DROP POLICY IF EXISTS acct_isolation ON accounts;
 CREATE POLICY acct_isolation ON accounts
@@ -42,30 +54,38 @@ CREATE POLICY tok_isolation ON swiggy_tokens
 
 -- Signup must create/lookup an account before any current_account is set, so it
 -- runs as a SECURITY DEFINER (owner) function that bypasses RLS for this one op.
+-- SET search_path = '' (empty) prevents pg_temp shadowing attacks: the definer
+-- runs as a superuser, so without a pinned search_path an attacker holding the
+-- broker DSN could create pg_temp.accounts to hijack the function body.
+-- ON CONFLICT ... DO UPDATE makes the insert race-safe for concurrent signups.
 CREATE OR REPLACE FUNCTION find_or_create_account(p_phone text)
     RETURNS uuid
     LANGUAGE plpgsql
     SECURITY DEFINER
+    SET search_path = ''
 AS $$
 DECLARE
     v_id uuid;
 BEGIN
-    SELECT id INTO v_id FROM accounts WHERE phone = p_phone;
-    IF v_id IS NULL THEN
-        INSERT INTO accounts (phone) VALUES (p_phone) RETURNING id INTO v_id;
-    END IF;
+    INSERT INTO public.accounts (phone)
+        VALUES (p_phone)
+        ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone
+        RETURNING id INTO v_id;
     RETURN v_id;
 END;
 $$;
 
 -- Pubkey -> account lookup happens before current_account is known, so it is a
 -- SECURITY DEFINER function returning only the owning account id (no token data).
+-- SET search_path = '' pins the search path so pg_temp.ssh_pubkeys cannot
+-- shadow the real table in the definer's elevated context.
 CREATE OR REPLACE FUNCTION account_for_pubkey(p_pubkey text)
     RETURNS uuid
     LANGUAGE sql
     SECURITY DEFINER
+    SET search_path = ''
 AS $$
-    SELECT account_id FROM ssh_pubkeys WHERE pubkey = p_pubkey;
+    SELECT account_id FROM public.ssh_pubkeys WHERE pubkey = p_pubkey;
 $$;
 
 -- Broker role: a NON-owner login role, so RLS is enforced against it.
