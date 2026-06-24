@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 )
 
@@ -66,5 +65,4 @@ func TestExchangeSurfacesError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on 400 token response")
 	}
-	_ = url.Values{}
 }

@@ -76,11 +76,18 @@ func (m *Manager) Start(pubkey string) (Pending, error) {
 }
 
 func (m *Manager) HandleCallback(ctx context.Context, state, code string) error {
+	// Atomically claim the pending entry: read AND delete in one critical
+	// section so (a) a failed exchange leaves the state consumed (not
+	// replayable) and (b) two concurrent callbacks with the same state can
+	// only one succeed — the other sees !ok immediately.
 	m.mu.Lock()
 	p, ok := m.pendingByState[state]
+	if ok {
+		delete(m.pendingByState, state)
+	}
 	m.mu.Unlock()
 	if !ok {
-		return fmt.Errorf("auth: unknown or expired state (CSRF check failed)")
+		return fmt.Errorf("auth: unknown, expired, or already-used state (CSRF check failed)")
 	}
 
 	tok, err := Exchange(ctx, m.cfg.HTTPClient, m.cfg.Metadata.TokenEndpoint,
@@ -111,7 +118,6 @@ func (m *Manager) HandleCallback(ctx context.Context, state, code string) error 
 	}
 
 	m.mu.Lock()
-	delete(m.pendingByState, state) // single-use; verifier never reused
 	m.done[p.flowID] = true
 	m.mu.Unlock()
 	return nil

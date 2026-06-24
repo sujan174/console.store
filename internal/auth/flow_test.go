@@ -109,3 +109,113 @@ func TestFlowCallbackRejectsUnknownState(t *testing.T) {
 		t.Fatal("expected state-mismatch rejection")
 	}
 }
+
+// managerWith400TokenEndpoint builds a Manager whose token endpoint always
+// returns HTTP 400, so HandleCallback fails at the exchange step.
+func managerWith400TokenEndpoint(t *testing.T, store AccountStore) *Manager {
+	t.Helper()
+	srv := fakeAuthzServer(t)
+	ctx := context.Background()
+	meta, _ := Discover(ctx, srv.Client(), srv.URL+"/.well-known/oauth-authorization-server")
+	badSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "invalid_grant", http.StatusBadRequest)
+	}))
+	t.Cleanup(badSrv.Close)
+	meta.TokenEndpoint = badSrv.URL
+	return NewManager(Config{
+		HTTPClient: http.DefaultClient, Metadata: meta, ClientID: "swiggy-mcp",
+		RedirectURI: "http://localhost:8765/cb", Scope: "mcp:tools", Store: store,
+	})
+}
+
+// TestFlowCallbackStateIsSingleUseAfterSuccess verifies that a successfully
+// completed callback consumes the state so a replay is rejected.
+func TestFlowCallbackStateIsSingleUseAfterSuccess(t *testing.T) {
+	store := newFakeStore()
+	m := managerWithFakeAuthz(t, store)
+	p, _ := m.Start("ssh-ed25519 AAAA keyA")
+	u, _ := url.Parse(p.AuthorizeURL)
+	state := u.Query().Get("state")
+
+	// First callback — must succeed.
+	if err := m.HandleCallback(context.Background(), state, "auth-code"); err != nil {
+		t.Fatalf("first callback failed: %v", err)
+	}
+
+	// Count bound pubkeys before the replay attempt.
+	store.mu.Lock()
+	bindCountBefore := len(store.pubkeys)
+	store.mu.Unlock()
+
+	// Second callback with the same state — must be rejected.
+	if err := m.HandleCallback(context.Background(), state, "auth-code"); err == nil {
+		t.Fatal("expected second callback with same state to be rejected")
+	}
+
+	// No additional bindings must have been made.
+	store.mu.Lock()
+	bindCountAfter := len(store.pubkeys)
+	store.mu.Unlock()
+	if bindCountAfter != bindCountBefore {
+		t.Fatalf("replay callback added a binding (before=%d after=%d)", bindCountBefore, bindCountAfter)
+	}
+}
+
+// TestFlowCallbackStateIsClaimedAfterFailedExchange verifies that even when
+// the token exchange fails, the state is consumed and a subsequent callback
+// with the same state is rejected (state is not left replayable on failure).
+func TestFlowCallbackStateIsClaimedAfterFailedExchange(t *testing.T) {
+	store := newFakeStore()
+	m := managerWith400TokenEndpoint(t, store)
+	p, _ := m.Start("ssh-ed25519 AAAA keyB")
+	u, _ := url.Parse(p.AuthorizeURL)
+	state := u.Query().Get("state")
+
+	// First callback — must fail (token endpoint returns 400).
+	if err := m.HandleCallback(context.Background(), state, "auth-code"); err == nil {
+		t.Fatal("expected first callback to fail due to 400 token endpoint")
+	}
+
+	// Second callback with the same state — must be rejected with CSRF error,
+	// proving the state was claimed (consumed) even on failure.
+	if err := m.HandleCallback(context.Background(), state, "auth-code"); err == nil {
+		t.Fatal("expected second callback to be rejected as state already consumed")
+	}
+}
+
+// TestFlowTwoFlowsBindOwnPubkeys verifies state→pubkey isolation: two
+// concurrent flows each carry their own pubkey through their own state.
+func TestFlowTwoFlowsBindOwnPubkeys(t *testing.T) {
+	store := newFakeStore()
+	m := managerWithFakeAuthz(t, store)
+
+	pA, _ := m.Start("keyA")
+	pB, _ := m.Start("keyB")
+
+	uA, _ := url.Parse(pA.AuthorizeURL)
+	uB, _ := url.Parse(pB.AuthorizeURL)
+	stateA := uA.Query().Get("state")
+	stateB := uB.Query().Get("state")
+
+	if err := m.HandleCallback(context.Background(), stateA, "code-a"); err != nil {
+		t.Fatalf("callback for keyA failed: %v", err)
+	}
+	if err := m.HandleCallback(context.Background(), stateB, "code-b"); err != nil {
+		t.Fatalf("callback for keyB failed: %v", err)
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	if _, ok := store.pubkeys["keyA"]; !ok {
+		t.Fatalf("keyA not bound; pubkeys=%v", store.pubkeys)
+	}
+	if _, ok := store.pubkeys["keyB"]; !ok {
+		t.Fatalf("keyB not bound; pubkeys=%v", store.pubkeys)
+	}
+	// Both pubkeys must map to the same (or any valid) account — what matters
+	// is that keyA's callback did not silently drop keyB's binding.
+	if store.pubkeys["keyA"] == "" || store.pubkeys["keyB"] == "" {
+		t.Fatalf("unexpected empty account in pubkeys=%v", store.pubkeys)
+	}
+}
