@@ -231,7 +231,7 @@ func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, rest string,
 		m.pendingAddOns = addons
 		m.pendingRest = rest
 		m.pendingSection = section
-		m.conflict = screens.NewCartConflict(m.cartRestaurant, rest, item.Name)
+		m.conflict = screens.NewCartConflict(m.cartHeader(), rest, item.Name)
 		m.conflictSel = 1
 		m.conflictOpen = true
 		return m
