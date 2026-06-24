@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/ssh v0.0.0-20250826160808-ebfa259c7309
 	github.com/charmbracelet/wish v1.4.7
 	github.com/charmbracelet/x/exp/teatest v0.0.0-20260615092313-b57e5e6d29bb
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/lucasb-eyer/go-colorful v1.4.0
 	github.com/muesli/termenv v0.16.0
 	golang.org/x/image v0.43.0
@@ -35,6 +36,9 @@ require (
 	github.com/creack/pty v1.1.21 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
@@ -44,6 +48,7 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
+	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 )

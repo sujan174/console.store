@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: console_owner
+      POSTGRES_PASSWORD: dev_only_password
+      POSTGRES_DB: console
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U console_owner -d console"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
