@@ -32,6 +32,7 @@ var addresses = []catalog.Address{
 var places = []catalog.Place{
 	// ---- coffee ----
 	{ID: "blue-tokai", Name: "Blue Tokai", City: "Bangalore", Section: catalog.SectionCoffee, ETA: "35-45 min", Fav: true, Rating: 4.6,
+		Description:      "Third-wave roastery — single-origin pours and cold brew on tap.",
 		ServesAddressIDs: []string{"a1", "a2"}, Items: []catalog.Item{
 			{ID: "bt-cold-coffee", Name: "Cold Coffee", Price: 149, Veg: true, Desc: "blended double espresso · lightly sweet", Kcal: 180, Rating: 4.8, Section: catalog.SectionCoffee},
 			{ID: "bt-hazelnut", Name: "Hazelnut Cold Brew", Price: 169, Veg: true, Desc: "16h steeped · hazelnut · no sugar", Kcal: 120, Rating: 4.7, Section: catalog.SectionCoffee, AddOns: coffeeAddOns},
@@ -45,6 +46,7 @@ var places = []catalog.Place{
 			{ID: "bt-sandwich", Name: "Chicken Club Sandwich", Price: 189, Veg: false, Desc: "grilled chicken · cheddar · lettuce · mustard", Kcal: 520, Rating: 4.3, Section: catalog.SectionCoffee},
 		}},
 	{ID: "third-wave", Name: "Third Wave", City: "Bangalore", Section: catalog.SectionCoffee, ETA: "30-40 min", Rating: 4.5,
+		Description:      "Specialty espresso bar — ristretto-forward, silky microfoam.",
 		ServesAddressIDs: []string{"a1", "a2", "a3"}, Items: []catalog.Item{
 			{ID: "tw-flat-white", Name: "Flat White", Price: 159, Veg: true, Desc: "double ristretto · silky microfoam", Kcal: 130, Rating: 4.7, Section: catalog.SectionCoffee},
 			{ID: "tw-filter", Name: "Filter Coffee", Price: 99, Veg: true, Desc: "south-indian · chicory blend · frothy", Kcal: 90, Rating: 4.9, Section: catalog.SectionCoffee},
@@ -58,6 +60,7 @@ var places = []catalog.Place{
 			{ID: "tw-cappuccino", Name: "Cappuccino", Price: 129, Veg: true, Desc: "double shot · velvety foam · dusted cocoa", Kcal: 110, Rating: 4.6, Section: catalog.SectionCoffee, AddOns: coffeeAddOns},
 		}},
 	{ID: "sleepy-owl", Name: "Sleepy Owl", City: "Bangalore", Section: catalog.SectionCoffee, ETA: "40-50 min", Rating: 4.3,
+		Description:      "Cold-brew specialists — steep-at-home packs and bottled brews.",
 		ServesAddressIDs: []string{"a2", "a3"}, Items: []catalog.Item{
 			{ID: "so-cold-brew", Name: "Cold Brew Original", Price: 129, Tag: "new", Veg: true, Desc: "smooth · low-acid · 18h steep", Kcal: 25, Rating: 4.5, Section: catalog.SectionCoffee},
 			{ID: "so-mocha", Name: "Mocha Cold Brew", Price: 149, Veg: true, Desc: "dark cocoa · cold brew · oat milk", Kcal: 150, Rating: 4.6, Section: catalog.SectionCoffee},
@@ -71,6 +74,7 @@ var places = []catalog.Place{
 			{ID: "so-choco-almond", Name: "Choco Almond Brew", Price: 159, Veg: true, Desc: "cold brew · almond milk · dark chocolate", Kcal: 130, Rating: 4.3, Section: catalog.SectionCoffee},
 		}},
 	{ID: "subko", Name: "Subko", City: "Bangalore", Section: catalog.SectionCoffee, ETA: "45-55 min", Rating: 4.7,
+		Description:      "Craft roaster-bakery — estate coffee and cardamom buns.",
 		ServesAddressIDs: []string{"a3"}, Items: []catalog.Item{
 			{ID: "sk-pour", Name: "Single-Origin Pour", Price: 179, Veg: true, Desc: "rotating estate · bright · hand-poured", Kcal: 5, Rating: 4.8, Section: catalog.SectionCoffee},
 			{ID: "sk-bun", Name: "Cardamom Bun", Price: 139, Veg: true, Desc: "cardamom · pearl sugar · fresh", Kcal: 340, Rating: 4.7, Section: catalog.SectionCoffee},
@@ -84,6 +88,7 @@ var places = []catalog.Place{
 			{ID: "sk-tonic-espresso", Name: "Espresso Tonic", Price: 189, Veg: true, Desc: "double shot over tonic water · citrus peel", Kcal: 20, Rating: 4.8, Section: catalog.SectionCoffee},
 		}},
 	{ID: "roastery-coffee", Name: "Roastery Coffee House", City: "Bangalore", Section: catalog.SectionCoffee, ETA: "30-40 min", Fav: true, Rating: 4.6,
+		Description:      "All-day cafe — filter coffee, paninis and big bakes.",
 		ServesAddressIDs: []string{"a1", "a2", "a3"}, Items: []catalog.Item{
 			{ID: "rc-signature-cold", Name: "Signature Cold Coffee", Price: 159, Veg: true, Desc: "house blend · cold brewed · creamy", Kcal: 170, Rating: 4.7, Section: catalog.SectionCoffee},
 			{ID: "rc-pour-over", Name: "Pour Over", Price: 169, Veg: true, Desc: "single origin arabica · clean cup · floral", Kcal: 8, Rating: 4.8, Section: catalog.SectionCoffee},
@@ -97,6 +102,7 @@ var places = []catalog.Place{
 			{ID: "rc-brownie-jar", Name: "Brownie in a Jar", Price: 139, Tag: "new", Veg: true, Desc: "fudge brownie · vanilla cream · layered", Kcal: 410, Rating: 4.7, Section: catalog.SectionCoffee},
 		}},
 	{ID: "maverick-farmer", Name: "Maverick & Farmer", City: "Bangalore", Section: catalog.SectionCoffee, ETA: "35-45 min", Rating: 4.5,
+		Description:      "Bean-to-cup roastery — affogatos and dessert-forward sips.",
 		ServesAddressIDs: []string{"a1", "a3"}, Items: []catalog.Item{
 			{ID: "mf-cold-brew", Name: "Cold Brew Classic", Price: 149, Veg: true, Desc: "12h steep · smooth · zero bitterness", Kcal: 20, Rating: 4.6, Section: catalog.SectionCoffee},
 			{ID: "mf-espresso-tonic", Name: "Espresso & Tonic", Price: 179, Tag: "new", Veg: true, Desc: "single origin · fever tree tonic · lime", Kcal: 25, Rating: 4.7, Section: catalog.SectionCoffee},
@@ -110,6 +116,7 @@ var places = []catalog.Place{
 			{ID: "mf-granola-bowl", Name: "Acai Granola Bowl", Price: 199, Veg: true, Desc: "acai base · house granola · banana · honey", Kcal: 310, Rating: 4.5, Section: catalog.SectionCoffee},
 		}},
 	{ID: "dyu-art-cafe", Name: "Dyu Art Cafe", City: "Bangalore", Section: catalog.SectionCoffee, ETA: "40-50 min", Rating: 4.4,
+		Description:      "Cosy art cafe — classic filter coffee and slow mornings.",
 		ServesAddressIDs: []string{"a2", "a3"}, Items: []catalog.Item{
 			{ID: "da-filter-coffee", Name: "Classic Filter Coffee", Price: 90, Veg: true, Desc: "traditional decoction · full cream · frothy", Kcal: 90, Rating: 4.8, Section: catalog.SectionCoffee},
 			{ID: "da-cold-coffee", Name: "Dyu Cold Coffee", Price: 145, Veg: true, Desc: "house blend · chilled milk · lightly sweetened", Kcal: 175, Rating: 4.6, Section: catalog.SectionCoffee},
@@ -124,6 +131,7 @@ var places = []catalog.Place{
 		}},
 	// ---- food ----
 	{ID: "california-burrito", Name: "California Burrito", City: "Bangalore", Section: catalog.SectionFood, ETA: "35-45 min", Rating: 4.4,
+		Description:      "Cal-Mex counter — fat burritos, bowls and loaded nachos.",
 		ServesAddressIDs: []string{"a1", "a2"}, Items: []catalog.Item{
 			{ID: "cb-chicken-burrito", Name: "Chicken Burrito", Price: 289, Desc: "grilled chicken · rice · beans · salsa", Kcal: 640, Rating: 4.6, Section: catalog.SectionFood, AddOns: foodAddOns},
 			{ID: "cb-veg-bowl", Name: "Veg Burrito Bowl", Price: 249, Veg: true, Desc: "cilantro rice · beans · guac · no tortilla", Kcal: 520, Rating: 4.5, Section: catalog.SectionFood},
@@ -137,6 +145,7 @@ var places = []catalog.Place{
 			{ID: "cb-jalapeno-poppers", Name: "Jalapeño Poppers", Price: 169, Veg: true, Desc: "cream cheese stuffed · crispy panko coating", Kcal: 320, Rating: 4.4, Section: catalog.SectionFood},
 		}},
 	{ID: "leon-grill", Name: "Leon Grill", City: "Bangalore", Section: catalog.SectionFood, ETA: "30-40 min", Rating: 4.2,
+		Description:      "Grill house — rolls, kebabs and char-smoked plates.",
 		ServesAddressIDs: []string{"a1", "a3"}, Items: []catalog.Item{
 			{ID: "lg-shawarma", Name: "Chicken Shawarma", Price: 199, Desc: "garlic · pickle · toasted lavash", Kcal: 560, Rating: 4.7, Section: catalog.SectionFood},
 			{ID: "lg-falafel", Name: "Falafel Wrap", Price: 169, Veg: true, Desc: "crisp falafel · hummus · tahini", Kcal: 430, Rating: 4.4, Section: catalog.SectionFood},
@@ -150,6 +159,7 @@ var places = []catalog.Place{
 			{ID: "lg-mint-lemonade", Name: "Mint Lemonade", Price: 89, Veg: true, Desc: "fresh mint · squeezed lemon · soda water", Kcal: 60, Rating: 4.4, Section: catalog.SectionFood},
 		}},
 	{ID: "freshmenu", Name: "FreshMenu", City: "Bangalore", Section: catalog.SectionFood, ETA: "40-50 min", Rating: 4.1,
+		Description:      "Chef-led kitchen — global mains, rotating weekly specials.",
 		ServesAddressIDs: []string{"a1", "a2", "a3"}, Items: []catalog.Item{
 			{ID: "fm-thai-rice", Name: "Thai Basil Rice", Price: 269, Veg: true, Desc: "holy basil · chilli · jasmine rice", Kcal: 610, Rating: 4.5, Section: catalog.SectionFood},
 			{ID: "fm-butter-chicken", Name: "Butter Chicken Meal", Price: 319, Desc: "makhani gravy · rice · butter naan", Kcal: 780, Rating: 4.8, Section: catalog.SectionFood},
@@ -163,6 +173,7 @@ var places = []catalog.Place{
 			{ID: "fm-gulab-jamun", Name: "Gulab Jamun (2 pcs)", Price: 99, Veg: true, Desc: "khoya balls · rose syrup · warm · saffron", Kcal: 280, Rating: 4.4, Section: catalog.SectionFood},
 		}},
 	{ID: "meghana-foods", Name: "Meghana Foods", City: "Bangalore", Section: catalog.SectionFood, ETA: "35-45 min", Fav: true, Rating: 4.7,
+		Description:      "Andhra biryani institution — fiery, generous, legendary.",
 		ServesAddressIDs: []string{"a1", "a2"}, Items: []catalog.Item{
 			{ID: "mgh-chicken-biryani", Name: "Chicken Biryani", Price: 299, Veg: false, Desc: "dum biryani · kachi method · raita · salan", Kcal: 740, Rating: 4.9, Section: catalog.SectionFood},
 			{ID: "mgh-mutton-biryani", Name: "Mutton Biryani", Price: 369, Veg: false, Desc: "slow cooked mutton · fragrant rice · fried onion", Kcal: 820, Rating: 4.8, Section: catalog.SectionFood},
@@ -176,6 +187,7 @@ var places = []catalog.Place{
 			{ID: "mgh-phirni", Name: "Phirni", Price: 99, Veg: true, Tag: "new", Desc: "rice pudding · saffron · cardamom · chilled", Kcal: 230, Rating: 4.6, Section: catalog.SectionFood},
 		}},
 	{ID: "truffles-restaurant", Name: "Truffles", City: "Bangalore", Section: catalog.SectionFood, ETA: "30-40 min", Rating: 4.5,
+		Description:      "Bengaluru diner classic — burgers, steaks and pastas.",
 		ServesAddressIDs: []string{"a2", "a3"}, Items: []catalog.Item{
 			{ID: "tr-classic-burger", Name: "Classic Beef Burger", Price: 349, Veg: false, Desc: "beef patty · cheddar · pickles · truffle mayo", Kcal: 720, Rating: 4.8, Section: catalog.SectionFood},
 			{ID: "tr-chicken-burger", Name: "Crispy Chicken Burger", Price: 299, Veg: false, Desc: "buttermilk fried chicken · coleslaw · sriracha", Kcal: 650, Rating: 4.7, Section: catalog.SectionFood},
@@ -189,6 +201,7 @@ var places = []catalog.Place{
 			{ID: "tr-lemonade", Name: "Virgin Mojito", Price: 119, Veg: true, Desc: "lime · mint · soda · crushed ice", Kcal: 70, Rating: 4.4, Section: catalog.SectionFood},
 		}},
 	{ID: "empire-restaurant", Name: "Empire Restaurant", City: "Bangalore", Section: catalog.SectionFood, ETA: "25-35 min", Rating: 4.3,
+		Description:      "Late-night legend — kebabs, biryani and butter curries.",
 		ServesAddressIDs: []string{"a1", "a2", "a3"}, Items: []catalog.Item{
 			{ID: "er-chicken-roll", Name: "Chicken Roll", Price: 139, Veg: false, Desc: "egg roll · spiced chicken · onion · chutney", Kcal: 420, Rating: 4.7, Section: catalog.SectionFood},
 			{ID: "er-mutton-roll", Name: "Mutton Roll", Price: 169, Veg: false, Desc: "egg roll · tender mutton · green chutney", Kcal: 470, Rating: 4.6, Section: catalog.SectionFood},
@@ -202,6 +215,7 @@ var places = []catalog.Place{
 			{ID: "er-cool-drinks", Name: "Rose Milk", Price: 59, Veg: true, Desc: "rose syrup · chilled full cream milk · sweet", Kcal: 130, Rating: 4.2, Section: catalog.SectionFood},
 		}},
 	{ID: "bowl-company", Name: "The Bowl Company", City: "Bangalore", Section: catalog.SectionFood, ETA: "40-50 min", Rating: 4.2,
+		Description:      "Rice and noodle bowls — Asian comfort, one bowl at a time.",
 		ServesAddressIDs: []string{"a1", "a3"}, Items: []catalog.Item{
 			{ID: "bc-korean-bowl", Name: "Korean Bibimbap Bowl", Price: 299, Veg: true, Desc: "steamed rice · gochujang · mixed vegetables · fried egg", Kcal: 580, Rating: 4.6, Section: catalog.SectionFood},
 			{ID: "bc-chicken-teriyaki", Name: "Chicken Teriyaki Bowl", Price: 319, Veg: false, Desc: "teriyaki chicken · steamed rice · sesame · spring onion", Kcal: 640, Rating: 4.7, Section: catalog.SectionFood},
@@ -216,6 +230,7 @@ var places = []catalog.Place{
 		}},
 	// ---- snacks ----
 	{ID: "whole-truth", Name: "The Whole Truth", City: "Bangalore", Section: catalog.SectionSnacks, ETA: "35-45 min", Fav: true, Rating: 4.8,
+		Description:      "Clean-label bars — no added sugar, nothing artificial.",
 		ServesAddressIDs: []string{"a1", "a2"}, Items: []catalog.Item{
 			{ID: "wt-protein-bar", Name: "Protein Bar", Price: 90, Tag: "new", Veg: true, Desc: "20g protein · no added sugar", Kcal: 200, Rating: 4.4, Section: catalog.SectionSnacks},
 			{ID: "wt-pb-cup", Name: "Peanut Butter Cup", Price: 60, Veg: true, Desc: "dark chocolate · 7g protein", Kcal: 120, Rating: 4.6, Section: catalog.SectionSnacks},
@@ -229,6 +244,7 @@ var places = []catalog.Place{
 			{ID: "wt-trail-mix", Name: "Trail Mix", Price: 149, Veg: true, Desc: "cashew · almond · cranberry · dark choc chips", Kcal: 200, Rating: 4.5, Section: catalog.SectionSnacks},
 		}},
 	{ID: "snackible", Name: "Snackible", City: "Bangalore", Section: catalog.SectionSnacks, ETA: "30-40 min", Rating: 4.3,
+		Description:      "Guilt-free munchies — baked, popped and air-dried snacks.",
 		ServesAddressIDs: []string{"a1", "a2", "a3"}, Items: []catalog.Item{
 			{ID: "sn-makhana", Name: "Roasted Makhana", Price: 99, Veg: true, Desc: "foxnuts · peri-peri · air-roasted", Kcal: 140, Rating: 4.5, Section: catalog.SectionSnacks},
 			{ID: "sn-chips", Name: "Baked Veggie Chips", Price: 79, Veg: true, Desc: "beetroot · kale · sea salt", Kcal: 160, Rating: 4.2, Section: catalog.SectionSnacks},
@@ -242,6 +258,7 @@ var places = []catalog.Place{
 			{ID: "sn-protein-popcorn", Name: "Protein Popcorn", Price: 89, Veg: true, Desc: "7g protein per bag · cheese · whey coated", Kcal: 120, Rating: 4.1, Section: catalog.SectionSnacks},
 		}},
 	{ID: "open-secret", Name: "Open Secret", City: "Bangalore", Section: catalog.SectionSnacks, ETA: "35-45 min", Fav: true, Rating: 4.6,
+		Description:      "Nut-based treats — cookies and bites disguised as dessert.",
 		ServesAddressIDs: []string{"a1", "a2"}, Items: []catalog.Item{
 			{ID: "os-peanut-butter", Name: "Classic Peanut Butter", Price: 199, Veg: true, Desc: "just peanuts and salt · no palm oil · stone ground", Kcal: 190, Rating: 4.8, Section: catalog.SectionSnacks},
 			{ID: "os-choco-pb", Name: "Choco Peanut Butter", Price: 215, Veg: true, Desc: "dark cocoa swirl · natural peanut butter · no added sugar", Kcal: 200, Rating: 4.7, Section: catalog.SectionSnacks},
@@ -255,6 +272,7 @@ var places = []catalog.Place{
 			{ID: "os-multigrain-chips", Name: "Multigrain Snack Chips", Price: 79, Veg: true, Desc: "corn · wheat · oats · no artificial colour", Kcal: 165, Rating: 4.3, Section: catalog.SectionSnacks},
 		}},
 	{ID: "yoga-bar", Name: "Yoga Bar", City: "Bangalore", Section: catalog.SectionSnacks, ETA: "30-40 min", Rating: 4.4,
+		Description:      "Protein bars and muesli — fuel that tastes like a snack.",
 		ServesAddressIDs: []string{"a2", "a3"}, Items: []catalog.Item{
 			{ID: "yb-protein-bar", Name: "Protein Bar Choco Fudge", Price: 85, Veg: true, Desc: "10g protein · dates · oats · dark chocolate", Kcal: 185, Rating: 4.5, Section: catalog.SectionSnacks},
 			{ID: "yb-multigrain-bar", Name: "Multigrain Energy Bar", Price: 55, Veg: true, Desc: "oats · millet · quinoa · seeds · honey", Kcal: 135, Rating: 4.3, Section: catalog.SectionSnacks},
@@ -268,6 +286,7 @@ var places = []catalog.Place{
 			{ID: "yb-date-bites", Name: "Dark Chocolate Date Bites (5 pcs)", Price: 99, Veg: true, Desc: "medjool dates · dark chocolate coating · almonds inside", Kcal: 150, Rating: 4.5, Section: catalog.SectionSnacks},
 		}},
 	{ID: "beyond-snack", Name: "Beyond Snack", City: "Bangalore", Section: catalog.SectionSnacks, ETA: "35-45 min", Rating: 4.5,
+		Description:      "Kerala banana chips — kettle-cooked, crunchy, moreish.",
 		ServesAddressIDs: []string{"a1", "a3"}, Items: []catalog.Item{
 			{ID: "bs-nendran-chips", Name: "Nendran Banana Chips (Classic)", Price: 79, Veg: true, Desc: "kerala nendran · coconut oil · hand sliced · salted", Kcal: 195, Rating: 4.8, Section: catalog.SectionSnacks},
 			{ID: "bs-masala-chips", Name: "Nendran Masala Chips", Price: 79, Veg: true, Desc: "nendran banana · house masala blend · spicy", Kcal: 190, Rating: 4.7, Section: catalog.SectionSnacks},
@@ -281,6 +300,7 @@ var places = []catalog.Place{
 			{ID: "bs-variety-pack", Name: "Chips Variety Pack (3 flavours)", Price: 199, Veg: true, Desc: "classic · masala · pepper · 3 packs of nendran chips", Kcal: 195, Rating: 4.8, Section: catalog.SectionSnacks},
 		}},
 	{ID: "happilo", Name: "Happilo", City: "Bangalore", Section: catalog.SectionSnacks, ETA: "40-50 min", Rating: 4.3,
+		Description:      "Premium dry fruits, nuts and trail mixes by the pack.",
 		ServesAddressIDs: []string{"a1", "a2", "a3"}, Items: []catalog.Item{
 			{ID: "hp-premium-mix", Name: "Premium Nut Mix", Price: 199, Veg: true, Desc: "california walnut · cashew · almond · pistachio", Kcal: 195, Rating: 4.6, Section: catalog.SectionSnacks},
 			{ID: "hp-dried-cranberry", Name: "Dried Cranberries", Price: 169, Veg: true, Desc: "sweetened dried cranberry · no preservatives", Kcal: 130, Rating: 4.4, Section: catalog.SectionSnacks},
@@ -294,6 +314,7 @@ var places = []catalog.Place{
 			{ID: "hp-choco-coated-nuts", Name: "Dark Choco Coated Nuts", Price: 189, Veg: true, Desc: "almond · cashew · 70% dark chocolate coating", Kcal: 195, Rating: 4.7, Section: catalog.SectionSnacks},
 		}},
 	{ID: "eat-anytime", Name: "Eat Anytime", City: "Bangalore", Section: catalog.SectionSnacks, ETA: "30-40 min", Rating: 4.2,
+		Description:      "On-the-go nutrition — shakes, bars and meal boxes.",
 		ServesAddressIDs: []string{"a2", "a3"}, Items: []catalog.Item{
 			{ID: "ea-protein-chips", Name: "Protein Chips Spicy", Price: 69, Veg: true, Desc: "lentil-based · 5g protein · baked not fried", Kcal: 110, Rating: 4.4, Section: catalog.SectionSnacks},
 			{ID: "ea-roasted-chana", Name: "Roasted Chana Crunch", Price: 55, Veg: true, Desc: "kabuli chana · tangy masala · high protein", Kcal: 130, Rating: 4.3, Section: catalog.SectionSnacks},

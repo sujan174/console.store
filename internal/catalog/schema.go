@@ -63,6 +63,7 @@ type Place struct {
 	ETA              string // "35-45 min"
 	Fav              bool
 	Rating           float64
+	Description      string // one-line "quick look" blurb; empty in older data
 	Items            []Item
 	ServesAddressIDs []string
 }

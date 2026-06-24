@@ -127,3 +127,11 @@ func TestRestaurantInfoPanelFollowsSelection(t *testing.T) {
 		t.Errorf("info panel should describe the selected item %q", sel.Name)
 	}
 }
+
+func TestPlaceHasDescription(t *testing.T) {
+	repo := mem.New()
+	p, _ := repo.Menu("blue-tokai")
+	if p.Description == "" {
+		t.Fatal("Blue Tokai Place.Description must be non-empty after seed")
+	}
+}
