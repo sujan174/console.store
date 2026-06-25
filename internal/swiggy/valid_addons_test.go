@@ -46,3 +46,23 @@ func TestValidAddonsEmptyWhenAbsent(t *testing.T) {
 		t.Fatalf("a cart with no valid_addons must yield no groups, got %d", len(g))
 	}
 }
+
+func TestToCartDoesNotSetValidAddons(t *testing.T) {
+	raw, err := os.ReadFile("testdata/valid_addons_cart.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var env cartEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	// toCart carries pricing + lines only; valid_addons is composed separately
+	// (inside UpdateFoodCart) so the two concerns stay independent.
+	if len(env.toCart().ValidAddons) != 0 {
+		t.Fatal("toCart must not populate ValidAddons; it is wired in UpdateFoodCart")
+	}
+	// The fixture DOES carry valid_addons via the dedicated accessor.
+	if len(env.validAddons()) == 0 {
+		t.Fatal("fixture should expose valid_addons via validAddons()")
+	}
+}

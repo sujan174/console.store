@@ -73,7 +73,9 @@ func (c *Client) UpdateFoodCart(ctx context.Context, addressID, restaurantID, re
 	if cerr := env.cartError(); cerr != nil {
 		return Cart{}, cerr
 	}
-	return env.toCart(), nil
+	cart := env.toCart()
+	cart.ValidAddons = env.validAddons()
+	return cart, nil
 }
 
 func (c *Client) FlushFoodCart(ctx context.Context) error {
