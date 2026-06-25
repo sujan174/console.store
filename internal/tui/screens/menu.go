@@ -185,17 +185,9 @@ func (m Menu) View() string {
 		tabHint := theme.FaintStyle.Render("tab ·")
 		b.WriteString("  " + activeV + vertSep + inactiveV + "   " + tabHint + "\n")
 
-		// cuisine chip row
-		var chips []string
-		for i, label := range m.chipLabels {
-			if i == m.chipActive {
-				chips = append(chips, theme.Fg(theme.Gold).Underline(true).Render(label))
-			} else {
-				chips = append(chips, theme.CatOffStyle.Render(label))
-			}
-		}
-		chipSep := theme.Fg(theme.Div2).Render(" │ ")
-		b.WriteString("  " + strings.Join(chips, chipSep) + "\n")
+		// cuisine chip row — scrolls horizontally (windowed around the active chip
+		// with ‹ / › markers) so a long chip list never truncates.
+		b.WriteString("  " + windowedBar(m.chipLabels, m.chipActive, components.ContentWidth()-4, " │ ") + "\n")
 		b.WriteString("\n")
 	}
 
