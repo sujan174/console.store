@@ -119,13 +119,13 @@ func TestSeededPathSkipsLiveLoads(t *testing.T) {
 func TestLiveCartSyncFires(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
 	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
-	snap.SetPlaces("a1", catalog.SectionCoffee, []catalog.Place{
-		{ID: "r1", SwiggyID: "swiggy-r1", Name: "Blue Tokai", Section: catalog.SectionCoffee},
-	})
-	snap.SetMenu(catalog.Place{
+	place := catalog.Place{
 		ID: "r1", SwiggyID: "swiggy-r1", Name: "Blue Tokai",
-		Items: []catalog.Item{{ID: "i1", SwiggyID: "swiggy-i1", Name: "Latte", Price: 250, Veg: true}},
-	})
+		Section: catalog.SectionCoffee,
+		Items:   []catalog.Item{{ID: "i1", SwiggyID: "swiggy-i1", Name: "Latte", Price: 250, Veg: true}},
+	}
+	snap.SetPlaces("a1", catalog.SectionCoffee, []catalog.Place{place})
+	snap.SetMenu(place)
 	be := &liveFake{}
 	m := New(render.Caps{},
 		WithLiveBackend(be, snap, "acct-1", ""),
@@ -133,12 +133,12 @@ func TestLiveCartSyncFires(t *testing.T) {
 	)
 	m.w, m.h = 100, 40
 
-	// Navigate to the restaurant and add an item.
-	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // enter restaurant
-	// Simulate MenuLoadedMsg arriving.
-	m3, _ := m2.(Model).Update(datasource.MenuLoadedMsg{PlaceID: "r1"})
-	// Now add item (enter on restaurant screen).
-	_, cmd := m3.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Skip to scrRestaurant with the restaurant loaded.
+	m.screen = scrRestaurant
+	m.rest = screens.NewRestaurant(place, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
+
+	// Add an item — in live mode with SwiggyID set, must return a SyncCart cmd.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("adding item in live mode must return a SyncCart cmd")
 	}
