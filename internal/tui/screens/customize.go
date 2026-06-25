@@ -30,8 +30,13 @@ type Customize struct {
 	picked map[string]map[string]bool // groupID -> choiceID -> on
 	rows   []optRow                   // flattened selectable rows
 
-	cursor int
+	cursor    int
+	viewportH int // terminal height; 0 = no windowing (render all)
 }
+
+// WithViewport sets the terminal height so a long option list scrolls within the
+// viewport instead of overflowing off the top.
+func (c Customize) WithViewport(h int) Customize { c.viewportH = h; return c }
 
 // optRow references one choice within a group, for cursor navigation.
 type optRow struct {
@@ -222,6 +227,7 @@ func (c Customize) groupedView() string {
 
 	var rows []string
 	row := 0
+	cursorLine := 0
 	for _, g := range c.groups {
 		req := ""
 		if g.Min > 0 {
@@ -256,12 +262,14 @@ func (c Customize) groupedView() string {
 			cursor := "  "
 			if row == c.cursor {
 				cursor = theme.CursorStyle.Render("> ")
+				cursorLine = len(rows) // index this row will occupy
 			}
 			gap := strings.Repeat(" ", nameW-lipgloss.Width(ch.Name)+3)
 			rows = append(rows, cursor+box+" "+name+gap+price)
 			row++
 		}
 	}
+	rows = c.windowRows(rows, cursorLine)
 
 	total := justify(
 		theme.DimStyle.Render("per item"),
@@ -323,6 +331,54 @@ func (c Customize) flatView() string {
 	parts = append(parts, rows...)
 	parts = append(parts, "", "  "+total, "", hint)
 	return dialogBox(strings.Join(parts, "\n"))
+}
+
+// windowRows scrolls a long option list to fit the viewport, keeping the cursor
+// visible and marking hidden rows above/below. Returns rows unchanged when the
+// height is unknown (0) or everything already fits.
+func (c Customize) windowRows(rows []string, cursorLine int) []string {
+	const chrome = 12 // title+sub+blanks+total+hint+border+padding
+	if c.viewportH <= 0 {
+		return rows
+	}
+	budget := c.viewportH - chrome
+	if budget < 3 {
+		budget = 3
+	}
+	if len(rows) <= budget {
+		return rows
+	}
+	content := budget - 2 // reserve two lines for the up/down markers
+	if content < 1 {
+		content = 1
+	}
+	start := cursorLine - content/2
+	if start < 0 {
+		start = 0
+	}
+	if start+content > len(rows) {
+		start = len(rows) - content
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + content
+	if end > len(rows) {
+		end = len(rows)
+	}
+	out := make([]string, 0, content+2)
+	if start > 0 {
+		out = append(out, theme.DimStyle.Render(fmt.Sprintf("  ↑ %d more above", start)))
+	} else {
+		out = append(out, "")
+	}
+	out = append(out, rows[start:end]...)
+	if end < len(rows) {
+		out = append(out, theme.DimStyle.Render(fmt.Sprintf("  ↓ %d more below", len(rows)-end)))
+	} else {
+		out = append(out, "")
+	}
+	return out
 }
 
 func dialogBox(inner string) string {

@@ -1097,7 +1097,7 @@ func (m Model) View() string {
 	// The customise / conflict modals take over the viewport, centered. They are
 	// blocking, so the context behind them is not needed.
 	if m.customizeOpen {
-		dialog := m.customize.View()
+		dialog := m.customize.WithViewport(m.h).View()
 		if m.w == 0 || m.h == 0 {
 			return dialog
 		}

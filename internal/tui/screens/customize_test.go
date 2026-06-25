@@ -1,6 +1,7 @@
 package screens_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -64,5 +65,37 @@ func TestCustomizeCursorClamps(t *testing.T) {
 	got := c.SelectedAddOns()
 	if len(got) != 1 || got[0].ID != "whip" {
 		t.Errorf("cursor clamp wrong, selected=%+v", got)
+	}
+}
+
+// bigOptItem builds a live item with many option rows to exercise viewport
+// windowing of the customise sheet.
+func bigOptItem() catalog.Item {
+	var groups []catalog.OptionGroup
+	for g := 0; g < 4; g++ {
+		grp := catalog.OptionGroup{ID: fmt.Sprintf("g%d", g), Name: fmt.Sprintf("Group %d", g), Min: 0, Max: 0}
+		for i := 0; i < 8; i++ {
+			grp.Choices = append(grp.Choices, catalog.Choice{ID: fmt.Sprintf("g%dc%d", g, i), Name: fmt.Sprintf("Choice %d-%d", g, i), InStock: true})
+		}
+		groups = append(groups, grp)
+	}
+	return catalog.Item{ID: "big", Name: "Loaded", Price: 100, Options: groups}
+}
+
+func TestCustomizeWindowsToViewport(t *testing.T) {
+	c := screens.NewCustomize(bigOptItem()).WithViewport(20)
+	// move cursor near the bottom so the top must scroll off
+	for i := 0; i < 30; i++ {
+		c = c.Down()
+	}
+	v := c.View()
+	if h := strings.Count(v, "\n") + 1; h > 20 {
+		t.Fatalf("dialog height %d exceeds viewport 20:\n%s", h, v)
+	}
+	if !strings.Contains(v, "more above") {
+		t.Errorf("expected an 'more above' scroll marker:\n%s", v)
+	}
+	if !strings.Contains(v, "> ") {
+		t.Errorf("cursor row not visible in window:\n%s", v)
 	}
 }
