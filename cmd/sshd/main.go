@@ -21,7 +21,9 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"console.store/internal/broker/api"
+	"console.store/internal/catalog"
 	swiggysnap "console.store/internal/catalog/swiggy"
+	"console.store/internal/config"
 	consoletui "console.store/internal/tui"
 	"console.store/internal/tui/datasource"
 	"console.store/internal/tui/render"
@@ -84,7 +86,61 @@ func liveModel(s ssh.Session, caps render.Caps) (tea.Model, bool) {
 
 	snap := swiggysnap.NewSnapshot()
 	be := datasource.NewBrokerBackend(cli, accountID)
-	return consoletui.New(caps, consoletui.WithLiveBackend(be, snap, accountID, authURL)), true
+	opts := []consoletui.Option{consoletui.WithLiveBackend(be, snap, accountID, authURL)}
+
+	// Load optional seed config to pre-populate the snapshot.
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		log.Printf("live: config load error: %v (continuing without seed)", err)
+	}
+	if cfg != nil && cfg.Seed.RestaurantID != "" {
+		seedSnapshot(snap, cfg)
+		opts = append(opts, consoletui.WithSeededSnapshot())
+		log.Printf("live: seeded snapshot from config: restaurant=%s items=%d",
+			cfg.Seed.RestaurantName, len(cfg.Seed.Items))
+	}
+
+	return consoletui.New(caps, opts...), true
+}
+
+// seedSnapshot pre-populates snap with the config's restaurant and curated items.
+// This lets the TUI boot instantly into the configured restaurant without waiting
+// for live Swiggy API calls. LoadMenu still fires when the user navigates in.
+func seedSnapshot(snap *swiggysnap.Snapshot, cfg *config.Config) {
+	s := cfg.Seed
+	section := catalog.Section(s.Section)
+	if section == "" {
+		section = catalog.SectionCoffee
+	}
+
+	// Seed address.
+	addr := catalog.Address{ID: s.AddressID, Label: "home"}
+	snap.SetAddresses([]catalog.Address{addr})
+
+	// Seed restaurant in the place list.
+	place := catalog.Place{
+		ID:       s.RestaurantID,
+		SwiggyID: s.RestaurantID,
+		Name:     s.RestaurantName,
+		Section:  section,
+	}
+	snap.SetPlaces(s.AddressID, section, []catalog.Place{place})
+
+	// Seed menu items.
+	items := make([]catalog.Item, len(s.Items))
+	for i, it := range s.Items {
+		items[i] = catalog.Item{
+			ID:       it.ID,
+			SwiggyID: it.ID,
+			Name:     it.Name,
+			Price:    it.Price,
+			Veg:      it.Veg,
+			Desc:     it.Desc,
+			Section:  catalog.Section(it.Section),
+		}
+	}
+	place.Items = items
+	snap.SetMenu(place)
 }
 
 // canvasMiddleware sets the client terminal's default background to the design
