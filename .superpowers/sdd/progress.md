@@ -94,3 +94,7 @@ S8 Task 7 (verification): complete.
   - Restarted local broker + sshd on new code (docker postgres healthy). Live UI smoke is the user's step.
   - No order placed; CONSOLE_LIVE_ORDERS untouched.
 Slice 8 (Restaurants IA redesign) COMPLETE — pending final whole-branch review.
+
+Final whole-branch review (c9d5d43..648a77a, Opus): READY TO MERGE. All 4 cross-task risks clean (Category path end-to-end, cache re-keying coherent, account-pinning upheld, no double-bar/panic). Logged Minors all deferred. One NEW Minor: vertical-toggle had no on-screen affordance (spec §1/§2).
+Final fix (107fa09): rendered "Restaurants · Instamart soon  tab ·" toggle row at top of live browse (gated len(chipLabels)>0; mock unchanged); fixed stale NextCategory "wraps" comment to "clamps". Tests green, gofmt/vet clean. sshd restarted on latest code.
+Slice 8 (Restaurants IA redesign) COMPLETE & READY TO MERGE. Pending: user live SSH smoke, then merge worktree-swiggy-live.
