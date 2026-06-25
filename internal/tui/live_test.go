@@ -9,6 +9,7 @@ import (
 	"console.store/internal/broker/api"
 	"console.store/internal/catalog"
 	swiggysnap "console.store/internal/catalog/swiggy"
+	"console.store/internal/config"
 	"console.store/internal/tui/datasource"
 	"console.store/internal/tui/render"
 	"console.store/internal/tui/screens"
@@ -183,6 +184,24 @@ func TestLivePlaceOrderTransitionsToConfirm(t *testing.T) {
 	}
 	if um2.placingOrder {
 		t.Fatal("placingOrder must be cleared after success")
+	}
+}
+
+func TestChipSwitchFiresQuery(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
+	be := &liveFake{}
+	m := New(render.Caps{},
+		WithLiveBackend(be, snap, "acct-1", ""),
+		WithSeededSnapshot(),
+		WithChips([]config.Category{{Label: "Coffee", Query: "coffee"}, {Label: "Pizza", Query: "pizza"}}),
+	)
+	m.w, m.h = 100, 40
+	m.screen = scrMenu
+	// move to the next chip → must return a non-nil Cmd (LoadPlacesQuery)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if cmd == nil {
+		t.Fatal("changing chip in live mode must fire a places query")
 	}
 }
 

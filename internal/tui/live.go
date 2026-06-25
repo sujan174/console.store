@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	swiggysnap "console.store/internal/catalog/swiggy"
+	"console.store/internal/config"
 	"console.store/internal/tui/datasource"
 )
 
@@ -41,6 +42,12 @@ func WithPendingAuth() Option {
 	return func(m *Model) { m.needsAuth = true }
 }
 
+// WithChips sets the cuisine chip categories for the live Restaurants browse.
+// When not set (or empty), New defaults to config.DefaultCategories().
+func WithChips(cats []config.Category) Option {
+	return func(m *Model) { m.chips = cats }
+}
+
 // liveInitCmds returns the initial fetches for a live session. When seeded,
 // the snapshot already has data; skip live loads so the TUI is instantly usable.
 // When the session is pending authorization (no linked account yet), skip the
@@ -52,8 +59,12 @@ func (m Model) liveInitCmds() tea.Cmd {
 	if m.seeded || m.needsAuth {
 		return nil
 	}
+	firstQuery := ""
+	if len(m.chips) > 0 {
+		firstQuery = m.chips[0].Query
+	}
 	return tea.Batch(
 		datasource.LoadAddresses(m.backend, m.snap),
-		datasource.LoadPlaces(m.backend, m.snap, m.addr.ID, m.section),
+		datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, firstQuery),
 	)
 }

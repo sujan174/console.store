@@ -107,6 +107,9 @@ func liveModel(s ssh.Session, caps render.Caps) (tea.Model, bool) {
 		log.Printf("live: seeded snapshot from config: restaurant=%s items=%d",
 			cfg.Seed.RestaurantName, len(cfg.Seed.Items))
 	}
+	// Pass chip categories from config (nil-safe: ChipCategories returns defaults
+	// when cfg is nil or has no categories configured).
+	opts = append(opts, consoletui.WithChips(cfg.ChipCategories()))
 
 	return consoletui.New(caps, opts...), true
 }

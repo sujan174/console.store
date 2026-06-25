@@ -15,10 +15,12 @@ import (
 	"console.store/internal/catalog"
 	"console.store/internal/catalog/mem"
 	swiggysnap "console.store/internal/catalog/swiggy"
+	"console.store/internal/config"
 	"console.store/internal/tui/components"
 	"console.store/internal/tui/datasource"
 	"console.store/internal/tui/render"
 	"console.store/internal/tui/screens"
+	"console.store/internal/tui/theme"
 )
 
 // dbgTUI logs to the server stderr when CONSOLE_DEBUG_TUI=1 (temporary, for
@@ -146,6 +148,11 @@ type Model struct {
 	cartSyncErr  string   // last cart-sync error; shown in status bar (non-fatal)
 	orderErr     string   // last order-placement error; shown in status bar
 	liveCart     api.Cart // last synced Swiggy cart (real pricing for the bill)
+
+	// vertical selects the top-level vertical: 0 = Restaurants, 1 = Instamart.
+	vertical int
+	chips    []config.Category // cuisine chips for the live browse; set from config
+	chipIdx  int               // index of the currently active chip
 }
 
 func New(caps render.Caps, opts ...Option) Model {
@@ -162,10 +169,35 @@ func New(caps render.Caps, opts ...Option) Model {
 			m.addr = addrs[0]
 		}
 	}
+	// Default chips when none were set via WithChips.
+	if len(m.chips) == 0 {
+		m.chips = config.DefaultCategories()
+	}
 	m.splash = screens.NewSplash().WithCaps(caps)
 	m.splashPhrase = screens.RandomPhrase("")
 	m.menu = m.buildMenu()
 	return m
+}
+
+// browsePlaces returns the places to display on the browse screen. In live mode
+// it reads from the chip query key; in mock mode it falls back to section places.
+func (m Model) browsePlaces() []catalog.Place {
+	if m.live {
+		if r, ok := m.repo.(*swiggysnap.Repository); ok {
+			if len(m.chips) == 0 {
+				return nil
+			}
+			idx := m.chipIdx
+			if idx < 0 {
+				idx = 0
+			}
+			if idx >= len(m.chips) {
+				idx = len(m.chips) - 1
+			}
+			return r.PlacesByQuery(m.addr, m.chips[idx].Query)
+		}
+	}
+	return m.repo.Places(m.addr, m.section)
 }
 
 // buildMenu constructs the menu screen for the current address + section.
@@ -180,8 +212,29 @@ func (m Model) buildMenu() screens.Menu {
 	for _, sec := range catalog.MenuSections {
 		counts[sec] = len(m.repo.Places(m.addr, sec))
 	}
-	return screens.NewMenu(m.repo.Places(m.addr, m.section), m.addr, m.section, usual, ok, m.cartChip()).
+	menu := screens.NewMenu(m.browsePlaces(), m.addr, m.section, usual, ok, m.cartChip()).
 		WithCounts(counts)
+	// In live mode attach the cuisine chips (suppresses the old section-tab row
+	// is NOT suppressed here — see menu.go: chips render ABOVE the tabs additively).
+	// We suppress the old tabs by not calling WithCounts when live, but that would
+	// hide counts. Instead we rely on the live browse having chips set: the
+	// menu.View() already renders both rows. The mock path passes no chips so only
+	// the section tabs appear. This is the designed additive behaviour from Task 5.
+	if m.live && len(m.chips) > 0 {
+		labels := make([]string, len(m.chips))
+		for i, c := range m.chips {
+			labels[i] = c.Label
+		}
+		idx := m.chipIdx
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(m.chips) {
+			idx = len(m.chips) - 1
+		}
+		menu = menu.WithChips(labels, idx)
+	}
+	return menu
 }
 
 var menuTabs = []catalog.Section{catalog.SectionCoffee, catalog.SectionFood, catalog.SectionSnacks}
@@ -505,7 +558,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.menu = m.buildMenu()
 		if m.live {
-			return m, datasource.LoadPlaces(m.backend, m.snap, m.addr.ID, m.section)
+			// Re-fire the active chip query after address adoption.
+			chipQuery := ""
+			if len(m.chips) > 0 {
+				idx := m.chipIdx
+				if idx < 0 {
+					idx = 0
+				}
+				if idx >= len(m.chips) {
+					idx = len(m.chips) - 1
+				}
+				chipQuery = m.chips[idx].Query
+			}
+			return m, datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, chipQuery)
 		}
 		return m, nil
 	case datasource.PlacesLoadedMsg:
@@ -757,14 +822,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "right", "l":
-				// non-cyclable: clamp at the last tab (snacks)
+				if m.live && len(m.chips) > 0 {
+					// Live mode: navigate cuisine chips
+					if m.chipIdx < len(m.chips)-1 {
+						m.chipIdx++
+						m.menu = m.buildMenu()
+						return m, datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, m.chips[m.chipIdx].Query)
+					}
+					return m, nil
+				}
+				// Mock mode: non-cyclable section tabs, clamp at the last tab (snacks)
 				if i := sectionIndex(m.section); i < len(menuTabs)-1 {
 					m.section = menuTabs[i+1]
 					m.menu = m.buildMenu()
 				}
 				return m, nil
 			case "left", "h":
-				// non-cyclable: clamp at the first tab (coffee)
+				if m.live && len(m.chips) > 0 {
+					// Live mode: navigate cuisine chips
+					if m.chipIdx > 0 {
+						m.chipIdx--
+						m.menu = m.buildMenu()
+						return m, datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, m.chips[m.chipIdx].Query)
+					}
+					return m, nil
+				}
+				// Mock mode: non-cyclable section tabs, clamp at the first tab (coffee)
 				if i := sectionIndex(m.section); i > 0 {
 					m.section = menuTabs[i-1]
 					m.menu = m.buildMenu()
@@ -803,6 +886,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "a":
 				m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
 				m.screen = scrAddress
+				return m, nil
+			case "tab":
+				if m.live {
+					// Vertical toggle: switch to the Instamart placeholder.
+					m.vertical = 1
+					m.screen = scrInstamart
+					return m, nil
+				}
 				return m, nil
 			default:
 				nm, cmd := m.menu.Update(msg)
@@ -980,7 +1071,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case scrInstamart:
 			switch k.String() {
-			case "esc":
+			case "esc", "tab":
+				// esc always returns to Restaurants browse. When live and we entered
+				// via vertical toggle, also reset the vertical state.
+				m.vertical = 0
 				m.screen = scrMenu
 				return m, nil
 			case "enter", "right", "l":
@@ -1156,7 +1250,14 @@ func (m Model) View() string {
 	case scrTracking:
 		body = m.track.View(m.trackStep, m.frame, m.spin())
 	case scrInstamart:
-		body = m.inst.WithMaxRows(m.listRows(11 + screens.BrandHeaderLines)).View()
+		if m.live {
+			// Live vertical: show "coming soon" placeholder until Instamart is built.
+			body = "  " + theme.BrandStyle.Render("Instamart") + "\n\n  " +
+				theme.DimStyle.Render("groceries in minutes — coming soon") + "\n\n" +
+				"  " + theme.FaintStyle.Render("tab · back to Restaurants")
+		} else {
+			body = m.inst.WithMaxRows(m.listRows(11 + screens.BrandHeaderLines)).View()
+		}
 	case scrImCart:
 		body = m.imCart.View()
 	default: // scrMenu
