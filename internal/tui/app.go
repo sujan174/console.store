@@ -348,8 +348,87 @@ func (m Model) wizard0(it catalog.Item, gs []catalog.OptionGroup) screens.Wizard
 	return screens.NewWizard(it, variantGroups(gs)).WithViewport(m.h).WithLoading(true)
 }
 
-// wizardCartCmd is implemented in Task 7. Temporary stub.
-func (m Model) wizardCartCmd() tea.Cmd { return nil }
+// wizardCartCmd sends the live cart = current committed lines + the draft item
+// carrying the wizard's cumulative selection, and returns the response (pricing
+// + valid_addons) via CartSyncedMsg. The draft is NOT yet in m.lines.
+func (m Model) wizardCartCmd() tea.Cmd {
+	if !m.live {
+		return nil
+	}
+	// The wizard's restaurant is the one being browsed (the cart may be empty on
+	// the first item, so cartPlaceID can't resolve it).
+	pd := m.rest.PlaceData()
+	if pd.SwiggyID == "" {
+		dbgTUI("wizardCartCmd: nil (browsed restaurant has no SwiggyID)")
+		return nil
+	}
+	items := m.cartItemsForLines() // committed lines as api.CartItem
+	draft := api.CartItem{ItemID: m.wizard.Item().SwiggyID, Quantity: 1}
+	for _, s := range m.wizard.AllSelections() {
+		switch {
+		case s.Variant && s.Absolute:
+			draft.VariantsV2 = append(draft.VariantsV2, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
+		case s.Variant:
+			draft.VariantsLegacy = append(draft.VariantsLegacy, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
+		default:
+			draft.Addons = append(draft.Addons, api.CartAddonSel{GroupID: s.GroupID, ChoiceID: s.ChoiceID})
+		}
+	}
+	items = append(items, draft)
+	dbgTUI("wizardCartCmd: SYNC swiggyRest=%q draftSels=%d", pd.SwiggyID, len(draft.VariantsV2)+len(draft.VariantsLegacy)+len(draft.Addons))
+	return datasource.SyncCart(m.backend, m.snap, m.addr.ID, pd.SwiggyID, pd.Name, items)
+}
+
+// cartItemsForLines converts the committed cart lines into api.CartItems (the
+// payload shared by liveSyncCart and the wizard's draft send).
+func (m Model) cartItemsForLines() []api.CartItem {
+	items := make([]api.CartItem, 0, len(m.lines))
+	for _, l := range m.lines {
+		if l.Item.SwiggyID == "" {
+			continue
+		}
+		ci := api.CartItem{ItemID: l.Item.SwiggyID, Quantity: l.Qty}
+		for _, s := range l.Selections {
+			switch {
+			case s.Variant && s.Absolute:
+				ci.VariantsV2 = append(ci.VariantsV2, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
+			case s.Variant:
+				ci.VariantsLegacy = append(ci.VariantsLegacy, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
+			default:
+				ci.Addons = append(ci.Addons, api.CartAddonSel{GroupID: s.GroupID, ChoiceID: s.ChoiceID})
+			}
+		}
+		items = append(items, ci)
+	}
+	return items
+}
+
+// nextWizardPage returns the groups in Swiggy's valid_addons that the wizard has
+// NOT shown yet — the next page. Empty means the customization is complete.
+func (m Model) nextWizardPage(returned []catalog.OptionGroup) []catalog.OptionGroup {
+	seen := m.wizard.SeenGroupIDs()
+	var next []catalog.OptionGroup
+	for _, g := range returned {
+		if !seen[g.ID] {
+			next = append(next, g)
+		}
+	}
+	return next
+}
+
+// apiToCatalogGroups converts broker option groups to catalog option groups
+// (mirror of datasource.toOptionGroups, which is unexported).
+func apiToCatalogGroups(in []api.OptionGroup) []catalog.OptionGroup {
+	out := make([]catalog.OptionGroup, len(in))
+	for i, g := range in {
+		choices := make([]catalog.Choice, len(g.Choices))
+		for j, ch := range g.Choices {
+			choices[j] = catalog.Choice{ID: ch.ID, Name: ch.Name, Price: ch.Price, InStock: ch.InStock}
+		}
+		out[i] = catalog.OptionGroup{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Absolute: g.Absolute, Choices: choices}
+	}
+	return out
+}
 
 // beginAdd starts adding item from rest (section). If the item is customizable it
 // opens the customise modal (the add is finished on confirm); otherwise it adds the
@@ -382,6 +461,47 @@ func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, sels []catal
 		m.conflictOpen = true
 		return m
 	}
+	wasEmpty := len(m.lines) == 0
+	m.lines = appendOrInc(m.lines, item, addons, sels, price)
+	if wasEmpty {
+		m.cartRestaurant = rest
+		m.cartSection = section
+	}
+	return m
+}
+
+// addonsFromSelections returns the non-variant selections as flat AddOns for the
+// cart-line display (variant selections set the base price instead).
+func addonsFromSelections(sels []catalog.Selection) []catalog.AddOn {
+	var out []catalog.AddOn
+	for _, s := range sels {
+		if !s.Variant {
+			out = append(out, catalog.AddOn{ID: s.ChoiceID, Name: s.Name, Price: s.Price})
+		}
+	}
+	return out
+}
+
+// priceFromSelections computes the per-unit price: a variantsV2 selection SETS
+// the base (absolute); legacy variations and add-ons add on.
+func priceFromSelections(base int, sels []catalog.Selection) int {
+	hasAbs, extra := false, 0
+	for _, s := range sels {
+		if s.Absolute {
+			base = s.Price
+			hasAbs = true
+		} else {
+			extra += s.Price
+		}
+	}
+	_ = hasAbs
+	return base + extra
+}
+
+// commitAddNoSync appends the configured draft to the local lines WITHOUT firing
+// another cart sync — the wizard already synced it to the live cart page by
+// page. Conflict was resolved before the wizard opened, so no conflict check.
+func (m Model) commitAddNoSync(item catalog.Item, addons []catalog.AddOn, sels []catalog.Selection, price int, rest string, section catalog.Section) Model {
 	wasEmpty := len(m.lines) == 0
 	m.lines = appendOrInc(m.lines, item, addons, sels, price)
 	if wasEmpty {
@@ -749,6 +869,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.customizeOpen = true
 		return m, nil
 	case datasource.CartSyncedMsg:
+		if m.wizardOpen {
+			if dm.Err != nil {
+				m.wizard = m.wizard.WithLoading(false).WithErr("cart: " + dm.Err.Error())
+				return m, nil
+			}
+			m.liveCart = dm.Cart // pricing for the bill
+			next := m.nextWizardPage(apiToCatalogGroups(dm.Cart.ValidAddons))
+			if len(next) > 0 {
+				m.wizard = m.wizard.AddPage(next) // advance to the next page
+				return m, nil
+			}
+			// No new groups → the configuration is complete and already in the
+			// live cart. Commit the draft to the local lines and close.
+			it := m.wizard.Item()
+			it.Options = nil
+			sels := m.wizard.AllSelections()
+			addons := addonsFromSelections(sels)
+			price := priceFromSelections(it.Price, sels)
+			m.wizardOpen = false
+			m = m.commitAddNoSync(it, addons, sels, price, m.pendingRest, m.pendingSection)
+			m = m.refreshAfterAdd()
+			return m, nil
+		}
 		if dm.Err != nil {
 			m.cartSyncErr = "cart sync: " + dm.Err.Error()
 		} else {
@@ -831,6 +974,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				var syncCmd tea.Cmd
 				if m.conflictSel == 0 { // start new
+					if m.live && m.pendingItem.Customizable {
+						// Live customizable item: clear the cart, then re-fetch its
+						// options so the (possibly wizard) add restarts cleanly.
+						m.lines = nil
+						m.cartRestaurant = ""
+						m.cartSection = ""
+						pd := m.rest.PlaceData()
+						m.conflictOpen = false
+						return m, datasource.LoadItemOptions(m.backend, m.addr.ID, pd.SwiggyID, m.pendingItem.Name, m.pendingItem.SwiggyID)
+					}
 					m = m.startNewCart(m.pendingItem, m.pendingAddOns, m.pendingSelections, m.pendingPrice, m.pendingRest, m.pendingSection)
 					m = m.refreshAfterAdd()
 					syncCmd = m.liveCartCmd()
@@ -839,6 +992,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, syncCmd
 			case "esc":
 				m.conflictOpen = false
+			}
+			return m, nil
+		}
+
+		if m.wizardOpen {
+			switch k.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				// Cancel: flush the draft out of the live cart (re-sync the
+				// committed lines without it), then close. If nothing was sent
+				// yet it's a pure local close.
+				m.wizardOpen = false
+				return m, m.liveCartCmd()
+			case "up", "k":
+				m.wizard = m.wizard.Up()
+			case "down", "j":
+				m.wizard = m.wizard.Down()
+			case " ", "space", "left", "right", "h", "l", "x":
+				m.wizard = m.wizard.Toggle()
+			case "enter":
+				if m.wizard.Loading() {
+					return m, nil
+				}
+				if !m.wizard.PageValid() {
+					return m, nil // required options not yet picked
+				}
+				m.wizard = m.wizard.WithLoading(true)
+				return m, m.wizardCartCmd() // send selection, fetch next valid_addons
 			}
 			return m, nil
 		}
@@ -1460,25 +1642,7 @@ func (m Model) liveSyncCart() tea.Cmd {
 		dbgTUI("liveSyncCart: nil (cartRestaurant=%q cartPlaceID=%q menuFound=%v swiggyID=%q)", m.cartRestaurant, pid, ok, p.SwiggyID)
 		return nil
 	}
-	items := make([]api.CartItem, 0, len(m.lines))
-	for _, l := range m.lines {
-		if l.Item.SwiggyID == "" {
-			dbgTUI("liveSyncCart: line %q has empty SwiggyID", l.Item.Name)
-			continue
-		}
-		ci := api.CartItem{ItemID: l.Item.SwiggyID, Quantity: l.Qty}
-		for _, s := range l.Selections {
-			switch {
-			case s.Variant && s.Absolute: // variantsV2
-				ci.VariantsV2 = append(ci.VariantsV2, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
-			case s.Variant: // legacy variations
-				ci.VariantsLegacy = append(ci.VariantsLegacy, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
-			default: // addon
-				ci.Addons = append(ci.Addons, api.CartAddonSel{GroupID: s.GroupID, ChoiceID: s.ChoiceID})
-			}
-		}
-		items = append(items, ci)
-	}
+	items := m.cartItemsForLines()
 	if len(items) == 0 {
 		dbgTUI("liveSyncCart: nil (no items with SwiggyID; lines=%d)", len(m.lines))
 		return nil
