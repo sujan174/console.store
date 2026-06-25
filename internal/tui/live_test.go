@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,6 +11,7 @@ import (
 	swiggysnap "console.store/internal/catalog/swiggy"
 	"console.store/internal/tui/datasource"
 	"console.store/internal/tui/render"
+	"console.store/internal/tui/screens"
 )
 
 type liveFake struct {
@@ -111,5 +113,97 @@ func TestSeededPathSkipsLiveLoads(t *testing.T) {
 	// We can't inspect the batch contents directly; instead verify liveInitCmds returns nil.
 	if c := m.liveInitCmds(); c != nil {
 		t.Fatal("liveInitCmds must return nil when seeded (no live loads on boot)")
+	}
+}
+
+func TestLiveCartSyncFires(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
+	snap.SetPlaces("a1", catalog.SectionCoffee, []catalog.Place{
+		{ID: "r1", SwiggyID: "swiggy-r1", Name: "Blue Tokai", Section: catalog.SectionCoffee},
+	})
+	snap.SetMenu(catalog.Place{
+		ID: "r1", SwiggyID: "swiggy-r1", Name: "Blue Tokai",
+		Items: []catalog.Item{{ID: "i1", SwiggyID: "swiggy-i1", Name: "Latte", Price: 250, Veg: true}},
+	})
+	be := &liveFake{}
+	m := New(render.Caps{},
+		WithLiveBackend(be, snap, "acct-1", ""),
+		WithSeededSnapshot(),
+	)
+	m.w, m.h = 100, 40
+
+	// Navigate to the restaurant and add an item.
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // enter restaurant
+	// Simulate MenuLoadedMsg arriving.
+	m3, _ := m2.(Model).Update(datasource.MenuLoadedMsg{PlaceID: "r1"})
+	// Now add item (enter on restaurant screen).
+	_, cmd := m3.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("adding item in live mode must return a SyncCart cmd")
+	}
+}
+
+func TestLivePlaceOrderTransitionsToConfirm(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
+	be := &liveFake{}
+	m := New(render.Caps{},
+		WithLiveBackend(be, snap, "acct-1", ""),
+		WithSeededSnapshot(),
+	)
+	// Put model on scrCheckout with a line in the cart.
+	m.screen = scrCheckout
+	m.lines = []screens.CartLine{{Item: catalog.Item{ID: "i1", Name: "Latte", Price: 250}, Qty: 1}}
+	m.cartRestaurant = "Blue Tokai"
+	m.checkout = screens.NewCheckout("Blue Tokai", m.addr, m.lines, "~35 min")
+
+	// Press enter → should set placingOrder=true and return a PlaceOrderCmd.
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um := updated.(Model)
+	if !um.placingOrder {
+		t.Fatal("expected placingOrder=true after checkout enter in live mode")
+	}
+	if cmd == nil {
+		t.Fatal("expected PlaceOrderCmd to be returned")
+	}
+
+	// Simulate OrderPlacedMsg success.
+	updated2, _ := um.Update(datasource.OrderPlacedMsg{
+		Order: api.Order{ID: "order-99", Status: "placed"},
+	})
+	um2 := updated2.(Model)
+	if um2.screen != scrConfirm {
+		t.Fatalf("screen = %v after OrderPlacedMsg; want scrConfirm", um2.screen)
+	}
+	if um2.placingOrder {
+		t.Fatal("placingOrder must be cleared after success")
+	}
+}
+
+func TestLivePlaceOrderErrShowsError(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
+	be := &liveFake{}
+	m := New(render.Caps{},
+		WithLiveBackend(be, snap, "acct-1", ""),
+		WithSeededSnapshot(),
+	)
+	m.screen = scrCheckout
+	m.lines = []screens.CartLine{{Item: catalog.Item{ID: "i1", Name: "Latte", Price: 250}, Qty: 1}}
+	m.placingOrder = true
+
+	updated, _ := m.Update(datasource.OrderPlacedMsg{
+		Err: errors.New("order failed: restaurant closed"),
+	})
+	um := updated.(Model)
+	if um.screen != scrCheckout {
+		t.Fatalf("screen = %v after error; want scrCheckout", um.screen)
+	}
+	if um.placingOrder {
+		t.Fatal("placingOrder must be cleared after error")
+	}
+	if um.orderErr == "" {
+		t.Fatal("orderErr must be set after PlaceOrder error")
 	}
 }

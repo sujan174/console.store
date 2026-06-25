@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"console.store/internal/broker/api"
 	"console.store/internal/catalog"
 	"console.store/internal/catalog/mem"
 	swiggysnap "console.store/internal/catalog/swiggy"
@@ -128,6 +129,10 @@ type Model struct {
 	authorizeURL string
 	needsAuth    bool // set when a load returns datasource.ErrNeedsAuth
 	seeded       bool // true when catalog/swiggy.Snapshot was pre-seeded from config; skips live init loads
+
+	placingOrder bool   // true while PlaceOrderCmd is in-flight; blocks double-fire
+	cartSyncErr  string // last cart-sync error; shown in status bar (non-fatal)
+	orderErr     string // last order-placement error; shown in status bar
 }
 
 func New(caps render.Caps, opts ...Option) Model {
@@ -503,6 +508,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case datasource.CartSyncedMsg:
+		if dm.Err != nil {
+			m.cartSyncErr = "cart sync: " + dm.Err.Error()
+		} else {
+			m.cartSyncErr = ""
+		}
+		return m, nil
+	case datasource.OrderPlacedMsg:
+		m.placingOrder = false
+		if dm.Err != nil {
+			m.orderErr = "order failed: " + dm.Err.Error()
+			return m, nil
+		}
+		m.orderErr = ""
+		m.checkout = m.checkout.Placed(dm.Order.ID, "~40 min")
+		m.screen = scrConfirm
+		m.lines = nil
+		m.cartRestaurant = ""
+		m.cartSection = ""
+		return m, nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
 		// Command palette captures all keys while open, so letters like `q`
@@ -559,11 +584,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "right", "l":
 				m.conflictSel = 1
 			case "enter":
+				var syncCmd tea.Cmd
 				if m.conflictSel == 0 { // start new
 					m = m.startNewCart(m.pendingItem, m.pendingAddOns, m.pendingRest, m.pendingSection)
 					m = m.refreshAfterAdd()
+					syncCmd = m.liveSyncCart()
 				}
 				m.conflictOpen = false
+				return m, syncCmd
 			case "esc":
 				m.conflictOpen = false
 			}
@@ -592,6 +620,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m = m.commitAdd(item, addons, m.pendingRest, m.pendingSection)
 				if !m.conflictOpen { // committed directly (no restaurant clash)
 					m = m.refreshAfterAdd()
+					return m, m.liveSyncCart()
 				}
 			}
 			return m, nil
@@ -733,7 +762,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil // a modal will finish the add
 				}
 				m = m.refreshAfterAdd()
-				return m, nil
+				return m, m.liveSyncCart()
 			case "left", "h":
 				it, ok := m.rest.Selected()
 				if !ok {
@@ -745,7 +774,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cartSection = ""
 				}
 				m = m.refreshAfterAdd()
-				return m, nil
+				return m, m.liveSyncCart()
 			case "c":
 				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta())
 				m.screen = scrCart
@@ -812,8 +841,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrCart
 				return m, nil
 			case "enter":
-				m.checkout = m.checkout.Placed(orderID(m.checkout.Lines()), "~40 min")
-				m.screen = scrConfirm
+				if m.live && !m.placingOrder {
+					m.placingOrder = true
+					m.orderErr = ""
+					return m, datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID)
+				}
+				if !m.live {
+					m.checkout = m.checkout.Placed(orderID(m.checkout.Lines()), "~40 min")
+					m.screen = scrConfirm
+				}
 				return m, nil
 			}
 		case scrConfirm:
@@ -937,6 +973,11 @@ func (m Model) screenLabel() string {
 // statusBar renders the bottom bar for the current frame/screen.
 func (m Model) statusBar() string {
 	hint := statusHints[(m.frame/27)%len(statusHints)]
+	if m.orderErr != "" {
+		hint = m.orderErr
+	} else if m.cartSyncErr != "" {
+		hint = m.cartSyncErr
+	}
 	return components.StatusBar(m.addr.Line, m.screenLabel(), hint, "12.4", m.blinkOn())
 }
 
@@ -1011,7 +1052,7 @@ func (m Model) View() string {
 	case scrAddress:
 		body = m.addrScreen.View()
 	case scrCheckout, scrConfirm:
-		body = m.checkout.View(m.frame)
+		body = m.checkout.WithPlacing(m.placingOrder).View(m.frame)
 	case scrTracking:
 		body = m.track.View(m.trackStep, m.frame, m.spin())
 	case scrInstamart:
@@ -1076,4 +1117,28 @@ func splitHint(body string) (content, hint string) {
 
 func errIsNeedsAuth(err error) bool {
 	return err != nil && errors.Is(err, datasource.ErrNeedsAuth)
+}
+
+// liveSyncCart assembles the current food cart and dispatches a SyncCart Cmd
+// to keep Swiggy's cart in sync. No-op when not live, cart is empty, or the
+// restaurant has no SwiggyID (e.g. if menu hasn't loaded yet). Items without
+// a SwiggyID are skipped — they can't be referenced by Swiggy.
+func (m Model) liveSyncCart() tea.Cmd {
+	if !m.live || len(m.lines) == 0 {
+		return nil
+	}
+	p, ok := m.repo.Menu(m.cartPlaceID())
+	if !ok || p.SwiggyID == "" {
+		return nil
+	}
+	items := make([]api.CartItem, 0, len(m.lines))
+	for _, l := range m.lines {
+		if l.Item.SwiggyID != "" {
+			items = append(items, api.CartItem{ItemID: l.Item.SwiggyID, Quantity: l.Qty})
+		}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return datasource.SyncCart(m.backend, m.snap, m.addr.ID, p.SwiggyID, m.cartRestaurant, items)
 }
