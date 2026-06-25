@@ -71,3 +71,18 @@ Slice 7 COMPLETE.
 Final whole-branch review: 0 Critical, 2 Important (I1: ErrNeedsAuth gate unreachable; I2: cart-screen edits not synced at checkout).
 Final fix (843ac5d): wrapAuthErr seam in BrokerBackend + tea.Sequence re-sync at checkout chokepoint. Re-review: approved.
 Branch READY TO MERGE.
+
+Slice 8: Restaurants IA redesign (chips + category filter + vertical shell)
+Plan: docs/superpowers/plans/2026-06-25-restaurants-ia-redesign.md
+BASE: c9d5d43baa07db43be7963aa121581992fbfc962
+Builders: Sonnet · Reviewers: Sonnet (scaled per diff)
+S8 Task 1 (thread Category swiggy->api->catalog): complete (commits c9d5d43..70e14b8, review clean)
+  Minor (defer to final): api/dto.go dropped the `// has variants or add-ons` comment on Customizable; Category field und­ocumented at api layer.
+S8 Task 2 (config cuisine chips + defaults): complete (commits 70e14b8..ab3eb05, review clean)
+S8 Task 3 (key places by chip query; PlacesQuery path): complete (commits ab3eb05..fdc0ba6, review clean — account-pinning verified)
+  Minor (defer): datasource.go SectionCoffee display-placeholder intent comment lives in spec not code.
+S8 Task 4 (restaurant category bar + veg + dish filter): complete (commits fdc0ba6..0963454, review clean — cursor/selection desync risk verified absent)
+  Minor (defer): WithCategory/WithVegOnly clear active search (UX choice); stepCategory clamps not wraps (matches plan code).
+S8 Task 5 (browse chips render): complete (commits 0963454..d8cc11e, review clean)
+  Minor (defer): WithChips doesn't clamp active (safe by render-loop equality; Task 6 owns nav).
+  NOTE for Task 6: chips render ADDITIVELY above the old section-tab row; live mode must not show both.

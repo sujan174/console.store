@@ -16,17 +16,18 @@ import (
 const Version = "v1.4"
 
 type Menu struct {
-	places     []catalog.Place
-	address    catalog.Address
-	section    catalog.Section
-	usual      catalog.Usual
-	hasUsual   bool
-	cartChip   string
-	counts     map[catalog.Section]int
-	list       components.List
-	searching  bool
-	chipLabels []string
-	chipActive int
+	places          []catalog.Place
+	address         catalog.Address
+	section         catalog.Section
+	usual           catalog.Usual
+	hasUsual        bool
+	cartChip        string
+	counts          map[catalog.Section]int
+	list            components.List
+	searching       bool
+	chipLabels      []string
+	chipActive      int
+	hideSectionTabs bool
 }
 
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartChip string) Menu {
@@ -65,6 +66,10 @@ func (m Menu) WithMaxRows(n int) Menu { m.list.MaxRows = n; return m }
 
 // WithCounts sets the per-section place counts shown on the tab bar.
 func (m Menu) WithCounts(c map[catalog.Section]int) Menu { m.counts = c; return m }
+
+// WithSectionTabsHidden hides the coffee/food/snacks tab row. Use in live mode
+// where the cuisine-chip row replaces it; leave false (default) for mock mode.
+func (m Menu) WithSectionTabsHidden(v bool) Menu { m.hideSectionTabs = v; return m }
 
 // WithChips sets the cuisine chip labels and the active (highlighted) chip index.
 func (m Menu) WithChips(labels []string, active int) Menu {
@@ -138,28 +143,35 @@ func (m Menu) View() string {
 
 	b.WriteString("\n")
 
-	// tab bar with per-section counts + cart chip:
+	// tab bar with per-section counts + cart chip (suppressed in live mode where
+	// the cuisine-chip row below replaces it):
 	//   coffee 4 │ food 5 │ quick snacks 5            🛒 cart empty
-	labels := map[catalog.Section]string{
-		catalog.SectionCoffee: "coffee",
-		catalog.SectionFood:   "food",
-		catalog.SectionSnacks: "quick snacks",
-	}
-	var tabs []string
-	for _, s := range catalog.MenuSections {
-		cnt := theme.DimStyle.Render(fmt.Sprintf(" %d", m.counts[s]))
-		if s == m.section {
-			tabs = append(tabs, theme.Fg(theme.Gold).Underline(true).Render(labels[s])+cnt)
-		} else {
-			tabs = append(tabs, theme.CatOffStyle.Render(labels[s])+cnt)
-		}
-	}
-	sep := theme.Fg(theme.Div2).Render(" │ ")
 	cartStyle := theme.CartStyle
 	if strings.Contains(m.cartChip, "empty") {
 		cartStyle = theme.DimStyle
 	}
-	b.WriteString("  " + justify(strings.Join(tabs, sep), cartStyle.Render(m.cartChip), w) + "\n")
+	if !m.hideSectionTabs {
+		labels := map[catalog.Section]string{
+			catalog.SectionCoffee: "coffee",
+			catalog.SectionFood:   "food",
+			catalog.SectionSnacks: "quick snacks",
+		}
+		var tabs []string
+		for _, s := range catalog.MenuSections {
+			cnt := theme.DimStyle.Render(fmt.Sprintf(" %d", m.counts[s]))
+			if s == m.section {
+				tabs = append(tabs, theme.Fg(theme.Gold).Underline(true).Render(labels[s])+cnt)
+			} else {
+				tabs = append(tabs, theme.CatOffStyle.Render(labels[s])+cnt)
+			}
+		}
+		sep := theme.Fg(theme.Div2).Render(" │ ")
+		b.WriteString("  " + justify(strings.Join(tabs, sep), cartStyle.Render(m.cartChip), w) + "\n")
+	} else {
+		// In live mode the section tabs are hidden; still render the cart chip
+		// right-aligned so it stays visible on the browse screen.
+		b.WriteString("  " + justify("", cartStyle.Render(m.cartChip), w) + "\n")
+	}
 
 	b.WriteString("\n")
 

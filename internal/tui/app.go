@@ -214,12 +214,9 @@ func (m Model) buildMenu() screens.Menu {
 	}
 	menu := screens.NewMenu(m.browsePlaces(), m.addr, m.section, usual, ok, m.cartChip()).
 		WithCounts(counts)
-	// In live mode attach the cuisine chips (suppresses the old section-tab row
-	// is NOT suppressed here — see menu.go: chips render ABOVE the tabs additively).
-	// We suppress the old tabs by not calling WithCounts when live, but that would
-	// hide counts. Instead we rely on the live browse having chips set: the
-	// menu.View() already renders both rows. The mock path passes no chips so only
-	// the section tabs appear. This is the designed additive behaviour from Task 5.
+	// In live mode attach the cuisine chips and hide the coffee/food/snacks tab
+	// row — the chip row REPLACES it. The mock path leaves hideSectionTabs false
+	// so the section tabs still show (no chips set, byte-for-byte unchanged).
 	if m.live && len(m.chips) > 0 {
 		labels := make([]string, len(m.chips))
 		for i, c := range m.chips {
@@ -232,7 +229,7 @@ func (m Model) buildMenu() screens.Menu {
 		if idx >= len(m.chips) {
 			idx = len(m.chips) - 1
 		}
-		menu = menu.WithChips(labels, idx)
+		menu = menu.WithChips(labels, idx).WithSectionTabsHidden(true)
 	}
 	return menu
 }
@@ -822,8 +819,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "right", "l":
-				if m.live && len(m.chips) > 0 {
-					// Live mode: navigate cuisine chips
+				// Guard chip nav so right/l during search-input is forwarded to
+				// menu.Update (the early Searching() guard above covers this, but
+				// the explicit check here makes the intent clear at the call site).
+				if !m.menu.Searching() && m.live && len(m.chips) > 0 {
+					// Live mode: navigate cuisine chips.
 					if m.chipIdx < len(m.chips)-1 {
 						m.chipIdx++
 						m.menu = m.buildMenu()
@@ -838,8 +838,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "left", "h":
-				if m.live && len(m.chips) > 0 {
-					// Live mode: navigate cuisine chips
+				// Guard chip nav so left/h during search-input is forwarded to
+				// menu.Update (the early Searching() guard above covers this, but
+				// the explicit check here makes the intent clear at the call site).
+				if !m.menu.Searching() && m.live && len(m.chips) > 0 {
+					// Live mode: navigate cuisine chips.
 					if m.chipIdx > 0 {
 						m.chipIdx--
 						m.menu = m.buildMenu()
