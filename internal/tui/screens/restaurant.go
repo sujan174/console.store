@@ -443,9 +443,9 @@ func (s Restaurant) View() string {
 	if ql := s.quickLook(w); ql != "" {
 		b.WriteString(ql + "\n")
 	}
-	// ↵ adds the focused dish; once it is in the cart ↑/↓ adjust its quantity
-	// (↓ to zero removes it), otherwise ↑/↓ move between dishes.
-	b.WriteString(components.Hint("↵", "add", "↑↓", "qty / move", "←→", "category", "v", "veg", "c", "cart", "esc", "back"))
+	// ↑/↓ always move between dishes; ↵/+ add the focused dish and − removes a
+	// unit (− to zero drops it from the cart).
+	b.WriteString(components.Hint("↑↓", "move", "↵/+", "add", "−", "remove", "←→", "category", "c", "cart", "esc", "back"))
 	return b.String()
 }
 

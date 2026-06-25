@@ -142,8 +142,8 @@ func TestEmptyingCartViaCartScreenClearsRestaurant(t *testing.T) {
 // Emptying the cart from the RESTAURANT screen must likewise clear the binding.
 func TestEmptyingCartViaRestaurantScreenClearsRestaurant(t *testing.T) {
 	m := enterFirstRestaurantWithItem(t)
-	// The dish stays selected after the add, so ↓ decrements it back to zero.
-	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown}) // remove the only line
+	// − decrements the focused dish back to zero, removing it from the cart.
+	u, _ := m.Update(keyRunes("-")) // remove the only line
 	m = u.(Model)
 	if len(m.lines) != 0 {
 		t.Fatalf("cart should be empty, lines=%d", len(m.lines))
@@ -554,10 +554,9 @@ func TestAddressSwitchFlushesUnserviceableCart(t *testing.T) {
 	}
 }
 
-// TestRestaurantDownDecrementsWhenInCart verifies that once a dish is in the cart,
-// ↓ decrements it and removes it from the cart at qty 0, staying on the restaurant
-// screen.
-func TestRestaurantDownDecrementsWhenInCart(t *testing.T) {
+// TestRestaurantMinusDecrements verifies that − decrements the focused dish and
+// removes it from the cart at qty 0, staying on the restaurant screen.
+func TestRestaurantMinusDecrements(t *testing.T) {
 	m := newAtMenu()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
 	m = updated.(Model)
@@ -568,11 +567,11 @@ func TestRestaurantDownDecrementsWhenInCart(t *testing.T) {
 	if m.screen != scrRestaurant {
 		t.Fatalf("should still be on restaurant after add, screen=%d", m.screen)
 	}
-	// ↓ decrements the selected dish (not back)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	// − decrements the focused dish (not back)
+	updated, _ = m.Update(keyRunes("-"))
 	m = updated.(Model)
 	if m.screen != scrRestaurant {
-		t.Fatalf("↓ must decrement, not navigate back; screen=%d", m.screen)
+		t.Fatalf("− must decrement, not navigate back; screen=%d", m.screen)
 	}
 	if len(m.lines) != 0 {
 		t.Fatalf("item should leave the cart at qty 0, lines=%v", m.lines)
@@ -582,48 +581,49 @@ func TestRestaurantDownDecrementsWhenInCart(t *testing.T) {
 	}
 }
 
-// TestRestaurantArrowsAdjustQtyOnlyWhenInCart verifies the implicit qty model:
-// Enter adds the focused dish; once it is in the cart ↑/↓ change its quantity;
-// before it is in the cart ↑/↓ move the cursor instead of touching the cart.
-func TestRestaurantArrowsAdjustQtyOnlyWhenInCart(t *testing.T) {
+// TestRestaurantArrowsNavigateQtyOnPlusMinus verifies the controls: ↑/↓ always
+// move between dishes (even while a dish is in the cart), while + / − adjust the
+// focused dish's quantity, and − to zero removes it.
+func TestRestaurantArrowsNavigateQtyOnPlusMinus(t *testing.T) {
 	m := newAtMenu()
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
 	m = u.(Model)
 
-	// ↓ before anything is in the cart moves the cursor (no add).
-	first, _ := m.rest.Selected()
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m = u.(Model)
-	moved, _ := m.rest.Selected()
-	if m.cartTotal() != 0 {
-		t.Fatalf("↓ on an empty cart must not add; total=%d", m.cartTotal())
-	}
-	if moved.Name == first.Name {
-		t.Fatalf("↓ before add should move the cursor, stayed on %q", first.Name)
-	}
-
-	// Back to the first dish; Enter adds it (Cold Coffee, non-customizable).
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
-	m = u.(Model)
+	// Add the first dish (Cold Coffee, non-customizable).
 	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add -> qty 1
 	m = u.(Model)
 	if m.qtyMap()["bt-cold-coffee"] != 1 {
 		t.Fatalf("Enter should add the focused dish; qtyMap=%v", m.qtyMap())
 	}
 
-	// Now in the cart: ↑ increments to 2.
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	// + increments the in-cart focused dish to 2.
+	u, _ = m.Update(keyRunes("+"))
 	m = u.(Model)
 	if m.qtyMap()["bt-cold-coffee"] != 2 {
-		t.Fatalf("↑ on an in-cart dish should increment; qtyMap=%v", m.qtyMap())
+		t.Fatalf("+ on an in-cart dish should increment; qtyMap=%v", m.qtyMap())
 	}
-	// ↓ twice returns to 0 and removes it.
+
+	// ↓ must MOVE to another dish even though one is in the cart (the bug fix):
+	// the cold-coffee qty stays 2 and the cursor leaves it.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = u.(Model)
+	moved, _ := m.rest.Selected()
+	if moved.Name == "Cold Coffee" {
+		t.Fatalf("↓ must navigate off the in-cart dish, stayed on %q", moved.Name)
+	}
+	if m.qtyMap()["bt-cold-coffee"] != 2 {
+		t.Fatalf("↓ must not change quantity; qtyMap=%v", m.qtyMap())
+	}
+
+	// Back to the cold coffee; − twice returns to 0 and removes it.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = u.(Model)
 	for i := 0; i < 2; i++ {
-		u, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		u, _ = m.Update(keyRunes("-"))
 		m = u.(Model)
 	}
 	if len(m.lines) != 0 {
-		t.Fatalf("↓ to zero should remove the dish; lines=%v", m.lines)
+		t.Fatalf("− to zero should remove the dish; lines=%v", m.lines)
 	}
 }
 

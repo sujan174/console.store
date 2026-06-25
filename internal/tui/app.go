@@ -357,18 +357,7 @@ func (m Model) refreshAfterAdd() Model {
 	return m
 }
 
-// restFocusInCart reports whether the dish currently under the restaurant cursor
-// is already in the cart — the implicit signal that ↑/↓ adjust its quantity
-// instead of moving the cursor.
-func (m Model) restFocusInCart() bool {
-	it, ok := m.rest.Selected()
-	if !ok {
-		return false
-	}
-	return m.qtyMap()[it.ID] > 0
-}
-
-// restIncSelected adds one unit of the selected dish (↑ in select-mode). A live
+// restIncSelected adds one unit of the focused dish (Enter / +). A live
 // customizable dish first fetches its options; non-customizable / mock dishes go
 // straight through beginAdd (which may open the customize or conflict modal).
 func (m Model) restIncSelected() (tea.Model, tea.Cmd) {
@@ -394,8 +383,8 @@ func (m Model) restIncSelected() (tea.Model, tea.Cmd) {
 	return m, m.liveCartCmd()
 }
 
-// restDecSelected removes one unit of the selected dish (↓ in select-mode),
-// releasing the restaurant binding when the cart empties.
+// restDecSelected removes one unit of the focused dish (−), releasing the
+// restaurant binding when the cart empties.
 func (m Model) restDecSelected() (tea.Model, tea.Cmd) {
 	it, ok := m.rest.Selected()
 	if !ok {
@@ -973,27 +962,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "right", "l", "]":
 				m.rest = m.rest.NextCategory()
 				return m, nil
-			case "enter":
-				// Enter adds the focused dish (opens the customise sheet when needed).
+			case "enter", "+", "=":
+				// Enter / + add the focused dish (opens the customise sheet when
+				// needed). ↑/↓ stay free for moving through the list.
 				return m.restIncSelected()
-			case "up", "k":
-				// Once a dish is in the cart, ↑ adds another unit; otherwise ↑ moves
-				// the cursor up the dish list.
-				if m.restFocusInCart() {
-					return m.restIncSelected()
-				}
-				nr, cmd := m.rest.Update(msg)
-				m.rest = nr.(screens.Restaurant)
-				return m, cmd
-			case "down", "j":
-				// For an in-cart dish, ↓ removes a unit (to zero it leaves the cart and
-				// hands ↓ back to navigation); otherwise ↓ moves the cursor down.
-				if m.restFocusInCart() {
-					return m.restDecSelected()
-				}
-				nr, cmd := m.rest.Update(msg)
-				m.rest = nr.(screens.Restaurant)
-				return m, cmd
+			case "-", "_":
+				// − removes a unit of the focused dish (to zero it leaves the cart).
+				return m.restDecSelected()
 			case "c":
 				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive())
 				m.screen = scrCart
