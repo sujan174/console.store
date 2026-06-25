@@ -175,8 +175,17 @@ func (m Menu) View() string {
 
 	b.WriteString("\n")
 
-	// cuisine chip row — rendered only when chips have been set via WithChips.
+	// vertical-toggle row + cuisine chip row — rendered only in live mode (when
+	// chips have been set via WithChips). Mock path (no chips) is unchanged.
 	if len(m.chipLabels) > 0 {
+		// vertical toggle: Restaurants (active) · Instamart soon   tab ·
+		vertSep := theme.Fg(theme.Div2).Render("  ·  ")
+		activeV := theme.Fg(theme.Gold).Underline(true).Render("Restaurants")
+		inactiveV := theme.CatOffStyle.Render("Instamart") + "  " + theme.FaintStyle.Render("soon")
+		tabHint := theme.FaintStyle.Render("tab ·")
+		b.WriteString("  " + activeV + vertSep + inactiveV + "   " + tabHint + "\n")
+
+		// cuisine chip row
 		var chips []string
 		for i, label := range m.chipLabels {
 			if i == m.chipActive {

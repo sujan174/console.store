@@ -129,6 +129,16 @@ func TestMenuRendersChips(t *testing.T) {
 			t.Errorf("browse view missing %q", want)
 		}
 	}
+	// vertical-toggle row must appear when chips are set (live mode)
+	if !strings.Contains(v, "Restaurants") {
+		t.Errorf("browse view missing vertical-toggle active label %q", "Restaurants")
+	}
+	if !strings.Contains(v, "Instamart") {
+		t.Errorf("browse view missing vertical-toggle inactive label %q", "Instamart")
+	}
+	if !strings.Contains(v, "soon") {
+		t.Errorf("browse view missing vertical-toggle soon marker")
+	}
 }
 
 // itoa is a tiny int-to-string helper for tests (avoids importing strconv twice).

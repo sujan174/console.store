@@ -189,7 +189,7 @@ func (s Restaurant) WithCategory(cat string) Restaurant {
 	return s
 }
 
-// NextCategory advances to the next category (wraps at end).
+// NextCategory advances to the next category, clamping at the last.
 func (s Restaurant) NextCategory() Restaurant { return s.stepCategory(1) }
 
 // PrevCategory retreats to the previous category (clamps at start).
