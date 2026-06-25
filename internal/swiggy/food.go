@@ -18,19 +18,30 @@ func decodeResult[T any](raw json.RawMessage, err error) (T, error) {
 }
 
 func (c *Client) GetAddresses(ctx context.Context) ([]Address, error) {
-	return decodeResult[[]Address](c.CallTool(ctx, "get_addresses", nil))
+	env, err := decodeResult[addressesEnvelope](c.CallTool(ctx, "get_addresses", nil))
+	return env.Addresses, err
 }
 
 func (c *Client) SearchRestaurants(ctx context.Context, addressID, query string, offset int) ([]Restaurant, error) {
-	return decodeResult[[]Restaurant](c.CallTool(ctx, "search_restaurants", map[string]any{
+	env, err := decodeResult[restaurantsEnvelope](c.CallTool(ctx, "search_restaurants", map[string]any{
 		"addressId": addressID, "query": query, "offset": offset,
 	}))
+	return env.Restaurants, err
 }
 
 func (c *Client) GetRestaurantMenu(ctx context.Context, addressID, restaurantID string, page, pageSize int) (Menu, error) {
-	return decodeResult[Menu](c.CallTool(ctx, "get_restaurant_menu", map[string]any{
+	env, err := decodeResult[menuEnvelope](c.CallTool(ctx, "get_restaurant_menu", map[string]any{
 		"addressId": addressID, "restaurantId": restaurantID, "page": page, "pageSize": pageSize,
 	}))
+	if err != nil {
+		return Menu{}, err
+	}
+	// Swiggy groups items into categories; the TUI shows a flat list, so merge.
+	m := Menu{RestaurantID: restaurantID}
+	for _, cat := range env.Categories {
+		m.Items = append(m.Items, cat.Items...)
+	}
+	return m, nil
 }
 
 func (c *Client) GetFoodCart(ctx context.Context, addressID, restaurantName string) (Cart, error) {

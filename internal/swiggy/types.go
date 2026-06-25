@@ -4,37 +4,61 @@ package swiggy
 // ignored. They intentionally mirror catalog shapes so the catalog/swiggy
 // adapter (a later slice) maps them with minimal translation.
 
+// Address matches Swiggy's get_addresses response items. The response wraps
+// them: {"addresses":[...],"total":N} — see addressesEnvelope.
 type Address struct {
-	ID    string  `json:"id"`
-	Label string  `json:"annotation"`
-	City  string  `json:"city"`
-	Line  string  `json:"locality"`
-	Full  string  `json:"address"`
-	Lat   float64 `json:"lat"`
-	Lng   float64 `json:"lng"`
+	ID       string `json:"id"`
+	Tag      string `json:"addressTag"`      // "Home", "Work", "Basketball Court"
+	Category string `json:"addressCategory"` // "Home", "Work", "Other"
+	Line     string `json:"addressLine"`     // full formatted address text
 }
 
+type addressesEnvelope struct {
+	Addresses []Address `json:"addresses"`
+}
+
+// Restaurant matches Swiggy's search_restaurants response items, wrapped in
+// {"query":...,"restaurants":[...]} — see restaurantsEnvelope.
 type Restaurant struct {
-	ID     string  `json:"id"`
-	Name   string  `json:"name"`
-	City   string  `json:"city"`
-	ETA    string  `json:"eta"`
-	Rating float64 `json:"rating"`
-	Desc   string  `json:"description"`
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	AreaName          string   `json:"areaName"`
+	AvgRating         float64  `json:"avgRating"`
+	CostForTwo        string   `json:"costForTwo"`
+	Cuisines          []string `json:"cuisines"`
+	DeliveryTimeRange string   `json:"deliveryTimeRange"`
+	Offer             string   `json:"offer"`
+	Availability      string   `json:"availabilityStatus"`
 }
 
+type restaurantsEnvelope struct {
+	Restaurants []Restaurant `json:"restaurants"`
+}
+
+// MenuItem matches an item inside a get_restaurant_menu category. Note Rating
+// arrives as a STRING ("4.6"), not a number.
 type MenuItem struct {
-	ID     string  `json:"id"`
-	Name   string  `json:"name"`
-	Price  int     `json:"price"`
-	Veg    bool    `json:"isVeg"`
-	Desc   string  `json:"description"`
-	Rating float64 `json:"rating"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Desc       string `json:"description"`
+	Price      int    `json:"price"` // whole rupees
+	Veg        bool   `json:"isVeg"`
+	Rating     string `json:"rating"`
+	InStock    int    `json:"inStock"`
+	Bestseller bool   `json:"isBestseller"`
 }
 
+// menuEnvelope matches get_restaurant_menu: {"categories":[{"items":[...]}]}.
+type menuEnvelope struct {
+	Categories []struct {
+		Items []MenuItem `json:"items"`
+	} `json:"categories"`
+}
+
+// Menu is the flattened (category-merged) item list for one restaurant.
 type Menu struct {
-	RestaurantID string     `json:"restaurantId"`
-	Items        []MenuItem `json:"items"`
+	RestaurantID string
+	Items        []MenuItem
 }
 
 type CartItem struct {

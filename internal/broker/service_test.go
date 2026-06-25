@@ -70,7 +70,7 @@ func fakeMCP(t *testing.T, handlers map[string]func(map[string]any) any) *httpte
 func TestServiceAddressesMapsDTO(t *testing.T) {
 	mcp := fakeMCP(t, map[string]func(map[string]any) any{
 		"get_addresses": func(map[string]any) any {
-			return []map[string]any{{"id": "a1", "annotation": "home", "lat": 12.9}}
+			return map[string]any{"addresses": []map[string]any{{"id": "a1", "addressTag": "Home", "addressLine": "12 HSR"}}}
 		},
 	})
 	store := &fakeStore{tokens: map[string]string{"acct-X": "tok"}}
@@ -79,7 +79,7 @@ func TestServiceAddressesMapsDTO(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].ID != "a1" || got[0].Label != "home" {
+	if len(got) != 1 || got[0].ID != "a1" || got[0].Label != "Home" {
 		t.Fatalf("addresses = %+v", got)
 	}
 }

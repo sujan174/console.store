@@ -12,7 +12,7 @@ import (
 func TestRPCRoundTripAddresses(t *testing.T) {
 	mcp := fakeMCP(t, map[string]func(map[string]any) any{
 		"get_addresses": func(map[string]any) any {
-			return []map[string]any{{"id": "a1", "annotation": "home"}}
+			return map[string]any{"addresses": []map[string]any{{"id": "a1", "addressTag": "Home", "addressLine": "12 HSR"}}}
 		},
 	})
 	store := &fakeStore{tokens: map[string]string{"acct-X": "tok"}}

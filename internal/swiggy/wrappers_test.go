@@ -8,8 +8,12 @@ import (
 func TestGetAddressesDecodes(t *testing.T) {
 	srv := newFakeMCP(t, map[string]toolFn{
 		"get_addresses": func(map[string]any) (any, error) {
-			return []map[string]any{
-				{"id": "a1", "annotation": "home", "city": "BLR", "locality": "HSR", "address": "12 HSR", "lat": 12.9, "lng": 77.6},
+			// Real Swiggy shape: addresses wrapped in an object with a total.
+			return map[string]any{
+				"addresses": []map[string]any{
+					{"id": "a1", "addressTag": "Home", "addressCategory": "Home", "addressLine": "12 HSR Layout, BLR"},
+				},
+				"total": 1,
 			}, nil
 		},
 	})
@@ -18,7 +22,7 @@ func TestGetAddressesDecodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].ID != "a1" || got[0].Label != "home" || got[0].Lat != 12.9 {
+	if len(got) != 1 || got[0].ID != "a1" || got[0].Tag != "Home" || got[0].Line != "12 HSR Layout, BLR" {
 		t.Fatalf("decoded = %+v", got)
 	}
 }
@@ -28,7 +32,11 @@ func TestSearchRestaurantsSendsExactArgs(t *testing.T) {
 	srv := newFakeMCP(t, map[string]toolFn{
 		"search_restaurants": func(args map[string]any) (any, error) {
 			seen = args
-			return []map[string]any{{"id": "r1", "name": "Blue Tokai"}}, nil
+			// Real Swiggy shape: restaurants wrapped under a "restaurants" key.
+			return map[string]any{
+				"query":       "coffee",
+				"restaurants": []map[string]any{{"id": "r1", "name": "Blue Tokai", "avgRating": 4.4, "cuisines": []string{"Coffee"}}},
+			}, nil
 		},
 	})
 	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
@@ -39,7 +47,7 @@ func TestSearchRestaurantsSendsExactArgs(t *testing.T) {
 	if seen["addressId"] != "a1" || seen["query"] != "coffee" {
 		t.Fatalf("args sent = %+v", seen)
 	}
-	if len(got) != 1 || got[0].Name != "Blue Tokai" {
+	if len(got) != 1 || got[0].Name != "Blue Tokai" || got[0].AvgRating != 4.4 {
 		t.Fatalf("got = %+v", got)
 	}
 }

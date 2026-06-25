@@ -1,6 +1,9 @@
 package broker
 
 import (
+	"strconv"
+	"strings"
+
 	"console.store/internal/broker/api"
 	"console.store/internal/swiggy"
 )
@@ -8,7 +11,13 @@ import (
 func mapAddresses(in []swiggy.Address) []api.Address {
 	out := make([]api.Address, len(in))
 	for i, a := range in {
-		out[i] = api.Address{ID: a.ID, Label: a.Label, City: a.City, Line: a.Line, Full: a.Full, Lat: a.Lat, Lng: a.Lng}
+		label := a.Tag
+		if label == "" {
+			label = a.Category
+		}
+		// Swiggy gives one formatted line (no separate city/lat/lng); use it for
+		// both the short label line and the full address Swiggy needs back.
+		out[i] = api.Address{ID: a.ID, Label: label, Line: a.Line, Full: a.Line}
 	}
 	return out
 }
@@ -16,7 +25,17 @@ func mapAddresses(in []swiggy.Address) []api.Address {
 func mapRestaurants(in []swiggy.Restaurant) []api.Restaurant {
 	out := make([]api.Restaurant, len(in))
 	for i, r := range in {
-		out[i] = api.Restaurant{ID: r.ID, Name: r.Name, City: r.City, ETA: r.ETA, Description: r.Desc, Rating: r.Rating}
+		desc := strings.Join(r.Cuisines, ", ")
+		if r.CostForTwo != "" {
+			if desc != "" {
+				desc += " · "
+			}
+			desc += r.CostForTwo
+		}
+		out[i] = api.Restaurant{
+			ID: r.ID, Name: r.Name, City: r.AreaName,
+			ETA: r.DeliveryTimeRange, Description: desc, Rating: r.AvgRating,
+		}
 	}
 	return out
 }
@@ -24,7 +43,8 @@ func mapRestaurants(in []swiggy.Restaurant) []api.Restaurant {
 func mapMenu(in swiggy.Menu) api.Menu {
 	items := make([]api.MenuItem, len(in.Items))
 	for i, m := range in.Items {
-		items[i] = api.MenuItem{ID: m.ID, Name: m.Name, Price: m.Price, Veg: m.Veg, Description: m.Desc, Rating: m.Rating}
+		rating, _ := strconv.ParseFloat(m.Rating, 64) // "4.6" -> 4.6; "" -> 0
+		items[i] = api.MenuItem{ID: m.ID, Name: m.Name, Price: m.Price, Veg: m.Veg, Description: m.Desc, Rating: rating}
 	}
 	return api.Menu{RestaurantID: in.RestaurantID, Items: items}
 }
