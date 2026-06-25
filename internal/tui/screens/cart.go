@@ -22,13 +22,19 @@ const (
 )
 
 type CartLine struct {
-	Item   catalog.Item
-	Qty    int
-	AddOns []catalog.AddOn // selected customizations for this line
+	Item       catalog.Item
+	Qty        int
+	AddOns     []catalog.AddOn     // selected customizations for this line
+	Selections []catalog.Selection // live variant/addon selections (cart-send + key)
+	Price      int                 // resolved per-unit price (0 = compute from Item+AddOns)
 }
 
-// UnitPrice is the per-unit price including any selected add-ons.
+// UnitPrice is the per-unit price including any selected add-ons. A resolved
+// Price (e.g. set by a live variant, which is an absolute price) wins.
 func (l CartLine) UnitPrice() int {
+	if l.Price > 0 {
+		return l.Price
+	}
 	p := l.Item.Price
 	for _, a := range l.AddOns {
 		p += a.Price
@@ -36,9 +42,23 @@ func (l CartLine) UnitPrice() int {
 	return p
 }
 
-// Key returns the cart-line identity: item id + its sorted add-on ids. Two lines
-// share a key (and so stack) only when the item AND the chosen add-ons match.
-func (l CartLine) Key() string { return LineKey(l.Item, l.AddOns) }
+// Key returns the cart-line identity: item id + its sorted add-on ids + live
+// selection ids. Two lines stack only when item, add-ons AND selections match
+// (so e.g. different pizza sizes are distinct lines).
+func (l CartLine) Key() string { return lineKeyFull(l.Item, l.AddOns, l.Selections) }
+
+func lineKeyFull(item catalog.Item, addons []catalog.AddOn, sels []catalog.Selection) string {
+	key := LineKey(item, addons)
+	if len(sels) == 0 {
+		return key
+	}
+	ids := make([]string, len(sels))
+	for i, s := range sels {
+		ids[i] = s.GroupID + ":" + s.ChoiceID
+	}
+	sort.Strings(ids)
+	return key + "|" + strings.Join(ids, ",")
+}
 
 // LineKey computes the stacking key for an item plus a set of add-ons. Add-on
 // ids are sorted so selection order never produces a duplicate line.

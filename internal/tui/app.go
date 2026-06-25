@@ -100,13 +100,15 @@ type Model struct {
 
 	// conflict modal: shown when adding an item from a restaurant other than
 	// the one the cart holds (Swiggy allows one restaurant per cart).
-	conflictOpen   bool
-	conflict       screens.CartConflict
-	conflictSel    int             // focused button: 0 = start new, 1 = keep current
-	pendingItem    catalog.Item    // item awaiting the start-new-cart confirmation
-	pendingAddOns  []catalog.AddOn // its chosen add-ons
-	pendingRest    string          // its restaurant name
-	pendingSection catalog.Section
+	conflictOpen      bool
+	conflict          screens.CartConflict
+	conflictSel       int                 // focused button: 0 = start new, 1 = keep current
+	pendingItem       catalog.Item        // item awaiting the start-new-cart confirmation (or options fetch)
+	pendingAddOns     []catalog.AddOn     // its chosen add-ons
+	pendingSelections []catalog.Selection // its live variant/addon selections
+	pendingPrice      int                 // its resolved unit price
+	pendingRest       string              // its restaurant name
+	pendingSection    catalog.Section
 
 	inst    screens.Instamart
 	imLines []screens.CartLine
@@ -193,16 +195,18 @@ func sectionIndex(s catalog.Section) int {
 	return 0
 }
 
-// appendOrInc adds item to lines, incrementing the qty if it is already present.
-func appendOrInc(lines []screens.CartLine, item catalog.Item, addons []catalog.AddOn) []screens.CartLine {
-	key := screens.LineKey(item, addons)
+// appendOrInc adds item (with add-ons, live selections, resolved price) to lines,
+// incrementing the qty if an identical line is already present.
+func appendOrInc(lines []screens.CartLine, item catalog.Item, addons []catalog.AddOn, sels []catalog.Selection, price int) []screens.CartLine {
+	nl := screens.CartLine{Item: item, Qty: 1, AddOns: addons, Selections: sels, Price: price}
+	key := nl.Key()
 	for i := range lines {
 		if lines[i].Key() == key {
 			lines[i].Qty++
 			return lines
 		}
 	}
-	return append(lines, screens.CartLine{Item: item, Qty: 1, AddOns: addons})
+	return append(lines, nl)
 }
 
 // decLastByItem decrements the most recently added line of item id (the last
@@ -238,8 +242,8 @@ func (m Model) conflictsWithCart(rest string, section catalog.Section) bool {
 // startNewCart clears the food cart and seeds it with a single item (and its
 // chosen add-ons) from rest — the one-restaurant-per-cart resolution for
 // non-snacks; for snacks the section acts as the cart owner.
-func (m Model) startNewCart(item catalog.Item, addons []catalog.AddOn, rest string, section catalog.Section) Model {
-	m.lines = []screens.CartLine{{Item: item, Qty: 1, AddOns: addons}}
+func (m Model) startNewCart(item catalog.Item, addons []catalog.AddOn, sels []catalog.Selection, price int, rest string, section catalog.Section) Model {
+	m.lines = []screens.CartLine{{Item: item, Qty: 1, AddOns: addons, Selections: sels, Price: price}}
 	m.cartRestaurant = rest
 	m.cartSection = section
 	return m
@@ -257,16 +261,18 @@ func (m Model) beginAdd(item catalog.Item, rest string, section catalog.Section)
 		m.pendingSection = section
 		return m
 	}
-	return m.commitAdd(item, nil, rest, section)
+	return m.commitAdd(item, nil, nil, 0, rest, section)
 }
 
 // commitAdd adds item (with its chosen add-ons) from rest (section) to the cart,
 // raising the cart-conflict modal first when the cart belongs to an incompatible
 // owner (different restaurant outside the snacks section).
-func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, rest string, section catalog.Section) Model {
+func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, sels []catalog.Selection, price int, rest string, section catalog.Section) Model {
 	if m.conflictsWithCart(rest, section) {
 		m.pendingItem = item
 		m.pendingAddOns = addons
+		m.pendingSelections = sels
+		m.pendingPrice = price
 		m.pendingRest = rest
 		m.pendingSection = section
 		m.conflict = screens.NewCartConflict(m.cartHeader(), rest, item.Name)
@@ -275,7 +281,7 @@ func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, rest string,
 		return m
 	}
 	wasEmpty := len(m.lines) == 0
-	m.lines = appendOrInc(m.lines, item, addons)
+	m.lines = appendOrInc(m.lines, item, addons, sels, price)
 	if wasEmpty {
 		m.cartRestaurant = rest
 		m.cartSection = section
@@ -533,6 +539,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case datasource.ItemOptionsLoadedMsg:
+		if dm.Err != nil {
+			m.cartSyncErr = "options: " + dm.Err.Error()
+			return m, nil
+		}
+		it := m.pendingItem
+		it.Options = dm.Groups
+		if len(dm.Groups) == 0 {
+			// Item flagged customizable but has no real options — add directly.
+			m = m.commitAdd(it, nil, nil, 0, m.pendingRest, m.pendingSection)
+			if !m.conflictOpen {
+				m = m.refreshAfterAdd()
+				return m, m.liveSyncCart()
+			}
+			return m, nil
+		}
+		m.customize = screens.NewCustomize(it)
+		m.customizeOpen = true
+		return m, nil
 	case datasource.CartSyncedMsg:
 		if dm.Err != nil {
 			m.cartSyncErr = "cart sync: " + dm.Err.Error()
@@ -616,7 +641,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				var syncCmd tea.Cmd
 				if m.conflictSel == 0 { // start new
-					m = m.startNewCart(m.pendingItem, m.pendingAddOns, m.pendingRest, m.pendingSection)
+					m = m.startNewCart(m.pendingItem, m.pendingAddOns, m.pendingSelections, m.pendingPrice, m.pendingRest, m.pendingSection)
 					m = m.refreshAfterAdd()
 					syncCmd = m.liveSyncCart()
 				}
@@ -644,10 +669,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case " ", "space", "left", "right", "h", "l", "x":
 				m.customize = m.customize.Toggle()
 			case "enter":
+				if !m.customize.Valid() {
+					return m, nil // required options not yet picked
+				}
 				item := m.customize.Item()
 				addons := m.customize.SelectedAddOns()
+				sels := m.customize.SelectedOptions()
+				price := m.customize.UnitPrice()
 				m.customizeOpen = false
-				m = m.commitAdd(item, addons, m.pendingRest, m.pendingSection)
+				m = m.commitAdd(item, addons, sels, price, m.pendingRest, m.pendingSection)
 				if !m.conflictOpen { // committed directly (no restaurant clash)
 					m = m.refreshAfterAdd()
 					return m, m.liveSyncCart()
@@ -789,6 +819,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				dbgTUI("add: item=%q swiggyID=%q rest=%q", it.Name, it.SwiggyID, m.rest.PlaceData().Name)
+				// Live customizable item: its variant/addon options aren't in the
+				// menu listing, so fetch them first; the customize sheet opens when
+				// ItemOptionsLoadedMsg arrives.
+				if m.live && it.Customizable && len(it.Options) == 0 {
+					m.pendingItem = it
+					m.pendingRest = m.rest.PlaceData().Name
+					m.pendingSection = m.rest.PlaceData().Section
+					dbgTUI("add: fetching options for %q", it.Name)
+					return m, datasource.LoadItemOptions(m.backend, m.addr.ID, m.rest.PlaceData().SwiggyID, it.Name, it.SwiggyID)
+				}
 				m = m.beginAdd(it, m.rest.PlaceData().Name, m.rest.PlaceData().Section)
 				if m.customizeOpen || m.conflictOpen {
 					dbgTUI("add: modal opened (customize=%v conflict=%v)", m.customizeOpen, m.conflictOpen)
@@ -922,7 +962,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !ok {
 					return m, nil
 				}
-				m.imLines = appendOrInc(m.imLines, it, nil)
+				m.imLines = appendOrInc(m.imLines, it, nil, nil, 0)
 				ci := m.inst.CursorIndex()
 				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartChip()).WithCursor(ci)
 				return m, nil
@@ -1186,11 +1226,19 @@ func (m Model) liveSyncCart() tea.Cmd {
 	}
 	items := make([]api.CartItem, 0, len(m.lines))
 	for _, l := range m.lines {
-		if l.Item.SwiggyID != "" {
-			items = append(items, api.CartItem{ItemID: l.Item.SwiggyID, Quantity: l.Qty})
-		} else {
+		if l.Item.SwiggyID == "" {
 			dbgTUI("liveSyncCart: line %q has empty SwiggyID", l.Item.Name)
+			continue
 		}
+		ci := api.CartItem{ItemID: l.Item.SwiggyID, Quantity: l.Qty}
+		for _, s := range l.Selections {
+			if s.Variant {
+				ci.Variants = append(ci.Variants, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
+			} else {
+				ci.Addons = append(ci.Addons, api.CartAddonSel{GroupID: s.GroupID, ChoiceID: s.ChoiceID})
+			}
+		}
+		items = append(items, ci)
 	}
 	if len(items) == 0 {
 		dbgTUI("liveSyncCart: nil (no items with SwiggyID; lines=%d)", len(m.lines))
