@@ -61,7 +61,7 @@ func TestUpdateCartSendsItems(t *testing.T) {
 		},
 	})
 	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
-	cart, err := c.UpdateCart(context.Background(), "a1", []CartItem{{ItemID: "i1", Quantity: 2}})
+	cart, err := c.UpdateCart(context.Background(), "a1", []CartItem{{MenuItemID: "i1", Quantity: 2}})
 	if err != nil {
 		t.Fatal(err)
 	}

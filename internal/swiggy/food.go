@@ -45,16 +45,33 @@ func (c *Client) GetRestaurantMenu(ctx context.Context, addressID, restaurantID 
 }
 
 func (c *Client) GetFoodCart(ctx context.Context, addressID, restaurantName string) (Cart, error) {
-	return decodeResult[Cart](c.CallTool(ctx, "get_food_cart", map[string]any{
+	env, err := decodeResult[cartEnvelope](c.CallTool(ctx, "get_food_cart", map[string]any{
 		"addressId": addressID, "restaurantName": restaurantName,
 	}))
+	if err != nil {
+		return Cart{}, err
+	}
+	return env.toCart(), nil
 }
 
 func (c *Client) UpdateFoodCart(ctx context.Context, addressID, restaurantID, restaurantName string, items []CartItem) (Cart, error) {
-	return decodeResult[Cart](c.CallTool(ctx, "update_food_cart", map[string]any{
+	env, err := decodeResult[cartEnvelope](c.CallTool(ctx, "update_food_cart", map[string]any{
 		"addressId": addressID, "restaurantId": restaurantID,
 		"restaurantName": restaurantName, "cartItems": items,
 	}))
+	if err != nil {
+		return Cart{}, err
+	}
+	// Swiggy returns HTTP 200 with an in-body failure (e.g. item unavailable);
+	// surface it as an error so the TUI does not silently believe the add stuck.
+	if env.Successful != nil && !*env.Successful {
+		msg := env.StatusMessage
+		if msg == "" {
+			msg = "cart update failed"
+		}
+		return Cart{}, &MCPError{Code: env.StatusCode, Message: msg}
+	}
+	return env.toCart(), nil
 }
 
 func (c *Client) FlushFoodCart(ctx context.Context) error {

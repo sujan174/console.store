@@ -65,7 +65,9 @@ func mapOrder(in swiggy.Order) api.Order {
 func mapCartItems(in []api.CartItem) []swiggy.CartItem {
 	out := make([]swiggy.CartItem, len(in))
 	for i, c := range in {
-		out[i] = swiggy.CartItem{ItemID: c.ItemID, Quantity: c.Quantity}
+		// api.CartItem.ItemID carries the Swiggy menu item id (catalog SwiggyID);
+		// update_food_cart wants it as menu_item_id.
+		out[i] = swiggy.CartItem{MenuItemID: c.ItemID, Quantity: c.Quantity}
 	}
 	return out
 }

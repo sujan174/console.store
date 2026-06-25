@@ -1,5 +1,10 @@
 package swiggy
 
+import (
+	"encoding/json"
+	"math"
+)
+
 // These structs decode the fields console.store uses; unknown fields are
 // ignored. They intentionally mirror catalog shapes so the catalog/swiggy
 // adapter (a later slice) maps them with minimal translation.
@@ -65,20 +70,75 @@ type Menu struct {
 	Items        []MenuItem
 }
 
+// CartItem is the SENT shape for update_food_cart's cartItems entries. Swiggy
+// requires the snake_case "menu_item_id" — "itemId" yields
+// INVALID_ITEM_IDS_IN_REQUEST. (Variants/addons omitted; simple items only.)
 type CartItem struct {
-	ItemID   string `json:"itemId"`
-	Quantity int    `json:"quantity"`
+	MenuItemID string `json:"menu_item_id"`
+	Quantity   int    `json:"quantity"`
 }
 
+// CartLine is the typed, TUI-facing shape for one cart item (post-conversion).
+type CartLine struct {
+	ItemID   string
+	Name     string
+	Quantity int
+	Price    int // whole rupees
+}
+
+// Cart is the typed, TUI-facing cart (converted from cartEnvelope).
 type Cart struct {
-	CartID string `json:"cartId"`
-	Total  int    `json:"total"`
-	Items  []struct {
-		ItemID   string `json:"itemId"`
-		Name     string `json:"name"`
-		Quantity int    `json:"quantity"`
-		Price    int    `json:"price"`
+	CartID string
+	Total  int // pricing.to_pay, whole rupees
+	Items  []CartLine
+}
+
+// cartEnvelope decodes the real get_food_cart / update_food_cart response. The
+// cart lives under "data" (null when empty); statusCode 0 == success.
+type cartEnvelope struct {
+	Data          *cartData `json:"data"`
+	StatusCode    int       `json:"statusCode"`
+	StatusMessage string    `json:"statusMessage"`
+	ErrorCodes    []string  `json:"errorCodes"`
+	Successful    *bool     `json:"successful"`
+}
+
+type cartData struct {
+	CartID    json.Number `json:"cart_id"`
+	ItemCount int         `json:"item_count"`
+	Items     []struct {
+		MenuItemID json.Number `json:"menu_item_id"`
+		Name       string      `json:"name"`
+		Quantity   int         `json:"quantity"`
+		FinalPrice float64     `json:"final_price"`
+		Total      float64     `json:"total"`
 	} `json:"items"`
+	Pricing struct {
+		ItemTotal float64 `json:"item_total"`
+		ToPay     float64 `json:"to_pay"`
+	} `json:"pricing"`
+	Restaurant struct {
+		Name string `json:"name"`
+	} `json:"restaurant"`
+}
+
+// toCart converts a decoded cartEnvelope into the typed Cart. An empty cart
+// (data null) yields a zero Cart. Prices arrive as floats; round to rupees.
+func (e cartEnvelope) toCart() Cart {
+	if e.Data == nil {
+		return Cart{}
+	}
+	d := e.Data
+	c := Cart{CartID: d.CartID.String(), Total: int(math.Round(d.Pricing.ToPay))}
+	for _, it := range d.Items {
+		c.Items = append(c.Items, CartLine{
+			ItemID:   it.MenuItemID.String(),
+			Name:     it.Name,
+			Quantity: it.Quantity,
+			Price:    int(math.Round(it.FinalPrice)),
+		})
+	}
+	return c
 }
 
 type Coupon struct {
