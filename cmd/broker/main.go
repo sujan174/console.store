@@ -68,6 +68,7 @@ func run() error {
 	svc := broker.NewService(broker.Config{
 		Store:       brokerStore{s: st},
 		Auth:        authMgr,
+		Refresher:   oauthRefresher{httpc: httpc, tokenURL: meta.TokenEndpoint, clientID: clientID},
 		FoodBaseURL: swiggy.FoodBaseURL,
 		ImBaseURL:   swiggy.InstamartBaseURL,
 		HTTPClient:  httpc,

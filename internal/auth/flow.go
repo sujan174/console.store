@@ -12,7 +12,7 @@ import (
 type AccountStore interface {
 	FindOrCreateAccount(ctx context.Context, phone string) (string, error)
 	LinkPubkey(ctx context.Context, accountID, pubkey string) error
-	PutToken(ctx context.Context, accountID, accessToken string, expiresAt time.Time) error
+	PutToken(ctx context.Context, accountID, accessToken, refreshToken string, expiresAt time.Time) error
 }
 
 type Config struct {
@@ -113,7 +113,7 @@ func (m *Manager) HandleCallback(ctx context.Context, state, code string) error 
 		return err
 	}
 	expiresAt := m.cfg.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
-	if err := m.cfg.Store.PutToken(ctx, accountID, tok.AccessToken, expiresAt); err != nil {
+	if err := m.cfg.Store.PutToken(ctx, accountID, tok.AccessToken, tok.RefreshToken, expiresAt); err != nil {
 		return err
 	}
 

@@ -37,7 +37,7 @@ func (f *fakeStore) LinkPubkey(_ context.Context, accountID, pubkey string) erro
 	f.pubkeys[pubkey] = accountID
 	return nil
 }
-func (f *fakeStore) PutToken(_ context.Context, accountID, accessToken string, _ time.Time) error {
+func (f *fakeStore) PutToken(_ context.Context, accountID, accessToken, _ string, _ time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.tokens[accountID] = accessToken

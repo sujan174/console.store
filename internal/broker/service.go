@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"sync"
+	"time"
 
 	"console.store/internal/auth"
 	"console.store/internal/broker/api"
@@ -12,8 +13,18 @@ import (
 
 type TokenStore interface {
 	AccountForPubkey(ctx context.Context, pubkey string) (string, bool, error)
-	GetToken(ctx context.Context, accountID string) (string, bool, error)
+	// GetTokenFull returns the account's access + refresh tokens and the access
+	// token's expiry. ok is false when no token is stored.
+	GetTokenFull(ctx context.Context, accountID string) (access, refresh string, expiresAt time.Time, ok bool, err error)
+	// PutToken persists a refreshed token pair.
+	PutToken(ctx context.Context, accountID, access, refresh string, expiresAt time.Time) error
 	PurgeToken(ctx context.Context, accountID string) error
+}
+
+// Refresher mints a new token pair from a refresh token (OAuth refresh_token
+// grant). nil disables refresh — an expired access token then forces re-auth.
+type Refresher interface {
+	Refresh(ctx context.Context, refreshToken string) (auth.Token, error)
 }
 
 type Authorizer interface {
@@ -24,6 +35,7 @@ type Authorizer interface {
 type Config struct {
 	Store       TokenStore
 	Auth        Authorizer
+	Refresher   Refresher
 	FoodBaseURL string
 	ImBaseURL   string
 	HTTPClient  *http.Client
@@ -50,7 +62,7 @@ func (s *Service) foodClient(accountID string) *swiggy.Client {
 		return c
 	}
 	c := swiggy.NewClient(s.cfg.FoodBaseURL,
-		storeTokenSource{store: s.cfg.Store, accountID: accountID},
+		newStoreTokenSource(s.cfg.Store, s.cfg.Refresher, accountID),
 		swiggy.WithHTTPClient(s.cfg.HTTPClient))
 	s.food[accountID] = c
 	return c

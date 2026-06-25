@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -10,6 +11,28 @@ import (
 
 	"console.store/internal/store/kms"
 )
+
+// tokenBlob is the sealed payload: both the access and refresh tokens, JSON-
+// encoded before encryption. Storing both inside the existing ciphertext column
+// avoids a schema migration. Rows written before refresh-token support hold a
+// raw access-token string instead of JSON — decodeTokenBlob falls back to that.
+type tokenBlob struct {
+	Access  string `json:"a"`
+	Refresh string `json:"r"`
+}
+
+func encodeTokenBlob(access, refresh string) []byte {
+	b, _ := json.Marshal(tokenBlob{Access: access, Refresh: refresh})
+	return b
+}
+
+func decodeTokenBlob(plaintext []byte) (access, refresh string) {
+	var tb tokenBlob
+	if err := json.Unmarshal(plaintext, &tb); err == nil && tb.Access != "" {
+		return tb.Access, tb.Refresh
+	}
+	return string(plaintext), "" // legacy: raw access-token bytes
+}
 
 // Store persists accounts, pubkeys, and envelope-encrypted Swiggy tokens under
 // Postgres RLS. All per-account operations run inside withAccount, which sets
@@ -74,12 +97,13 @@ func (s *Store) AccountForPubkey(ctx context.Context, pubkey string) (string, bo
 
 // Token holds a decrypted Swiggy access token and its expiry.
 type Token struct {
-	AccessToken string
-	ExpiresAt   time.Time
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    time.Time
 }
 
 func (s *Store) PutToken(ctx context.Context, accountID string, t Token) error {
-	sl, err := sealToken(ctx, s.kms, []byte(t.AccessToken))
+	sl, err := sealToken(ctx, s.kms, encodeTokenBlob(t.AccessToken, t.RefreshToken))
 	if err != nil {
 		return err
 	}
@@ -122,7 +146,8 @@ func (s *Store) GetToken(ctx context.Context, accountID string) (Token, bool, er
 	if err != nil {
 		return Token{}, false, err
 	}
-	out = Token{AccessToken: string(pt), ExpiresAt: exp}
+	access, refresh := decodeTokenBlob(pt)
+	out = Token{AccessToken: access, RefreshToken: refresh, ExpiresAt: exp}
 	return out, true, nil
 }
 

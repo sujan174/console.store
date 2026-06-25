@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"console.store/internal/auth"
 	"console.store/internal/broker/api"
@@ -19,9 +20,17 @@ type fakeStore struct {
 func (f *fakeStore) AccountForPubkey(_ context.Context, pubkey string) (string, bool, error) {
 	return "acct-" + pubkey, true, nil
 }
-func (f *fakeStore) GetToken(_ context.Context, accountID string) (string, bool, error) {
+func (f *fakeStore) GetTokenFull(_ context.Context, accountID string) (string, string, time.Time, bool, error) {
 	tok, ok := f.tokens[accountID]
-	return tok, ok, nil
+	// Far-future expiry so the token source returns it without refreshing.
+	return tok, "", time.Now().Add(time.Hour), ok, nil
+}
+func (f *fakeStore) PutToken(_ context.Context, accountID, access, _ string, _ time.Time) error {
+	if f.tokens == nil {
+		f.tokens = map[string]string{}
+	}
+	f.tokens[accountID] = access
+	return nil
 }
 func (f *fakeStore) PurgeToken(_ context.Context, accountID string) error {
 	f.purged = append(f.purged, accountID)

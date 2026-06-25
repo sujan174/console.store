@@ -70,10 +70,11 @@ func Register(ctx context.Context, httpc *http.Client, registrationURL, redirect
 }
 
 type Token struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	ExpiresIn   int    `json:"expires_in"`
-	Scope       string `json:"scope"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	Scope        string `json:"scope"`
 }
 
 func Exchange(ctx context.Context, httpc *http.Client, tokenURL, clientID, code, verifier, redirectURI string) (Token, error) {
@@ -98,6 +99,34 @@ func Exchange(ctx context.Context, httpc *http.Client, tokenURL, clientID, code,
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
 		return t, fmt.Errorf("auth: token status %d: %s", resp.StatusCode, b)
+	}
+	return t, json.Unmarshal(b, &t)
+}
+
+// Refresh exchanges a refresh token for a new access token (grant_type=
+// refresh_token). The authorization server may rotate the refresh token; when
+// the response omits one, callers should keep reusing the previous refresh
+// token.
+func Refresh(ctx context.Context, httpc *http.Client, tokenURL, clientID, refreshToken string) (Token, error) {
+	var t Token
+	form := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+		"client_id":     {clientID},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return t, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := httpc.Do(req)
+	if err != nil {
+		return t, err
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return t, fmt.Errorf("auth: refresh status %d: %s", resp.StatusCode, b)
 	}
 	return t, json.Unmarshal(b, &t)
 }
