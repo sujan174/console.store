@@ -4,9 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"sync"
 )
+
+// debugSwiggy, when CONSOLE_DEBUG_SWIGGY=1, logs the raw parsed result of every
+// tool call. Used to harvest real Swiggy response schemas against a live account
+// (e.g. the order/tracking shapes that only appear after a real order).
+func debugSwiggy(tool string, raw json.RawMessage, err error) {
+	if os.Getenv("CONSOLE_DEBUG_SWIGGY") != "1" {
+		return
+	}
+	s := string(raw)
+	if len(s) > 4000 {
+		s = s[:4000] + "…(trunc)"
+	}
+	log.Printf("SWIGGY-DEBUG tool=%s err=%v raw=%s", tool, err, s)
+}
 
 // FoodBaseURL is the Swiggy MCP endpoint for the Food (restaurant) vertical.
 const FoodBaseURL = "https://mcp.swiggy.com/food"
@@ -107,7 +123,9 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 		}
 		return nil, e
 	}
-	return parseToolResult(res.Body)
+	raw, perr := parseToolResult(res.Body)
+	debugSwiggy(name, raw, perr)
+	return raw, perr
 }
 
 func parseToolResult(body []byte) (json.RawMessage, error) {

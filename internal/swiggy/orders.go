@@ -112,7 +112,9 @@ func (c *Client) PlaceFoodOrder(ctx context.Context, req PlaceFoodOrderRequest) 
 	}
 	pay := req.PaymentMethod
 	if pay == "" {
-		pay = "COD"
+		// Swiggy's cash-on-delivery payment method is named "Cash" (payment_code
+		// from the cart's paymentOptions). "COD" is rejected as unsupported.
+		pay = "Cash"
 	}
 	snapshot := func(ctx context.Context) ([]Order, error) {
 		return c.GetFoodOrders(ctx, req.AddressID, true)
@@ -138,7 +140,7 @@ func (c *Client) Checkout(ctx context.Context, req CheckoutRequest) (Order, erro
 	}
 	pay := req.PaymentMethod
 	if pay == "" {
-		pay = "COD"
+		pay = "Cash" // Swiggy's COD payment method is "Cash", not "COD".
 	}
 	snapshot := func(ctx context.Context) ([]Order, error) {
 		return c.GetOrders(ctx, 20, true)
