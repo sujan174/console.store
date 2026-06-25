@@ -349,12 +349,55 @@ func (m Model) refreshAfterAdd() Model {
 		info := m.rest.InfoOpen()
 		cat := m.rest.ActiveCategory()
 		veg := m.rest.VegOnly()
+		chosen := m.rest.Chosen()
 		// WithCategory and WithVegOnly reset cursor to 0; apply WithCursor last.
 		m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).
 			WithAddr(m.addr).WithInfo(info).
-			WithCategory(cat).WithVegOnly(veg).WithCursor(ci)
+			WithCategory(cat).WithVegOnly(veg).WithChosen(chosen).WithCursor(ci)
 	}
 	return m
+}
+
+// restIncSelected adds one unit of the selected dish (↑ in select-mode). A live
+// customizable dish first fetches its options; non-customizable / mock dishes go
+// straight through beginAdd (which may open the customize or conflict modal).
+func (m Model) restIncSelected() (tea.Model, tea.Cmd) {
+	it, ok := m.rest.Selected()
+	if !ok {
+		dbgTUI("add: Selected() returned !ok (no item under cursor)")
+		return m, nil
+	}
+	dbgTUI("add: item=%q swiggyID=%q rest=%q", it.Name, it.SwiggyID, m.rest.PlaceData().Name)
+	if m.live && it.Customizable && len(it.Options) == 0 {
+		m.pendingItem = it
+		m.pendingRest = m.rest.PlaceData().Name
+		m.pendingSection = m.rest.PlaceData().Section
+		dbgTUI("add: fetching options for %q", it.Name)
+		return m, datasource.LoadItemOptions(m.backend, m.addr.ID, m.rest.PlaceData().SwiggyID, it.Name, it.SwiggyID)
+	}
+	m = m.beginAdd(it, m.rest.PlaceData().Name, m.rest.PlaceData().Section)
+	if m.customizeOpen || m.conflictOpen {
+		dbgTUI("add: modal opened (customize=%v conflict=%v)", m.customizeOpen, m.conflictOpen)
+		return m, nil // a modal will finish the add
+	}
+	m = m.refreshAfterAdd()
+	return m, m.liveCartCmd()
+}
+
+// restDecSelected removes one unit of the selected dish (↓ in select-mode),
+// releasing the restaurant binding when the cart empties.
+func (m Model) restDecSelected() (tea.Model, tea.Cmd) {
+	it, ok := m.rest.Selected()
+	if !ok {
+		return m, nil
+	}
+	m.lines = decLastByItem(m.lines, it.ID)
+	if len(m.lines) == 0 {
+		m.cartRestaurant = ""
+		m.cartSection = ""
+	}
+	m = m.refreshAfterAdd()
+	return m, m.liveCartCmd()
 }
 
 // qtyMap returns current cart quantities keyed by item ID.
@@ -913,54 +956,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.screen = scrMenu
 				return m, nil
-			case "enter", "right", "l":
-				it, ok := m.rest.Selected()
-				if !ok {
-					dbgTUI("add: Selected() returned !ok (no item under cursor)")
+			case "left", "h", "[":
+				// ← / → navigate the top category bar (and drop select-mode).
+				m.rest = m.rest.WithChosen(false).PrevCategory()
+				return m, nil
+			case "right", "l", "]":
+				m.rest = m.rest.WithChosen(false).NextCategory()
+				return m, nil
+			case "enter":
+				// Enter selects the focused dish: ↑/↓ then adjust its quantity.
+				// Pressing it again exits select-mode (back to dish navigation).
+				if _, ok := m.rest.Selected(); !ok {
 					return m, nil
 				}
-				dbgTUI("add: item=%q swiggyID=%q rest=%q", it.Name, it.SwiggyID, m.rest.PlaceData().Name)
-				// Live customizable item: its variant/addon options aren't in the
-				// menu listing, so fetch them first; the customize sheet opens when
-				// ItemOptionsLoadedMsg arrives.
-				if m.live && it.Customizable && len(it.Options) == 0 {
-					m.pendingItem = it
-					m.pendingRest = m.rest.PlaceData().Name
-					m.pendingSection = m.rest.PlaceData().Section
-					dbgTUI("add: fetching options for %q", it.Name)
-					return m, datasource.LoadItemOptions(m.backend, m.addr.ID, m.rest.PlaceData().SwiggyID, it.Name, it.SwiggyID)
+				m.rest = m.rest.WithChosen(!m.rest.Chosen())
+				return m, nil
+			case "up", "k":
+				if m.rest.Chosen() {
+					return m.restIncSelected()
 				}
-				m = m.beginAdd(it, m.rest.PlaceData().Name, m.rest.PlaceData().Section)
-				if m.customizeOpen || m.conflictOpen {
-					dbgTUI("add: modal opened (customize=%v conflict=%v)", m.customizeOpen, m.conflictOpen)
-					return m, nil // a modal will finish the add
+				nr, cmd := m.rest.Update(msg)
+				m.rest = nr.(screens.Restaurant)
+				return m, cmd
+			case "down", "j":
+				if m.rest.Chosen() {
+					return m.restDecSelected()
 				}
-				m = m.refreshAfterAdd()
-				return m, m.liveCartCmd()
-			case "left", "h":
-				it, ok := m.rest.Selected()
-				if !ok {
-					return m, nil
-				}
-				m.lines = decLastByItem(m.lines, it.ID)
-				if len(m.lines) == 0 {
-					m.cartRestaurant = ""
-					m.cartSection = ""
-				}
-				m = m.refreshAfterAdd()
-				return m, m.liveCartCmd()
+				nr, cmd := m.rest.Update(msg)
+				m.rest = nr.(screens.Restaurant)
+				return m, cmd
 			case "c":
 				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive())
 				m.screen = scrCart
 				return m, nil
-			case "]", "tab":
-				m.rest = m.rest.NextCategory()
-				return m, nil
-			case "[":
-				m.rest = m.rest.PrevCategory()
-				return m, nil
 			case "v":
-				m.rest = m.rest.WithVegOnly(!m.rest.VegOnly())
+				m.rest = m.rest.WithChosen(false).WithVegOnly(!m.rest.VegOnly())
 				return m, nil
 			default:
 				nr, cmd := m.rest.Update(msg)
