@@ -485,16 +485,14 @@ func addonsFromSelections(sels []catalog.Selection) []catalog.AddOn {
 // priceFromSelections computes the per-unit price: a variantsV2 selection SETS
 // the base (absolute); legacy variations and add-ons add on.
 func priceFromSelections(base int, sels []catalog.Selection) int {
-	hasAbs, extra := false, 0
+	extra := 0
 	for _, s := range sels {
 		if s.Absolute {
 			base = s.Price
-			hasAbs = true
 		} else {
 			extra += s.Price
 		}
 	}
-	_ = hasAbs
 	return base + extra
 }
 
@@ -863,7 +861,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.wizard = m.wizard0(it, dm.Groups)
 			m.wizardOpen = true
-			return m, m.wizardCartCmd() // send the default variant, fetch valid_addons
+			if c := m.wizardCartCmd(); c != nil {
+				return m, c // send the default variant, fetch valid_addons
+			}
+			// No live cart available (mock path or restaurant has no SwiggyID) —
+			// a permanently-spinning wizard would block the user forever. Fall back
+			// to the flat customize sheet which works without a backend.
+			m.wizardOpen = false
+			m.customize = screens.NewCustomize(it)
+			m.customizeOpen = true
+			return m, nil
 		}
 		m.customize = screens.NewCustomize(it)
 		m.customizeOpen = true
@@ -1494,6 +1501,13 @@ func (m Model) View() string {
 
 	// The customise / conflict modals take over the viewport, centered. They are
 	// blocking, so the context behind them is not needed.
+	if m.wizardOpen {
+		dialog := m.wizard.WithViewport(m.h).View()
+		if m.w == 0 || m.h == 0 {
+			return dialog
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, dialog)
+	}
 	if m.customizeOpen {
 		dialog := m.customize.WithViewport(m.h).View()
 		if m.w == 0 || m.h == 0 {

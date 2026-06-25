@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"console.store/internal/broker/api"
 	"console.store/internal/catalog"
+	"console.store/internal/tui/render"
 	"console.store/internal/tui/screens"
 )
 
@@ -75,5 +77,33 @@ func TestApiToCatalogGroups(t *testing.T) {
 	out := apiToCatalogGroups(in)
 	if len(out) != 1 || out[0].ID != "g" || len(out[0].Choices) != 1 || out[0].Choices[0].Price != 50 {
 		t.Fatalf("conversion wrong: %+v", out)
+	}
+}
+
+// TestWizardOpenRendersDialog guards C1: when wizardOpen=true the View() must
+// render the wizard dialog, not the underlying screen.
+func TestWizardOpenRendersDialog(t *testing.T) {
+	m := New(render.Caps{})
+	m.screen = scrMenu
+	m.w = 80
+	m.h = 24
+	sizeGrp := catalog.OptionGroup{
+		ID: "71532142", Name: "Choose Size", Min: 1, Max: 1, Variant: true, Absolute: true,
+		Choices: []catalog.Choice{
+			{ID: "212139800", Name: "Small", Price: 269, InStock: true},
+		},
+	}
+	m.wizard = screens.NewWizard(
+		catalog.Item{ID: "pizza", Name: "Margherita", Price: 269},
+		[]catalog.OptionGroup{sizeGrp},
+	)
+	m.wizardOpen = true
+
+	v := m.View()
+	if !strings.Contains(v, "Choose Size") {
+		t.Errorf("wizardOpen=true: View() should render the wizard dialog (expected 'Choose Size'):\n%s", v)
+	}
+	if !strings.Contains(v, "step 1") {
+		t.Errorf("wizardOpen=true: View() should show step indicator:\n%s", v)
 	}
 }

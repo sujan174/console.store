@@ -120,3 +120,52 @@ func TestWizardViewLastPageOffersAdd(t *testing.T) {
 		t.Errorf("page 2 should show step 2:\n%s", v)
 	}
 }
+
+// outOfStockSizeGroup returns a required single-choice group where the first
+// choice is out of stock and the second is in stock (for I3 tests).
+func outOfStockSizeGroup() catalog.OptionGroup {
+	return catalog.OptionGroup{
+		ID: "71532142", Name: "Choose Size", Min: 1, Max: 1, Variant: true, Absolute: true,
+		Choices: []catalog.Choice{
+			{ID: "212139800", Name: "Small", Price: 269, InStock: false}, // out of stock
+			{ID: "212139801", Name: "Medium", Price: 399, InStock: true}, // in stock
+		},
+	}
+}
+
+// TestWizardDefaultSelectsFirstInStockChoice guards I3: newWizPage must skip
+// out-of-stock choices when auto-selecting a required single-choice group.
+func TestWizardDefaultSelectsFirstInStockChoice(t *testing.T) {
+	w := NewWizard(variantItem(), []catalog.OptionGroup{outOfStockSizeGroup()})
+	sels := w.AllSelections()
+	if len(sels) != 1 {
+		t.Fatalf("expected exactly one pre-selected choice, got %d: %+v", len(sels), sels)
+	}
+	if sels[0].ChoiceID != "212139801" {
+		t.Errorf("expected the first IN-STOCK choice (Medium/212139801) to be pre-selected, got %q", sels[0].ChoiceID)
+	}
+}
+
+// TestWizardToggleIgnoresOutOfStockChoice guards I3: Toggle ON must be a no-op
+// for out-of-stock choices; turning OFF is still allowed.
+func TestWizardToggleIgnoresOutOfStockChoice(t *testing.T) {
+	w := NewWizard(variantItem(), []catalog.OptionGroup{outOfStockSizeGroup()})
+	// cursor starts at row 0 (Small, out of stock). Attempt to select it.
+	w2 := w.Toggle()
+	sels := w2.AllSelections()
+	for _, s := range sels {
+		if s.ChoiceID == "212139800" {
+			t.Errorf("Toggle should not select an out-of-stock choice (Small/212139800): %+v", sels)
+		}
+	}
+}
+
+// TestWizardViewMarksSoldOutChoices guards I3: View must render out-of-stock
+// choices with a "sold out" marker.
+func TestWizardViewMarksSoldOutChoices(t *testing.T) {
+	w := NewWizard(variantItem(), []catalog.OptionGroup{outOfStockSizeGroup()})
+	v := w.View()
+	if !strings.Contains(v, "sold out") {
+		t.Errorf("View() should mark out-of-stock choices as 'sold out':\n%s", v)
+	}
+}

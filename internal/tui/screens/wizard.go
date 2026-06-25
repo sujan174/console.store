@@ -39,8 +39,16 @@ func newWizPage(groups []catalog.OptionGroup) wizPage {
 	p := wizPage{groups: groups, picked: make(map[string]map[string]bool, len(groups))}
 	for gi, g := range groups {
 		p.picked[g.ID] = map[string]bool{}
-		if g.Min >= 1 && g.Max == 1 && len(g.Choices) > 0 {
-			p.picked[g.ID][g.Choices[0].ID] = true // default for required single-choice
+		if g.Min >= 1 && g.Max == 1 {
+			// Default-select the first IN-STOCK choice for required single-choice
+			// groups; skip out-of-stock choices so we never auto-select an
+			// unavailable item (§6: INVALID_ADDON guard).
+			for _, ch := range g.Choices {
+				if ch.InStock {
+					p.picked[g.ID][ch.ID] = true
+					break
+				}
+			}
 		}
 		for ci := range g.Choices {
 			p.rows = append(p.rows, optRow{group: gi, choice: ci})
@@ -84,6 +92,7 @@ func (w Wizard) Down() Wizard { w.cursor++; return w.clampCursor() }
 
 // Toggle flips the choice under the cursor on the current page. Max==1 groups
 // behave like a radio; multi groups respect Max (0/<0 = unlimited).
+// Toggling ON an out-of-stock choice is silently ignored; turning OFF is always allowed.
 func (w Wizard) Toggle() Wizard {
 	p := w.cur()
 	if w.cursor < 0 || w.cursor >= len(p.rows) {
@@ -94,7 +103,11 @@ func (w Wizard) Toggle() Wizard {
 	ch := g.Choices[r.choice]
 	pg := p.picked[g.ID]
 	if pg[ch.ID] {
-		delete(pg, ch.ID) // turning off is allowed; min enforced at PageValid.
+		delete(pg, ch.ID) // turning off is always allowed; min enforced at PageValid.
+		return w
+	}
+	// Do not allow selecting an out-of-stock choice (§6: INVALID_ADDON guard).
+	if !ch.InStock {
 		return w
 	}
 	if g.Max == 1 {
@@ -203,7 +216,14 @@ func (w Wizard) View() string {
 		for _, ch := range g.Choices {
 			on := p.picked[g.ID][ch.ID]
 			var box string
-			if g.Max == 1 {
+			if !ch.InStock {
+				// Out-of-stock: render the box as unavailable (dimmed, never filled).
+				if g.Max == 1 {
+					box = theme.DimStyle.Render("( )")
+				} else {
+					box = theme.DimStyle.Render("[ ]")
+				}
+			} else if g.Max == 1 {
 				box = theme.DimStyle.Render("( )")
 				if on {
 					box = theme.GreenStyle.Render("(•)")
@@ -214,14 +234,20 @@ func (w Wizard) View() string {
 					box = theme.GreenStyle.Render("[x]")
 				}
 			}
-			name := theme.TextStyle.Render(ch.Name)
-			price := theme.FaintStyle.Render("free")
-			if ch.Price > 0 {
-				tag := "+₹"
-				if g.Absolute {
-					tag = "₹"
+			var name, price string
+			if !ch.InStock {
+				name = theme.DimStyle.Render(ch.Name)
+				price = theme.DimStyle.Render("sold out")
+			} else {
+				name = theme.TextStyle.Render(ch.Name)
+				price = theme.FaintStyle.Render("free")
+				if ch.Price > 0 {
+					tag := "+₹"
+					if g.Absolute {
+						tag = "₹"
+					}
+					price = theme.GoldStyle.Render(fmt.Sprintf("%s%d", tag, ch.Price))
 				}
-				price = theme.GoldStyle.Render(fmt.Sprintf("%s%d", tag, ch.Price))
 			}
 			cursor := "  "
 			if row == w.cursor {
