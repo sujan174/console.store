@@ -39,7 +39,10 @@ type (
 		PlaceID string
 		Err     error
 	}
-	CartSyncedMsg  struct{ Err error }
+	CartSyncedMsg struct {
+		Cart api.Cart
+		Err  error
+	}
 	OrderPlacedMsg struct {
 		Order api.Order
 		Err   error
@@ -79,13 +82,14 @@ func LoadMenu(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID stri
 	}
 }
 
-// SyncCart calls UpdateCart on the backend with the current cart contents. The
-// returned cart is discarded (SetCart not yet wired on Snapshot). Errors are
-// non-fatal: the TUI shows them in the status bar and continues.
+// SyncCart calls UpdateCart on the backend with the current cart contents and
+// returns the resulting cart (with Swiggy's real bill breakdown) in the Msg so
+// the checkout can show an accurate split. Errors are non-fatal: the TUI shows
+// them in the status bar and continues.
 func SyncCart(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID, restaurantName string, items []api.CartItem) tea.Cmd {
 	return func() tea.Msg {
-		_, err := b.UpdateCart(addressID, restaurantID, restaurantName, items)
-		return CartSyncedMsg{Err: err}
+		cart, err := b.UpdateCart(addressID, restaurantID, restaurantName, items)
+		return CartSyncedMsg{Cart: cart, Err: err}
 	}
 }
 

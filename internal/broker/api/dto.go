@@ -50,9 +50,12 @@ type CartLine struct {
 }
 
 type Cart struct {
-	CartID string
-	Total  int
-	Lines  []CartLine
+	CartID    string
+	ItemTotal int // Swiggy bill: item subtotal
+	Delivery  int // Swiggy bill: delivery charge
+	Taxes     int // Swiggy bill: taxes & charges
+	Total     int // Swiggy bill: to-pay
+	Lines     []CartLine
 }
 
 type Order struct {

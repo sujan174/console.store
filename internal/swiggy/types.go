@@ -101,11 +101,16 @@ type CartLine struct {
 	Price    int // whole rupees
 }
 
-// Cart is the typed, TUI-facing cart (converted from cartEnvelope).
+// Cart is the typed, TUI-facing cart (converted from cartEnvelope). The pricing
+// fields carry Swiggy's real bill breakdown (whole rupees) for an accurate
+// checkout split instead of mock delivery/coupon math.
 type Cart struct {
-	CartID string
-	Total  int // pricing.to_pay, whole rupees
-	Items  []CartLine
+	CartID    string
+	ItemTotal int // pricing.item_total
+	Delivery  int // pricing.delivery_charge
+	Taxes     int // pricing.taxes_and_charges
+	Total     int // pricing.to_pay
+	Items     []CartLine
 }
 
 // cartEnvelope decodes the real get_food_cart / update_food_cart response. The
@@ -129,8 +134,10 @@ type cartData struct {
 		Total      float64     `json:"total"`
 	} `json:"items"`
 	Pricing struct {
-		ItemTotal float64 `json:"item_total"`
-		ToPay     float64 `json:"to_pay"`
+		ItemTotal       float64 `json:"item_total"`
+		DeliveryCharge  float64 `json:"delivery_charge"`
+		TaxesAndCharges float64 `json:"taxes_and_charges"`
+		ToPay           float64 `json:"to_pay"`
 	} `json:"pricing"`
 	Restaurant struct {
 		Name string `json:"name"`
@@ -144,7 +151,13 @@ func (e cartEnvelope) toCart() Cart {
 		return Cart{}
 	}
 	d := e.Data
-	c := Cart{CartID: d.CartID.String(), Total: int(math.Round(d.Pricing.ToPay))}
+	c := Cart{
+		CartID:    d.CartID.String(),
+		ItemTotal: int(math.Round(d.Pricing.ItemTotal)),
+		Delivery:  int(math.Round(d.Pricing.DeliveryCharge)),
+		Taxes:     int(math.Round(d.Pricing.TaxesAndCharges)),
+		Total:     int(math.Round(d.Pricing.ToPay)),
+	}
 	for _, it := range d.Items {
 		c.Items = append(c.Items, CartLine{
 			ItemID:   it.MenuItemID.String(),

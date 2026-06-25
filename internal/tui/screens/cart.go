@@ -69,6 +69,35 @@ type Cart struct {
 	cursor     int
 	eta        string
 	minNotice  string
+	bill       Bill
+}
+
+// Bill carries Swiggy's real cart pricing breakdown. When Live is set, the cart
+// and checkout screens render this exact split (item / delivery / taxes / to-pay)
+// instead of the mock delivery-fee-minus-coupon math.
+type Bill struct {
+	ItemTotal int
+	Delivery  int
+	Taxes     int
+	ToPay     int
+	Live      bool
+}
+
+// renderBill renders Swiggy's real itemized split.
+func renderBill(w int, bill Bill) string {
+	var b strings.Builder
+	b.WriteString(components.DashRule())
+	row := func(label string, amt int) {
+		b.WriteString("  " + justify(theme.DimStyle.Render(label),
+			theme.TextStyle.Render(fmt.Sprintf("₹%d", amt)), w) + "\n")
+	}
+	row("item total", bill.ItemTotal)
+	row("delivery", bill.Delivery)
+	row("taxes & charges", bill.Taxes)
+	b.WriteString(components.DashRule())
+	b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
+		theme.BrightStyle.Render(fmt.Sprintf("₹%d", bill.ToPay)), w) + "\n")
+	return b.String()
 }
 
 func NewCart(restaurant string, lines []CartLine) Cart {
@@ -82,6 +111,9 @@ func (c Cart) Lines() []CartLine { return c.lines }
 
 // WithEta sets the cart header ETA (e.g. "~45 min"), shown top-right.
 func (c Cart) WithEta(s string) Cart { c.eta = s; return c }
+
+// WithBill attaches Swiggy's real pricing breakdown (live mode).
+func (c Cart) WithBill(b Bill) Cart { c.bill = b; return c }
 
 // WithMinNotice sets a notice shown when the cart is below a minimum.
 func (c Cart) WithMinNotice(s string) Cart { c.minNotice = s; return c }
@@ -206,18 +238,22 @@ func (c Cart) View() string {
 	}
 	b.WriteString(list.View())
 
-	// Bill breakdown.
-	b.WriteString(components.DashRule())
-	b.WriteString("  " + justify(theme.DimStyle.Render("item total"),
-		theme.TextStyle.Render(fmt.Sprintf("₹%d", c.Total())), w) + "\n")
-	b.WriteString("  " + justify(theme.DimStyle.Render("delivery"),
-		theme.TextStyle.Render(fmt.Sprintf("₹%d", DeliveryFee)), w) + "\n")
-	b.WriteString("  " + justify(
-		theme.GreenStyle.Render(fmt.Sprintf("%s  −₹%d", CouponCode, CouponAmount)),
-		theme.GreenStyle.Render("applied"), w) + "\n")
-	b.WriteString(components.DashRule())
-	b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
-		theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
+	// Bill breakdown — real Swiggy split in live mode, mock math otherwise.
+	if c.bill.Live {
+		b.WriteString(renderBill(w, c.bill))
+	} else {
+		b.WriteString(components.DashRule())
+		b.WriteString("  " + justify(theme.DimStyle.Render("item total"),
+			theme.TextStyle.Render(fmt.Sprintf("₹%d", c.Total())), w) + "\n")
+		b.WriteString("  " + justify(theme.DimStyle.Render("delivery"),
+			theme.TextStyle.Render(fmt.Sprintf("₹%d", DeliveryFee)), w) + "\n")
+		b.WriteString("  " + justify(
+			theme.GreenStyle.Render(fmt.Sprintf("%s  −₹%d", CouponCode, CouponAmount)),
+			theme.GreenStyle.Render("applied"), w) + "\n")
+		b.WriteString(components.DashRule())
+		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
+			theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
+	}
 
 	if c.minNotice != "" {
 		b.WriteString("\n  " + theme.FavStyle.Render(c.minNotice) + "\n")

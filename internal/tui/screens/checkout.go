@@ -20,11 +20,15 @@ type Checkout struct {
 	orderID    string
 	eta        string
 	placing    bool // true while PlaceOrderCmd is in-flight
+	bill       Bill // Swiggy's real pricing breakdown (live mode)
 }
 
 func NewCheckout(restaurant string, addr catalog.Address, lines []CartLine, eta string) Checkout {
 	return Checkout{restaurant: restaurant, addr: addr, lines: lines, eta: eta}
 }
+
+// WithBill attaches Swiggy's real pricing breakdown (live mode).
+func (c Checkout) WithBill(b Bill) Checkout { c.bill = b; return c }
 
 // Placed returns a confirm-state copy carrying the order id and eta.
 func (c Checkout) Placed(orderID, eta string) Checkout {
@@ -63,6 +67,14 @@ func (c Checkout) Total() int {
 // toPay is the design bill: item + delivery − coupon.
 func (c Checkout) toPay() int { return billToPay(c.Total()) }
 
+// payAmount is the amount shown as due — Swiggy's real to-pay in live mode.
+func (c Checkout) payAmount() int {
+	if c.bill.Live {
+		return c.bill.ToPay
+	}
+	return c.toPay()
+}
+
 func (c Checkout) Init() tea.Cmd { return nil }
 
 func (c Checkout) View(frame int) string {
@@ -97,11 +109,15 @@ func (c Checkout) summaryView() string {
 	b.WriteString("  " + label("from") + theme.TextStyle.Render(from) + "\n")
 	b.WriteString("  " + label("pay") + theme.GoldStyle.Render("Cash / UPI to rider on delivery") + "\n")
 
-	b.WriteString(components.DashRule())
-	b.WriteString("  " + justify(
-		theme.BrightStyle.Render("to pay (COD)"),
-		theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
-	b.WriteString(components.DashRule())
+	if c.bill.Live {
+		b.WriteString(renderBill(w, c.bill))
+	} else {
+		b.WriteString(components.DashRule())
+		b.WriteString("  " + justify(
+			theme.BrightStyle.Render("to pay (COD)"),
+			theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
+		b.WriteString(components.DashRule())
+	}
 
 	// Full-bleed place-order bar: green left bar + selected-row background.
 	barLabel := " > place order "
@@ -162,7 +178,7 @@ func (c Checkout) confirmView(frame int) string {
 
 	b.WriteString("  " + theme.BrightStyle.Render(c.restaurant+" · ETA "+c.eta+" · ") +
 		theme.DimStyle.Render(c.orderID) + "\n")
-	b.WriteString("  " + theme.DimStyle.Render(fmt.Sprintf("pay ₹%d to rider (cash/UPI)", c.toPay())) + "\n")
+	b.WriteString("  " + theme.DimStyle.Render(fmt.Sprintf("pay ₹%d to rider (cash/UPI)", c.payAmount())) + "\n")
 	b.WriteString("  " + theme.FavStyle.Render("can't be cancelled now") + "\n\n")
 
 	b.WriteString(c.speedReceipt())

@@ -140,9 +140,10 @@ type Model struct {
 	needsAuth    bool // set when a load returns datasource.ErrNeedsAuth
 	seeded       bool // true when catalog/swiggy.Snapshot was pre-seeded from config; skips live init loads
 
-	placingOrder bool   // true while PlaceOrderCmd is in-flight; blocks double-fire
-	cartSyncErr  string // last cart-sync error; shown in status bar (non-fatal)
-	orderErr     string // last order-placement error; shown in status bar
+	placingOrder bool     // true while PlaceOrderCmd is in-flight; blocks double-fire
+	cartSyncErr  string   // last cart-sync error; shown in status bar (non-fatal)
+	orderErr     string   // last order-placement error; shown in status bar
+	liveCart     api.Cart // last synced Swiggy cart (real pricing for the bill)
 }
 
 func New(caps render.Caps, opts ...Option) Model {
@@ -537,6 +538,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cartSyncErr = "cart sync: " + dm.Err.Error()
 		} else {
 			m.cartSyncErr = ""
+			m.liveCart = dm.Cart // real Swiggy pricing for an accurate bill
 		}
 		return m, nil
 	case datasource.OrderPlacedMsg:
@@ -758,7 +760,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "c":
-				m.cart = screens.NewCart(m.cartHeader(), m.lines).WithEta(m.cartEta())
+				m.cart = screens.NewCart(m.cartHeader(), m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive())
 				m.screen = scrCart
 				return m, nil
 			case "a":
@@ -807,7 +809,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m = m.refreshAfterAdd()
 				return m, m.liveSyncCart()
 			case "c":
-				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta())
+				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive())
 				m.screen = scrCart
 				return m, nil
 			default:
@@ -822,7 +824,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "enter":
 				if len(m.lines) > 0 {
-					m.checkout = screens.NewCheckout(m.cartHeader(), m.addr, m.lines, m.cartEta())
+					m.checkout = screens.NewCheckout(m.cartHeader(), m.addr, m.lines, m.cartEta()).WithBill(m.billFromLive())
 					m.screen = scrCheckout
 					return m, nil
 				}
@@ -1155,6 +1157,22 @@ func errIsNeedsAuth(err error) bool {
 // to keep Swiggy's cart in sync. No-op when not live, cart is empty, or the
 // restaurant has no SwiggyID (e.g. if menu hasn't loaded yet). Items without
 // a SwiggyID are skipped — they can't be referenced by Swiggy.
+// billFromLive returns Swiggy's real pricing breakdown for the cart/checkout
+// bill. In mock mode (or before any sync), Live is false and screens fall back
+// to the design's delivery/coupon math.
+func (m Model) billFromLive() screens.Bill {
+	if !m.live || m.liveCart.Total == 0 {
+		return screens.Bill{}
+	}
+	return screens.Bill{
+		ItemTotal: m.liveCart.ItemTotal,
+		Delivery:  m.liveCart.Delivery,
+		Taxes:     m.liveCart.Taxes,
+		ToPay:     m.liveCart.Total,
+		Live:      true,
+	}
+}
+
 func (m Model) liveSyncCart() tea.Cmd {
 	if !m.live || len(m.lines) == 0 {
 		dbgTUI("liveSyncCart: nil (live=%v lines=%d)", m.live, len(m.lines))

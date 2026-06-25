@@ -55,7 +55,10 @@ func mapCart(in swiggy.Cart) api.Cart {
 	for i, l := range in.Items {
 		lines[i] = api.CartLine{ItemID: l.ItemID, Name: l.Name, Quantity: l.Quantity, Price: l.Price}
 	}
-	return api.Cart{CartID: in.CartID, Total: in.Total, Lines: lines}
+	return api.Cart{
+		CartID: in.CartID, ItemTotal: in.ItemTotal, Delivery: in.Delivery,
+		Taxes: in.Taxes, Total: in.Total, Lines: lines,
+	}
 }
 
 func mapOrder(in swiggy.Order) api.Order {
