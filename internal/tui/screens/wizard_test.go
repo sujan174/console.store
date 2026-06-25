@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"strings"
 	"testing"
 
 	"console.store/internal/catalog"
@@ -81,5 +82,41 @@ func TestWizardPageInvalidUntilRequiredPicked(t *testing.T) {
 	w = w.Toggle() // cursor at crust row 0 (Classic, pre-selected) → turn off
 	if w.PageValid() {
 		t.Fatal("crust page should be invalid with the required group empty")
+	}
+}
+
+func TestWizardViewShowsVariantPage(t *testing.T) {
+	w := NewWizard(variantItem(), []catalog.OptionGroup{sizeGroup()})
+	v := w.View()
+	if !strings.Contains(v, "Choose Size") {
+		t.Errorf("variant page should show the size group:\n%s", v)
+	}
+	if !strings.Contains(v, "Small") || !strings.Contains(v, "Medium") {
+		t.Errorf("variant page should list choices:\n%s", v)
+	}
+	if !strings.Contains(v, "step 1") {
+		t.Errorf("wizard should show a step indicator:\n%s", v)
+	}
+	if !strings.Contains(v, "next") {
+		t.Errorf("variant page hint should offer next:\n%s", v)
+	}
+}
+
+func TestWizardViewLoadingLine(t *testing.T) {
+	w := NewWizard(variantItem(), []catalog.OptionGroup{sizeGroup()}).WithLoading(true)
+	if !strings.Contains(w.View(), "updating") {
+		t.Errorf("loading wizard should show an updating line:\n%s", w.View())
+	}
+}
+
+func TestWizardViewLastPageOffersAdd(t *testing.T) {
+	w := NewWizard(variantItem(), []catalog.OptionGroup{sizeGroup()})
+	w = w.AddPage([]catalog.OptionGroup{crustGroup()})
+	v := w.View()
+	if !strings.Contains(v, "Crust Small.") {
+		t.Errorf("page 2 should show the crust group:\n%s", v)
+	}
+	if !strings.Contains(v, "step 2") {
+		t.Errorf("page 2 should show step 2:\n%s", v)
 	}
 }

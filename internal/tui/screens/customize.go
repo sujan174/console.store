@@ -270,7 +270,7 @@ func (c Customize) groupedView() string {
 			row++
 		}
 	}
-	rows = c.windowRows(rows, cursorLine)
+	rows = windowRows(rows, cursorLine, c.viewportH)
 
 	total := justify(
 		theme.DimStyle.Render("per item"),
@@ -337,12 +337,12 @@ func (c Customize) flatView() string {
 // windowRows scrolls a long option list to fit the viewport, keeping the cursor
 // visible and marking hidden rows above/below. Returns rows unchanged when the
 // height is unknown (0) or everything already fits.
-func (c Customize) windowRows(rows []string, cursorLine int) []string {
+func windowRows(rows []string, cursorLine, viewportH int) []string {
 	const chrome = 12 // title+sub+blanks+total+hint+border+padding
-	if c.viewportH <= 0 {
+	if viewportH <= 0 {
 		return rows
 	}
-	budget := c.viewportH - chrome
+	budget := viewportH - chrome
 	if budget < 3 {
 		budget = 3
 	}

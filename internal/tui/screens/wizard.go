@@ -1,7 +1,13 @@
 package screens
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+
 	"console.store/internal/catalog"
+	"console.store/internal/tui/theme"
 )
 
 // Wizard is the live, multi-step customize flow for items whose add-on groups
@@ -162,4 +168,95 @@ func (w Wizard) Back() Wizard {
 		w.cursor = 0
 	}
 	return w
+}
+
+// View renders the current page: title, step indicator, the page's groups
+// (radios for single-choice, checkboxes for multi), a loading/error line, and
+// contextual hints (next on intermediate pages, add on the last). The caller
+// centers it in the viewport.
+func (w Wizard) View() string {
+	p := w.cur()
+	title := theme.BrandStyle.Render("customise") + theme.DimStyle.Render(" · ") +
+		theme.BrightStyle.Render(w.item.Name)
+	step := theme.DimStyle.Render(fmt.Sprintf("step %d of %d+ · pick options", w.pageIdx+1, len(w.pages)))
+
+	nameW := 0
+	for _, g := range p.groups {
+		for _, ch := range g.Choices {
+			if wd := lipgloss.Width(ch.Name); wd > nameW {
+				nameW = wd
+			}
+		}
+	}
+
+	var rows []string
+	row := 0
+	cursorLine := 0
+	for _, g := range p.groups {
+		req := ""
+		if g.Min > 0 {
+			req = theme.FavStyle.Render(" *required")
+		} else if g.Max != 1 {
+			req = theme.DimStyle.Render(" · optional")
+		}
+		rows = append(rows, theme.DimStyle.Render("  "+strings.TrimSpace(g.Name))+req)
+		for _, ch := range g.Choices {
+			on := p.picked[g.ID][ch.ID]
+			var box string
+			if g.Max == 1 {
+				box = theme.DimStyle.Render("( )")
+				if on {
+					box = theme.GreenStyle.Render("(•)")
+				}
+			} else {
+				box = theme.DimStyle.Render("[ ]")
+				if on {
+					box = theme.GreenStyle.Render("[x]")
+				}
+			}
+			name := theme.TextStyle.Render(ch.Name)
+			price := theme.FaintStyle.Render("free")
+			if ch.Price > 0 {
+				tag := "+₹"
+				if g.Absolute {
+					tag = "₹"
+				}
+				price = theme.GoldStyle.Render(fmt.Sprintf("%s%d", tag, ch.Price))
+			}
+			cursor := "  "
+			if row == w.cursor {
+				cursor = theme.CursorStyle.Render("> ")
+				cursorLine = len(rows)
+			}
+			gap := strings.Repeat(" ", nameW-lipgloss.Width(ch.Name)+3)
+			rows = append(rows, cursor+box+" "+name+gap+price)
+			row++
+		}
+	}
+	rows = windowRows(rows, cursorLine, w.viewportH)
+
+	var status string
+	switch {
+	case w.loading:
+		status = theme.DimStyle.Render("  updating…")
+	case w.errMsg != "":
+		status = theme.FavStyle.Render("  " + w.errMsg)
+	}
+
+	// Intermediate pages advance (next); the page is "last" only after the root
+	// has confirmed via the cart that no more groups follow — until then every
+	// page offers next, because we don't know if it's last.
+	advance := "↵ next"
+	if !w.PageValid() {
+		advance = theme.FavStyle.Render("pick required options")
+	}
+	hint := theme.DimStyle.Render("↑↓ move   space select   ") + advance + theme.DimStyle.Render("   esc cancel")
+
+	parts := []string{title, step, ""}
+	parts = append(parts, rows...)
+	if status != "" {
+		parts = append(parts, "", status)
+	}
+	parts = append(parts, "", hint)
+	return dialogBox(strings.Join(parts, "\n"))
 }
