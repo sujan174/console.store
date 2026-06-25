@@ -1186,7 +1186,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "c":
-				m.cart = screens.NewCart(m.cartHeader(), m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive())
+				m.cart = screens.NewCart(m.cartHeader(), m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive()).WithLiveSync(m.live, m.cartSyncErr)
 				m.screen = scrCart
 				return m, nil
 			case "a":
@@ -1231,7 +1231,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// − removes a unit of the focused dish (to zero it leaves the cart).
 				return m.restDecSelected()
 			case "c":
-				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive())
+				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive()).WithLiveSync(m.live, m.cartSyncErr)
 				m.screen = scrCart
 				return m, nil
 			case "v":

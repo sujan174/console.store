@@ -90,6 +90,8 @@ type Cart struct {
 	eta        string
 	minNotice  string
 	bill       Bill
+	liveMode   bool
+	syncErr    string
 }
 
 // Bill carries Swiggy's real cart pricing breakdown. When Live is set, the cart
@@ -137,6 +139,15 @@ func (c Cart) WithBill(b Bill) Cart { c.bill = b; return c }
 
 // WithMinNotice sets a notice shown when the cart is below a minimum.
 func (c Cart) WithMinNotice(s string) Cart { c.minNotice = s; return c }
+
+// WithLiveSync marks the cart as live and carries the last sync error. In live
+// mode without real pricing yet, the bill area shows a syncing/error state
+// instead of the mock placeholder split.
+func (c Cart) WithLiveSync(live bool, syncErr string) Cart {
+	c.liveMode = live
+	c.syncErr = syncErr
+	return c
+}
 
 // billToPay applies the design bill: item + delivery − coupon, or 0 when empty.
 // Shared by cart and checkout so the two screens never disagree on the total.
@@ -258,10 +269,20 @@ func (c Cart) View() string {
 	}
 	b.WriteString(list.View())
 
-	// Bill breakdown — real Swiggy split in live mode, mock math otherwise.
-	if c.bill.Live {
+	// Bill breakdown — real Swiggy split when synced; a syncing/error state in
+	// live mode before pricing arrives; the design mock math otherwise.
+	switch {
+	case c.bill.Live:
 		b.WriteString(renderBill(w, c.bill))
-	} else {
+	case c.liveMode:
+		b.WriteString(components.DashRule())
+		if c.syncErr != "" {
+			b.WriteString("  " + theme.FavStyle.Render("couldn't sync — "+c.syncErr) + "\n")
+		} else {
+			b.WriteString("  " + theme.DimStyle.Render("syncing cart…") + "\n")
+		}
+		b.WriteString(components.DashRule())
+	default:
 		b.WriteString(components.DashRule())
 		b.WriteString("  " + justify(theme.DimStyle.Render("item total"),
 			theme.TextStyle.Render(fmt.Sprintf("₹%d", c.Total())), w) + "\n")

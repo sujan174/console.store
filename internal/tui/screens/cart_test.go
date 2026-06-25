@@ -120,6 +120,33 @@ func TestCartShowsAddOnSummaryAndAdjustedPrice(t *testing.T) {
 	}
 }
 
+func TestCartLiveUnsyncedHidesPlaceholderBill(t *testing.T) {
+	c := screens.NewCart("Onesta", []screens.CartLine{{Item: catalog.Item{Name: "Pizza", Price: 269}, Qty: 1, Price: 269}}).
+		WithLiveSync(true, "")
+	v := c.View()
+	if strings.Contains(v, screens.CouponCode) {
+		t.Errorf("live-unsynced cart must NOT show the mock coupon line:\n%s", v)
+	}
+	if !strings.Contains(v, "syncing") {
+		t.Errorf("live-unsynced cart should show a syncing state:\n%s", v)
+	}
+}
+
+func TestCartLiveSyncErrorShown(t *testing.T) {
+	c := screens.NewCart("Onesta", []screens.CartLine{{Item: catalog.Item{Name: "Pizza", Price: 269}, Qty: 1, Price: 269}}).
+		WithLiveSync(true, "INVALID_ADDON")
+	if !strings.Contains(c.View(), "INVALID_ADDON") {
+		t.Errorf("sync error should surface in the cart bill area:\n%s", c.View())
+	}
+}
+
+func TestCartMockBillUnchanged(t *testing.T) {
+	c := screens.NewCart("Blue Tokai", []screens.CartLine{{Item: catalog.Item{Name: "Latte", Price: 200}, Qty: 1, Price: 200}})
+	if !strings.Contains(c.View(), screens.CouponCode) {
+		t.Errorf("mock cart must still show the design coupon bill:\n%s", c.View())
+	}
+}
+
 func TestCartIncrementDecrementRemove(t *testing.T) {
 	lines := []screens.CartLine{
 		{Item: catalog.Item{Name: "Cold Coffee", Price: 149}, Qty: 1},
