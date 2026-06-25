@@ -141,6 +141,10 @@ type Cart struct {
 	Taxes     int // pricing.taxes_and_charges
 	Total     int // pricing.to_pay
 	Items     []CartLine
+	// ValidAddons are the add-on groups Swiggy reports as valid for the current
+	// variant/add-on selection (the server-driven customization mechanism). Used
+	// by the customize wizard to render the next page. Empty for simple carts.
+	ValidAddons []OptionGroup
 }
 
 // cartEnvelope decodes the real get_food_cart / update_food_cart response. The
@@ -172,6 +176,22 @@ type cartData struct {
 	Restaurant struct {
 		Name string `json:"name"`
 	} `json:"restaurant"`
+	ValidAddons []validAddonGroup `json:"valid_addons"`
+}
+
+// validAddonGroup decodes one entry of the cart response's valid_addons array —
+// the add-on groups Swiggy scopes to the current variant selection.
+type validAddonGroup struct {
+	GroupID   string `json:"group_id"`
+	GroupName string `json:"group_name"`
+	MinAddons int    `json:"min_addons"`
+	MaxAddons int    `json:"max_addons"`
+	Choices   []struct {
+		ID      string  `json:"id"`
+		Name    string  `json:"name"`
+		Price   float64 `json:"price"`
+		InStock int     `json:"in_stock"`
+	} `json:"choices"`
 }
 
 // cartError returns a non-nil error when Swiggy rejected the cart operation
@@ -195,6 +215,28 @@ func (e cartEnvelope) cartError() error {
 		return fmt.Errorf("swiggy: %s (%s)", msg, strings.Join(e.ErrorCodes, ", "))
 	}
 	return fmt.Errorf("swiggy: %s", msg)
+}
+
+// validAddons converts the cart response's valid_addons into typed OptionGroups
+// (always add-on groups — Variant=false, additive prices). Empty when the cart
+// reports none.
+func (e cartEnvelope) validAddons() []OptionGroup {
+	if e.Data == nil {
+		return nil
+	}
+	var out []OptionGroup
+	for _, g := range e.Data.ValidAddons {
+		og := OptionGroup{ID: g.GroupID, Name: g.GroupName, Min: g.MinAddons, Max: g.MaxAddons}
+		for _, ch := range g.Choices {
+			og.Choices = append(og.Choices, OptionChoice{
+				ID: ch.ID, Name: ch.Name, Price: int(math.Round(ch.Price)), InStock: ch.InStock == 1,
+			})
+		}
+		if len(og.Choices) > 0 {
+			out = append(out, og)
+		}
+	}
+	return out
 }
 
 // toCart converts a decoded cartEnvelope into the typed Cart. An empty cart
