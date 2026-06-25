@@ -1,0 +1,60 @@
+{
+  "statusCode": 0,
+  "statusMessage": "",
+  "data": {
+    "cart_id": "9988776655",
+    "item_count": 1,
+    "items": [
+      {
+        "menu_item_id": "117835513",
+        "name": "Chicken Tikka Delight Pizza",
+        "quantity": 1,
+        "final_price": 269,
+        "total": 269
+      }
+    ],
+    "pricing": {
+      "item_total": 269,
+      "delivery_charge": 35,
+      "taxes_and_charges": 42,
+      "to_pay": 346
+    },
+    "restaurant": {
+      "name": "Onesta"
+    },
+    "valid_addons": [
+      {
+        "group_id": "272982076",
+        "group_name": "Crust Small.",
+        "min_addons": 1,
+        "max_addons": 1,
+        "choices": [
+          { "id": "812440001", "name": "Classic Hand Tossed", "price": 0, "in_stock": 1 },
+          { "id": "812440002", "name": "Pan", "price": 50, "in_stock": 1 },
+          { "id": "812440003", "name": "Cheese Burst", "price": 90, "in_stock": 1 }
+        ]
+      },
+      {
+        "group_id": "272982077",
+        "group_name": "Toppings (Regular)",
+        "min_addons": 0,
+        "max_addons": 10,
+        "choices": [
+          { "id": "812450001", "name": "Extra Cheese", "price": 60, "in_stock": 1 },
+          { "id": "812450002", "name": "Paneer", "price": 70, "in_stock": 1 },
+          { "id": "812450003", "name": "Mushroom", "price": 50, "in_stock": 0 }
+        ]
+      },
+      {
+        "group_id": "272982090",
+        "group_name": "Beverage.",
+        "min_addons": 0,
+        "max_addons": 10,
+        "choices": [
+          { "id": "812460001", "name": "Pepsi 250ml", "price": 60, "in_stock": 1 },
+          { "id": "812460002", "name": "Sprite 250ml", "price": 60, "in_stock": 1 }
+        ]
+      }
+    ]
+  }
+}
