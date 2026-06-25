@@ -18,8 +18,12 @@ import (
 	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/charmbracelet/wish/logging"
 	"github.com/muesli/termenv"
+	gossh "golang.org/x/crypto/ssh"
 
+	"console.store/internal/broker/api"
+	swiggysnap "console.store/internal/catalog/swiggy"
 	consoletui "console.store/internal/tui"
+	"console.store/internal/tui/datasource"
 	"console.store/internal/tui/render"
 	"console.store/internal/tui/theme"
 )
@@ -39,7 +43,48 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	truecolor := renderer.ColorProfile() == termenv.TrueColor
 	caps := render.DetectCaps(pty.Term, s.Environ(), truecolor)
 
+	if os.Getenv("CONSOLE_BACKEND") == "live" {
+		if m, ok := liveModel(s, caps); ok {
+			return m, []tea.ProgramOption{tea.WithAltScreen()}
+		}
+		// fall through to mock on any wiring failure (logged in liveModel)
+	}
 	return consoletui.New(caps), []tea.ProgramOption{tea.WithAltScreen()}
+}
+
+// liveModel builds a broker-backed TUI Model for this SSH session. The account
+// id comes from the session's public key (never from client input). Returns
+// ok=false if the broker is unreachable or no pubkey was presented.
+func liveModel(s ssh.Session, caps render.Caps) (tea.Model, bool) {
+	pk := s.PublicKey()
+	if pk == nil {
+		log.Printf("live: session presented no public key; using mock")
+		return nil, false
+	}
+	pubkey := string(gossh.MarshalAuthorizedKey(pk))
+
+	sock := os.Getenv("CONSOLE_BROKER_SOCKET")
+	if sock == "" {
+		sock = "/tmp/console-broker.sock"
+	}
+	cli, err := api.Dial(sock)
+	if err != nil {
+		log.Printf("live: broker dial failed: %v; using mock", err)
+		return nil, false
+	}
+	accountID, _, err := cli.AccountForPubkey(pubkey)
+	if err != nil {
+		log.Printf("live: AccountForPubkey failed: %v; using mock", err)
+		return nil, false
+	}
+	authURL := ""
+	if start, err := cli.StartAuth(pubkey); err == nil {
+		authURL = start.AuthorizeURL
+	}
+
+	snap := swiggysnap.NewSnapshot()
+	be := datasource.NewBrokerBackend(cli, accountID)
+	return consoletui.New(caps, consoletui.WithLiveBackend(be, snap, accountID, authURL)), true
 }
 
 // canvasMiddleware sets the client terminal's default background to the design
@@ -60,6 +105,7 @@ func main() {
 		wish.WithAddress(net.JoinHostPort(host, port)),
 		wish.WithHostKeyPath(".ssh/console_host_key"),
 		wish.WithIdleTimeout(5*time.Minute),
+		wish.WithPublicKeyAuth(func(_ ssh.Context, _ ssh.PublicKey) bool { return true }),
 		wish.WithMiddleware(
 			bubbletea.Middleware(teaHandler),
 			logging.Middleware(),
