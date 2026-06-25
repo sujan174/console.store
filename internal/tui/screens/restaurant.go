@@ -19,13 +19,17 @@ type Restaurant struct {
 	list      components.List
 	searching bool
 	infoOpen  bool // 'i' toggles the detail panel for the selected item
+
+	category string // active category filter; "" or "All" = no filter
+	vegOnly  bool
+	qtyByID  map[string]int // cart quantities (for rebuilding rows after filter change)
 }
 
-// NewRestaurant builds the restaurant screen, rendering in-cart checks and
-// inline qty steppers from the current cart quantities (keyed by item ID).
-func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartChip string) Restaurant {
-	rows := make([]components.Row, 0, len(p.Items))
-	for _, it := range p.Items {
+// buildRows converts a slice of catalog items into display rows using the
+// given cart quantity map.
+func buildRows(items []catalog.Item, qtyByItemID map[string]int) []components.Row {
+	rows := make([]components.Row, 0, len(items))
+	for _, it := range items {
 		qty := qtyByItemID[it.ID]
 
 		// in-cart items read brighter; the green left-bar + stepper already
@@ -48,7 +52,15 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartChip string)
 
 		rows = append(rows, components.Row{Left: left, Right: right, BarGreen: qty > 0})
 	}
-	return Restaurant{p: p, cartChip: cartChip, list: components.List{Rows: rows}}
+	return rows
+}
+
+// NewRestaurant builds the restaurant screen, rendering in-cart checks and
+// inline qty steppers from the current cart quantities (keyed by item ID).
+func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartChip string) Restaurant {
+	s := Restaurant{p: p, cartChip: cartChip, qtyByID: qtyByItemID}
+	s.list.Rows = buildRows(p.Items, qtyByItemID)
+	return s
 }
 
 // quickLook renders the ╭─ quick look ─╮ card shown below the item list.
@@ -110,11 +122,16 @@ func (s Restaurant) vegCount() int {
 }
 
 func (s Restaurant) Selected() (catalog.Item, bool) {
+	// s.list.Rows holds the category+veg filtered items (as display rows).
+	// s.list.SelectedIndex() resolves the cursor (which may be further narrowed
+	// by the list's search filter) back to an index into s.list.Rows, which
+	// corresponds 1:1 with categoryVegItems().
 	i := s.list.SelectedIndex()
-	if i < 0 || i >= len(s.p.Items) {
+	items := s.categoryVegItems()
+	if i < 0 || i >= len(items) {
 		return catalog.Item{}, false
 	}
-	return s.p.Items[i], true
+	return items[i], true
 }
 
 func (s Restaurant) WithCartChip(c string) Restaurant { s.cartChip = c; return s }
@@ -141,6 +158,121 @@ func (s Restaurant) InfoOpen() bool { return s.infoOpen }
 
 // WithInfo restores the detail-panel open/closed state.
 func (s Restaurant) WithInfo(open bool) Restaurant { s.infoOpen = open; return s }
+
+// Categories returns "All" followed by the distinct item categories in menu order.
+func (s Restaurant) Categories() []string {
+	out := []string{"All"}
+	seen := map[string]bool{}
+	for _, it := range s.p.Items {
+		c := it.Category
+		if c == "" || seen[c] {
+			continue
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	return out
+}
+
+// ActiveCategory returns the currently active category filter (empty = "All").
+func (s Restaurant) ActiveCategory() string { return s.category }
+
+// WithCategory sets the active category filter. "" or "All" = no filter.
+func (s Restaurant) WithCategory(cat string) Restaurant {
+	if cat == "All" {
+		cat = ""
+	}
+	s.category = cat
+	s.list.Cursor = 0
+	s.list.SetFilter("") // clear search when changing category
+	s.list.Rows = buildRows(s.categoryVegItems(), s.qtyByID)
+	return s
+}
+
+// NextCategory advances to the next category (wraps at end).
+func (s Restaurant) NextCategory() Restaurant { return s.stepCategory(1) }
+
+// PrevCategory retreats to the previous category (clamps at start).
+func (s Restaurant) PrevCategory() Restaurant { return s.stepCategory(-1) }
+
+func (s Restaurant) stepCategory(d int) Restaurant {
+	cats := s.Categories()
+	cur := 0
+	for i, c := range cats {
+		if (c == "All" && s.category == "") || c == s.category {
+			cur = i
+			break
+		}
+	}
+	cur += d
+	if cur < 0 {
+		cur = 0
+	}
+	if cur >= len(cats) {
+		cur = len(cats) - 1
+	}
+	return s.WithCategory(cats[cur])
+}
+
+// VegOnly reports whether the veg-only filter is active.
+func (s Restaurant) VegOnly() bool { return s.vegOnly }
+
+// WithVegOnly sets the veg-only filter and resets the cursor.
+func (s Restaurant) WithVegOnly(v bool) Restaurant {
+	s.vegOnly = v
+	s.list.Cursor = 0
+	s.list.SetFilter("") // clear search when toggling veg filter
+	s.list.Rows = buildRows(s.categoryVegItems(), s.qtyByID)
+	return s
+}
+
+// categoryVegItems returns items after applying the category and veg-only filters
+// (but NOT the search filter). Used to populate s.list.Rows so that the list's
+// own filter handles the search term, keeping cursor navigation consistent.
+func (s Restaurant) categoryVegItems() []catalog.Item {
+	out := []catalog.Item{}
+	for _, it := range s.p.Items {
+		if s.category != "" && it.Category != s.category {
+			continue
+		}
+		if s.vegOnly && !it.Veg {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
+// visibleItems applies the category, veg-only, and dish-search filters.
+// The list's rows are always the category+veg subset; the list.Filter() (search
+// term) is then applied on top. This function reconstructs the full visible set
+// from the underlying items so Selected() can index it correctly.
+func (s Restaurant) visibleItems() []catalog.Item {
+	search := strings.ToLower(s.list.Filter())
+	out := []catalog.Item{}
+	for _, it := range s.p.Items {
+		if s.category != "" && it.Category != s.category {
+			continue
+		}
+		if s.vegOnly && !it.Veg {
+			continue
+		}
+		if search != "" && !strings.Contains(strings.ToLower(it.Name), search) {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
+// VisibleNamesForTest exposes the filtered item names for unit tests.
+func (s Restaurant) VisibleNamesForTest() []string {
+	out := []string{}
+	for _, it := range s.visibleItems() {
+		out = append(out, it.Name)
+	}
+	return out
+}
 
 func (s Restaurant) Init() tea.Cmd { return nil }
 
@@ -203,16 +335,29 @@ func (s Restaurant) View() string {
 
 	b.WriteString("\n")
 
-	// filter row: all 10 │ veg 9   ⌄ filter            🛒 cart empty
-	allTab := theme.Fg(theme.Gold).Underline(true).Render("all") + theme.DimStyle.Render(fmt.Sprintf(" %d", len(s.p.Items)))
-	vegTab := theme.CatOffStyle.Render("veg") + theme.DimStyle.Render(fmt.Sprintf(" %d", s.vegCount()))
-	sep := theme.Fg(theme.Div2).Render(" │ ")
-	filters := allTab + sep + vegTab + "   " + theme.FaintStyle.Render("⌄ filter")
+	// category filter bar: All · <Cat1> · <Cat2>  [veg ●]     🛒 chip
+	cats := s.Categories()
+	sep := theme.Fg(theme.Div2).Render(" · ")
+	var catParts []string
+	for _, c := range cats {
+		active := (c == "All" && s.category == "") || c == s.category
+		if active {
+			catParts = append(catParts, theme.Fg(theme.Gold).Underline(true).Render(c))
+		} else {
+			catParts = append(catParts, theme.CatOffStyle.Render(c))
+		}
+	}
+	catBar := strings.Join(catParts, sep)
+	if s.vegOnly {
+		catBar += "   " + theme.GreenStyle.Render("veg ●")
+	} else {
+		catBar += "   " + theme.FaintStyle.Render("⌄ filter")
+	}
 	cartStyle := theme.CartStyle
 	if strings.Contains(s.cartChip, "empty") {
 		cartStyle = theme.DimStyle
 	}
-	b.WriteString("  " + justify(filters, cartStyle.Render(s.cartChip), w) + "\n")
+	b.WriteString("  " + justify(catBar, cartStyle.Render(s.cartChip), w) + "\n")
 
 	// search prompt (when active)
 	if s.searching || s.list.Filter() != "" {

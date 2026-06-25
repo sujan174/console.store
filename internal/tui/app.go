@@ -297,8 +297,12 @@ func (m Model) refreshAfterAdd() Model {
 	if m.screen == scrRestaurant {
 		ci := m.rest.CursorIndex()
 		info := m.rest.InfoOpen()
+		cat := m.rest.ActiveCategory()
+		veg := m.rest.VegOnly()
+		// WithCategory and WithVegOnly reset cursor to 0; apply WithCursor last.
 		m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).
-			WithAddr(m.addr).WithCursor(ci).WithInfo(info)
+			WithAddr(m.addr).WithInfo(info).
+			WithCategory(cat).WithVegOnly(veg).WithCursor(ci)
 	}
 	return m
 }
@@ -534,8 +538,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				p.Description = prev.Description
 				ci := m.rest.CursorIndex()
 				info := m.rest.InfoOpen()
+				cat := m.rest.ActiveCategory()
+				veg := m.rest.VegOnly()
 				m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).
-					WithAddr(m.addr).WithCursor(ci).WithInfo(info)
+					WithAddr(m.addr).WithInfo(info).
+					WithCategory(cat).WithVegOnly(veg).WithCursor(ci)
 			}
 		}
 		return m, nil
@@ -851,6 +858,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "c":
 				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive())
 				m.screen = scrCart
+				return m, nil
+			case "]", "tab":
+				m.rest = m.rest.NextCategory()
+				return m, nil
+			case "[":
+				m.rest = m.rest.PrevCategory()
+				return m, nil
+			case "v":
+				m.rest = m.rest.WithVegOnly(!m.rest.VegOnly())
 				return m, nil
 			default:
 				nr, cmd := m.rest.Update(msg)
