@@ -57,11 +57,26 @@ type MenuItem struct {
 	Bestseller bool    `json:"isBestseller"`
 }
 
-// menuEnvelope matches get_restaurant_menu: {"categories":[{"items":[...]}]}.
+// menuEnvelope matches get_restaurant_menu. A category EITHER holds items
+// directly OR nests them under subcategories (e.g. "Summer Specials" →
+// "Summer Special Beverages" → items). Both levels use the same item shape, so
+// menuCategory is recursive and collect() flattens the whole tree. Missing the
+// subcategory branch silently drops items (that hid Blue Tokai's Iced Mocha).
 type menuEnvelope struct {
-	Categories []struct {
-		Items []MenuItem `json:"items"`
-	} `json:"categories"`
+	Categories []menuCategory `json:"categories"`
+}
+
+type menuCategory struct {
+	Items         []MenuItem     `json:"items"`
+	Subcategories []menuCategory `json:"subcategories"`
+}
+
+func (c menuCategory) collect() []MenuItem {
+	out := append([]MenuItem(nil), c.Items...)
+	for _, sub := range c.Subcategories {
+		out = append(out, sub.collect()...)
+	}
+	return out
 }
 
 // Menu is the flattened (category-merged) item list for one restaurant.

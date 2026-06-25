@@ -36,10 +36,11 @@ func (c *Client) GetRestaurantMenu(ctx context.Context, addressID, restaurantID 
 	if err != nil {
 		return Menu{}, err
 	}
-	// Swiggy groups items into categories; the TUI shows a flat list, so merge.
+	// Swiggy groups items into categories (and nested subcategories); the TUI
+	// shows a flat list, so collect the whole tree.
 	m := Menu{RestaurantID: restaurantID}
 	for _, cat := range env.Categories {
-		m.Items = append(m.Items, cat.Items...)
+		m.Items = append(m.Items, cat.collect()...)
 	}
 	return m, nil
 }
