@@ -100,6 +100,11 @@ type Model struct {
 	customizeOpen bool
 	customize     screens.Customize
 
+	// wizard: multi-page flow for items with BOTH a variant group AND an add-on
+	// group, where valid add-ons depend on the chosen variant.
+	wizardOpen bool
+	wizard     screens.Wizard
+
 	// conflict modal: shown when adding an item from a restaurant other than
 	// the one the cart holds (Swiggy allows one restaurant per cart).
 	conflictOpen      bool
@@ -298,6 +303,53 @@ func (m Model) startNewCart(item catalog.Item, addons []catalog.AddOn, sels []ca
 	m.cartSection = section
 	return m
 }
+
+// hasVariantGroup / hasAddonGroup classify an item's fetched option groups.
+func hasVariantGroup(gs []catalog.OptionGroup) bool {
+	for _, g := range gs {
+		if g.Variant {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAddonGroup(gs []catalog.OptionGroup) bool {
+	for _, g := range gs {
+		if !g.Variant {
+			return true
+		}
+	}
+	return false
+}
+
+// wizardEligible is true when an item's add-ons may depend on its variant — it
+// has BOTH a variant group and an add-on group. Those items must use the
+// server-driven wizard (add variant → read valid_addons). Variant-only or
+// addon-only items are safe in the single-page Customize sheet.
+func wizardEligible(gs []catalog.OptionGroup) bool {
+	return hasVariantGroup(gs) && hasAddonGroup(gs)
+}
+
+// variantGroups returns just the variant groups (page 0 of the wizard).
+func variantGroups(gs []catalog.OptionGroup) []catalog.OptionGroup {
+	var out []catalog.OptionGroup
+	for _, g := range gs {
+		if g.Variant {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// wizard0 builds a fresh wizard for item it from its fetched option groups,
+// seeding the variant page for the draft lifecycle.
+func (m Model) wizard0(it catalog.Item, gs []catalog.OptionGroup) screens.Wizard {
+	return screens.NewWizard(it, variantGroups(gs)).WithViewport(m.h).WithLoading(true)
+}
+
+// wizardCartCmd is implemented in Task 7. Temporary stub.
+func (m Model) wizardCartCmd() tea.Cmd { return nil }
 
 // beginAdd starts adding item from rest (section). If the item is customizable it
 // opens the customise modal (the add is finished on confirm); otherwise it adds the
@@ -678,6 +730,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.liveCartCmd()
 			}
 			return m, nil
+		}
+		if wizardEligible(dm.Groups) {
+			// Variant-dependent add-ons: drive the server-driven wizard. Resolve any
+			// cart-restaurant conflict first (the wizard mutates the live cart).
+			if m.conflictsWithCart(m.pendingRest, m.pendingSection) {
+				m.conflict = screens.NewCartConflict(m.cartHeader(), m.pendingRest, it.Name)
+				m.conflictSel = 1
+				m.conflictOpen = true
+				m.pendingItem = it // re-fetch path on "new cart" (handled in conflict resolve)
+				return m, nil
+			}
+			m.wizard = m.wizard0(it, dm.Groups)
+			m.wizardOpen = true
+			return m, m.wizardCartCmd() // send the default variant, fetch valid_addons
 		}
 		m.customize = screens.NewCustomize(it)
 		m.customizeOpen = true
