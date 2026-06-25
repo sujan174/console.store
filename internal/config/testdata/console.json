@@ -1,0 +1,26 @@
+{
+  "seed": {
+    "address_id": "addr-001",
+    "restaurant_id": "rest-001",
+    "restaurant_name": "Blue Tokai Coffee",
+    "section": "coffee",
+    "items": [
+      {
+        "id": "item-001",
+        "name": "Cold Coffee",
+        "price": 220,
+        "veg": true,
+        "desc": "Single origin cold brew",
+        "section": "coffee"
+      },
+      {
+        "id": "item-002",
+        "name": "Espresso",
+        "price": 180,
+        "veg": true,
+        "desc": "Double shot",
+        "section": "coffee"
+      }
+    ]
+  }
+}
