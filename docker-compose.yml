@@ -7,8 +7,20 @@ services:
       POSTGRES_DB: console
     ports:
       - "5432:5432"
+    volumes:
+      # Persist data across restarts so a logged-in token survives `compose stop`.
+      - pgdata:/var/lib/postgresql/data
+      # Applied once, on first init of an empty volume, as the console_owner
+      # superuser: creates tables, RLS policies, the SECURITY DEFINER signup
+      # functions, and the non-owner console_broker login role. This is exactly
+      # what store.Migrate() runs. To re-apply after editing schema.sql, run
+      # `make db-reset` (drops the volume) or `make db-migrate` (idempotent).
+      - ./internal/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U console_owner -d console"]
       interval: 2s
       timeout: 3s
       retries: 20
+
+volumes:
+  pgdata:
