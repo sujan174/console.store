@@ -9,6 +9,8 @@ type brokerRPC interface {
 	Addresses(accountID string) ([]api.Address, error)
 	Restaurants(accountID, addressID, query string) ([]api.Restaurant, error)
 	Menu(accountID, addressID, restaurantID string) (api.Menu, error)
+	UpdateCart(a api.UpdateCartArgs) (api.Cart, error)
+	PlaceOrder(accountID, addressID string) (api.Order, error)
 }
 
 // BrokerBackend adapts the broker RPC client into a datasource.Backend, pinned
@@ -34,6 +36,20 @@ func (b *BrokerBackend) Places(addressID string, section catalog.Section) ([]api
 
 func (b *BrokerBackend) Menu(addressID, restaurantID string) (api.Menu, error) {
 	return b.rpc.Menu(b.accountID, addressID, restaurantID)
+}
+
+func (b *BrokerBackend) UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error) {
+	return b.rpc.UpdateCart(api.UpdateCartArgs{
+		AccountID:      b.accountID,
+		AddressID:      addressID,
+		RestaurantID:   restaurantID,
+		RestaurantName: restaurantName,
+		Items:          items,
+	})
+}
+
+func (b *BrokerBackend) PlaceOrder(addressID string) (api.Order, error) {
+	return b.rpc.PlaceOrder(b.accountID, addressID)
 }
 
 // sectionQuery maps a catalogue lane to a Swiggy restaurant-search query.

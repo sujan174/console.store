@@ -24,6 +24,14 @@ func (f *fakeRPC) Menu(accountID, addressID, restaurantID string) (api.Menu, err
 	f.lastAccount = accountID
 	return api.Menu{RestaurantID: restaurantID}, nil
 }
+func (f *fakeRPC) UpdateCart(a api.UpdateCartArgs) (api.Cart, error) {
+	f.lastAccount = a.AccountID
+	return api.Cart{}, nil
+}
+func (f *fakeRPC) PlaceOrder(accountID, addressID string) (api.Order, error) {
+	f.lastAccount = accountID
+	return api.Order{}, nil
+}
 
 func TestBrokerBackendPinsAccountAndMapsSection(t *testing.T) {
 	rpc := &fakeRPC{}

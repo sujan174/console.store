@@ -25,6 +25,8 @@ type Backend interface {
 	Addresses() ([]api.Address, error)
 	Places(addressID string, section catalog.Section) ([]api.Restaurant, error)
 	Menu(addressID, restaurantID string) (api.Menu, error)
+	UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error)
+	PlaceOrder(addressID string) (api.Order, error)
 }
 
 type (
@@ -36,6 +38,11 @@ type (
 	MenuLoadedMsg struct {
 		PlaceID string
 		Err     error
+	}
+	CartSyncedMsg  struct{ Err error }
+	OrderPlacedMsg struct {
+		Order api.Order
+		Err   error
 	}
 )
 
@@ -69,5 +76,25 @@ func LoadMenu(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID stri
 		}
 		snap.SetMenu(toMenuPlace(got))
 		return MenuLoadedMsg{PlaceID: restaurantID}
+	}
+}
+
+// SyncCart calls UpdateCart on the backend with the current cart contents and
+// records the returned cart in the snapshot. Errors are non-fatal: the TUI shows
+// them in the status bar and continues.
+func SyncCart(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID, restaurantName string, items []api.CartItem) tea.Cmd {
+	return func() tea.Msg {
+		_, err := b.UpdateCart(addressID, restaurantID, restaurantName, items)
+		return CartSyncedMsg{Err: err}
+	}
+}
+
+// PlaceOrderCmd submits the order through the broker. The TUI must have already
+// synced the cart via SyncCart before calling this. On success the broker returns
+// the placed order; on failure the TUI shows the error and stays on scrCheckout.
+func PlaceOrderCmd(b Backend, snap *swiggysnap.Snapshot, addressID string) tea.Cmd {
+	return func() tea.Msg {
+		order, err := b.PlaceOrder(addressID)
+		return OrderPlacedMsg{Order: order, Err: err}
 	}
 }

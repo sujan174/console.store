@@ -22,6 +22,10 @@ func (f *liveFake) Places(string, catalog.Section) ([]api.Restaurant, error) {
 	return nil, f.err
 }
 func (f *liveFake) Menu(string, string) (api.Menu, error) { return api.Menu{}, f.err }
+func (f *liveFake) UpdateCart(string, string, string, []api.CartItem) (api.Cart, error) {
+	return api.Cart{}, f.err
+}
+func (f *liveFake) PlaceOrder(string) (api.Order, error) { return api.Order{}, f.err }
 
 func TestMockPathUnaffected(t *testing.T) {
 	m := New(render.Caps{})
