@@ -79,9 +79,9 @@ func LoadMenu(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID stri
 	}
 }
 
-// SyncCart calls UpdateCart on the backend with the current cart contents and
-// records the returned cart in the snapshot. Errors are non-fatal: the TUI shows
-// them in the status bar and continues.
+// SyncCart calls UpdateCart on the backend with the current cart contents. The
+// returned cart is discarded (SetCart not yet wired on Snapshot). Errors are
+// non-fatal: the TUI shows them in the status bar and continues.
 func SyncCart(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID, restaurantName string, items []api.CartItem) tea.Cmd {
 	return func() tea.Msg {
 		_, err := b.UpdateCart(addressID, restaurantID, restaurantName, items)
