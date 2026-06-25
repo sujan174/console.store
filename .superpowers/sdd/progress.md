@@ -86,3 +86,11 @@ S8 Task 4 (restaurant category bar + veg + dish filter): complete (commits fdc0b
 S8 Task 5 (browse chips render): complete (commits 0963454..d8cc11e, review clean)
   Minor (defer): WithChips doesn't clamp active (safe by render-loop equality; Task 6 owns nav).
   NOTE for Task 6: chips render ADDITIVELY above the old section-tab row; live mode must not show both.
+S8 Task 6 (vertical toggle + chip wiring + Instamart placeholder): complete (commits d8cc11e..5747c37, review clean after fix wave)
+  Fix wave (5747c37): hideSectionTabs (live shows chips only, not section tabs); chip-nav guarded by !Searching(); nil-cfg ChipCategories confirmed nil-safe.
+S8 Task 7 (verification): complete.
+  - Full build green; go vet clean; go test ./... all 17 pkgs ok.
+  - gofmt clean on all 24 slice-touched files. (Pre-existing gofmt violations in cmdbar.go/cmdbar_test.go/app_test.go are NOT from this slice — out of scope.)
+  - Restarted local broker + sshd on new code (docker postgres healthy). Live UI smoke is the user's step.
+  - No order placed; CONSOLE_LIVE_ORDERS untouched.
+Slice 8 (Restaurants IA redesign) COMPLETE — pending final whole-branch review.
