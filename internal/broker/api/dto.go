@@ -24,12 +24,13 @@ type Restaurant struct {
 }
 
 type MenuItem struct {
-	ID          string
-	Name        string
-	Price       int
-	Veg         bool
-	Description string
-	Rating      float64
+	ID           string
+	Name         string
+	Price        int
+	Veg          bool
+	Description  string
+	Rating       float64
+	Customizable bool // has variants or add-ons (fetch options before adding)
 }
 
 type Menu struct {

@@ -45,7 +45,7 @@ func mapMenu(in swiggy.Menu) api.Menu {
 	items := make([]api.MenuItem, len(in.Items))
 	for i, m := range in.Items {
 		rating, _ := strconv.ParseFloat(m.Rating, 64) // "4.6" -> 4.6; "" -> 0
-		items[i] = api.MenuItem{ID: m.ID, Name: m.Name, Price: int(math.Round(m.Price)), Veg: m.Veg, Description: m.Desc, Rating: rating}
+		items[i] = api.MenuItem{ID: m.ID, Name: m.Name, Price: int(math.Round(m.Price)), Veg: m.Veg, Description: m.Desc, Rating: rating, Customizable: m.HasVariants || m.HasAddons}
 	}
 	return api.Menu{RestaurantID: in.RestaurantID, Items: items}
 }

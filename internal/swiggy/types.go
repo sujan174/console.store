@@ -50,11 +50,13 @@ type MenuItem struct {
 	// bags). Keep it float here; the broker rounds to whole rupees for the TUI.
 	// It MUST be float64 — an int field fails to unmarshal a decimal and would
 	// drop the entire menu.
-	Price      float64 `json:"price"`
-	Veg        bool    `json:"isVeg"`
-	Rating     string  `json:"rating"`
-	InStock    int     `json:"inStock"`
-	Bestseller bool    `json:"isBestseller"`
+	Price       float64 `json:"price"`
+	Veg         bool    `json:"isVeg"`
+	Rating      string  `json:"rating"`
+	InStock     int     `json:"inStock"`
+	Bestseller  bool    `json:"isBestseller"`
+	HasVariants bool    `json:"hasVariants"`
+	HasAddons   bool    `json:"hasAddons"`
 }
 
 // menuEnvelope matches get_restaurant_menu. A category EITHER holds items

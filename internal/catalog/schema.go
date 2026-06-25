@@ -36,6 +36,38 @@ type AddOn struct {
 	Price int // extra rupees; 0 = free
 }
 
+// Choice is one selectable option within an OptionGroup (a Swiggy variation or
+// addon choice). For a variant, Price is the FULL item price for that choice;
+// for an addon, Price is the extra it adds.
+type Choice struct {
+	ID      string
+	Name    string
+	Price   int
+	InStock bool
+}
+
+// OptionGroup is a customization group for a live item — a Swiggy variant group
+// ("Choose Your Size", single-choice, price-setting) or addon group ("Choice of
+// Milk", with min/max constraints). Min>0 means a selection is required.
+type OptionGroup struct {
+	ID      string
+	Name    string
+	Min     int  // minimum selections required (1 = required)
+	Max     int  // maximum selectable (1 = single-choice; 0/<0 = unlimited)
+	Variant bool // true = variant group (sets price); false = addon group (additive)
+	Choices []Choice
+}
+
+// Selection is a chosen Choice within a group, carried on a cart line for both
+// price display and the cart-send payload (group/choice ids).
+type Selection struct {
+	GroupID  string
+	ChoiceID string
+	Name     string
+	Price    int
+	Variant  bool
+}
+
 // Item is one orderable item. SwiggyID maps to a live menu item later.
 type Item struct {
 	ID       string
@@ -48,7 +80,13 @@ type Item struct {
 	Kcal     int     // calories; 0 = unknown
 	Rating   float64 // out of 5; 0 = unknown
 	Section  Section
-	AddOns   []AddOn // optional customizations; empty = not customizable
+	AddOns   []AddOn // mock customizations (flat toggles); empty = not customizable
+
+	// Live customization. Customizable is set from the menu's hasAddons/hasVariants
+	// flags so the TUI knows to fetch Options (via search_menu) before adding.
+	// Options is filled on demand by that fetch; empty until then.
+	Customizable bool
+	Options      []OptionGroup
 }
 
 // Place is a restaurant/store. SwiggyID maps to a live restaurant id.

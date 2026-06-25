@@ -48,3 +48,26 @@ Slice 5: built (commits 5dd2d0d..820b4bf), all tests pass (catalog/swiggy, tui/d
   Task 4: internal/tui/live.go + app.go — WithLiveBackend Option, variadic New, Init dispatches live loads, Update handles datasource Msgs + needsAuth gate, View authorize gate + r-retry ✓
             cmd/sshd/main.go — CONSOLE_BACKEND=live, liveModel resolves accountID from SSH pubkey via api.Client.AccountForPubkey, WithPublicKeyAuth(accept-all), falls back to mock on any error ✓
   OPEN CONCERN (slice-4 carry) CLOSED: broker RPC accountID is now derived from SSH pubkey via AccountForPubkey, never from user/client input ✓
+
+Slice 6: config seed + nav load
+Plan: docs/superpowers/plans/2026-06-25-config-seed-nav-load.md
+BASE: 8c419a8279c6949bbe6036f996d99655f2d2e2ab
+S6 Task 1 (internal/config JSON package): complete (commits 8c419a8..1c24356, review clean)
+S6 Task 2 (New() addr-after-opts + WithSeededSnapshot): complete (commits 1c24356..71206cd, review clean)
+S6 Task 3 (sshd config load + Snapshot seed): complete (commits 71206cd..a3dc2bd, review clean)
+S6 Task 4 (scrMenu enter fires LoadMenu live): complete (commits a3dc2bd..b6b6dd9, review clean)
+Slice 6 COMPLETE.
+
+Slice 7: live cart sync + order placement
+Plan: docs/superpowers/plans/2026-06-25-live-cart-order.md
+BASE: b6b6dd9
+S7 Task 1 (datasource UpdateCart/PlaceOrder + SyncCart/PlaceOrderCmd): complete (commits b6b6dd9..18ed7bb, review clean after comment fix)
+  NOTE: implementer also updated broker_backend.go + broker_backend_test.go + live_test.go to satisfy new interface; Task 2 BrokerBackend methods already landed here.
+S7 Task 2 (BrokerBackend account-pinning tests for UpdateCart/PlaceOrder): complete (commits 18ed7bb..2702564, review clean)
+S7 Task 3 (Checkout.WithPlacing builder): complete (commits 2702564..bc9dd6c, review clean)
+S7 Task 4 (app.go eager cart sync + live PlaceOrder + Msg handlers): complete (commits bc9dd6c..2b385b9, review clean after test fix)
+  Minor noted: last-item removal doesn't clear Swiggy cart (liveSyncCart guards len==0) — expected, spec silent, future slice.
+Slice 7 COMPLETE.
+Final whole-branch review: 0 Critical, 2 Important (I1: ErrNeedsAuth gate unreachable; I2: cart-screen edits not synced at checkout).
+Final fix (843ac5d): wrapAuthErr seam in BrokerBackend + tea.Sequence re-sync at checkout chokepoint. Re-review: approved.
+Branch READY TO MERGE.
