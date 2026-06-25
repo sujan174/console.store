@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,7 +11,9 @@ import (
 
 	"console.store/internal/catalog"
 	"console.store/internal/catalog/mem"
+	swiggysnap "console.store/internal/catalog/swiggy"
 	"console.store/internal/tui/components"
+	"console.store/internal/tui/datasource"
 	"console.store/internal/tui/render"
 	"console.store/internal/tui/screens"
 )
@@ -115,13 +118,28 @@ type Model struct {
 	frame int
 	w, h  int // terminal size from WindowSizeMsg
 	caps  render.Caps
+
+	// live data path (nil/false on the mock default). When live, repo is a
+	// catalog/swiggy.Repository backed by snap, filled by datasource Cmds.
+	live         bool
+	backend      datasource.Backend
+	snap         *swiggysnap.Snapshot
+	accountID    string
+	authorizeURL string
+	needsAuth    bool // set when a load returns datasource.ErrNeedsAuth
 }
 
-func New(caps render.Caps) Model {
+func New(caps render.Caps, opts ...Option) Model {
 	repo := mem.New()
 	addr := repo.Addresses()[0]
 	section := catalog.SectionCoffee
 	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1}
+	for _, o := range opts {
+		o(&m)
+	}
+	// A live backend starts with an empty snapshot; the mock addr seed above is
+	// only a placeholder until LoadAddresses fills the snapshot and Update swaps
+	// m.addr to the first live address.
 	m.splash = screens.NewSplash().WithCaps(caps)
 	m.splashPhrase = screens.RandomPhrase("")
 	m.menu = m.buildMenu()
@@ -288,7 +306,12 @@ func orderID(lines []screens.CartLine) string {
 	return fmt.Sprintf("#SW%04X", sum)
 }
 
-func (m Model) Init() tea.Cmd { return tick() }
+func (m Model) Init() tea.Cmd {
+	if c := m.liveInitCmds(); c != nil {
+		return tea.Batch(tick(), c)
+	}
+	return tick()
+}
 
 // onTick advances time-based screen state; extended by later tasks.
 func (m Model) onTick() Model {
@@ -441,6 +464,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		components.SetFrameWidth(m.w)
 		return m, nil
 	}
+	switch dm := msg.(type) {
+	case datasource.AddressesLoadedMsg:
+		if errIsNeedsAuth(dm.Err) {
+			m.needsAuth = true
+			return m, nil
+		}
+		if addrs := m.repo.Addresses(); len(addrs) > 0 {
+			m.addr = addrs[0]
+		}
+		m.menu = m.buildMenu()
+		if m.live {
+			return m, datasource.LoadPlaces(m.backend, m.snap, m.addr.ID, m.section)
+		}
+		return m, nil
+	case datasource.PlacesLoadedMsg:
+		if errIsNeedsAuth(dm.Err) {
+			m.needsAuth = true
+			return m, nil
+		}
+		m.menu = m.buildMenu()
+		return m, nil
+	case datasource.MenuLoadedMsg:
+		if errIsNeedsAuth(dm.Err) {
+			m.needsAuth = true
+			return m, nil
+		}
+		if m.screen == scrRestaurant {
+			if p, ok := m.repo.Menu(dm.PlaceID); ok {
+				ci := m.rest.CursorIndex()
+				info := m.rest.InfoOpen()
+				m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).
+					WithAddr(m.addr).WithCursor(ci).WithInfo(info)
+			}
+		}
+		return m, nil
+	}
 	if k, ok := msg.(tea.KeyMsg); ok {
 		// Command palette captures all keys while open, so letters like `q`
 		// type into the prompt instead of quitting (design lines 743-751).
@@ -466,6 +525,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if k.Type == tea.KeyRunes {
 					m.cmd = m.cmd.Append(string(k.Runes))
 				}
+			}
+			return m, nil
+		}
+
+		// Authorize gate captures all keys until the user retries or quits.
+		if m.needsAuth {
+			switch k.String() {
+			case "r":
+				m.needsAuth = false
+				return m, m.liveInitCmds()
+			case "ctrl+c":
+				return m, tea.Quit
 			}
 			return m, nil
 		}
@@ -877,6 +948,17 @@ func (m Model) listRows(chrome int) int {
 }
 
 func (m Model) View() string {
+	if m.needsAuth {
+		gate := "  console.store needs to connect to your Swiggy account.\n\n" +
+			"  1. Open this link on your phone and log in to Swiggy:\n\n" +
+			"     " + m.authorizeURL + "\n\n" +
+			"  2. Approve access, then press  r  to retry.\n"
+		if m.w == 0 || m.h == 0 {
+			return gate
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, gate)
+	}
+
 	// Splash is centered in the viewport (design lines 196-228). We render on
 	// the terminal's own background — wrapping the frame in a lipgloss
 	// Background tears on inner colour resets (banding), and a dark terminal
@@ -983,4 +1065,8 @@ func splitHint(body string) (content, hint string) {
 		c = c[:len(c)-1]
 	}
 	return strings.Join(c, "\n"), hint
+}
+
+func errIsNeedsAuth(err error) bool {
+	return err != nil && errors.Is(err, datasource.ErrNeedsAuth)
 }
