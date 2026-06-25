@@ -27,9 +27,40 @@ type Seed struct {
 	Items          []ConfigItem `json:"items"`
 }
 
+// Category is one dev-curated cuisine chip on the Restaurants landing. Label is
+// shown; Query is sent to search_restaurants.
+type Category struct {
+	Label string `json:"label"`
+	Query string `json:"query"`
+}
+
 // Config is the top-level console.json structure.
 type Config struct {
-	Seed Seed `json:"seed"`
+	Seed       Seed       `json:"seed"`
+	Categories []Category `json:"categories"`
+}
+
+// DefaultCategories is the built-in chip set used when config has none.
+func DefaultCategories() []Category {
+	return []Category{
+		{Label: "Coffee & Refreshments", Query: "coffee"},
+		{Label: "Rice Bowls", Query: "rice bowls"},
+		{Label: "Pizza", Query: "pizza"},
+		{Label: "Sandwich", Query: "sandwich"},
+		{Label: "Burgers", Query: "burger"},
+		{Label: "Biryani", Query: "biryani"},
+		{Label: "Rolls", Query: "rolls"},
+		{Label: "Desserts", Query: "dessert"},
+	}
+}
+
+// ChipCategories returns the configured chips, or the defaults when none are set.
+// Safe on a nil *Config.
+func (c *Config) ChipCategories() []Category {
+	if c != nil && len(c.Categories) > 0 {
+		return c.Categories
+	}
+	return DefaultCategories()
 }
 
 // DefaultPath returns the config file path: $CONSOLE_CONFIG or "console.json".
