@@ -57,6 +57,11 @@ func (b *BrokerBackend) Places(addressID string, section catalog.Section) ([]api
 	return r, wrapAuthErr(err)
 }
 
+func (b *BrokerBackend) PlacesQuery(addressID, query string) ([]api.Restaurant, error) {
+	r, err := b.rpc.Restaurants(b.accountID, addressID, query)
+	return r, wrapAuthErr(err)
+}
+
 func (b *BrokerBackend) Menu(addressID, restaurantID string) (api.Menu, error) {
 	r, err := b.rpc.Menu(b.accountID, addressID, restaurantID)
 	return r, wrapAuthErr(err)

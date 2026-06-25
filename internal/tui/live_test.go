@@ -23,7 +23,8 @@ func (f *liveFake) Addresses() ([]api.Address, error) { return f.addrs, f.err }
 func (f *liveFake) Places(string, catalog.Section) ([]api.Restaurant, error) {
 	return nil, f.err
 }
-func (f *liveFake) Menu(string, string) (api.Menu, error) { return api.Menu{}, f.err }
+func (f *liveFake) PlacesQuery(string, string) ([]api.Restaurant, error) { return nil, f.err }
+func (f *liveFake) Menu(string, string) (api.Menu, error)                { return api.Menu{}, f.err }
 func (f *liveFake) ItemOptions(string, string, string, string) ([]api.OptionGroup, error) {
 	return nil, f.err
 }
@@ -69,7 +70,7 @@ func TestLiveNeedsAuthOnAuthError(t *testing.T) {
 func TestLiveMenuEnterFiresLoadMenu(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
 	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
-	snap.SetPlaces("a1", catalog.SectionCoffee, []catalog.Place{
+	snap.SetPlaces("a1", string(catalog.SectionCoffee), []catalog.Place{
 		{ID: "r1", SwiggyID: "swiggy-r1", Name: "Blue Tokai", Section: catalog.SectionCoffee},
 	})
 	be := &liveFake{}
@@ -128,7 +129,7 @@ func TestLiveCartSyncFires(t *testing.T) {
 		Section: catalog.SectionCoffee,
 		Items:   []catalog.Item{{ID: "i1", SwiggyID: "swiggy-i1", Name: "Latte", Price: 250, Veg: true}},
 	}
-	snap.SetPlaces("a1", catalog.SectionCoffee, []catalog.Place{place})
+	snap.SetPlaces("a1", string(catalog.SectionCoffee), []catalog.Place{place})
 	snap.SetMenu(place)
 	be := &liveFake{}
 	m := New(render.Caps{},

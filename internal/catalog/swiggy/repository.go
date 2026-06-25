@@ -12,7 +12,12 @@ func NewRepository(snap *Snapshot) *Repository { return &Repository{snap: snap} 
 func (r *Repository) Addresses() []catalog.Address { return r.snap.getAddresses() }
 
 func (r *Repository) Places(addr catalog.Address, section catalog.Section) []catalog.Place {
-	return r.snap.getPlaces(addr.ID, section)
+	return r.snap.getPlaces(addr.ID, string(section))
+}
+
+// PlacesByQuery reads places cached under an arbitrary chip query key.
+func (r *Repository) PlacesByQuery(addr catalog.Address, query string) []catalog.Place {
+	return r.snap.getPlaces(addr.ID, query)
 }
 
 func (r *Repository) Menu(placeID string) (catalog.Place, bool) {

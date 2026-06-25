@@ -11,8 +11,8 @@ import (
 )
 
 type placeKey struct {
-	addrID  string
-	section catalog.Section
+	addrID string
+	key    string // chip query (or legacy section string)
 }
 
 // Snapshot is the per-session cache the live Repository reads. All access is
@@ -40,9 +40,9 @@ func (s *Snapshot) SetAddresses(a []catalog.Address) {
 	s.mu.Unlock()
 }
 
-func (s *Snapshot) SetPlaces(addrID string, section catalog.Section, places []catalog.Place) {
+func (s *Snapshot) SetPlaces(addrID, key string, places []catalog.Place) {
 	s.mu.Lock()
-	s.places[placeKey{addrID, section}] = places
+	s.places[placeKey{addrID, key}] = places
 	s.mu.Unlock()
 }
 
@@ -64,10 +64,10 @@ func (s *Snapshot) getAddresses() []catalog.Address {
 	return s.addresses
 }
 
-func (s *Snapshot) getPlaces(addrID string, section catalog.Section) []catalog.Place {
+func (s *Snapshot) getPlaces(addrID, key string) []catalog.Place {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.places[placeKey{addrID, section}]
+	return s.places[placeKey{addrID, key}]
 }
 
 func (s *Snapshot) getMenu(placeID string) (catalog.Place, bool) {

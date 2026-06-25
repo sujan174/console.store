@@ -132,7 +132,7 @@ func seedSnapshot(snap *swiggysnap.Snapshot, cfg *config.Config) {
 		Name:     s.RestaurantName,
 		Section:  section,
 	}
-	snap.SetPlaces(s.AddressID, section, []catalog.Place{place})
+	snap.SetPlaces(s.AddressID, string(section), []catalog.Place{place})
 
 	// Seed menu items.
 	items := make([]catalog.Item, len(s.Items))

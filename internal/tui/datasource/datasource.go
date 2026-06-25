@@ -24,6 +24,7 @@ var ErrNeedsAuth = errors.New("datasource: account not authorized")
 type Backend interface {
 	Addresses() ([]api.Address, error)
 	Places(addressID string, section catalog.Section) ([]api.Restaurant, error)
+	PlacesQuery(addressID, query string) ([]api.Restaurant, error)
 	Menu(addressID, restaurantID string) (api.Menu, error)
 	ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error)
@@ -35,6 +36,7 @@ type (
 	AddressesLoadedMsg struct{ Err error }
 	PlacesLoadedMsg    struct {
 		Section catalog.Section
+		Query   string
 		Err     error
 	}
 	MenuLoadedMsg struct {
@@ -73,8 +75,21 @@ func LoadPlaces(b Backend, snap *swiggysnap.Snapshot, addressID string, section 
 		if err != nil {
 			return PlacesLoadedMsg{Section: section, Err: err}
 		}
-		snap.SetPlaces(addressID, section, toPlaces(got, section))
+		snap.SetPlaces(addressID, string(section), toPlaces(got, section))
 		return PlacesLoadedMsg{Section: section}
+	}
+}
+
+// LoadPlacesQuery runs a free/chip restaurant search and caches it under the
+// query key.
+func LoadPlacesQuery(b Backend, snap *swiggysnap.Snapshot, addressID, query string) tea.Cmd {
+	return func() tea.Msg {
+		got, err := b.PlacesQuery(addressID, query)
+		if err != nil {
+			return PlacesLoadedMsg{Query: query, Err: err}
+		}
+		snap.SetPlaces(addressID, query, toPlaces(got, catalog.SectionCoffee))
+		return PlacesLoadedMsg{Query: query}
 	}
 }
 

@@ -19,7 +19,7 @@ func TestRepositoryReadsSnapshot(t *testing.T) {
 	}
 
 	snap.SetAddresses([]catalog.Address{addr})
-	snap.SetPlaces("a1", catalog.SectionCoffee, []catalog.Place{{ID: "p1", Name: "Blue Tokai", Section: catalog.SectionCoffee}})
+	snap.SetPlaces("a1", string(catalog.SectionCoffee), []catalog.Place{{ID: "p1", Name: "Blue Tokai", Section: catalog.SectionCoffee}})
 	snap.SetMenu(catalog.Place{ID: "p1", Name: "Blue Tokai", Items: []catalog.Item{{ID: "i1", Name: "Latte", Price: 250}}})
 
 	if got := repo.Addresses(); len(got) != 1 || got[0].ID != "a1" {
