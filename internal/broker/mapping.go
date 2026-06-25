@@ -58,6 +58,7 @@ func mapCart(in swiggy.Cart) api.Cart {
 	return api.Cart{
 		CartID: in.CartID, ItemTotal: in.ItemTotal, Delivery: in.Delivery,
 		Taxes: in.Taxes, Total: in.Total, Lines: lines,
+		ValidAddons: mapOptions(in.ValidAddons),
 	}
 }
 

@@ -90,6 +90,9 @@ type Cart struct {
 	Taxes     int // Swiggy bill: taxes & charges
 	Total     int // Swiggy bill: to-pay
 	Lines     []CartLine
+	// ValidAddons are the add-on groups Swiggy reports valid for the current
+	// variant selection — drives the customize wizard's next page.
+	ValidAddons []OptionGroup
 }
 
 type Order struct {
