@@ -178,6 +178,82 @@ func (s Restaurant) Categories() []string {
 // ActiveCategory returns the currently active category filter (empty = "All").
 func (s Restaurant) ActiveCategory() string { return s.category }
 
+// activeCategoryIndex is the position of the active category within Categories()
+// ("All" is index 0 when no filter is set).
+func (s Restaurant) activeCategoryIndex(cats []string) int {
+	for i, c := range cats {
+		if (c == "All" && s.category == "") || c == s.category {
+			return i
+		}
+	}
+	return 0
+}
+
+// categoryBar renders the top-nav category row as a horizontal window centred on
+// the active category, so a long category list stays navigable: the active chip
+// is always visible, with ‹ / › markers when categories are hidden off either
+// side. budget is the character width available for the categories.
+func (s Restaurant) categoryBar(budget int) string {
+	cats := s.Categories()
+	if len(cats) == 0 {
+		return ""
+	}
+	active := s.activeCategoryIndex(cats)
+
+	const sepW = 3            // " · "
+	const markW = 2           // "‹ " / " ›"
+	avail := budget - 2*markW // reserve room for both overflow markers
+	if w := lipgloss.Width(cats[active]); avail < w {
+		avail = w // always show the active category, even if it alone overflows
+	}
+
+	// Grow a window outward from the active category, alternating sides, while it
+	// still fits the available width.
+	lo, hi := active, active
+	cur := lipgloss.Width(cats[active])
+	for {
+		grew := false
+		if hi+1 < len(cats) {
+			if wd := sepW + lipgloss.Width(cats[hi+1]); cur+wd <= avail {
+				hi++
+				cur += wd
+				grew = true
+			}
+		}
+		if lo-1 >= 0 {
+			if wd := sepW + lipgloss.Width(cats[lo-1]); cur+wd <= avail {
+				lo--
+				cur += wd
+				grew = true
+			}
+		}
+		if !grew {
+			break
+		}
+	}
+
+	sep := theme.Fg(theme.Div2).Render(" · ")
+	parts := make([]string, 0, hi-lo+1)
+	for i := lo; i <= hi; i++ {
+		if i == active {
+			parts = append(parts, theme.Fg(theme.Gold).Underline(true).Render(cats[i]))
+		} else {
+			parts = append(parts, theme.CatOffStyle.Render(cats[i]))
+		}
+	}
+	bar := strings.Join(parts, sep)
+	if lo > 0 {
+		bar = theme.FaintStyle.Render("‹ ") + bar
+	}
+	if hi < len(cats)-1 {
+		bar = bar + theme.FaintStyle.Render(" ›")
+	}
+	return bar
+}
+
+// CategoryBarForTest exposes the windowed category bar for unit tests.
+func (s Restaurant) CategoryBarForTest(budget int) string { return s.categoryBar(budget) }
+
 // WithCategory sets the active category filter. "" or "All" = no filter.
 func (s Restaurant) WithCategory(cat string) Restaurant {
 	if cat == "All" {
@@ -343,29 +419,26 @@ func (s Restaurant) View() string {
 
 	b.WriteString("\n")
 
-	// category filter bar: All · <Cat1> · <Cat2>  [veg ●]     🛒 chip
-	cats := s.Categories()
-	sep := theme.Fg(theme.Div2).Render(" · ")
-	var catParts []string
-	for _, c := range cats {
-		active := (c == "All" && s.category == "") || c == s.category
-		if active {
-			catParts = append(catParts, theme.Fg(theme.Gold).Underline(true).Render(c))
-		} else {
-			catParts = append(catParts, theme.CatOffStyle.Render(c))
-		}
-	}
-	catBar := strings.Join(catParts, sep)
+	// category filter bar: ‹ <Cat> · <Cat*> · <Cat> ›  [veg ●]     🛒 chip
+	// The bar scrolls horizontally to keep the active category in view when the
+	// menu has more categories than fit on one line.
+	veg := theme.FaintStyle.Render("⌄ filter")
 	if s.vegOnly {
-		catBar += "   " + theme.GreenStyle.Render("veg ●")
-	} else {
-		catBar += "   " + theme.FaintStyle.Render("⌄ filter")
+		veg = theme.GreenStyle.Render("veg ●")
 	}
 	cartStyle := theme.CartStyle
 	if strings.Contains(s.cartChip, "empty") {
 		cartStyle = theme.DimStyle
 	}
-	b.WriteString("  " + justify(catBar, cartStyle.Render(s.cartChip), w) + "\n")
+	chip := cartStyle.Render(s.cartChip)
+	// Budget for the scrolling categories = full width minus the right-aligned
+	// cart chip, the veg indicator (+ its gap), and the leading/trailing margins.
+	budget := w - lipgloss.Width(chip) - lipgloss.Width(veg) - 3 - 4
+	if budget < 12 {
+		budget = 12
+	}
+	catBar := s.categoryBar(budget) + "   " + veg
+	b.WriteString("  " + justify(catBar, chip, w) + "\n")
 
 	// search prompt (when active)
 	if s.searching || s.list.Filter() != "" {
