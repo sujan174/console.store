@@ -89,10 +89,25 @@ type Menu struct {
 
 // CartItem is the SENT shape for update_food_cart's cartItems entries. Swiggy
 // requires the snake_case "menu_item_id" — "itemId" yields
-// INVALID_ITEM_IDS_IN_REQUEST. (Variants/addons omitted; simple items only.)
+// INVALID_ITEM_IDS_IN_REQUEST. VariantsV2/Addons carry the customization
+// selections (omitted for simple items).
 type CartItem struct {
-	MenuItemID string `json:"menu_item_id"`
-	Quantity   int    `json:"quantity"`
+	MenuItemID string        `json:"menu_item_id"`
+	Quantity   int           `json:"quantity"`
+	VariantsV2 []CartVariant `json:"variantsV2,omitempty"`
+	Addons     []CartAddon   `json:"addons,omitempty"`
+}
+
+// CartVariant selects one variation within a variant group.
+type CartVariant struct {
+	GroupID     string `json:"group_id"`
+	VariationID string `json:"variation_id"`
+}
+
+// CartAddon selects one choice within an addon group.
+type CartAddon struct {
+	GroupID  string `json:"group_id"`
+	ChoiceID string `json:"choice_id"`
 }
 
 // CartLine is the typed, TUI-facing shape for one cart item (post-conversion).
