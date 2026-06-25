@@ -90,7 +90,7 @@ func (c *Client) placeWithVerify(
 		return Order{}, placeErr
 	}
 	for _, o := range after {
-		if !known[o.ID] && o.ID != "" {
+		if !known[string(o.ID)] && o.ID != "" {
 			return o, nil
 		}
 	}
@@ -156,7 +156,7 @@ func (c *Client) Checkout(ctx context.Context, req CheckoutRequest) (Order, erro
 func orderIDset(orders []Order) map[string]bool {
 	m := make(map[string]bool, len(orders))
 	for _, o := range orders {
-		m[o.ID] = true
+		m[string(o.ID)] = true
 	}
 	return m
 }

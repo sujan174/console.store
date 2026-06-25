@@ -59,7 +59,7 @@ func mapCart(in swiggy.Cart) api.Cart {
 }
 
 func mapOrder(in swiggy.Order) api.Order {
-	return api.Order{ID: in.ID, Status: in.Status, Restaurant: in.Restaurant, Total: in.Total, PlacedAt: in.PlacedAt}
+	return api.Order{ID: string(in.ID), Status: in.Status, Restaurant: in.Restaurant, Total: in.Total, ETA: in.ETA}
 }
 
 func mapCartItems(in []api.CartItem) []swiggy.CartItem {

@@ -546,7 +546,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.orderErr = ""
-		m.checkout = m.checkout.Placed(dm.Order.ID, "~40 min")
+		eta := dm.Order.ETA
+		if eta == "" {
+			eta = "~40 min"
+		}
+		m.checkout = m.checkout.Placed(dm.Order.ID, eta)
 		m.screen = scrConfirm
 		m.lines = nil
 		m.cartRestaurant = ""

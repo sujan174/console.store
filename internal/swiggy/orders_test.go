@@ -23,14 +23,14 @@ func TestPlaceFoodOrderHappyPath(t *testing.T) {
 	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
 	srv := newFakeMCP(t, map[string]toolFn{
 		"get_food_orders":  func(map[string]any) (any, error) { return []map[string]any{}, nil },
-		"place_food_order": func(map[string]any) (any, error) { return map[string]any{"orderId": "o1", "status": "PLACED"}, nil },
+		"place_food_order": func(map[string]any) (any, error) { return map[string]any{"orderId": 1, "status": "PLACED"}, nil },
 	})
 	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
 	o, err := c.PlaceFoodOrder(context.Background(), PlaceFoodOrderRequest{AddressID: "a1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.ID != "o1" {
+	if o.ID != "1" {
 		t.Fatalf("order = %+v", o)
 	}
 }
@@ -66,7 +66,7 @@ func TestPlaceFoodOrderSuppressesDuplicateAfter5xx(t *testing.T) {
 		case msg.Params.Name == "place_food_order":
 			atomic.AddInt32(&placeCalls, 1)
 			// the order "lands" server-side, then the response 503s
-			orders.Store([]map[string]any{{"orderId": "o9", "status": "PLACED"}})
+			orders.Store([]map[string]any{{"orderId": 9, "status": "PLACED"}})
 			w.WriteHeader(503)
 			w.Write([]byte("gateway timeout"))
 		}
@@ -77,7 +77,7 @@ func TestPlaceFoodOrderSuppressesDuplicateAfter5xx(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected suppressed-duplicate success, got err %v", err)
 	}
-	if o.ID != "o9" {
+	if o.ID != "9" {
 		t.Fatalf("order = %+v, want o9 from verify-before-retry", o)
 	}
 	if got := atomic.LoadInt32(&placeCalls); got != 1 {
@@ -135,7 +135,7 @@ func TestPlaceFoodOrderPicksNewOrderNotPreExisting(t *testing.T) {
 	var placeCalls int32
 	var orders atomic.Value
 	// Pre-snapshot: one pre-existing order.
-	orders.Store([]map[string]any{{"orderId": "old1", "status": "PLACED"}})
+	orders.Store([]map[string]any{{"orderId": 101, "status": "PLACED"}})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var msg struct {
 			ID     any    `json:"id"`
@@ -158,8 +158,8 @@ func TestPlaceFoodOrderPicksNewOrderNotPreExisting(t *testing.T) {
 			atomic.AddInt32(&placeCalls, 1)
 			// Order lands server-side; response 503s.
 			orders.Store([]map[string]any{
-				{"orderId": "old1", "status": "PLACED"},
-				{"orderId": "new2", "status": "PLACED"},
+				{"orderId": 101, "status": "PLACED"},
+				{"orderId": 202, "status": "PLACED"},
 			})
 			w.WriteHeader(503)
 			w.Write([]byte("gateway timeout"))
@@ -171,7 +171,7 @@ func TestPlaceFoodOrderPicksNewOrderNotPreExisting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected verify-before-retry success, got err %v", err)
 	}
-	if o.ID != "new2" {
+	if o.ID != "202" {
 		t.Fatalf("order = %+v, want new2 (not pre-existing old1)", o)
 	}
 	if got := atomic.LoadInt32(&placeCalls); got != 1 {

@@ -162,12 +162,15 @@ type Coupon struct {
 	Amount      int    `json:"amount"`
 }
 
+// Order matches place_food_order / get_food_orders. orderId is a NUMBER in the
+// API (e.g. 241351408816590) — an int/string field fails to decode it and the
+// order silently looks failed even when CONFIRMED. json.Number accepts both.
 type Order struct {
-	ID         string `json:"orderId"`
-	Status     string `json:"status"`
-	Restaurant string `json:"restaurantName"`
-	Total      int    `json:"total"`
-	PlacedAt   string `json:"placedAt"`
+	ID         json.Number `json:"orderId"`
+	Status     string      `json:"status"`
+	Restaurant string      `json:"restaurantName"`
+	Total      int         `json:"totalAmount"`
+	ETA        string      `json:"estimatedDelivery"`
 }
 
 type Tracking struct {

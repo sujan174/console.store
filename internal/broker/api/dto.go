@@ -60,7 +60,7 @@ type Order struct {
 	Status     string
 	Restaurant string
 	Total      int
-	PlacedAt   string
+	ETA        string // Swiggy's estimatedDelivery, e.g. "45-50 mins"
 }
 
 type AuthStart struct {
