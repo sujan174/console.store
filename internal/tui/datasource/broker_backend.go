@@ -14,6 +14,7 @@ type brokerRPC interface {
 	Menu(accountID, addressID, restaurantID string) (api.Menu, error)
 	ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(a api.UpdateCartArgs) (api.Cart, error)
+	ClearCart(accountID string) error
 	PlaceOrder(accountID, addressID string) (api.Order, error)
 }
 
@@ -75,6 +76,10 @@ func (b *BrokerBackend) UpdateCart(addressID, restaurantID, restaurantName strin
 		Items:          items,
 	})
 	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) ClearCart() error {
+	return wrapAuthErr(b.rpc.ClearCart(b.accountID))
 }
 
 func (b *BrokerBackend) PlaceOrder(addressID string) (api.Order, error) {

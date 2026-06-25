@@ -46,6 +46,7 @@ func (f *fakeRPC) UpdateCart(a api.UpdateCartArgs) (api.Cart, error) {
 	}
 	return api.Cart{}, nil
 }
+func (f *fakeRPC) ClearCart(accountID string) error { f.lastAccount = accountID; return nil }
 func (f *fakeRPC) PlaceOrder(accountID, addressID string) (api.Order, error) {
 	f.lastAccount = accountID
 	if f.err != nil {

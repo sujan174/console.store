@@ -551,7 +551,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.commitAdd(it, nil, nil, 0, m.pendingRest, m.pendingSection)
 			if !m.conflictOpen {
 				m = m.refreshAfterAdd()
-				return m, m.liveSyncCart()
+				return m, m.liveCartCmd()
 			}
 			return m, nil
 		}
@@ -643,7 +643,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.conflictSel == 0 { // start new
 					m = m.startNewCart(m.pendingItem, m.pendingAddOns, m.pendingSelections, m.pendingPrice, m.pendingRest, m.pendingSection)
 					m = m.refreshAfterAdd()
-					syncCmd = m.liveSyncCart()
+					syncCmd = m.liveCartCmd()
 				}
 				m.conflictOpen = false
 				return m, syncCmd
@@ -680,7 +680,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m = m.commitAdd(item, addons, sels, price, m.pendingRest, m.pendingSection)
 				if !m.conflictOpen { // committed directly (no restaurant clash)
 					m = m.refreshAfterAdd()
-					return m, m.liveSyncCart()
+					return m, m.liveCartCmd()
 				}
 			}
 			return m, nil
@@ -835,7 +835,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil // a modal will finish the add
 				}
 				m = m.refreshAfterAdd()
-				return m, m.liveSyncCart()
+				return m, m.liveCartCmd()
 			case "left", "h":
 				it, ok := m.rest.Selected()
 				if !ok {
@@ -847,7 +847,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cartSection = ""
 				}
 				m = m.refreshAfterAdd()
-				return m, m.liveSyncCart()
+				return m, m.liveCartCmd()
 			case "c":
 				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive())
 				m.screen = scrCart
@@ -868,14 +868,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.screen = scrCheckout
 					return m, nil
 				}
+			}
+			mutated := false
+			switch k.String() {
 			case "j", "down":
 				m.cart = m.cart.Down()
 			case "k", "up":
 				m.cart = m.cart.Up()
 			case "right", "l":
 				m.cart = m.cart.Right()
+				mutated = true
 			case "left", "h":
 				m.cart = m.cart.Left()
+				mutated = true
 			}
 			// keep router's authoritative lines in sync with cart edits
 			m.lines = m.cart.Lines()
@@ -887,6 +892,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cartSection = ""
 			}
 			m.menu = m.menu.WithCartChip(m.cartChip())
+			if mutated {
+				// qty/remove on the cart screen must reach Swiggy too (UpdateCart
+				// when items remain, flush when the cart just went empty).
+				return m, m.liveCartCmd()
+			}
 			return m, nil
 		case scrAddress:
 			switch k.String() {
@@ -1211,6 +1221,19 @@ func (m Model) billFromLive() screens.Bill {
 		ToPay:     m.liveCart.Total,
 		Live:      true,
 	}
+}
+
+// liveCartCmd syncs the Swiggy cart after any local cart mutation: an UpdateCart
+// when items remain, or a flush when the cart just went empty (UpdateCart can't
+// express an empty cart — it requires a restaurant id).
+func (m Model) liveCartCmd() tea.Cmd {
+	if !m.live {
+		return nil
+	}
+	if len(m.lines) == 0 {
+		return datasource.ClearCartCmd(m.backend)
+	}
+	return m.liveSyncCart()
 }
 
 func (m Model) liveSyncCart() tea.Cmd {

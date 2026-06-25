@@ -27,6 +27,7 @@ type Backend interface {
 	Menu(addressID, restaurantID string) (api.Menu, error)
 	ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error)
+	ClearCart() error
 	PlaceOrder(addressID string) (api.Order, error)
 }
 
@@ -108,6 +109,14 @@ func SyncCart(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID, res
 	return func() tea.Msg {
 		cart, err := b.UpdateCart(addressID, restaurantID, restaurantName, items)
 		return CartSyncedMsg{Cart: cart, Err: err}
+	}
+}
+
+// ClearCartCmd empties the Swiggy cart (flush_food_cart). Used when the TUI cart
+// goes empty — UpdateCart can't express an empty cart (it needs a restaurant id).
+func ClearCartCmd(b Backend) tea.Cmd {
+	return func() tea.Msg {
+		return CartSyncedMsg{Err: b.ClearCart()}
 	}
 }
 

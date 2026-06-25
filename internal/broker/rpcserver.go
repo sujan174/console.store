@@ -64,6 +64,10 @@ func (a *rpcAdapter) Menu(args api.MenuArgs, rep *api.MenuReply) error {
 	return err
 }
 
+func (a *rpcAdapter) ClearCart(args api.ClearCartArgs, rep *api.ClearCartReply) error {
+	return a.svc.ClearCart(context.Background(), args.AccountID)
+}
+
 func (a *rpcAdapter) ItemOptions(args api.ItemOptionsArgs, rep *api.ItemOptionsReply) error {
 	out, err := a.svc.ItemOptions(context.Background(), args.AccountID, args.AddressID, args.RestaurantID, args.ItemName, args.MenuItemID)
 	rep.Groups = out

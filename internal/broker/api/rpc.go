@@ -53,6 +53,9 @@ type UpdateCartArgs struct {
 }
 type UpdateCartReply struct{ Cart Cart }
 
+type ClearCartArgs struct{ AccountID string }
+type ClearCartReply struct{}
+
 type PlaceOrderArgs struct {
 	AccountID string
 	AddressID string

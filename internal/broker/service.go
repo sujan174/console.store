@@ -94,6 +94,10 @@ func (s *Service) Menu(ctx context.Context, accountID, addressID, restaurantID s
 	return mapMenu(swiggy.Menu{RestaurantID: restaurantID, Items: items}), nil
 }
 
+func (s *Service) ClearCart(ctx context.Context, accountID string) error {
+	return s.foodClient(accountID).FlushFoodCart(ctx)
+}
+
 func (s *Service) ItemOptions(ctx context.Context, accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {
 	groups, err := s.foodClient(accountID).ItemOptions(ctx, addressID, restaurantID, itemName, menuItemID)
 	if err != nil {

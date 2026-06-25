@@ -32,6 +32,7 @@ func (f *fakeBackend) UpdateCart(string, string, string, []api.CartItem) (api.Ca
 	f.updateCalls++
 	return f.cart, f.err
 }
+func (f *fakeBackend) ClearCart() error { return f.err }
 func (f *fakeBackend) PlaceOrder(string) (api.Order, error) {
 	f.placeCalls++
 	return f.order, f.err
