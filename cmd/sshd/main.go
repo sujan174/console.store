@@ -74,7 +74,7 @@ func liveModel(s ssh.Session, caps render.Caps) (tea.Model, bool) {
 		log.Printf("live: broker dial failed: %v; using mock", err)
 		return nil, false
 	}
-	accountID, _, err := cli.AccountForPubkey(pubkey)
+	accountID, linked, err := cli.AccountForPubkey(pubkey)
 	if err != nil {
 		log.Printf("live: AccountForPubkey failed: %v; using mock", err)
 		return nil, false
@@ -87,6 +87,14 @@ func liveModel(s ssh.Session, caps render.Caps) (tea.Model, bool) {
 	snap := swiggysnap.NewSnapshot()
 	be := datasource.NewBrokerBackend(cli, accountID)
 	opts := []consoletui.Option{consoletui.WithLiveBackend(be, snap, accountID, authURL)}
+
+	if !linked {
+		// Pubkey not yet linked to a Swiggy account: no account id to scope live
+		// loads to. Start on the authorize gate instead of firing loads with an
+		// empty account id (which would surface as an empty "shop").
+		log.Printf("live: pubkey not linked; starting on authorize gate")
+		opts = append(opts, consoletui.WithPendingAuth())
+	}
 
 	// Load optional seed config to pre-populate the snapshot.
 	cfg, err := config.Load(config.DefaultPath())

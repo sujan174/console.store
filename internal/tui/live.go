@@ -33,13 +33,23 @@ func WithSeededSnapshot() Option {
 	return func(m *Model) { m.seeded = true }
 }
 
+// WithPendingAuth starts the session on the authorize gate. sshd sets this when
+// the SSH pubkey is not yet linked to a Swiggy account: there is no account to
+// scope live loads to, so we show the authorize URL immediately instead of
+// firing loads that would hit the store with an empty account id.
+func WithPendingAuth() Option {
+	return func(m *Model) { m.needsAuth = true }
+}
+
 // liveInitCmds returns the initial fetches for a live session. When seeded,
 // the snapshot already has data; skip live loads so the TUI is instantly usable.
+// When the session is pending authorization (no linked account yet), skip the
+// loads too — there is no account to scope them to; the gate drives re-auth.
 func (m Model) liveInitCmds() tea.Cmd {
 	if !m.live {
 		return nil
 	}
-	if m.seeded {
+	if m.seeded || m.needsAuth {
 		return nil
 	}
 	return tea.Batch(

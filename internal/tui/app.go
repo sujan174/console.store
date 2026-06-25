@@ -998,9 +998,10 @@ func (m Model) listRows(chrome int) int {
 func (m Model) View() string {
 	if m.needsAuth {
 		gate := "  console.store needs to connect to your Swiggy account.\n\n" +
-			"  1. Open this link on your phone and log in to Swiggy:\n\n" +
+			"  1. Open this link in a browser and log in to Swiggy:\n\n" +
 			"     " + m.authorizeURL + "\n\n" +
-			"  2. Approve access, then press  r  to retry.\n"
+			"  2. Approve access. You'll see \"console.store authorized.\"\n\n" +
+			"  3. Reconnect to load your account:  Ctrl+C, then  ssh localhost -p 2222\n"
 		if m.w == 0 || m.h == 0 {
 			return gate
 		}
