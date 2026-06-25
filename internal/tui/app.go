@@ -1255,9 +1255,12 @@ func (m Model) liveSyncCart() tea.Cmd {
 		}
 		ci := api.CartItem{ItemID: l.Item.SwiggyID, Quantity: l.Qty}
 		for _, s := range l.Selections {
-			if s.Variant {
-				ci.Variants = append(ci.Variants, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
-			} else {
+			switch {
+			case s.Variant && s.Absolute: // variantsV2
+				ci.VariantsV2 = append(ci.VariantsV2, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
+			case s.Variant: // legacy variations
+				ci.VariantsLegacy = append(ci.VariantsLegacy, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
+			default: // addon
 				ci.Addons = append(ci.Addons, api.CartAddonSel{GroupID: s.GroupID, ChoiceID: s.ChoiceID})
 			}
 		}

@@ -31,7 +31,7 @@ func toOptionGroups(in []api.OptionGroup) []catalog.OptionGroup {
 		for j, ch := range g.Choices {
 			choices[j] = catalog.Choice{ID: ch.ID, Name: ch.Name, Price: ch.Price, InStock: ch.InStock}
 		}
-		out[i] = catalog.OptionGroup{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Choices: choices}
+		out[i] = catalog.OptionGroup{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Absolute: g.Absolute, Choices: choices}
 	}
 	return out
 }

@@ -50,12 +50,13 @@ type Choice struct {
 // ("Choose Your Size", single-choice, price-setting) or addon group ("Choice of
 // Milk", with min/max constraints). Min>0 means a selection is required.
 type OptionGroup struct {
-	ID      string
-	Name    string
-	Min     int  // minimum selections required (1 = required)
-	Max     int  // maximum selectable (1 = single-choice; 0/<0 = unlimited)
-	Variant bool // true = variant group (sets price); false = addon group (additive)
-	Choices []Choice
+	ID       string
+	Name     string
+	Min      int  // minimum selections required (1 = required)
+	Max      int  // maximum selectable (1 = single-choice; 0/<0 = unlimited)
+	Variant  bool // true = a variant group (variantsV2 or legacy variations); false = addon
+	Absolute bool // true = variantsV2 (choice price REPLACES base); false = additive
+	Choices  []Choice
 }
 
 // Selection is a chosen Choice within a group, carried on a cart line for both
@@ -65,7 +66,8 @@ type Selection struct {
 	ChoiceID string
 	Name     string
 	Price    int
-	Variant  bool
+	Variant  bool // variant (variantsV2 or legacy) vs addon
+	Absolute bool // variantsV2 (replaces base price) vs additive
 }
 
 // Item is one orderable item. SwiggyID maps to a live menu item later.

@@ -146,7 +146,8 @@ func (c Customize) SelectedOptions() []catalog.Selection {
 		for _, ch := range g.Choices {
 			if c.picked[g.ID][ch.ID] {
 				out = append(out, catalog.Selection{
-					GroupID: g.ID, ChoiceID: ch.ID, Name: ch.Name, Price: ch.Price, Variant: g.Variant,
+					GroupID: g.ID, ChoiceID: ch.ID, Name: ch.Name, Price: ch.Price,
+					Variant: g.Variant, Absolute: g.Absolute,
 				})
 			}
 		}
@@ -188,16 +189,16 @@ func (c Customize) UnitPrice() int {
 		}
 		return p
 	}
-	base, hasVariant, extra := 0, false, 0
+	base, hasAbs, extra := c.item.Price, false, 0
 	for _, s := range c.SelectedOptions() {
-		if s.Variant {
-			base += s.Price
-			hasVariant = true
-		} else {
+		if s.Absolute { // variantsV2 price replaces the base
+			base = s.Price
+			hasAbs = true
+		} else { // legacy variation increment or addon — additive
 			extra += s.Price
 		}
 	}
-	if !hasVariant {
+	if !hasAbs {
 		base = c.item.Price
 	}
 	return base + extra
@@ -253,9 +254,9 @@ func (c Customize) groupedView() string {
 			name := theme.TextStyle.Render(ch.Name)
 			price := theme.FaintStyle.Render("free")
 			if ch.Price > 0 {
-				tag := "+₹"
-				if g.Variant {
-					tag = "₹" // variant price is absolute
+				tag := "+₹" // additive (legacy variation increment or addon)
+				if g.Absolute {
+					tag = "₹" // variantsV2 price is absolute
 				}
 				price = theme.GoldStyle.Render(fmt.Sprintf("%s%d", tag, ch.Price))
 			}

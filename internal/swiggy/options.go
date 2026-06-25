@@ -3,18 +3,20 @@ package swiggy
 import (
 	"context"
 	"math"
+	"strings"
 )
 
 // OptionGroup / OptionChoice are the typed customization options for a live
 // item (variant or addon group), parsed from search_menu. swiggy keeps its own
 // copy so the package stays free of catalog imports; the broker maps to api.
 type OptionGroup struct {
-	ID      string
-	Name    string
-	Min     int
-	Max     int
-	Variant bool // true = variantsV2/variations group (sets price); false = addon group
-	Choices []OptionChoice
+	ID       string
+	Name     string
+	Min      int
+	Max      int
+	Variant  bool // variantsV2 or legacy variations
+	Absolute bool // variantsV2: choice price replaces base; legacy/addon: additive
+	Choices  []OptionChoice
 }
 
 type OptionChoice struct {
@@ -40,15 +42,14 @@ type searchMenuItem struct {
 			InStock int     `json:"inStock"`
 		} `json:"variations"`
 	} `json:"variantsV2"`
+	// Legacy variations are a FLAT list; entries are grouped by their groupId
+	// (e.g. one groupId for Size, another for Milk). Prices are increments.
 	Variations []struct {
-		GroupID    string `json:"groupId"`
-		Name       string `json:"name"`
-		Variations []struct {
-			ID      string  `json:"id"`
-			Name    string  `json:"name"`
-			Price   float64 `json:"price"`
-			InStock int     `json:"inStock"`
-		} `json:"variations"`
+		ID      string  `json:"id"`
+		Name    string  `json:"name"`
+		GroupID string  `json:"groupId"`
+		Price   float64 `json:"price"`
+		InStock int     `json:"inStock"`
 	} `json:"variations"`
 	Addons []struct {
 		GroupID   string `json:"groupId"`
@@ -89,14 +90,10 @@ func (c *Client) ItemOptions(ctx context.Context, addressID, restaurantID, itemN
 
 func buildOptions(it searchMenuItem) []OptionGroup {
 	var groups []OptionGroup
-	// Variant groups (variantsV2 preferred, else legacy variations). A variant
-	// is a required single choice — Min/Max 1 — and its price sets the line price.
-	variantSrc := it.VariantsV2
-	if len(variantSrc) == 0 {
-		variantSrc = it.Variations
-	}
-	for _, vg := range variantSrc {
-		g := OptionGroup{ID: vg.GroupID, Name: vg.Name, Min: 1, Max: 1, Variant: true}
+
+	// variantsV2: nested groups, single-choice, ABSOLUTE price (replaces base).
+	for _, vg := range it.VariantsV2 {
+		g := OptionGroup{ID: vg.GroupID, Name: vg.Name, Min: 1, Max: 1, Variant: true, Absolute: true}
 		for _, v := range vg.Variations {
 			g.Choices = append(g.Choices, OptionChoice{
 				ID: v.ID, Name: v.Name, Price: int(math.Round(v.Price)), InStock: v.InStock == 1,
@@ -106,9 +103,31 @@ func buildOptions(it searchMenuItem) []OptionGroup {
 			groups = append(groups, g)
 		}
 	}
-	// Addon groups carry their own min/max constraints.
+
+	// Legacy variations (only when there is no variantsV2): a FLAT list grouped
+	// by groupId — each group is a required single choice with ADDITIVE prices.
+	if len(it.VariantsV2) == 0 && len(it.Variations) > 0 {
+		var order []string
+		byGroup := map[string][]OptionChoice{}
+		for _, v := range it.Variations {
+			if _, seen := byGroup[v.GroupID]; !seen {
+				order = append(order, v.GroupID)
+			}
+			byGroup[v.GroupID] = append(byGroup[v.GroupID], OptionChoice{
+				ID: v.ID, Name: v.Name, Price: int(math.Round(v.Price)), InStock: v.InStock == 1,
+			})
+		}
+		for _, gid := range order {
+			ch := byGroup[gid]
+			groups = append(groups, OptionGroup{
+				ID: gid, Name: legacyGroupName(ch), Min: 1, Max: 1, Variant: true, Absolute: false, Choices: ch,
+			})
+		}
+	}
+
+	// Addon groups: additive, with their own min/max constraints.
 	for _, ag := range it.Addons {
-		g := OptionGroup{ID: ag.GroupID, Name: ag.GroupName, Min: ag.MinAddons, Max: ag.MaxAddons, Variant: false}
+		g := OptionGroup{ID: ag.GroupID, Name: ag.GroupName, Min: ag.MinAddons, Max: ag.MaxAddons}
 		for _, ch := range ag.Choices {
 			g.Choices = append(g.Choices, OptionChoice{
 				ID: ch.ID, Name: ch.Name, Price: int(math.Round(ch.Price)), InStock: true,
@@ -119,4 +138,24 @@ func buildOptions(it searchMenuItem) []OptionGroup {
 		}
 	}
 	return groups
+}
+
+// legacyGroupName guesses a label for a legacy variation group (the flat
+// variations carry no group name) from its choices, so the sheet reads sensibly.
+func legacyGroupName(choices []OptionChoice) string {
+	var b strings.Builder
+	for _, c := range choices {
+		b.WriteString(strings.ToLower(c.Name))
+		b.WriteByte(' ')
+	}
+	s := b.String()
+	switch {
+	case strings.Contains(s, "milk") || strings.Contains(s, "soy") || strings.Contains(s, "oat") || strings.Contains(s, "almond"):
+		return "Milk / Dairy"
+	case strings.Contains(s, "tall") || strings.Contains(s, "grande") || strings.Contains(s, "venti") ||
+		strings.Contains(s, "small") || strings.Contains(s, "regular") || strings.Contains(s, "large") || strings.Contains(s, "inch"):
+		return "Size"
+	default:
+		return "Choose one"
+	}
 }

@@ -95,6 +95,7 @@ type CartItem struct {
 	MenuItemID string        `json:"menu_item_id"`
 	Quantity   int           `json:"quantity"`
 	VariantsV2 []CartVariant `json:"variantsV2,omitempty"`
+	Variants   []CartVariant `json:"variants,omitempty"` // legacy variations channel
 	Addons     []CartAddon   `json:"addons,omitempty"`
 }
 
