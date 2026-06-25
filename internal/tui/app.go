@@ -3,6 +3,8 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -18,6 +20,14 @@ import (
 	"console.store/internal/tui/render"
 	"console.store/internal/tui/screens"
 )
+
+// dbgTUI logs to the server stderr when CONSOLE_DEBUG_TUI=1 (temporary, for
+// diagnosing the live cart-sync path). Never logs to the SSH channel.
+func dbgTUI(format string, args ...any) {
+	if os.Getenv("CONSOLE_DEBUG_TUI") == "1" {
+		log.Printf("TUI-DEBUG "+format, args...)
+	}
+}
 
 // Bill constants mirror the design (script line 606: toPay = item + 29 − 50).
 // NOTE: duplicated in package screens (cart.go) since screens cannot import tui.
@@ -501,6 +511,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.screen == scrRestaurant {
 			if p, ok := m.repo.Menu(dm.PlaceID); ok {
+				// The menu place carries only Items; its descriptive fields (Name,
+				// ID, Section…) come back empty. Preserve the identity from the
+				// restaurant we navigated in from (the search result) so the cart
+				// can attribute items to the right restaurant — without the Name,
+				// cartRestaurant stays "" and the live cart sync never fires.
+				prev := m.rest.PlaceData()
+				p.Name = prev.Name
+				p.ID = prev.ID
+				p.SwiggyID = prev.SwiggyID
+				p.Section = prev.Section
+				p.City = prev.City
+				p.ETA = prev.ETA
+				p.Rating = prev.Rating
+				p.Description = prev.Description
 				ci := m.rest.CursorIndex()
 				info := m.rest.InfoOpen()
 				m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).
@@ -755,10 +779,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter", "right", "l":
 				it, ok := m.rest.Selected()
 				if !ok {
+					dbgTUI("add: Selected() returned !ok (no item under cursor)")
 					return m, nil
 				}
+				dbgTUI("add: item=%q swiggyID=%q rest=%q", it.Name, it.SwiggyID, m.rest.PlaceData().Name)
 				m = m.beginAdd(it, m.rest.PlaceData().Name, m.rest.PlaceData().Section)
 				if m.customizeOpen || m.conflictOpen {
+					dbgTUI("add: modal opened (customize=%v conflict=%v)", m.customizeOpen, m.conflictOpen)
 					return m, nil // a modal will finish the add
 				}
 				m = m.refreshAfterAdd()
@@ -1126,20 +1153,27 @@ func errIsNeedsAuth(err error) bool {
 // a SwiggyID are skipped — they can't be referenced by Swiggy.
 func (m Model) liveSyncCart() tea.Cmd {
 	if !m.live || len(m.lines) == 0 {
+		dbgTUI("liveSyncCart: nil (live=%v lines=%d)", m.live, len(m.lines))
 		return nil
 	}
-	p, ok := m.repo.Menu(m.cartPlaceID())
+	pid := m.cartPlaceID()
+	p, ok := m.repo.Menu(pid)
 	if !ok || p.SwiggyID == "" {
+		dbgTUI("liveSyncCart: nil (cartRestaurant=%q cartPlaceID=%q menuFound=%v swiggyID=%q)", m.cartRestaurant, pid, ok, p.SwiggyID)
 		return nil
 	}
 	items := make([]api.CartItem, 0, len(m.lines))
 	for _, l := range m.lines {
 		if l.Item.SwiggyID != "" {
 			items = append(items, api.CartItem{ItemID: l.Item.SwiggyID, Quantity: l.Qty})
+		} else {
+			dbgTUI("liveSyncCart: line %q has empty SwiggyID", l.Item.Name)
 		}
 	}
 	if len(items) == 0 {
+		dbgTUI("liveSyncCart: nil (no items with SwiggyID; lines=%d)", len(m.lines))
 		return nil
 	}
+	dbgTUI("liveSyncCart: SYNC restaurant=%q swiggyRest=%q items=%d", m.cartRestaurant, p.SwiggyID, len(items))
 	return datasource.SyncCart(m.backend, m.snap, m.addr.ID, p.SwiggyID, m.cartRestaurant, items)
 }

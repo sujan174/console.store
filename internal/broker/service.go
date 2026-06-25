@@ -73,11 +73,25 @@ func (s *Service) Restaurants(ctx context.Context, accountID, addressID, query s
 }
 
 func (s *Service) Menu(ctx context.Context, accountID, addressID, restaurantID string) (api.Menu, error) {
-	m, err := s.foodClient(accountID).GetRestaurantMenu(ctx, addressID, restaurantID, 0, 50)
-	if err != nil {
-		return api.Menu{}, err
+	// get_restaurant_menu paginates by CATEGORY (pageSize = categories per page,
+	// max 8, 1-indexed). A single call returns only the first page, so the TUI
+	// saw a truncated menu. Loop pages until one comes back empty, merging items.
+	client := s.foodClient(accountID)
+	var items []swiggy.MenuItem
+	for page := 1; page <= 20; page++ {
+		m, err := client.GetRestaurantMenu(ctx, addressID, restaurantID, page, 8)
+		if err != nil {
+			if page == 1 {
+				return api.Menu{}, err
+			}
+			break // partial menu beats none if a later page fails
+		}
+		if len(m.Items) == 0 {
+			break
+		}
+		items = append(items, m.Items...)
 	}
-	return mapMenu(m), nil
+	return mapMenu(swiggy.Menu{RestaurantID: restaurantID, Items: items}), nil
 }
 
 func (s *Service) UpdateCart(ctx context.Context, a api.UpdateCartArgs) (api.Cart, error) {
