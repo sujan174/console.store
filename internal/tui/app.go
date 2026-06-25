@@ -551,8 +551,21 @@ func (m Model) cartHeader() string {
 	return "your order"
 }
 
-// cartPlaceID finds the id of the cart's restaurant by name across sections.
+// cartPlaceID finds the id of the cart's restaurant by name. In live mode the
+// browse places are keyed by chip query (e.g. "pizza"), not by the mock section
+// names, so search every chip's results first; fall back to the mock sections.
 func (m Model) cartPlaceID() string {
+	if m.live {
+		if r, ok := m.repo.(*swiggysnap.Repository); ok {
+			for _, c := range m.chips {
+				for _, p := range r.PlacesByQuery(m.addr, c.Query) {
+					if p.Name == m.cartRestaurant {
+						return p.ID
+					}
+				}
+			}
+		}
+	}
 	for _, sec := range catalog.MenuSections {
 		for _, p := range m.repo.Places(m.addr, sec) {
 			if p.Name == m.cartRestaurant {

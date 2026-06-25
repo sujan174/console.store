@@ -150,6 +150,33 @@ func TestLiveCartSyncFires(t *testing.T) {
 	}
 }
 
+// TestCartPlaceIDResolvesNonCoffeeChip is the regression for "Pizza Hut didn't
+// sync": cartPlaceID resolved the cart restaurant only across the fixed mock
+// sections, so a restaurant opened under a chip whose query != a section name
+// (e.g. "pizza") resolved to "" and cart sync silently no-op'd.
+func TestCartPlaceIDResolvesNonCoffeeChip(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
+	// Pizza Hut lives under the "pizza" chip query — NOT a mock section key.
+	ph := catalog.Place{ID: "ph1", SwiggyID: "ph1", Name: "Pizza Hut"}
+	snap.SetPlaces("a1", "pizza", []catalog.Place{ph})
+	snap.SetMenu(catalog.Place{ID: "ph1", SwiggyID: "ph1", Items: []catalog.Item{
+		{ID: "p1", SwiggyID: "p1", Name: "Margherita", Price: 300},
+	}})
+	be := &liveFake{}
+	m := New(render.Caps{},
+		WithLiveBackend(be, snap, "acct-1", ""),
+		WithSeededSnapshot(),
+		WithChips([]config.Category{{Label: "Pizza", Query: "pizza"}}),
+	)
+	m.w, m.h = 100, 40
+	m.cartRestaurant = "Pizza Hut"
+
+	if got := m.cartPlaceID(); got != "ph1" {
+		t.Fatalf("cartPlaceID for a pizza-chip restaurant = %q, want \"ph1\"", got)
+	}
+}
+
 func TestLivePlaceOrderTransitionsToConfirm(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
 	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
