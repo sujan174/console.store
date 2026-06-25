@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"log"
 	"net"
 	"net/rpc"
 	"os"
@@ -17,6 +18,18 @@ func (a *rpcAdapter) StartAuth(args api.StartAuthArgs, rep *api.StartAuthReply) 
 	p, err := a.svc.cfg.Auth.Start(args.Pubkey)
 	if err != nil {
 		return err
+	}
+	// The authorize URL is ~200 chars and wraps in a narrow terminal, so copying
+	// it out of the TUI corrupts it. Emit it copy-safe: log it on one line and
+	// write it to a file the user can `open` directly. Path overridable via
+	// CONSOLE_AUTH_URL_FILE; default /tmp/console-authorize-url.txt.
+	log.Printf("authorize URL: %s", p.AuthorizeURL)
+	urlFile := os.Getenv("CONSOLE_AUTH_URL_FILE")
+	if urlFile == "" {
+		urlFile = "/tmp/console-authorize-url.txt"
+	}
+	if werr := os.WriteFile(urlFile, []byte(p.AuthorizeURL+"\n"), 0o600); werr != nil {
+		log.Printf("authorize URL: could not write %s: %v", urlFile, werr)
 	}
 	rep.Start = api.AuthStart{FlowID: p.FlowID, AuthorizeURL: p.AuthorizeURL}
 	return nil
