@@ -844,7 +844,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.live && !m.placingOrder {
 					m.placingOrder = true
 					m.orderErr = ""
-					return m, datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID)
+					return m, tea.Sequence(m.liveSyncCart(), datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID))
 				}
 				if !m.live {
 					m.checkout = m.checkout.Placed(orderID(m.checkout.Lines()), "~40 min")

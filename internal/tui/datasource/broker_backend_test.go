@@ -1,6 +1,7 @@
 package datasource
 
 import (
+	"errors"
 	"testing"
 
 	"console.store/internal/broker/api"
@@ -10,26 +11,42 @@ import (
 type fakeRPC struct {
 	lastAccount string
 	lastQuery   string
+	err         error // if set, all methods return this error
 }
 
 func (f *fakeRPC) Addresses(accountID string) ([]api.Address, error) {
 	f.lastAccount = accountID
+	if f.err != nil {
+		return nil, f.err
+	}
 	return []api.Address{{ID: "a1"}}, nil
 }
 func (f *fakeRPC) Restaurants(accountID, addressID, query string) ([]api.Restaurant, error) {
 	f.lastAccount, f.lastQuery = accountID, query
+	if f.err != nil {
+		return nil, f.err
+	}
 	return []api.Restaurant{{ID: "r1"}}, nil
 }
 func (f *fakeRPC) Menu(accountID, addressID, restaurantID string) (api.Menu, error) {
 	f.lastAccount = accountID
+	if f.err != nil {
+		return api.Menu{}, f.err
+	}
 	return api.Menu{RestaurantID: restaurantID}, nil
 }
 func (f *fakeRPC) UpdateCart(a api.UpdateCartArgs) (api.Cart, error) {
 	f.lastAccount = a.AccountID
+	if f.err != nil {
+		return api.Cart{}, f.err
+	}
 	return api.Cart{}, nil
 }
 func (f *fakeRPC) PlaceOrder(accountID, addressID string) (api.Order, error) {
 	f.lastAccount = accountID
+	if f.err != nil {
+		return api.Order{}, f.err
+	}
 	return api.Order{}, nil
 }
 
@@ -76,4 +93,37 @@ func TestBrokerBackendPlaceOrderPinsAccount(t *testing.T) {
 
 func TestBrokerBackendIsBackend(t *testing.T) {
 	var _ Backend = NewBrokerBackend(&fakeRPC{}, "x")
+}
+
+func TestBrokerBackendWrapsAuthErr(t *testing.T) {
+	cases := []struct {
+		name    string
+		errText string
+	}{
+		{"token expired", "swiggy: access token expired (401)"},
+		{"account not authorized", "swiggy: access token expired (401) (account not authorized)"},
+		{"session revoked", "swiggy: session revoked (419)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rpc := &fakeRPC{err: errors.New(tc.errText)}
+			be := NewBrokerBackend(rpc, "x")
+			_, err := be.Addresses()
+			if !errors.Is(err, ErrNeedsAuth) {
+				t.Fatalf("expected ErrNeedsAuth wrapping %q, got %v", tc.errText, err)
+			}
+		})
+	}
+}
+
+func TestBrokerBackendNonAuthErrPassedThrough(t *testing.T) {
+	rpc := &fakeRPC{err: errors.New("swiggy: http 500: internal server error")}
+	be := NewBrokerBackend(rpc, "x")
+	_, err := be.Addresses()
+	if errors.Is(err, ErrNeedsAuth) {
+		t.Fatal("non-auth error should not be wrapped as ErrNeedsAuth")
+	}
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
 }

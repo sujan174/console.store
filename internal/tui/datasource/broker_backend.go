@@ -1,6 +1,9 @@
 package datasource
 
 import (
+	"fmt"
+	"strings"
+
 	"console.store/internal/broker/api"
 	"console.store/internal/catalog"
 )
@@ -26,30 +29,51 @@ func NewBrokerBackend(rpc brokerRPC, accountID string) *BrokerBackend {
 	return &BrokerBackend{rpc: rpc, accountID: accountID}
 }
 
+// wrapAuthErr wraps a broker error to ErrNeedsAuth if the error text indicates
+// a missing or expired token. net/rpc serialises errors as plain strings, so
+// we cannot use errors.Is — string matching is the intended seam here.
+func wrapAuthErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	s := err.Error()
+	if strings.Contains(s, "token expired") ||
+		strings.Contains(s, "account not authorized") ||
+		strings.Contains(s, "session revoked") {
+		return fmt.Errorf("%w: %v", ErrNeedsAuth, err)
+	}
+	return err
+}
+
 func (b *BrokerBackend) Addresses() ([]api.Address, error) {
-	return b.rpc.Addresses(b.accountID)
+	r, err := b.rpc.Addresses(b.accountID)
+	return r, wrapAuthErr(err)
 }
 
 func (b *BrokerBackend) Places(addressID string, section catalog.Section) ([]api.Restaurant, error) {
-	return b.rpc.Restaurants(b.accountID, addressID, sectionQuery(section))
+	r, err := b.rpc.Restaurants(b.accountID, addressID, sectionQuery(section))
+	return r, wrapAuthErr(err)
 }
 
 func (b *BrokerBackend) Menu(addressID, restaurantID string) (api.Menu, error) {
-	return b.rpc.Menu(b.accountID, addressID, restaurantID)
+	r, err := b.rpc.Menu(b.accountID, addressID, restaurantID)
+	return r, wrapAuthErr(err)
 }
 
 func (b *BrokerBackend) UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error) {
-	return b.rpc.UpdateCart(api.UpdateCartArgs{
+	r, err := b.rpc.UpdateCart(api.UpdateCartArgs{
 		AccountID:      b.accountID,
 		AddressID:      addressID,
 		RestaurantID:   restaurantID,
 		RestaurantName: restaurantName,
 		Items:          items,
 	})
+	return r, wrapAuthErr(err)
 }
 
 func (b *BrokerBackend) PlaceOrder(addressID string) (api.Order, error) {
-	return b.rpc.PlaceOrder(b.accountID, addressID)
+	r, err := b.rpc.PlaceOrder(b.accountID, addressID)
+	return r, wrapAuthErr(err)
 }
 
 // sectionQuery maps a catalogue lane to a Swiggy restaurant-search query.
