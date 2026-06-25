@@ -116,6 +116,21 @@ func TestMenuEnterSelectsRestaurant(t *testing.T) {
 	}
 }
 
+func TestMenuRendersChips(t *testing.T) {
+	m := NewMenu(
+		[]catalog.Place{{ID: "r1", Name: "Blue Tokai"}},
+		catalog.Address{ID: "a1", Label: "home"},
+		catalog.SectionCoffee, catalog.Usual{}, false, "",
+	).WithChips([]string{"Coffee & Refreshments", "Pizza", "Burgers"}, 1)
+
+	v := m.View()
+	for _, want := range []string{"Coffee & Refreshments", "Pizza", "Burgers", "Blue Tokai"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("browse view missing %q", want)
+		}
+	}
+}
+
 // itoa is a tiny int-to-string helper for tests (avoids importing strconv twice).
 func itoa(n int) string {
 	if n == 0 {

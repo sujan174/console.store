@@ -16,15 +16,17 @@ import (
 const Version = "v1.4"
 
 type Menu struct {
-	places    []catalog.Place
-	address   catalog.Address
-	section   catalog.Section
-	usual     catalog.Usual
-	hasUsual  bool
-	cartChip  string
-	counts    map[catalog.Section]int
-	list      components.List
-	searching bool
+	places     []catalog.Place
+	address    catalog.Address
+	section    catalog.Section
+	usual      catalog.Usual
+	hasUsual   bool
+	cartChip   string
+	counts     map[catalog.Section]int
+	list       components.List
+	searching  bool
+	chipLabels []string
+	chipActive int
 }
 
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartChip string) Menu {
@@ -63,6 +65,16 @@ func (m Menu) WithMaxRows(n int) Menu { m.list.MaxRows = n; return m }
 
 // WithCounts sets the per-section place counts shown on the tab bar.
 func (m Menu) WithCounts(c map[catalog.Section]int) Menu { m.counts = c; return m }
+
+// WithChips sets the cuisine chip labels and the active (highlighted) chip index.
+func (m Menu) WithChips(labels []string, active int) Menu {
+	m.chipLabels = labels
+	m.chipActive = active
+	return m
+}
+
+// ChipCount returns the number of cuisine chips.
+func (m Menu) ChipCount() int { return len(m.chipLabels) }
 
 func (m Menu) Init() tea.Cmd { return nil }
 
@@ -150,6 +162,21 @@ func (m Menu) View() string {
 	b.WriteString("  " + justify(strings.Join(tabs, sep), cartStyle.Render(m.cartChip), w) + "\n")
 
 	b.WriteString("\n")
+
+	// cuisine chip row — rendered only when chips have been set via WithChips.
+	if len(m.chipLabels) > 0 {
+		var chips []string
+		for i, label := range m.chipLabels {
+			if i == m.chipActive {
+				chips = append(chips, theme.Fg(theme.Gold).Underline(true).Render(label))
+			} else {
+				chips = append(chips, theme.CatOffStyle.Render(label))
+			}
+		}
+		chipSep := theme.Fg(theme.Div2).Render(" │ ")
+		b.WriteString("  " + strings.Join(chips, chipSep) + "\n")
+		b.WriteString("\n")
+	}
 
 	// search prompt (when active)
 	if m.searching || m.list.Filter() != "" {
