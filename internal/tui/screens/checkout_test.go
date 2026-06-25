@@ -28,3 +28,22 @@ func TestConfirmedShowsCupAndOrderId(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckoutWithPlacingChangesCTA(t *testing.T) {
+	addr := catalog.Address{ID: "a1", Label: "home", Line: "HSR Layout"}
+	lines := []screens.CartLine{{Item: catalog.Item{ID: "i1", Name: "Cold Coffee", Price: 220}, Qty: 1}}
+	c := screens.NewCheckout("Blue Tokai", addr, lines, "~35 min")
+
+	normal := c.View(0)
+	if !strings.Contains(normal, "place order") {
+		t.Errorf("normal view should contain 'place order'; got:\n%s", normal)
+	}
+
+	placing := c.WithPlacing(true).View(0)
+	if !strings.Contains(placing, "placing") {
+		t.Errorf("placing view should contain 'placing'; got:\n%s", placing)
+	}
+	if strings.Contains(placing, "> place order") {
+		t.Errorf("placing view should NOT show '> place order' CTA; got:\n%s", placing)
+	}
+}

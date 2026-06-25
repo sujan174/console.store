@@ -19,6 +19,7 @@ type Checkout struct {
 	placed     bool
 	orderID    string
 	eta        string
+	placing    bool // true while PlaceOrderCmd is in-flight
 }
 
 func NewCheckout(restaurant string, addr catalog.Address, lines []CartLine, eta string) Checkout {
@@ -30,6 +31,12 @@ func (c Checkout) Placed(orderID, eta string) Checkout {
 	c.placed = true
 	c.orderID = orderID
 	c.eta = eta
+	return c
+}
+
+// WithPlacing returns a copy in the "placing order" in-flight state (disables the CTA).
+func (c Checkout) WithPlacing(placing bool) Checkout {
+	c.placing = placing
 	return c
 }
 
@@ -97,11 +104,15 @@ func (c Checkout) summaryView() string {
 	b.WriteString(components.DashRule())
 
 	// Full-bleed place-order bar: green left bar + selected-row background.
+	barLabel := " > place order "
+	if c.placing {
+		barLabel = " placing order… "
+	}
 	bar := theme.GreenStyle.Render("▌") +
 		lipgloss.NewStyle().
 			Foreground(lipgloss.Color(theme.Bright)).
 			Background(lipgloss.Color(theme.SelRowBg)).
-			Render(padTo(" > place order ", components.FrameWidth()-1))
+			Render(padTo(barLabel, components.FrameWidth()-1))
 	b.WriteString(bar + "\n\n")
 
 	b.WriteString("  " + theme.FavStyle.Render("no online payment — pay the rider on delivery") + "\n")
