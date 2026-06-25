@@ -127,19 +127,23 @@ type Model struct {
 	accountID    string
 	authorizeURL string
 	needsAuth    bool // set when a load returns datasource.ErrNeedsAuth
+	seeded       bool // true when catalog/swiggy.Snapshot was pre-seeded from config; skips live init loads
 }
 
 func New(caps render.Caps, opts ...Option) Model {
 	repo := mem.New()
-	addr := repo.Addresses()[0]
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, addr: addr, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1}
+	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1}
 	for _, o := range opts {
 		o(&m)
 	}
-	// A live backend starts with an empty snapshot; the mock addr seed above is
-	// only a placeholder until LoadAddresses fills the snapshot and Update swaps
-	// m.addr to the first live address.
+	// Adopt first address after opts: live path may have seeded the snapshot already
+	// (WithLiveBackend swaps m.repo; if the snapshot has addresses, use them).
+	if m.addr.ID == "" {
+		if addrs := m.repo.Addresses(); len(addrs) > 0 {
+			m.addr = addrs[0]
+		}
+	}
 	m.splash = screens.NewSplash().WithCaps(caps)
 	m.splashPhrase = screens.RandomPhrase("")
 	m.menu = m.buildMenu()

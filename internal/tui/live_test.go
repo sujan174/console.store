@@ -53,3 +53,30 @@ func TestLiveNeedsAuthOnAuthError(t *testing.T) {
 		t.Fatal("expected needsAuth after ErrNeedsAuth load")
 	}
 }
+
+func TestSeededPathSkipsLiveLoads(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	// Pre-seed the snapshot with an address (simulates what sshd does from config).
+	snap.SetAddresses([]catalog.Address{{ID: "seed-addr", Label: "home"}})
+	be := &liveFake{}
+	m := New(render.Caps{},
+		WithLiveBackend(be, snap, "acct-1", "https://authz/x"),
+		WithSeededSnapshot(),
+	)
+	if !m.seeded {
+		t.Fatal("expected seeded=true")
+	}
+	// addr should be picked up from the seeded snapshot, not the mock fallback.
+	if m.addr.ID != "seed-addr" {
+		t.Fatalf("addr.ID = %q; want seed-addr", m.addr.ID)
+	}
+	// Init() should not return a batch that includes LoadAddresses/LoadPlaces when seeded.
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("Init must return tick() even when seeded")
+	}
+	// We can't inspect the batch contents directly; instead verify liveInitCmds returns nil.
+	if c := m.liveInitCmds(); c != nil {
+		t.Fatal("liveInitCmds must return nil when seeded (no live loads on boot)")
+	}
+}
