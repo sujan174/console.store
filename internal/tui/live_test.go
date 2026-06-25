@@ -3,6 +3,8 @@ package tui
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"console.store/internal/broker/api"
 	"console.store/internal/catalog"
 	swiggysnap "console.store/internal/catalog/swiggy"
@@ -51,6 +53,33 @@ func TestLiveNeedsAuthOnAuthError(t *testing.T) {
 	updated, _ := m.Update(datasource.AddressesLoadedMsg{Err: datasource.ErrNeedsAuth})
 	if !updated.(Model).needsAuth {
 		t.Fatal("expected needsAuth after ErrNeedsAuth load")
+	}
+}
+
+func TestLiveMenuEnterFiresLoadMenu(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
+	snap.SetPlaces("a1", catalog.SectionCoffee, []catalog.Place{
+		{ID: "r1", SwiggyID: "swiggy-r1", Name: "Blue Tokai", Section: catalog.SectionCoffee},
+	})
+	be := &liveFake{}
+	m := New(render.Caps{},
+		WithLiveBackend(be, snap, "acct-1", ""),
+		WithSeededSnapshot(),
+	)
+	// Force window size so menu renders.
+	m.w, m.h = 100, 40
+	// Navigate to the menu screen (model starts at scrSplash).
+	m.screen = scrMenu
+
+	// Simulate pressing enter on the menu (restaurant is first in list).
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um := updated.(Model)
+	if um.screen != scrRestaurant {
+		t.Fatalf("screen = %v after enter; want scrRestaurant", um.screen)
+	}
+	if cmd == nil {
+		t.Fatal("live mode: enter on menu must return a non-nil LoadMenu Cmd")
 	}
 }
 

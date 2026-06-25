@@ -655,6 +655,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if p, ok := m.menu.Selected(); ok {
 					m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
 					m.screen = scrRestaurant
+					if m.live && p.SwiggyID != "" {
+						return m, datasource.LoadMenu(m.backend, m.snap, m.addr.ID, p.SwiggyID)
+					}
 				}
 				return m, nil
 			case "right", "l":
