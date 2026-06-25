@@ -70,7 +70,26 @@ func mapCartItems(in []api.CartItem) []swiggy.CartItem {
 	for i, c := range in {
 		// api.CartItem.ItemID carries the Swiggy menu item id (catalog SwiggyID);
 		// update_food_cart wants it as menu_item_id.
-		out[i] = swiggy.CartItem{MenuItemID: c.ItemID, Quantity: c.Quantity}
+		ci := swiggy.CartItem{MenuItemID: c.ItemID, Quantity: c.Quantity}
+		for _, v := range c.Variants {
+			ci.VariantsV2 = append(ci.VariantsV2, swiggy.CartVariant{GroupID: v.GroupID, VariationID: v.VariationID})
+		}
+		for _, a := range c.Addons {
+			ci.Addons = append(ci.Addons, swiggy.CartAddon{GroupID: a.GroupID, ChoiceID: a.ChoiceID})
+		}
+		out[i] = ci
+	}
+	return out
+}
+
+func mapOptions(in []swiggy.OptionGroup) []api.OptionGroup {
+	out := make([]api.OptionGroup, len(in))
+	for i, g := range in {
+		choices := make([]api.OptionChoice, len(g.Choices))
+		for j, ch := range g.Choices {
+			choices[j] = api.OptionChoice{ID: ch.ID, Name: ch.Name, Price: ch.Price, InStock: ch.InStock}
+		}
+		out[i] = api.OptionGroup{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Choices: choices}
 	}
 	return out
 }

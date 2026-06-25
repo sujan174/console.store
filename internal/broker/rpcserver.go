@@ -64,6 +64,12 @@ func (a *rpcAdapter) Menu(args api.MenuArgs, rep *api.MenuReply) error {
 	return err
 }
 
+func (a *rpcAdapter) ItemOptions(args api.ItemOptionsArgs, rep *api.ItemOptionsReply) error {
+	out, err := a.svc.ItemOptions(context.Background(), args.AccountID, args.AddressID, args.RestaurantID, args.ItemName, args.MenuItemID)
+	rep.Groups = out
+	return err
+}
+
 func (a *rpcAdapter) UpdateCart(args api.UpdateCartArgs, rep *api.UpdateCartReply) error {
 	out, err := a.svc.UpdateCart(context.Background(), args)
 	rep.Cart = out

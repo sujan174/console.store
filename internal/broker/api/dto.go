@@ -41,6 +41,36 @@ type Menu struct {
 type CartItem struct {
 	ItemID   string
 	Quantity int
+	Variants []CartVariantSel
+	Addons   []CartAddonSel
+}
+
+// CartVariantSel / CartAddonSel are the user's customization selections sent
+// with a cart line.
+type CartVariantSel struct {
+	GroupID     string
+	VariationID string
+}
+type CartAddonSel struct {
+	GroupID  string
+	ChoiceID string
+}
+
+// OptionGroup / OptionChoice are an item's customization options (variant or
+// addon group) returned by ItemOptions.
+type OptionGroup struct {
+	ID      string
+	Name    string
+	Min     int
+	Max     int
+	Variant bool
+	Choices []OptionChoice
+}
+type OptionChoice struct {
+	ID      string
+	Name    string
+	Price   int
+	InStock bool
 }
 
 type CartLine struct {

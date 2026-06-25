@@ -25,6 +25,9 @@ func (f *fakeBackend) Places(string, catalog.Section) ([]api.Restaurant, error) 
 	return f.rests, f.err
 }
 func (f *fakeBackend) Menu(string, string) (api.Menu, error) { return f.menu, f.err }
+func (f *fakeBackend) ItemOptions(string, string, string, string) ([]api.OptionGroup, error) {
+	return nil, f.err
+}
 func (f *fakeBackend) UpdateCart(string, string, string, []api.CartItem) (api.Cart, error) {
 	f.updateCalls++
 	return f.cart, f.err

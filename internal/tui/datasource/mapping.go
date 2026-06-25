@@ -24,6 +24,18 @@ func toPlaces(in []api.Restaurant, section catalog.Section) []catalog.Place {
 	return out
 }
 
+func toOptionGroups(in []api.OptionGroup) []catalog.OptionGroup {
+	out := make([]catalog.OptionGroup, len(in))
+	for i, g := range in {
+		choices := make([]catalog.Choice, len(g.Choices))
+		for j, ch := range g.Choices {
+			choices[j] = catalog.Choice{ID: ch.ID, Name: ch.Name, Price: ch.Price, InStock: ch.InStock}
+		}
+		out[i] = catalog.OptionGroup{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Choices: choices}
+	}
+	return out
+}
+
 func toMenuPlace(m api.Menu) catalog.Place {
 	items := make([]catalog.Item, len(m.Items))
 	for i, it := range m.Items {

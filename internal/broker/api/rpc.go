@@ -35,6 +35,15 @@ type MenuArgs struct {
 }
 type MenuReply struct{ Menu Menu }
 
+type ItemOptionsArgs struct {
+	AccountID    string
+	AddressID    string
+	RestaurantID string
+	ItemName     string
+	MenuItemID   string
+}
+type ItemOptionsReply struct{ Groups []OptionGroup }
+
 type UpdateCartArgs struct {
 	AccountID      string
 	AddressID      string

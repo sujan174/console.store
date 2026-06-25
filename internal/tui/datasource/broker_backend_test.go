@@ -35,6 +35,10 @@ func (f *fakeRPC) Menu(accountID, addressID, restaurantID string) (api.Menu, err
 	}
 	return api.Menu{RestaurantID: restaurantID}, nil
 }
+func (f *fakeRPC) ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {
+	f.lastAccount = accountID
+	return nil, nil
+}
 func (f *fakeRPC) UpdateCart(a api.UpdateCartArgs) (api.Cart, error) {
 	f.lastAccount = a.AccountID
 	if f.err != nil {

@@ -25,6 +25,7 @@ type Backend interface {
 	Addresses() ([]api.Address, error)
 	Places(addressID string, section catalog.Section) ([]api.Restaurant, error)
 	Menu(addressID, restaurantID string) (api.Menu, error)
+	ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error)
 	PlaceOrder(addressID string) (api.Order, error)
 }
@@ -38,6 +39,11 @@ type (
 	MenuLoadedMsg struct {
 		PlaceID string
 		Err     error
+	}
+	ItemOptionsLoadedMsg struct {
+		ItemID string
+		Groups []catalog.OptionGroup
+		Err    error
 	}
 	CartSyncedMsg struct {
 		Cart api.Cart
@@ -79,6 +85,18 @@ func LoadMenu(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID stri
 		}
 		snap.SetMenu(toMenuPlace(got))
 		return MenuLoadedMsg{PlaceID: restaurantID}
+	}
+}
+
+// LoadItemOptions fetches an item's customization groups (variants/addons) so
+// the TUI can open the customize sheet before adding it to the cart.
+func LoadItemOptions(b Backend, addressID, restaurantID, itemName, menuItemID string) tea.Cmd {
+	return func() tea.Msg {
+		groups, err := b.ItemOptions(addressID, restaurantID, itemName, menuItemID)
+		if err != nil {
+			return ItemOptionsLoadedMsg{ItemID: menuItemID, Err: err}
+		}
+		return ItemOptionsLoadedMsg{ItemID: menuItemID, Groups: toOptionGroups(groups)}
 	}
 }
 

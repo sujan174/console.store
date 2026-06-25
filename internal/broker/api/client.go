@@ -54,6 +54,15 @@ func (c *Client) Menu(accountID, addressID, restaurantID string) (Menu, error) {
 	return rep.Menu, err
 }
 
+func (c *Client) ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]OptionGroup, error) {
+	var rep ItemOptionsReply
+	err := c.rc.Call(ServiceName+".ItemOptions", ItemOptionsArgs{
+		AccountID: accountID, AddressID: addressID, RestaurantID: restaurantID,
+		ItemName: itemName, MenuItemID: menuItemID,
+	}, &rep)
+	return rep.Groups, err
+}
+
 func (c *Client) UpdateCart(a UpdateCartArgs) (Cart, error) {
 	var rep UpdateCartReply
 	err := c.rc.Call(ServiceName+".UpdateCart", a, &rep)

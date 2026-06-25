@@ -12,6 +12,7 @@ type brokerRPC interface {
 	Addresses(accountID string) ([]api.Address, error)
 	Restaurants(accountID, addressID, query string) ([]api.Restaurant, error)
 	Menu(accountID, addressID, restaurantID string) (api.Menu, error)
+	ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(a api.UpdateCartArgs) (api.Cart, error)
 	PlaceOrder(accountID, addressID string) (api.Order, error)
 }
@@ -57,6 +58,11 @@ func (b *BrokerBackend) Places(addressID string, section catalog.Section) ([]api
 
 func (b *BrokerBackend) Menu(addressID, restaurantID string) (api.Menu, error) {
 	r, err := b.rpc.Menu(b.accountID, addressID, restaurantID)
+	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {
+	r, err := b.rpc.ItemOptions(b.accountID, addressID, restaurantID, itemName, menuItemID)
 	return r, wrapAuthErr(err)
 }
 
