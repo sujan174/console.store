@@ -38,14 +38,18 @@ type restaurantsEnvelope struct {
 // MenuItem matches an item inside a get_restaurant_menu category. Note Rating
 // arrives as a STRING ("4.6"), not a number.
 type MenuItem struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Desc       string `json:"description"`
-	Price      int    `json:"price"` // whole rupees
-	Veg        bool   `json:"isVeg"`
-	Rating     string `json:"rating"`
-	InStock    int    `json:"inStock"`
-	Bestseller bool   `json:"isBestseller"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Desc string `json:"description"`
+	// Price arrives in rupees and may be fractional (e.g. 1185.59 on coffee
+	// bags). Keep it float here; the broker rounds to whole rupees for the TUI.
+	// It MUST be float64 — an int field fails to unmarshal a decimal and would
+	// drop the entire menu.
+	Price      float64 `json:"price"`
+	Veg        bool    `json:"isVeg"`
+	Rating     string  `json:"rating"`
+	InStock    int     `json:"inStock"`
+	Bestseller bool    `json:"isBestseller"`
 }
 
 // menuEnvelope matches get_restaurant_menu: {"categories":[{"items":[...]}]}.
