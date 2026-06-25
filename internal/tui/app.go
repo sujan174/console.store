@@ -349,13 +349,23 @@ func (m Model) refreshAfterAdd() Model {
 		info := m.rest.InfoOpen()
 		cat := m.rest.ActiveCategory()
 		veg := m.rest.VegOnly()
-		chosen := m.rest.Chosen()
 		// WithCategory and WithVegOnly reset cursor to 0; apply WithCursor last.
 		m.rest = screens.NewRestaurant(m.rest.PlaceData(), m.qtyMap(), m.cartChip()).
 			WithAddr(m.addr).WithInfo(info).
-			WithCategory(cat).WithVegOnly(veg).WithChosen(chosen).WithCursor(ci)
+			WithCategory(cat).WithVegOnly(veg).WithCursor(ci)
 	}
 	return m
+}
+
+// restFocusInCart reports whether the dish currently under the restaurant cursor
+// is already in the cart — the implicit signal that ↑/↓ adjust its quantity
+// instead of moving the cursor.
+func (m Model) restFocusInCart() bool {
+	it, ok := m.rest.Selected()
+	if !ok {
+		return false
+	}
+	return m.qtyMap()[it.ID] > 0
 }
 
 // restIncSelected adds one unit of the selected dish (↑ in select-mode). A live
@@ -957,29 +967,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrMenu
 				return m, nil
 			case "left", "h", "[":
-				// ← / → navigate the top category bar (and drop select-mode).
-				m.rest = m.rest.WithChosen(false).PrevCategory()
+				// ← / → navigate the top category bar.
+				m.rest = m.rest.PrevCategory()
 				return m, nil
 			case "right", "l", "]":
-				m.rest = m.rest.WithChosen(false).NextCategory()
+				m.rest = m.rest.NextCategory()
 				return m, nil
 			case "enter":
-				// Enter selects the focused dish: ↑/↓ then adjust its quantity.
-				// Pressing it again exits select-mode (back to dish navigation).
-				if _, ok := m.rest.Selected(); !ok {
-					return m, nil
-				}
-				m.rest = m.rest.WithChosen(!m.rest.Chosen())
-				return m, nil
+				// Enter adds the focused dish (opens the customise sheet when needed).
+				return m.restIncSelected()
 			case "up", "k":
-				if m.rest.Chosen() {
+				// Once a dish is in the cart, ↑ adds another unit; otherwise ↑ moves
+				// the cursor up the dish list.
+				if m.restFocusInCart() {
 					return m.restIncSelected()
 				}
 				nr, cmd := m.rest.Update(msg)
 				m.rest = nr.(screens.Restaurant)
 				return m, cmd
 			case "down", "j":
-				if m.rest.Chosen() {
+				// For an in-cart dish, ↓ removes a unit (to zero it leaves the cart and
+				// hands ↓ back to navigation); otherwise ↓ moves the cursor down.
+				if m.restFocusInCart() {
 					return m.restDecSelected()
 				}
 				nr, cmd := m.rest.Update(msg)
@@ -990,7 +999,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrCart
 				return m, nil
 			case "v":
-				m.rest = m.rest.WithChosen(false).WithVegOnly(!m.rest.VegOnly())
+				m.rest = m.rest.WithVegOnly(!m.rest.VegOnly())
 				return m, nil
 			default:
 				nr, cmd := m.rest.Update(msg)

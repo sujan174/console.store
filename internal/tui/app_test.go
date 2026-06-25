@@ -90,13 +90,10 @@ func TestTickAdvancesFrame(t *testing.T) {
 // keyRunes builds a rune key-press (e.g. keyRunes("c")).
 func keyRunes(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 
-// addFocused adds one unit of the dish under the cursor using the select-mode
-// controls: Enter to select the dish, then ↑ to +1. For a non-customizable dish
-// the unit is added directly; a customizable dish opens the customise modal on ↑.
+// addFocused adds one unit of the dish under the cursor: Enter adds it directly
+// (a customizable dish opens the customise modal instead).
 func addFocused(m Model) Model {
-	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select
-	m = u.(Model)
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // +1
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add
 	return u.(Model)
 }
 
@@ -169,9 +166,7 @@ func openCustomizeForHazelnut(t *testing.T) Model {
 	if len(sel.AddOns) == 0 {
 		t.Fatalf("precondition: %q should be customizable", sel.Name)
 	}
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select the dish
-	m = u.(Model)
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // +1 -> opens modal
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add -> opens modal
 	m = u.(Model)
 	if !m.customizeOpen {
 		t.Fatal("adding a customizable item should open the customise modal")
@@ -231,8 +226,7 @@ func TestSameAddOnsStackDifferentAddOnsSplit(t *testing.T) {
 	m = u.(Model)
 
 	// Second add: identical selection -> should stack (qty 2, one line).
-	// The dish stays selected, so ↑ re-adds and reopens the customise modal.
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // re-add -> modal
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // re-add -> modal
 	m = u.(Model)
 	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = u.(Model)
@@ -245,7 +239,7 @@ func TestSameAddOnsStackDifferentAddOnsSplit(t *testing.T) {
 	}
 
 	// Third add: different selection (no add-ons) -> separate line.
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // re-add -> modal
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // re-add -> modal
 	m = u.(Model)
 	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm with nothing selected
 	m = u.(Model)
@@ -430,8 +424,7 @@ func TestCartScreenShowsBillAndEta(t *testing.T) {
 	m := newAtMenu()
 	for _, k := range []tea.KeyMsg{
 		{Type: tea.KeyEnter},                     // open Blue Tokai
-		{Type: tea.KeyEnter},                     // select Cold Coffee
-		{Type: tea.KeyUp},                        // +1 -> add (₹149)
+		{Type: tea.KeyEnter},                     // add Cold Coffee (₹149)
 		{Type: tea.KeyRunes, Runes: []rune("c")}, // cart
 	} {
 		updated, _ := m.Update(k)
@@ -453,8 +446,7 @@ func TestCheckoutFlowPlacesAndResets(t *testing.T) {
 	m := newAtMenu()
 	steps := []tea.KeyMsg{
 		{Type: tea.KeyEnter},                     // open place
-		{Type: tea.KeyEnter},                     // select item
-		{Type: tea.KeyUp},                        // +1 -> add
+		{Type: tea.KeyEnter},                     // add item
 		{Type: tea.KeyRunes, Runes: []rune("c")}, // cart
 		{Type: tea.KeyEnter},                     // checkout
 		{Type: tea.KeyEnter},                     // place order
@@ -480,8 +472,7 @@ func TestTrackingFlowAdvancesAndEscResets(t *testing.T) {
 	m := newAtMenu()
 	steps := []tea.KeyMsg{
 		{Type: tea.KeyEnter},                     // open place
-		{Type: tea.KeyEnter},                     // select item
-		{Type: tea.KeyUp},                        // +1 -> add
+		{Type: tea.KeyEnter},                     // add item
 		{Type: tea.KeyRunes, Runes: []rune("c")}, // cart
 		{Type: tea.KeyEnter},                     // checkout
 		{Type: tea.KeyEnter},                     // place order -> confirm
@@ -563,14 +554,14 @@ func TestAddressSwitchFlushesUnserviceableCart(t *testing.T) {
 	}
 }
 
-// TestRestaurantDownDecrementsWhenSelected verifies the select-mode controls: after
-// selecting a dish and adding a unit, ↓ decrements it and removes it from the cart
-// at qty 0, staying on the restaurant screen.
-func TestRestaurantDownDecrementsWhenSelected(t *testing.T) {
+// TestRestaurantDownDecrementsWhenInCart verifies that once a dish is in the cart,
+// ↓ decrements it and removes it from the cart at qty 0, staying on the restaurant
+// screen.
+func TestRestaurantDownDecrementsWhenInCart(t *testing.T) {
 	m := newAtMenu()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
 	m = updated.(Model)
-	m = addFocused(m) // select Cold Coffee + ↑ (qty 1); dish stays selected
+	m = addFocused(m) // Enter adds Cold Coffee (qty 1)
 	if m.qtyMap()["bt-cold-coffee"] != 1 {
 		t.Fatalf("expected qty 1 after add, qtyMap=%v", m.qtyMap())
 	}
@@ -588,6 +579,51 @@ func TestRestaurantDownDecrementsWhenSelected(t *testing.T) {
 	}
 	if m.cartTotal() != 0 {
 		t.Fatalf("cart total should be 0 after decrement, got %d", m.cartTotal())
+	}
+}
+
+// TestRestaurantArrowsAdjustQtyOnlyWhenInCart verifies the implicit qty model:
+// Enter adds the focused dish; once it is in the cart ↑/↓ change its quantity;
+// before it is in the cart ↑/↓ move the cursor instead of touching the cart.
+func TestRestaurantArrowsAdjustQtyOnlyWhenInCart(t *testing.T) {
+	m := newAtMenu()
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
+	m = u.(Model)
+
+	// ↓ before anything is in the cart moves the cursor (no add).
+	first, _ := m.rest.Selected()
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = u.(Model)
+	moved, _ := m.rest.Selected()
+	if m.cartTotal() != 0 {
+		t.Fatalf("↓ on an empty cart must not add; total=%d", m.cartTotal())
+	}
+	if moved.Name == first.Name {
+		t.Fatalf("↓ before add should move the cursor, stayed on %q", first.Name)
+	}
+
+	// Back to the first dish; Enter adds it (Cold Coffee, non-customizable).
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // add -> qty 1
+	m = u.(Model)
+	if m.qtyMap()["bt-cold-coffee"] != 1 {
+		t.Fatalf("Enter should add the focused dish; qtyMap=%v", m.qtyMap())
+	}
+
+	// Now in the cart: ↑ increments to 2.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = u.(Model)
+	if m.qtyMap()["bt-cold-coffee"] != 2 {
+		t.Fatalf("↑ on an in-cart dish should increment; qtyMap=%v", m.qtyMap())
+	}
+	// ↓ twice returns to 0 and removes it.
+	for i := 0; i < 2; i++ {
+		u, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m = u.(Model)
+	}
+	if len(m.lines) != 0 {
+		t.Fatalf("↓ to zero should remove the dish; lines=%v", m.lines)
 	}
 }
 
@@ -721,8 +757,7 @@ func openSecondRestaurantWithFirstInCart(t *testing.T) (Model, string) {
 	step := func(k tea.KeyMsg) { u, _ := m.Update(k); m = u.(Model) }
 
 	step(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
-	step(tea.KeyMsg{Type: tea.KeyEnter}) // select first item
-	step(tea.KeyMsg{Type: tea.KeyUp})    // +1 -> add
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add first item
 	first := m.cartRestaurant
 	if first == "" || len(m.lines) == 0 {
 		t.Fatalf("setup: expected an item in the cart from %q", first)
@@ -824,9 +859,8 @@ func TestSameRestaurantNoConflict(t *testing.T) {
 	m := newAtMenu()
 	step := func(k tea.KeyMsg) { u, _ := m.Update(k); m = u.(Model) }
 	step(tea.KeyMsg{Type: tea.KeyEnter}) // open Blue Tokai
-	step(tea.KeyMsg{Type: tea.KeyEnter}) // select first item
-	step(tea.KeyMsg{Type: tea.KeyUp})    // +1 -> add
-	step(tea.KeyMsg{Type: tea.KeyUp})    // +1 -> add again, same restaurant
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add first item
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add again, same restaurant
 
 	if m.conflictOpen {
 		t.Fatal("adding from the same restaurant must not open the modal")
@@ -851,8 +885,7 @@ func TestSnacksCrossPlaceNoConflict(t *testing.T) {
 	if m.screen != scrRestaurant {
 		t.Fatal("setup: expected restaurant screen")
 	}
-	step(tea.KeyMsg{Type: tea.KeyEnter}) // select first item
-	step(tea.KeyMsg{Type: tea.KeyUp})    // +1 -> add
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add first item
 	first := m.cartRestaurant
 	if first == "" || len(m.lines) == 0 {
 		t.Fatalf("setup: expected item in cart from %q", first)
@@ -871,8 +904,7 @@ func TestSnacksCrossPlaceNoConflict(t *testing.T) {
 	}
 
 	// Add from second snack place — must NOT conflict
-	step(tea.KeyMsg{Type: tea.KeyEnter}) // select
-	step(tea.KeyMsg{Type: tea.KeyUp})    // +1 -> add
+	step(tea.KeyMsg{Type: tea.KeyEnter})
 
 	if m.conflictOpen {
 		t.Fatal("adding from a different snack place must NOT open the conflict modal")
@@ -894,8 +926,7 @@ func TestSnacksToFoodConflicts(t *testing.T) {
 	if m.screen != scrRestaurant {
 		t.Fatal("setup: expected restaurant screen")
 	}
-	step(tea.KeyMsg{Type: tea.KeyEnter}) // select item
-	step(tea.KeyMsg{Type: tea.KeyUp})    // +1 -> add
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add item
 	if len(m.lines) == 0 {
 		t.Fatal("setup: expected item in snacks cart")
 	}
@@ -907,8 +938,7 @@ func TestSnacksToFoodConflicts(t *testing.T) {
 	if m.screen != scrRestaurant {
 		t.Fatal("setup: expected food restaurant screen")
 	}
-	step(tea.KeyMsg{Type: tea.KeyEnter}) // select dish
-	step(tea.KeyMsg{Type: tea.KeyUp})    // +1 -> add (may open customize modal if item has add-ons)
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // try to add (may open customize modal if item has add-ons)
 	if m.customizeOpen {
 		// The selected item is customizable — confirm the customize modal so
 		// commitAdd is reached and the conflict check fires.
@@ -931,8 +961,7 @@ func TestUsualCrossRestaurantOpensConflict(t *testing.T) {
 	step(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}) // 2nd coffee place
 	step(tea.KeyMsg{Type: tea.KeyEnter})                     // open it
 	second := m.rest.PlaceData().Name
-	step(tea.KeyMsg{Type: tea.KeyEnter}) // select its first item
-	step(tea.KeyMsg{Type: tea.KeyUp})    // +1 -> add
+	step(tea.KeyMsg{Type: tea.KeyEnter}) // add its first item
 	step(tea.KeyMsg{Type: tea.KeyEsc})   // back to menu
 	if len(m.lines) == 0 || m.cartRestaurant != second {
 		t.Fatalf("setup: expected cart seeded from %q, got %d lines / %q", second, len(m.lines), m.cartRestaurant)

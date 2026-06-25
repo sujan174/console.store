@@ -143,11 +143,8 @@ func TestLiveCartSyncFires(t *testing.T) {
 	m.screen = scrRestaurant
 	m.rest = screens.NewRestaurant(place, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
 
-	// Select the dish, then ↑ to add a unit — in live mode with SwiggyID set, the
-	// add must return a SyncCart cmd.
-	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select
-	m = u.(Model)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyUp}) // +1 -> add
+	// Add an item — in live mode with SwiggyID set, must return a SyncCart cmd.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("adding item in live mode must return a SyncCart cmd")
 	}

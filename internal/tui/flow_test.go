@@ -19,9 +19,8 @@ func TestFlowMenuToCart(t *testing.T) {
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	// open first restaurant
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
-	// select first dish, then ↑ to add a unit
+	// add first dish
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
-	tm.Send(tea.KeyMsg{Type: tea.KeyUp})
 	// go to cart
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
 

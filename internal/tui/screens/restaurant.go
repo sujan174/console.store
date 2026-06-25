@@ -22,7 +22,6 @@ type Restaurant struct {
 
 	category string // active category filter; "" or "All" = no filter
 	vegOnly  bool
-	chosen   bool           // a dish is selected: ↑/↓ adjust its qty instead of moving the cursor
 	qtyByID  map[string]int // cart quantities (for rebuilding rows after filter change)
 }
 
@@ -291,13 +290,6 @@ func (s Restaurant) stepCategory(d int) Restaurant {
 	return s.WithCategory(cats[cur])
 }
 
-// Chosen reports whether a dish is selected for quantity adjustment (↑/↓ change
-// its qty instead of moving the cursor).
-func (s Restaurant) Chosen() bool { return s.chosen }
-
-// WithChosen sets the selected/qty-adjust mode.
-func (s Restaurant) WithChosen(v bool) Restaurant { s.chosen = v; return s }
-
 // VegOnly reports whether the veg-only filter is active.
 func (s Restaurant) VegOnly() bool { return s.vegOnly }
 
@@ -445,26 +437,15 @@ func (s Restaurant) View() string {
 		b.WriteString("  " + theme.CursorStyle.Render("/"+s.list.Filter()) + "\n")
 	}
 
-	// select-mode caption: which dish ↑/↓ will adjust.
-	if s.chosen {
-		if it, ok := s.Selected(); ok {
-			b.WriteString("  " + theme.GreenStyle.Render("● selecting ") +
-				theme.BrightStyle.Render(it.Name) +
-				theme.FaintStyle.Render("   ↑ +1   ↓ −1") + "\n")
-		}
-	}
-
 	b.WriteString("\n")
 	b.WriteString(s.list.View())
 	b.WriteString("\n")
 	if ql := s.quickLook(w); ql != "" {
 		b.WriteString(ql + "\n")
 	}
-	if s.chosen {
-		b.WriteString(components.Hint("↑", "+ qty", "↓", "− qty", "↵", "done", "←→", "category", "esc", "back"))
-	} else {
-		b.WriteString(components.Hint("↑↓", "move", "↵", "select", "←→", "category", "v", "veg", "c", "cart", "esc", "back"))
-	}
+	// ↵ adds the focused dish; once it is in the cart ↑/↓ adjust its quantity
+	// (↓ to zero removes it), otherwise ↑/↓ move between dishes.
+	b.WriteString(components.Hint("↵", "add", "↑↓", "qty / move", "←→", "category", "v", "veg", "c", "cart", "esc", "back"))
 	return b.String()
 }
 
