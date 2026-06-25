@@ -2,7 +2,9 @@ package swiggy
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
+	"strings"
 )
 
 // These structs decode the fields console.store uses; unknown fields are
@@ -170,6 +172,29 @@ type cartData struct {
 	Restaurant struct {
 		Name string `json:"name"`
 	} `json:"restaurant"`
+}
+
+// cartError returns a non-nil error when Swiggy rejected the cart operation
+// (error codes present, an explicit successful:false, or a non-success status
+// with no cart data). A successful empty cart (statusCode 0, data null, no
+// error codes) is NOT an error. Used so cart-sync failures surface to the user
+// instead of silently falling back to the placeholder bill.
+func (e cartEnvelope) cartError() error {
+	rejected := len(e.ErrorCodes) > 0 || (e.Successful != nil && !*e.Successful)
+	if !rejected && e.StatusCode != 0 && e.Data == nil {
+		rejected = true
+	}
+	if !rejected {
+		return nil
+	}
+	msg := e.StatusMessage
+	if msg == "" {
+		msg = "cart update rejected"
+	}
+	if len(e.ErrorCodes) > 0 {
+		return fmt.Errorf("swiggy: %s (%s)", msg, strings.Join(e.ErrorCodes, ", "))
+	}
+	return fmt.Errorf("swiggy: %s", msg)
 }
 
 // toCart converts a decoded cartEnvelope into the typed Cart. An empty cart

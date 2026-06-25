@@ -52,6 +52,9 @@ func (c *Client) GetFoodCart(ctx context.Context, addressID, restaurantName stri
 	if err != nil {
 		return Cart{}, err
 	}
+	if cerr := env.cartError(); cerr != nil {
+		return Cart{}, cerr
+	}
 	return env.toCart(), nil
 }
 
@@ -63,14 +66,12 @@ func (c *Client) UpdateFoodCart(ctx context.Context, addressID, restaurantID, re
 	if err != nil {
 		return Cart{}, err
 	}
-	// Swiggy returns HTTP 200 with an in-body failure (e.g. item unavailable);
-	// surface it as an error so the TUI does not silently believe the add stuck.
-	if env.Successful != nil && !*env.Successful {
-		msg := env.StatusMessage
-		if msg == "" {
-			msg = "cart update failed"
-		}
-		return Cart{}, &MCPError{Code: env.StatusCode, Message: msg}
+	// Swiggy returns HTTP 200 with an in-body failure (item unavailable, invalid
+	// add-on combination, etc.). Surface it as an error — keyed on error codes /
+	// status, not just the `successful` flag (which is often absent) — so the TUI
+	// shows the real reason instead of silently falling back to a placeholder bill.
+	if cerr := env.cartError(); cerr != nil {
+		return Cart{}, cerr
 	}
 	return env.toCart(), nil
 }
