@@ -51,6 +51,29 @@ func TestBrokerBackendPinsAccountAndMapsSection(t *testing.T) {
 	}
 }
 
+func TestBrokerBackendUpdateCartPinsAccount(t *testing.T) {
+	rpc := &fakeRPC{}
+	be := NewBrokerBackend(rpc, "acct-7")
+	items := []api.CartItem{{ItemID: "item-1", Quantity: 2}}
+	if _, err := be.UpdateCart("a1", "r1", "Blue Tokai", items); err != nil {
+		t.Fatal(err)
+	}
+	if rpc.lastAccount != "acct-7" {
+		t.Fatalf("UpdateCart account = %q; want acct-7", rpc.lastAccount)
+	}
+}
+
+func TestBrokerBackendPlaceOrderPinsAccount(t *testing.T) {
+	rpc := &fakeRPC{}
+	be := NewBrokerBackend(rpc, "acct-7")
+	if _, err := be.PlaceOrder("a1"); err != nil {
+		t.Fatal(err)
+	}
+	if rpc.lastAccount != "acct-7" {
+		t.Fatalf("PlaceOrder account = %q; want acct-7", rpc.lastAccount)
+	}
+}
+
 func TestBrokerBackendIsBackend(t *testing.T) {
 	var _ Backend = NewBrokerBackend(&fakeRPC{}, "x")
 }
