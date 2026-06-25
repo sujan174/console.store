@@ -30,7 +30,8 @@ type MenuItem struct {
 	Veg          bool
 	Description  string
 	Rating       float64
-	Customizable bool // has variants or add-ons (fetch options before adding)
+	Customizable bool
+	Category     string
 }
 
 type Menu struct {

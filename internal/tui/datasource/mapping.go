@@ -42,7 +42,7 @@ func toMenuPlace(m api.Menu) catalog.Place {
 		items[i] = catalog.Item{
 			ID: it.ID, SwiggyID: it.ID, Name: it.Name, Price: it.Price,
 			Veg: it.Veg, Desc: it.Description, Rating: it.Rating,
-			Customizable: it.Customizable,
+			Customizable: it.Customizable, Category: it.Category,
 		}
 	}
 	return catalog.Place{ID: m.RestaurantID, SwiggyID: m.RestaurantID, Items: items}

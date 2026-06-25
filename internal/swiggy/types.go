@@ -57,6 +57,7 @@ type MenuItem struct {
 	Bestseller  bool    `json:"isBestseller"`
 	HasVariants bool    `json:"hasVariants"`
 	HasAddons   bool    `json:"hasAddons"`
+	Category    string  `json:"-"` // filled by collect(); not from JSON
 }
 
 // menuEnvelope matches get_restaurant_menu. A category EITHER holds items
@@ -69,12 +70,21 @@ type menuEnvelope struct {
 }
 
 type menuCategory struct {
+	Title         string         `json:"title"`
 	Items         []MenuItem     `json:"items"`
 	Subcategories []menuCategory `json:"subcategories"`
 }
 
+// collect flattens the category tree, tagging each item with the most specific
+// (sub)category title it belongs to.
 func (c menuCategory) collect() []MenuItem {
-	out := append([]MenuItem(nil), c.Items...)
+	out := make([]MenuItem, 0, len(c.Items))
+	for _, it := range c.Items {
+		if it.Category == "" {
+			it.Category = c.Title
+		}
+		out = append(out, it)
+	}
 	for _, sub := range c.Subcategories {
 		out = append(out, sub.collect()...)
 	}

@@ -89,6 +89,7 @@ type Item struct {
 	// Options is filled on demand by that fetch; empty until then.
 	Customizable bool
 	Options      []OptionGroup
+	Category     string // menu (sub)category title; live only, "" in mock
 }
 
 // Place is a restaurant/store. SwiggyID maps to a live restaurant id.
