@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -311,5 +312,24 @@ func TestStaleMenuLoadIgnored(t *testing.T) {
 	}
 	if len(got.Items) == 0 || got.Items[0].Name != "Bitem" {
 		t.Fatalf("stale A load injected wrong menu into B: items=%+v", got.Items)
+	}
+}
+
+// TestCartChipShowsLiveGrandTotal: once Swiggy's real cart is known, the chip
+// (shown on every page) reflects the true line count + grand total including
+// delivery + taxes, not the local item subtotal.
+func TestCartChipShowsLiveGrandTotal(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	m := New(render.Caps{}, WithLiveBackend(&liveFake{}, snap, "acct-1", ""), WithSeededSnapshot())
+	m.liveCart = api.Cart{
+		ItemTotal: 250, Delivery: 29, Taxes: 18, Total: 297,
+		Lines: []api.CartLine{{ItemID: "i1", Name: "Latte", Quantity: 2, Price: 125}},
+	}
+	chip := m.cartChip()
+	if !strings.Contains(chip, "297") {
+		t.Fatalf("chip should show grand total 297, got %q", chip)
+	}
+	if !strings.Contains(chip, "2") {
+		t.Fatalf("chip should show live line count 2, got %q", chip)
 	}
 }

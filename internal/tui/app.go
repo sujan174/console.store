@@ -1204,7 +1204,20 @@ func cartChipStr(count, total int) string {
 }
 
 // cartChip / imCartChip are the formatted chips for the food / Instamart carts.
-func (m Model) cartChip() string   { return cartChipStr(m.cartCount(), m.cartTotal()) }
+// In live mode, once Swiggy's real cart is known the chip shows the true line
+// count + grand total (item subtotal + delivery + taxes) so every page agrees
+// with what Place Order will charge. Before any live cart exists it falls back
+// to the local optimistic lines (instant feedback on the first add).
+func (m Model) cartChip() string {
+	if m.live && len(m.liveCart.Lines) > 0 {
+		n := 0
+		for _, l := range m.liveCart.Lines {
+			n += l.Quantity
+		}
+		return cartChipStr(n, m.liveCart.Total)
+	}
+	return cartChipStr(m.cartCount(), m.cartTotal())
+}
 func (m Model) imCartChip() string { return cartChipStr(m.imCartCount(), m.imCartTotal()) }
 
 // cartRestaurantServes reports whether the cart's restaurant/section is serviceable
