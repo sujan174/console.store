@@ -2,15 +2,29 @@ package datasource
 
 import (
 	"sort"
+	"strings"
 
 	"console.store/internal/broker/api"
 	"console.store/internal/catalog"
 )
 
+// cleanAddrLine strips a short, digit-free "<name>: " prefix that Swiggy prepends
+// to the formatted address (e.g. "Sujan: FD 46 HAL…" → "FD 46 HAL…"). A delivery
+// line should show the place, not the recipient's name. Real address parts start
+// with a number or are longer/comma-bearing, so they're left intact.
+func cleanAddrLine(s string) string {
+	if i := strings.Index(s, ": "); i > 0 && i <= 24 {
+		if prefix := s[:i]; !strings.ContainsAny(prefix, "0123456789,") {
+			return strings.TrimSpace(s[i+2:])
+		}
+	}
+	return s
+}
+
 func toAddresses(in []api.Address) []catalog.Address {
 	out := make([]catalog.Address, len(in))
 	for i, a := range in {
-		out[i] = catalog.Address{ID: a.ID, Label: a.Label, City: a.City, Line: a.Line, Full: a.Full, Lat: a.Lat, Lng: a.Lng}
+		out[i] = catalog.Address{ID: a.ID, Label: a.Label, City: a.City, Line: cleanAddrLine(a.Line), Full: a.Full, Lat: a.Lat, Lng: a.Lng}
 	}
 	return out
 }

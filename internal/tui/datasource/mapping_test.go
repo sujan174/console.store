@@ -82,3 +82,17 @@ func choiceIDs(g catalog.OptionGroup) []string {
 	}
 	return ids
 }
+
+func TestCleanAddrLineStripsNamePrefix(t *testing.T) {
+	cases := map[string]string{
+		"Sujan: FD 46 HAL SENIOR Off Officers Enclave": "FD 46 HAL SENIOR Off Officers Enclave",
+		"FD 46 HAL SENIOR Off":                         "FD 46 HAL SENIOR Off", // no prefix → unchanged
+		"12 HSR Layout, BLR":                           "12 HSR Layout, BLR",   // digit-led → unchanged
+		"Flat 2: Green Park":                           "Flat 2: Green Park",   // prefix has a digit → keep
+	}
+	for in, want := range cases {
+		if got := cleanAddrLine(in); got != want {
+			t.Errorf("cleanAddrLine(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
