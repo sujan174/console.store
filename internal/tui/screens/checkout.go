@@ -21,6 +21,10 @@ type Checkout struct {
 	eta        string
 	placing    bool // true while PlaceOrderCmd is in-flight
 	bill       Bill // Swiggy's real pricing breakdown (live mode)
+	cursor     int
+	liveMode   bool
+	syncErr    string
+	mutating   bool
 }
 
 func NewCheckout(restaurant string, addr catalog.Address, lines []CartLine, eta string) Checkout {
@@ -43,6 +47,38 @@ func (c Checkout) WithPlacing(placing bool) Checkout {
 	c.placing = placing
 	return c
 }
+
+// WithCursor sets the focused line index (clamped in View).
+func (c Checkout) WithCursor(i int) Checkout { c.cursor = i; return c }
+
+// Cursor returns the focused line index.
+func (c Checkout) Cursor() int { return c.cursor }
+
+// WithLiveSync marks the page live and carries the last sync error (drives the
+// bill's syncing/error state, same as the old cart screen).
+func (c Checkout) WithLiveSync(live bool, syncErr string) Checkout {
+	c.liveMode = live
+	c.syncErr = syncErr
+	return c
+}
+
+// WithMutating marks a reduce/delete sync as in flight (freezes the CTA + line).
+func (c Checkout) WithMutating(m bool) Checkout { c.mutating = m; return c }
+
+func (c Checkout) clampCursor() int {
+	i := c.cursor
+	if i >= len(c.lines) {
+		i = len(c.lines) - 1
+	}
+	if i < 0 {
+		i = 0
+	}
+	return i
+}
+
+// Up / Down move the line cursor.
+func (c Checkout) Up() Checkout   { c.cursor--; c.cursor = c.clampCursor(); return c }
+func (c Checkout) Down() Checkout { c.cursor++; c.cursor = c.clampCursor(); return c }
 
 func (c Checkout) IsPlaced() bool { return c.placed }
 
@@ -109,9 +145,48 @@ func (c Checkout) summaryView() string {
 	b.WriteString("  " + label("from") + theme.TextStyle.Render(from) + "\n")
 	b.WriteString("  " + label("pay") + theme.GoldStyle.Render("Cash / UPI to rider on delivery") + "\n")
 
-	if c.bill.Live {
+	// Item list: one row per line, full-bleed cursor bar. The focused row shows
+	// the restaurant-style − ×N + stepper; others show a plain ×N. Customized
+	// lines keep a faint "+ <add-ons>" summary after the name.
+	if len(c.lines) > 0 {
+		cur := c.clampCursor()
+		list := components.List{Cursor: cur}
+		for i, l := range c.lines {
+			name := theme.BrightStyle.Render(l.Item.Name)
+			if s := AddOnSummary(l.AddOns); s != "" {
+				name += theme.FaintStyle.Render("  + " + s)
+			}
+			total := theme.PriceStyle.Render(fmt.Sprintf("₹%d", l.UnitPrice()*l.Qty))
+			var right string
+			if i == cur {
+				updating := ""
+				if c.mutating {
+					updating = "  " + theme.DimStyle.Render("updating…")
+				}
+				stepper := theme.FavStyle.Render("−") + " " +
+					theme.GreenStyle.Render(fmt.Sprintf("×%d", l.Qty)) + " " +
+					theme.GreenStyle.Render("+")
+				right = stepper + updating + "    " + total
+			} else {
+				right = theme.DimStyle.Render(fmt.Sprintf("×%d", l.Qty)) + "    " + total
+			}
+			list.Rows = append(list.Rows, components.Row{Left: name, Right: right, BarGreen: i == cur})
+		}
+		b.WriteString(list.View())
+	}
+
+	switch {
+	case c.bill.Live:
 		b.WriteString(renderBill(w, c.bill))
-	} else {
+	case c.liveMode:
+		b.WriteString(components.DashRule())
+		if c.syncErr != "" {
+			b.WriteString("  " + theme.FavStyle.Render("couldn't sync — "+c.syncErr) + "\n")
+		} else {
+			b.WriteString("  " + theme.DimStyle.Render("syncing cart…") + "\n")
+		}
+		b.WriteString(components.DashRule())
+	default:
 		b.WriteString(components.DashRule())
 		b.WriteString("  " + justify(
 			theme.BrightStyle.Render("to pay (COD)"),
@@ -121,8 +196,11 @@ func (c Checkout) summaryView() string {
 
 	// Full-bleed place-order bar: green left bar + selected-row background.
 	barLabel := " > place order "
-	if c.placing {
+	switch {
+	case c.placing:
 		barLabel = " placing order… "
+	case c.mutating:
+		barLabel = " syncing… "
 	}
 	bar := theme.GreenStyle.Render("▌") +
 		lipgloss.NewStyle().
@@ -133,7 +211,7 @@ func (c Checkout) summaryView() string {
 
 	b.WriteString("  " + theme.FavStyle.Render("no online payment — pay the rider on delivery") + "\n")
 	b.WriteString("  " + theme.DimStyle.Render("orders can't be cancelled once placed") + "\n\n")
-	b.WriteString(components.Hint("↵", "place order", "esc", "back"))
+	b.WriteString(components.Hint("↑↓", "move", "←→", "qty", "⌫", "remove", "↵", "place order", "esc", "back"))
 	return b.String()
 }
 

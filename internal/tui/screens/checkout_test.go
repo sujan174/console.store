@@ -47,3 +47,23 @@ func TestCheckoutWithPlacingChangesCTA(t *testing.T) {
 		t.Errorf("placing view should NOT show '> place order' CTA; got:\n%s", placing)
 	}
 }
+
+func TestCheckoutRendersStepperOnFocusedLine(t *testing.T) {
+	lines := []screens.CartLine{
+		{Item: catalog.Item{ID: "i1", Name: "Iced Americano", Price: 169}, Qty: 2},
+		{Item: catalog.Item{ID: "i2", Name: "Cold Brew", Price: 260}, Qty: 1},
+	}
+	c := screens.NewCheckout("Blue Tokai", catalog.Address{Line: "HSR", Label: "home"}, lines, "~30 min").
+		WithLiveSync(true, "").WithCursor(0)
+	v := c.View(0)
+	if !strings.Contains(v, "Iced Americano") || !strings.Contains(v, "Cold Brew") {
+		t.Fatalf("checkout must list every line:\n%s", v)
+	}
+	// Focused line (cursor 0) shows the − ×N + stepper and its line total.
+	if !strings.Contains(v, "×2") || !strings.Contains(v, "−") || !strings.Contains(v, "+") {
+		t.Fatalf("focused line missing − ×N + stepper:\n%s", v)
+	}
+	if !strings.Contains(v, "₹338") { // 169 × 2
+		t.Fatalf("focused line missing line total ₹338:\n%s", v)
+	}
+}
