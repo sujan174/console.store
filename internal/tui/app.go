@@ -89,7 +89,6 @@ type Model struct {
 	screen         screen
 	menu           screens.Menu
 	rest           screens.Restaurant
-	cart           screens.Cart
 	addrScreen     screens.Address
 	checkout       screens.Checkout
 	lines          []screens.CartLine
@@ -2329,60 +2328,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.rest = nr.(screens.Restaurant)
 				return m, cmd
 			}
-		case scrCart:
-			switch k.String() {
-			case "esc":
-				m.screen = scrMenu
-				return m, nil
-			case "enter":
-				if len(m.cartScreenLines()) > 0 {
-					m.checkout = screens.NewCheckout(m.cartHeader(), m.addr, m.cartScreenLines(), m.cartEta()).WithBill(m.billFromLive())
-					m.screen = scrCheckout
-					return m, nil
-				}
-			}
-			// When showing the live Swiggy cart, the lines are Swiggy's truth —
-			// qty editing would overwrite the local lines (which carry the
-			// variant/add-on selections) with the flattened display copy. So the
-			// live cart is display-only; ↑↓ still move the cursor. Edit quantities
-			// from the restaurant screen (+/−).
-			liveDisplay := m.live && m.cartLoaded
-			mutated := false
-			switch k.String() {
-			case "j", "down":
-				m.cart = m.cart.Down()
-			case "k", "up":
-				m.cart = m.cart.Up()
-			case "right", "l":
-				if !liveDisplay {
-					m.cart = m.cart.Right()
-					mutated = true
-				}
-			case "left", "h":
-				if !liveDisplay {
-					m.cart = m.cart.Left()
-					mutated = true
-				}
-			}
-			if liveDisplay {
-				return m, nil // display-only; never write Swiggy's lines back
-			}
-			// keep router's authoritative lines in sync with cart edits
-			m.lines = m.cart.Lines()
-			// emptying the cart here must also release the restaurant binding —
-			// otherwise the stale name lingers on the next cart view (and would
-			// wrongly trigger a cart-conflict against a different restaurant).
-			if len(m.lines) == 0 {
-				m.cartRestaurant = ""
-				m.cartSection = ""
-			}
-			m.menu = m.menu.WithCartChip(m.cartChip())
-			if mutated {
-				// qty/remove on the cart screen must reach Swiggy too (UpdateCart
-				// when items remain, flush when the cart just went empty).
-				return m, m.liveCartCmd()
-			}
-			return m, nil
 		case scrCheckout:
 			// Freeze: while a reduce/delete sync is in flight, ignore all keys
 			// until CartSyncedMsg clears cartMutating (race guard).
@@ -2543,8 +2488,6 @@ func (m Model) screenLabel() string {
 		return "menu"
 	case scrRestaurant:
 		return "menu"
-	case scrCart:
-		return "cart"
 	case scrCheckout:
 		return "checkout"
 	case scrConfirm:
@@ -2704,8 +2647,6 @@ func (m Model) View() string {
 	case scrRestaurant:
 		chrome := 14 + screens.BrandHeaderLines
 		body = m.rest.WithMaxRows(m.listRows(chrome)).View()
-	case scrCart:
-		body = m.cart.View()
 	case scrCheckout, scrConfirm:
 		body = m.checkout.WithPlacing(m.placingOrder).View(m.frame)
 	case scrTracking:
@@ -2796,12 +2737,6 @@ func errIsNeedsAuth(err error) bool {
 // the item list are always in sync without the flattened Swiggy copy overwriting
 // local selections.
 func (m Model) cartScreenLines() []screens.CartLine { return m.lines }
-
-// buildCart constructs the cart screen from the display lines + live bill.
-func (m Model) buildCart() screens.Cart {
-	return screens.NewCart(m.cartHeader(), m.cartScreenLines()).
-		WithEta(m.cartEta()).WithBill(m.billFromLive()).WithLiveSync(m.live, m.cartSyncErr)
-}
 
 // afterCheckoutReduce finalizes a reduce/delete on the checkout: releases the
 // restaurant binding if the cart is now empty, sets the freeze, rebuilds the
