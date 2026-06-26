@@ -2695,6 +2695,12 @@ func splitHint(body string) (content, hint string) {
 	if last < 0 {
 		return body, ""
 	}
+	// Only lift the last line as a hint when it FLOATS after a void (a blank line
+	// precedes it). A contiguous list — like the two-pane browse, which ends with
+	// a restaurant row — must NOT have its final row yanked to the bottom.
+	if last == 0 || strings.TrimSpace(lines[last-1]) != "" {
+		return body, ""
+	}
 	hint = lines[last]
 	c := lines[:last]
 	for len(c) > 0 && strings.TrimSpace(c[len(c)-1]) == "" {

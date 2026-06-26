@@ -417,11 +417,6 @@ func (m Menu) twoPaneView() string {
 
 	var main strings.Builder
 
-	// The delivery address and the cart chip both live in the top brand bar now,
-	// so the main pane opens straight into the sections (one spacer keeps it off
-	// the banner rule).
-	main.WriteString("\n")
-
 	switch {
 	case m.searchMode:
 		main.WriteString(m.searchInputLine() + "\n")
