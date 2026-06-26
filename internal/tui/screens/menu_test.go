@@ -191,3 +191,11 @@ func TestMenuMockPaneUnchanged(t *testing.T) {
 		t.Errorf("mock pane must be unchanged (tabs, no rail sections):\n%s", v)
 	}
 }
+
+func TestMenuCategoryShowsHeader(t *testing.T) {
+	m := liveMenu().WithCategoryHeader("Coffee")
+	m.places = []catalog.Place{{Name: "Blue Tokai"}}
+	if v := m.View(); !strings.Contains(v, "Coffee") {
+		t.Fatalf("category flat list missing its section header:\n%s", v)
+	}
+}

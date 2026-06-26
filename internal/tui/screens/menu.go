@@ -35,6 +35,7 @@ type Menu struct {
 	searching       bool
 	chipLabels      []string
 	chipActive      int
+	catHeader       string // section header for a category flat list (e.g. "Coffee")
 	hideSectionTabs bool
 	// two-pane live fields (only active when hasRail is true)
 	rail            Rail
@@ -130,6 +131,17 @@ func (m Menu) WithChips(labels []string, active int) Menu {
 	m.chipLabels = labels
 	m.chipActive = active
 	return m
+}
+
+// WithCategoryHeader sets the section header shown above a category's flat list
+// (so categories read consistently with Home's "popular near you" divider).
+func (m Menu) WithCategoryHeader(label string) Menu { m.catHeader = label; return m }
+
+// sectionRule renders a centered "── label ──" divider, matching the Home
+// section headers.
+func sectionRule(label string) string {
+	rule := theme.Fg(theme.Div2).Render(strings.Repeat("─", 20))
+	return "  " + rule + " " + theme.DimStyle.Render(label) + " " + rule + "\n"
 }
 
 // ChipCount returns the number of cuisine chips.
@@ -303,10 +315,7 @@ func (m Menu) sectionedListView() string {
 		b.WriteString(m.placeRow(p, idx == cursor) + "\n")
 	}
 
-	renderHeader := func(label string) {
-		rule := theme.Fg(theme.Div2).Render(strings.Repeat("─", 20))
-		b.WriteString("  " + rule + " " + theme.DimStyle.Render(label) + " " + rule + "\n")
-	}
+	renderHeader := func(label string) { b.WriteString(sectionRule(label)) }
 
 	idx := 0
 	if len(m.usuals) > 0 {
@@ -375,7 +384,10 @@ func (m Menu) twoPaneView() string {
 	case m.hasSections:
 		main.WriteString(m.sectionedListView())
 	default:
-		// plain flat list (live mode, non-Home category, no sections set)
+		// plain flat list (live mode, a category) — header matches Home's dividers.
+		if m.catHeader != "" {
+			main.WriteString(sectionRule(m.catHeader))
+		}
 		if len(m.places) == 0 && m.loading {
 			main.WriteString(theme.GoldStyle.Render("loading restaurants…") + "\n")
 		}

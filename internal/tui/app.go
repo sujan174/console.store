@@ -312,13 +312,13 @@ func (m Model) buildMenu() screens.Menu {
 			results := m.liveRepo().PlacesByQuery(m.addr, datasource.SearchKey(m.searchQuery))
 			menu = menu.WithSearchMode(true, m.searchQuery, results, len(results), m.searchPending).
 				WithSearchCaret(m.searchCaret).WithSearchCorrected(m.searchCorrected)
-		} else if _, isCat := rail.IsCategory(m.railActive); isCat {
-			// Category view: use the flat places path (no sections header).
-			// viewPlaces already holds catPlaces; WithSections is intentionally NOT
-			// called so mainPlaces() falls through to the default flat-list branch
-			// and no "nearby" section header is printed. WithLoading shows a cue
-			// while the (auto-fired, on-hover) category load is still in flight.
+		} else if catIdx, isCat := rail.IsCategory(m.railActive); isCat {
+			// Category view: flat places path with a section header (the category
+			// name) so it reads consistently with Home's "popular near you" divider.
 			menu = menu.WithLoading(m.catPending)
+			if catIdx < len(m.chips) {
+				menu = menu.WithCategoryHeader(m.chips[catIdx].Label)
+			}
 		} else {
 			menu = menu.WithSections(usuals, nearby).WithLoading(m.homePending)
 		}
