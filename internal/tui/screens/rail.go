@@ -85,9 +85,9 @@ func (r Rail) View() string {
 		var row string
 		switch {
 		case i == r.active && r.focus:
-			// Focused + active: blue ▌ bar (matching the list cursor) + bright gold
-			// label — THIS is what you're navigating.
-			row = theme.CursorStyle.Render("▌") + " " + theme.Fg(theme.Gold).Bold(true).Render(railTrunc(e))
+			// Focused + active: gold ▌ bar (matching the gold label) — THIS is what
+			// you're navigating.
+			row = theme.Fg(theme.Gold).Bold(true).Render("▌ " + railTrunc(e))
 		case i == r.active:
 			// The current view, but focus is on the main pane (no bar here).
 			row = "  " + theme.Fg(theme.Gold).Render(railTrunc(e))
