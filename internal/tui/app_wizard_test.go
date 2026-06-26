@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/broker/api"
 	"console.store/internal/catalog"
 	"console.store/internal/tui/render"
 	"console.store/internal/tui/screens"
@@ -41,42 +40,58 @@ func TestVariantGroupsFiltersVariantsOnly(t *testing.T) {
 	}
 }
 
-func TestNextWizardPageDropsSeenGroups(t *testing.T) {
-	m := Model{}
-	m.wizard = screens.NewWizard(
-		catalog.Item{ID: "p", Name: "Pizza", Price: 269},
-		[]catalog.OptionGroup{variant()}, // page 0 group id "v1"
-	)
-	// Swiggy returns the variant-group id again plus a NEW crust group; only the
-	// new one becomes the next page.
-	returned := []catalog.OptionGroup{
-		{ID: "v1", Name: "Choose Size"}, // already seen
-		{ID: "a1", Name: "Crust", Min: 1, Max: 1, Choices: []catalog.Choice{{ID: "c", Name: "Pan"}}},
+func crustSmall() catalog.OptionGroup {
+	return catalog.OptionGroup{ID: "cs", Name: "Crust Small.", Min: 1, Max: 1,
+		Choices: []catalog.Choice{{ID: "ps", Name: "Pan Small", Price: 0, InStock: true}}}
+}
+func crustMedium() catalog.OptionGroup {
+	return catalog.OptionGroup{ID: "cm", Name: "Crust Medium.", Min: 1, Max: 1,
+		Choices: []catalog.Choice{{ID: "pm", Name: "Pan Medium", Price: 0, InStock: true}}}
+}
+func toppings() catalog.OptionGroup {
+	return catalog.OptionGroup{ID: "tp", Name: "Toppings (Regular)", Min: 0, Max: 10,
+		Choices: []catalog.Choice{{ID: "ec", Name: "Extra Cheese", Price: 60, InStock: true}}}
+}
+
+func TestRequiredVsOptionalAddonGroups(t *testing.T) {
+	gs := []catalog.OptionGroup{variant(), crustSmall(), crustMedium(), toppings()}
+	req := requiredAddonGroups(gs)
+	if len(req) != 2 || req[0].ID != "cs" || req[1].ID != "cm" {
+		t.Fatalf("requiredAddonGroups should return the two crust groups, got %+v", req)
 	}
-	next := m.nextWizardPage(returned)
-	if len(next) != 1 || next[0].ID != "a1" {
-		t.Fatalf("nextWizardPage should drop seen groups, got %+v", next)
+	opt := optionalAddonGroups(gs)
+	if len(opt) != 1 || opt[0].ID != "tp" {
+		t.Fatalf("optionalAddonGroups should return toppings only, got %+v", opt)
+	}
+	// The variant group is neither required nor optional add-on.
+	for _, g := range append(req, opt...) {
+		if g.Variant {
+			t.Errorf("variant group leaked into add-on classification: %+v", g)
+		}
 	}
 }
 
-func TestNextWizardPageEmptyWhenAllSeen(t *testing.T) {
-	m := Model{}
-	m.wizard = screens.NewWizard(
-		catalog.Item{ID: "p", Name: "Pizza"},
-		[]catalog.OptionGroup{variant()},
-	)
-	next := m.nextWizardPage([]catalog.OptionGroup{{ID: "v1", Name: "Choose Size"}})
-	if len(next) != 0 {
-		t.Fatalf("all-seen valid_addons should yield no next page, got %+v", next)
+func TestTrialOrderRanksByVariantName(t *testing.T) {
+	req := []catalog.OptionGroup{crustSmall(), crustMedium()}
+	// "Small" → "Crust Small." matches and is tried first.
+	ord := trialOrder(req, "Small")
+	if len(ord) != 2 || ord[0].ID != "cs" {
+		t.Fatalf("Small should try Crust Small. first, got %+v", ord)
+	}
+	// "Medium" → "Crust Medium." first.
+	ord = trialOrder(req, "Medium")
+	if len(ord) != 2 || ord[0].ID != "cm" {
+		t.Fatalf("Medium should try Crust Medium. first, got %+v", ord)
 	}
 }
 
-func TestApiToCatalogGroups(t *testing.T) {
-	in := []api.OptionGroup{{ID: "g", Name: "Crust", Min: 1, Max: 1,
-		Choices: []api.OptionChoice{{ID: "c", Name: "Pan", Price: 50, InStock: true}}}}
-	out := apiToCatalogGroups(in)
-	if len(out) != 1 || out[0].ID != "g" || len(out[0].Choices) != 1 || out[0].Choices[0].Price != 50 {
-		t.Fatalf("conversion wrong: %+v", out)
+func TestTrialOrderDropsOutOfStockGroups(t *testing.T) {
+	soldOut := catalog.OptionGroup{ID: "so", Name: "Crust Large.", Min: 1, Max: 1,
+		Choices: []catalog.Choice{{ID: "x", Name: "Pan Large", Price: 0, InStock: false}}}
+	ord := trialOrder([]catalog.OptionGroup{crustSmall(), soldOut}, "Large")
+	// soldOut has no in-stock choice → dropped; only Crust Small. remains.
+	if len(ord) != 1 || ord[0].ID != "cs" {
+		t.Fatalf("a group with no in-stock choice must be dropped, got %+v", ord)
 	}
 }
 

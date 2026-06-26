@@ -26,6 +26,13 @@ type Wizard struct {
 	loading   bool
 	errMsg    string
 	viewportH int
+	// subtotal is the live price of the current full variant selection, probed
+	// from the cart (search_menu omits variant prices, and with multiple variant
+	// groups — e.g. Crust × Size — only the combination has a price). subPriced
+	// is false while a probe is in flight / before the first result.
+	subtotal  int
+	subPriced bool
+	subShown  bool // whether to render the subtotal line at all
 }
 
 // wizPage is one step: a set of choice groups plus the user's picks for them.
@@ -66,6 +73,17 @@ func (w Wizard) Item() catalog.Item { return w.item }
 func (w Wizard) PageIndex() int     { return w.pageIdx }
 func (w Wizard) Loading() bool      { return w.loading }
 func (w Wizard) Err() string        { return w.errMsg }
+
+// WithSubtotal sets the live price of the current variant selection and shows
+// the subtotal line. priced is false while the probe is in flight ("pricing…").
+func (w Wizard) WithSubtotal(price int, priced bool) Wizard {
+	w.subtotal, w.subPriced, w.subShown = price, priced, true
+	return w
+}
+
+// WithoutSubtotal hides the subtotal line (used when per-choice prices are shown
+// or on a non-final variant page).
+func (w Wizard) WithoutSubtotal() Wizard { w.subShown = false; return w }
 
 func (w Wizard) WithLoading(b bool) Wizard { w.loading = b; return w }
 func (w Wizard) WithErr(s string) Wizard   { w.errMsg = s; return w }
@@ -183,6 +201,42 @@ func (w Wizard) Back() Wizard {
 	return w
 }
 
+// AtVariantPage reports whether the wizard is on page 0 (the variant/size pick).
+func (w Wizard) AtVariantPage() bool { return w.pageIdx == 0 }
+
+// SelectedVariantName returns the name of the chosen variation on the variant
+// page (page 0), used to rank which required add-on group to try first during
+// server-trial discovery. Empty if nothing is picked.
+func (w Wizard) SelectedVariantName() string {
+	_, name := w.selectedVariant()
+	return name
+}
+
+// SelectedVariantID returns the id of the chosen variation — the cache key for a
+// variant's discovered add-on groups. Empty if nothing is picked.
+func (w Wizard) SelectedVariantID() string {
+	id, _ := w.selectedVariant()
+	return id
+}
+
+func (w Wizard) selectedVariant() (id, name string) {
+	if len(w.pages) == 0 {
+		return "", ""
+	}
+	p := w.pages[0]
+	for _, g := range p.groups {
+		if !g.Variant {
+			continue
+		}
+		for _, ch := range g.Choices {
+			if p.picked[g.ID][ch.ID] {
+				return ch.ID, ch.Name
+			}
+		}
+	}
+	return "", ""
+}
+
 // View renders the current page: title, step indicator, the page's groups
 // (radios for single-choice, checkboxes for multi), a loading/error line, and
 // contextual hints (next on intermediate pages, add on the last). The caller
@@ -240,13 +294,18 @@ func (w Wizard) View() string {
 				price = theme.DimStyle.Render("sold out")
 			} else {
 				name = theme.TextStyle.Render(ch.Name)
-				price = theme.FaintStyle.Render("free")
-				if ch.Price > 0 {
-					tag := "+₹"
-					if g.Absolute {
-						tag = "₹"
-					}
-					price = theme.GoldStyle.Render(fmt.Sprintf("%s%d", tag, ch.Price))
+				switch {
+				case g.Absolute && ch.Price > 0:
+					// A priced variant (the full combo price for that choice).
+					price = theme.GoldStyle.Render(fmt.Sprintf("₹%d", ch.Price))
+				case g.Absolute:
+					// A variant whose price Swiggy's menu API omits — shown via the
+					// subtotal line instead (set by the root when it probed it).
+					price = ""
+				case ch.Price > 0:
+					price = theme.GoldStyle.Render(fmt.Sprintf("+₹%d", ch.Price))
+				default:
+					price = theme.FaintStyle.Render("free") // genuinely-free add-on
 				}
 			}
 			cursor := "  "
@@ -280,6 +339,15 @@ func (w Wizard) View() string {
 
 	parts := []string{title, step, ""}
 	parts = append(parts, rows...)
+	// Subtotal — the live price of the current variant selection (probed), shown
+	// only when per-choice prices aren't available for this page.
+	if w.subShown {
+		if w.subPriced {
+			parts = append(parts, "", theme.DimStyle.Render("  subtotal  ")+theme.PriceStyle.Render(fmt.Sprintf("₹%d", w.subtotal)))
+		} else {
+			parts = append(parts, "", theme.DimStyle.Render("  subtotal  pricing…"))
+		}
+	}
 	if status != "" {
 		parts = append(parts, "", status)
 	}

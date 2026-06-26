@@ -73,21 +73,22 @@ func TestLiveNeedsAuthOnAuthError(t *testing.T) {
 func TestLiveMenuEnterFiresLoadMenu(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
 	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
-	// Rail Home view reads from query "" (nearby); seed under that key.
-	snap.SetPlaces("a1", "", []catalog.Place{
+	// Home's "popular near you" reads the first category's query ("coffee").
+	snap.SetPlaces("a1", "coffee", []catalog.Place{
 		{ID: "r1", SwiggyID: "swiggy-r1", Name: "Blue Tokai", Section: catalog.SectionCoffee},
 	})
 	be := &liveFake{}
 	m := New(render.Caps{},
 		WithLiveBackend(be, snap, "acct-1", ""),
 		WithSeededSnapshot(),
+		WithChips([]config.Category{{Label: "Coffee", Query: "coffee"}}),
 	)
 	// Force window size so menu renders.
 	m.w, m.h = 100, 40
 	// Navigate to the menu screen (model starts at scrSplash).
 	m.screen = scrMenu
 
-	// Simulate pressing enter on the menu (restaurant is first in the Home nearby list).
+	// Simulate pressing enter on the menu (restaurant is first in the Home list).
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	um := updated.(Model)
 	if um.screen != scrRestaurant {
@@ -119,9 +120,10 @@ func TestSeededPathSkipsLiveLoads(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("Init must return tick() even when seeded")
 	}
-	// We can't inspect the batch contents directly; instead verify liveInitCmds returns nil.
-	if c := m.liveInitCmds(); c != nil {
-		t.Fatal("liveInitCmds must return nil when seeded (no live loads on boot)")
+	// Seeded skips re-fetching ADDRESSES, but still loads the Home view (usuals +
+	// the popular list) for the seeded address — otherwise the browse is empty.
+	if c := m.liveInitCmds(); c == nil {
+		t.Fatal("seeded liveInitCmds must load Home (usuals + popular) for the seeded address")
 	}
 }
 

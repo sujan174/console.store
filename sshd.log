@@ -1,0 +1,10 @@
+2026/06/26 14:01:16 SSH server listening on 127.0.0.1:2222 — connect with: ssh localhost -p 2222
+2026/06/26 14:07:33 INFO sujan connect 127.0.0.1:59513 true [] xterm-ghostty 82 35 SSH-2.0-OpenSSH_10.3
+2026/06/26 14:07:35 TUI-DEBUG usuals: swiggy mcp error -1: addressId is required. Call get_addresses first to retrieve the user's saved addresses, then pass the selected addressId to this tool.
+Report ID: ERR-MQUOHBPJ-6MUE
+Something went wrong. If this persists, quote report ID: ERR-MQUOHBPJ-6MUE when contacting support at mcp-support@swiggy.in.
+2026/06/26 14:08:11 INFO 127.0.0.1:59513 disconnect 37.465492792s
+2026/06/26 14:08:12 INFO sujan connect 127.0.0.1:59559 true [] xterm-ghostty 82 35 SSH-2.0-OpenSSH_10.3
+2026/06/26 14:08:12 TUI-DEBUG usuals: swiggy mcp error -1: addressId is required. Call get_addresses first to retrieve the user's saved addresses, then pass the selected addressId to this tool.
+Report ID: ERR-MQUOI4TL-8EQR
+Something went wrong. If this persists, quote report ID: ERR-MQUOI4TL-8EQR when contacting support at mcp-support@swiggy.in.

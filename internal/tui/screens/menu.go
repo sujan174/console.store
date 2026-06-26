@@ -222,7 +222,7 @@ func (m Menu) sectionedListView() string {
 	}
 
 	if len(m.nearby) > 0 || len(m.usuals) == 0 {
-		renderHeader("nearby")
+		renderHeader("popular near you")
 		for _, p := range m.nearby {
 			renderRow(p, idx)
 			idx++

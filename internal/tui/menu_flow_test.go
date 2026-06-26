@@ -213,8 +213,8 @@ func TestLiveBrowseHomeShowsUsuals(t *testing.T) {
 	if !strings.Contains(v, "Usual Spot") {
 		t.Errorf("Home view must show the cached usual restaurant\n%s", v)
 	}
-	if !strings.Contains(v, "nearby") {
-		t.Errorf("Home view must show 'nearby' section\n%s", v)
+	if !strings.Contains(v, "popular near you") {
+		t.Errorf("Home view must show the 'popular near you' section\n%s", v)
 	}
 }
 

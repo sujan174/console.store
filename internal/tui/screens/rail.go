@@ -23,7 +23,8 @@ const (
 	RailSearch  = 0
 	RailHome    = 1
 	railCatBase = 2
-	railWidth   = 14 // column width incl. the divider gutter
+	railWidth   = 19 // text column width (the right divider is drawn separately)
+	railInner   = railWidth - 3
 )
 
 // NewRail builds the rail entries: Search, Home, then the categories.
@@ -68,27 +69,41 @@ func (r Rail) IsCategory(i int) (int, bool) {
 	return 0, false
 }
 
+// railTrunc shortens a label to fit the inner column, adding an ellipsis.
+func railTrunc(s string) string {
+	r := []rune(s)
+	if len(r) <= railInner {
+		return s
+	}
+	return string(r[:railInner-1]) + "…"
+}
+
 func (r Rail) View() string {
-	var b strings.Builder
+	rows := make([]string, 0, len(r.entries)+2)
+	rows = append(rows, theme.FaintStyle.Render(" explore"))
 	for i, e := range r.entries {
-		cursor := "  "
-		label := theme.CatOffStyle.Render(e)
-		if i == r.active {
-			if r.focus {
-				cursor = theme.CursorStyle.Render("▸ ")
-			} else {
-				cursor = theme.DimStyle.Render("▸ ")
-			}
-			label = theme.Fg(theme.Gold).Underline(true).Render(e)
+		var row string
+		switch {
+		case i == r.active && r.focus:
+			row = theme.Fg(theme.Gold).Bold(true).Render("▌ " + railTrunc(e))
+		case i == r.active:
+			row = theme.Fg(theme.Gold).Render("▌ " + railTrunc(e))
+		default:
+			row = theme.CatOffStyle.Render("  " + railTrunc(e))
 		}
-		row := cursor + label
-		// pad/truncate to the content width (rail minus the divider gutter)
-		row = lipgloss.NewStyle().Width(railWidth - 2).Render(row)
-		b.WriteString(row + theme.Fg(theme.Div2).Render(" │") + "\n")
+		rows = append(rows, row)
+		if i == RailSearch {
+			rows = append(rows, "") // blank line sets Search apart from the nav list
+		}
 	}
-	// pad to height so the divider runs the full pane
-	for n := len(r.entries); n < r.height; n++ {
-		b.WriteString(lipgloss.NewStyle().Width(railWidth-2).Render("") + theme.Fg(theme.Div2).Render(" │") + "\n")
+
+	block := lipgloss.NewStyle().
+		Width(railWidth).
+		Padding(0, 1, 0, 0).
+		Border(lipgloss.NormalBorder(), false, true, false, false).
+		BorderForeground(lipgloss.Color(theme.Div2))
+	if h := r.height; h > len(rows) {
+		block = block.Height(h)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return block.Render(strings.Join(rows, "\n"))
 }

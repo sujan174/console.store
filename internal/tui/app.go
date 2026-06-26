@@ -275,9 +275,10 @@ func (m Model) buildMenu() screens.Menu {
 		} else if catIdx, isCat := rail.IsCategory(m.railActive); isCat {
 			viewPlaces = m.liveRepo().PlacesByQuery(m.addr, m.chips[catIdx].Query)
 		} else {
-			// Home view: usuals then nearby
+			// Home view: usuals then a populated "popular" list (Swiggy has no
+			// list-all, so Home borrows the first cuisine's results).
 			usuals = m.liveRepo().PlacesByQuery(m.addr, datasource.UsualsKey)
-			nearby = m.liveRepo().PlacesByQuery(m.addr, "")
+			nearby = m.liveRepo().PlacesByQuery(m.addr, m.homeNearbyQuery())
 			viewPlaces = make([]catalog.Place, 0, len(usuals)+len(nearby))
 			viewPlaces = append(viewPlaces, usuals...)
 			viewPlaces = append(viewPlaces, nearby...)
@@ -330,18 +331,27 @@ func (m Model) ensureQuery(query string) tea.Cmd {
 
 // ensureHomeLoaded fires LoadUsuals + LoadPlacesQuery("") if not already cached.
 // Called when the user selects Home on the rail or on initial browse entry.
+// homeNearbyQuery is the keyword used to populate Home's "popular near you"
+// list. Swiggy's search_restaurants REQUIRES a query (there is no list-all), so
+// Home borrows the first configured cuisine — a real, populated default.
+func (m Model) homeNearbyQuery() string {
+	if len(m.chips) > 0 {
+		return m.chips[0].Query
+	}
+	return "pizza"
+}
+
 func (m *Model) ensureHomeLoaded() tea.Cmd {
+	if m.addr.ID == "" {
+		return nil // no address yet; AddressesLoadedMsg fires Home loads after adoption
+	}
 	var cmds []tea.Cmd
 	if !m.usualsLoaded {
 		m.usualsLoaded = true
 		cmds = append(cmds, datasource.LoadUsuals(m.backend, m.snap, m.addr.ID))
 	}
-	if r := m.liveRepo(); r != nil {
-		if places := r.PlacesByQuery(m.addr, ""); len(places) == 0 {
-			cmds = append(cmds, datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, ""))
-		}
-	} else {
-		cmds = append(cmds, datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, ""))
+	if c := m.ensureQuery(m.homeNearbyQuery()); c != nil {
+		cmds = append(cmds, c)
 	}
 	if len(cmds) == 0 {
 		return nil
@@ -1206,14 +1216,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.menu = m.buildMenu()
 		if m.live {
-			// Re-fire Home view loads (nearby + usuals) after address adoption.
-			// Set usualsLoaded=true immediately so liveInitCmds / ensureHomeLoaded
-			// cannot double-fire it; the dispatch here IS the load for the new addr.
-			m.usualsLoaded = true
-			return m, tea.Batch(
-				datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, ""),
-				datasource.LoadUsuals(m.backend, m.snap, m.addr.ID),
-			)
+			// Address just adopted → load Home (usuals + the popular list) for it.
+			// Reset usualsLoaded so the new address's usuals are fetched.
+			m.usualsLoaded = false
+			cmd := m.ensureHomeLoaded()
+			return m, cmd
 		}
 		return m, nil
 	case datasource.PlacesLoadedMsg:
@@ -1442,6 +1449,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if dm.Err != nil {
 			dbgTUI("usuals: %v", dm.Err)
 		}
+		m.usualsLoaded = true // fetched (success or empty); don't refire for this addr
 		m.menu = m.buildMenu()
 		return m, nil
 	case datasource.OrderPlacedMsg:

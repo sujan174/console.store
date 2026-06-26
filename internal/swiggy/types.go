@@ -166,6 +166,9 @@ type cartData struct {
 		Quantity   int         `json:"quantity"`
 		FinalPrice float64     `json:"final_price"`
 		Total      float64     `json:"total"`
+		// valid_addons is nested PER ITEM (not at the data root). It carries the
+		// authoritative per-choice availability (inStock) that search_menu omits.
+		ValidAddons []validAddonGroup `json:"valid_addons"`
 	} `json:"items"`
 	Pricing struct {
 		ItemTotal       float64 `json:"item_total"`
@@ -176,21 +179,21 @@ type cartData struct {
 	Restaurant struct {
 		Name string `json:"name"`
 	} `json:"restaurant"`
-	ValidAddons []validAddonGroup `json:"valid_addons"`
 }
 
-// validAddonGroup decodes one entry of the cart response's valid_addons array —
-// the add-on groups Swiggy scopes to the current variant selection.
+// validAddonGroup decodes one entry of a cart item's valid_addons array. Field
+// names + numeric ids match the LIVE response (group_id / id are numbers;
+// inStock / minAddons / maxAddons are camelCase) — NOT search_menu's shape.
 type validAddonGroup struct {
-	GroupID   string `json:"group_id"`
-	GroupName string `json:"group_name"`
-	MinAddons int    `json:"min_addons"`
-	MaxAddons int    `json:"max_addons"`
+	GroupID   json.Number `json:"group_id"`
+	GroupName string      `json:"group_name"`
+	MinAddons int         `json:"minAddons"`
+	MaxAddons int         `json:"maxAddons"`
 	Choices   []struct {
-		ID      string  `json:"id"`
-		Name    string  `json:"name"`
-		Price   float64 `json:"price"`
-		InStock int     `json:"in_stock"`
+		ID      json.Number `json:"id"`
+		Name    string      `json:"name"`
+		Price   float64     `json:"price"`
+		InStock int         `json:"inStock"`
 	} `json:"choices"`
 }
 
@@ -225,15 +228,23 @@ func (e cartEnvelope) validAddons() []OptionGroup {
 		return nil
 	}
 	var out []OptionGroup
-	for _, g := range e.Data.ValidAddons {
-		og := OptionGroup{ID: g.GroupID, Name: g.GroupName, Min: g.MinAddons, Max: g.MaxAddons}
-		for _, ch := range g.Choices {
-			og.Choices = append(og.Choices, OptionChoice{
-				ID: ch.ID, Name: ch.Name, Price: int(math.Round(ch.Price)), InStock: ch.InStock == 1,
-			})
-		}
-		if len(og.Choices) > 0 {
-			out = append(out, og)
+	seen := map[string]bool{} // dedup groups shared across cart items
+	for _, it := range e.Data.Items {
+		for _, g := range it.ValidAddons {
+			gid := g.GroupID.String()
+			if seen[gid] {
+				continue
+			}
+			seen[gid] = true
+			og := OptionGroup{ID: gid, Name: g.GroupName, Min: g.MinAddons, Max: g.MaxAddons}
+			for _, ch := range g.Choices {
+				og.Choices = append(og.Choices, OptionChoice{
+					ID: ch.ID.String(), Name: ch.Name, Price: int(math.Round(ch.Price)), InStock: ch.InStock == 1,
+				})
+			}
+			if len(og.Choices) > 0 {
+				out = append(out, og)
+			}
 		}
 	}
 	return out

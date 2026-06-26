@@ -53,16 +53,20 @@ func WithChips(cats []config.Category) Option {
 // When the session is pending authorization (no linked account yet), skip the
 // loads too — there is no account to scope them to; the gate drives re-auth.
 func (m Model) liveInitCmds() tea.Cmd {
-	if !m.live {
+	if !m.live || m.needsAuth {
 		return nil
 	}
-	if m.seeded || m.needsAuth {
-		return nil
+	if m.seeded {
+		// Address is already seeded → load Home (usuals + the popular list) now.
+		if m.addr.ID == "" {
+			return nil
+		}
+		return tea.Batch(
+			datasource.LoadUsuals(m.backend, m.snap, m.addr.ID),
+			datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, m.homeNearbyQuery()),
+		)
 	}
-	// Home view shows usuals + nearby (query=""); fire both on session start.
-	return tea.Batch(
-		datasource.LoadAddresses(m.backend, m.snap),
-		datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, ""),
-		datasource.LoadUsuals(m.backend, m.snap, m.addr.ID),
-	)
+	// Not seeded: resolve addresses first — AddressesLoadedMsg then fires Home
+	// loads (search_restaurants requires a valid addressId).
+	return datasource.LoadAddresses(m.backend, m.snap)
 }

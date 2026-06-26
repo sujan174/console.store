@@ -98,3 +98,27 @@ Slice 8 (Restaurants IA redesign) COMPLETE — pending final whole-branch review
 Final whole-branch review (c9d5d43..648a77a, Opus): READY TO MERGE. All 4 cross-task risks clean (Category path end-to-end, cache re-keying coherent, account-pinning upheld, no double-bar/panic). Logged Minors all deferred. One NEW Minor: vertical-toggle had no on-screen affordance (spec §1/§2).
 Final fix (107fa09): rendered "Restaurants · Instamart soon  tab ·" toggle row at top of live browse (gated len(chipLabels)>0; mock unchanged); fixed stale NextCategory "wraps" comment to "clamps". Tests green, gofmt/vet clean. sshd restarted on latest code.
 Slice 8 (Restaurants IA redesign) COMPLETE & READY TO MERGE. Pending: user live SSH smoke, then merge worktree-swiggy-live.
+
+Slice 10: Variant/add-on wizard (server-driven valid_addons)
+Plan: docs/superpowers/plans/2026-06-26-variant-addon-wizard.md
+BASE: 95fc981 (plan+revert commit)
+Builders: Sonnet · Task reviewers: Sonnet · Final: Opus
+Task 0 (phase-0 fixture): SYNTHETIC snake_case fixture authored by controller (no live capture exists); committed. MUST reconcile field names live in Task 9.
+Task 1 (swiggy parse valid_addons): complete (commit 49d1a1d..c81632b, review clean). Reviewer flagged Important "toCart doesn't populate ValidAddons" — ADJUDICATED not-a-defect: Task 2 wires it in UpdateFoodCart by design (Task 2 test locks toCart separation). Deferred Minors: test lacks Absolute==false assert; "live response" comment on synthetic fixture.
+Task 2 (UpdateFoodCart returns valid_addons): complete (commit c81632b..d72c1f9, review clean).
+Task 3 (carry valid_addons broker->api): complete (commit d72c1f9..5f00619, review clean).
+Task 4 (wizard page model + selection logic): complete (commit 5f00619..39c654d, review clean; Minors only: clampCursor redundant guard, shallow-map-copy load-bearing per design).
+Task 5 (wizard View + shared windowRows): complete (commit 39c654d..288c434, review clean, 63/63 screens tests green).
+Task 6 (route variant+addon items into wizard): complete (commit 288c434..85f2ca3, review clean; conflict path stashes pendingItem w/ Options for Task 7 re-fetch).
+Task 7 (wizard loop + draft-cart lifecycle): complete (commit 85f2ca3..c1e6034, review clean; full repo green). Verified: convergent loop, no draft double-add, cancel flushes draft. Deferred Minor: DRY refactor dropped the per-item empty-SwiggyID dbgTUI log in cartItemsForLines.
+Task 8 (live cart sync state vs placeholder bill): complete (commit c1e6034..ffe7286, review clean; both NewCart sites wired).
+
+Final whole-slice review (95fc981..ffe7286, Opus): CHANGES NEEDED.
+  C1 (CRITICAL): wizard never rendered — Model.View() had no wizardOpen branch (plan omitted the View step; per-task reviews structurally couldn't catch it).
+  I1 (Important): opening wizard when wizardCartCmd()==nil stuck on loading forever.
+  I3 (Important): out-of-stock choices auto-selected/selectable -> risks the very INVALID_ADDON this slice prevents (spec §6).
+  M1 (Minor): dead hasAbs var.
+Final fix (a3ec814, one consolidated fixer): C1 wizardOpen render branch + regression test; I1 fall back to flat Customize when cmd nil; I3 InStock respected in newWizPage/Toggle/View + 3 tests; M1 removed. Full repo green.
+Re-review (ffe7286..a3ec814, Sonnet): all four RESOLVED, no regressions. FIXES APPROVED.
+DEFERRED (need live Task 9): I2 cancel-flush sub-cases (load-bearing, add comment), M2 group-id stability across round-trips, M3 step "of N+"/next wording on final page. Plus Task 0 fixture is SYNTHETIC — reconcile valid_addons field names against a real capture.
+Slice 10 (variant/add-on wizard) COMPLETE & code-clean. PENDING: user live verification (plan Task 9) + synthetic-fixture field-name reconciliation before merge. NO order placed; CONSOLE_LIVE_ORDERS untouched.

@@ -18,8 +18,8 @@ func debugSwiggy(tool string, raw json.RawMessage, err error) {
 		return
 	}
 	s := string(raw)
-	if len(s) > 4000 {
-		s = s[:4000] + "…(trunc)"
+	if len(s) > 200000 {
+		s = s[:200000] + "…(trunc)"
 	}
 	log.Printf("SWIGGY-DEBUG tool=%s err=%v raw=%s", tool, err, s)
 }
@@ -109,6 +109,11 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 	}
 	if args == nil {
 		args = map[string]any{}
+	}
+	if os.Getenv("CONSOLE_DEBUG_SWIGGY") == "1" && name == "update_food_cart" {
+		if b, mErr := json.Marshal(args); mErr == nil {
+			log.Printf("SWIGGY-DEBUG REQUEST tool=%s args=%s", name, string(b))
+		}
 	}
 	res, err := rpc(ctx, c.http, c.base, bearer, sid, map[string]any{
 		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
