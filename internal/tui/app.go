@@ -1345,6 +1345,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.screen == scrRestaurant {
+			// Drop stale loads: a menu that finished AFTER the user opened a
+			// different restaurant must not overwrite the current one. Without
+			// this guard, a slow load for A lands while B is open and merges A's
+			// items onto B's identity — the cross-restaurant cart Swiggy rejects.
+			if cur := m.rest.PlaceData().SwiggyID; cur != "" && dm.PlaceID != cur {
+				return m, nil
+			}
 			if p, ok := m.repo.Menu(dm.PlaceID); ok {
 				// The menu place carries only Items; its descriptive fields (Name,
 				// ID, Section…) come back empty. Preserve the identity from the

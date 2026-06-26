@@ -280,3 +280,36 @@ func TestLivePlaceOrderErrShowsError(t *testing.T) {
 }
 
 func (f *liveFake) Logout() error { return f.err }
+
+// TestStaleMenuLoadIgnored is the regression for the cross-restaurant race:
+// open A (slow load) → open B before A lands → A's late MenuLoadedMsg must NOT
+// overwrite B's screen/menu. Before the fix, A's items were merged onto B's
+// identity, so adding a dish sent A's item to B's cart and Swiggy rejected it.
+func TestStaleMenuLoadIgnored(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
+	rA := catalog.Place{ID: "A", SwiggyID: "A", Name: "Restaurant A", Section: catalog.SectionCoffee,
+		Items: []catalog.Item{{ID: "ai", SwiggyID: "ai", Name: "Aitem", Price: 100}}}
+	rB := catalog.Place{ID: "B", SwiggyID: "B", Name: "Restaurant B", Section: catalog.SectionCoffee,
+		Items: []catalog.Item{{ID: "bi", SwiggyID: "bi", Name: "Bitem", Price: 200}}}
+	snap.SetMenu(rA)
+	snap.SetMenu(rB)
+	m := New(render.Caps{}, WithLiveBackend(&liveFake{}, snap, "acct-1", ""), WithSeededSnapshot())
+	m.w, m.h = 100, 40
+
+	// Now viewing B (opened second; A's load is still in flight).
+	m.screen = scrRestaurant
+	m.rest = screens.NewRestaurant(rB, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
+
+	// A's slow MenuLoadedMsg lands late — must be dropped as stale.
+	nm, _ := m.Update(datasource.MenuLoadedMsg{PlaceID: "A"})
+	m = nm.(Model)
+
+	got := m.rest.PlaceData()
+	if got.SwiggyID != "B" {
+		t.Fatalf("stale A load swapped restaurant identity to %q, want B", got.SwiggyID)
+	}
+	if len(got.Items) == 0 || got.Items[0].Name != "Bitem" {
+		t.Fatalf("stale A load injected wrong menu into B: items=%+v", got.Items)
+	}
+}
