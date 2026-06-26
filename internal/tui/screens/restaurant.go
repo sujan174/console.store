@@ -281,6 +281,11 @@ func (s Restaurant) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if f != "" {
 				s.list.SetFilter(f[:len(f)-1])
 			}
+		case "up":
+			// Arrow keys browse matches WITHOUT leaving search (j/k stay typable).
+			s.list.Up()
+		case "down":
+			s.list.Down()
 		default:
 			if k.Type == tea.KeyRunes {
 				s.list.SetFilter(s.list.Filter() + string(k.Runes))
@@ -371,7 +376,7 @@ func (s Restaurant) View() string {
 	// Search mode gets its own focused hint; otherwise the full key set,
 	// now including / to enter dish search.
 	if s.searching {
-		b.WriteString(components.Hint("type", "filter dishes", "↵", "done", "esc", "clear"))
+		b.WriteString(components.Hint("type", "filter", "↑↓", "browse", "↵", "done", "esc", "clear"))
 	} else {
 		// ↑/↓ move between dishes; ↵/+ add the focused dish and − removes a unit.
 		b.WriteString(components.Hint("↑↓", "move", "↵/+", "add", "−", "remove", "←→", "category", "/", "search", "c", "cart", "esc", "back"))
