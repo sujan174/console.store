@@ -341,18 +341,50 @@ func (s Restaurant) View() string {
 	catBar := s.categoryBar(budget) + veg
 	b.WriteString("  " + catBar + "\n")
 
-	// search prompt (when active)
+	// search input line + live result count (when active)
 	if s.searching || s.list.Filter() != "" {
-		b.WriteString("  " + theme.CursorStyle.Render("/"+s.list.Filter()) + "\n")
+		b.WriteString("  " + s.searchLine() + "\n")
 	}
 
 	b.WriteString("\n")
-	b.WriteString(s.list.View())
+	// Empty state: a filter that matches nothing reads better as a message than
+	// a blank void where the list would be.
+	if (s.searching || s.list.Filter() != "") && len(s.list.VisibleRows()) == 0 {
+		b.WriteString("  " + theme.DimStyle.Render(fmt.Sprintf("no dishes match %q", s.list.Filter())) + "\n")
+	} else {
+		b.WriteString(s.list.View())
+	}
 	b.WriteString("\n")
-	// ↑/↓ always move between dishes; ↵/+ add the focused dish and − removes a
-	// unit (− to zero drops it from the cart).
-	b.WriteString(components.Hint("↑↓", "move", "↵/+", "add", "−", "remove", "←→", "category", "c", "cart", "esc", "back"))
+	// Search mode gets its own focused hint; otherwise the full key set,
+	// now including / to enter dish search.
+	if s.searching {
+		b.WriteString(components.Hint("type", "filter dishes", "↵", "done", "esc", "clear"))
+	} else {
+		// ↑/↓ move between dishes; ↵/+ add the focused dish and − removes a unit.
+		b.WriteString(components.Hint("↑↓", "move", "↵/+", "add", "−", "remove", "←→", "category", "/", "search", "c", "cart", "esc", "back"))
+	}
 	return b.String()
+}
+
+// searchLine renders the dish-search input: a ⌕ prompt with a block caret while
+// typing, plus a live match count — mirroring the discovery search so the two
+// feel like one system. When a filter is set but not actively typed, it shows
+// the count and a "/ edit" affordance instead of the caret.
+func (s Restaurant) searchLine() string {
+	f := s.list.Filter()
+	n := len(s.list.VisibleRows())
+	if s.searching {
+		caret := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Bg)).
+			Background(lipgloss.Color(theme.Cursor)).Render(" ")
+		line := theme.CursorStyle.Render("⌕ "+f) + caret
+		if f == "" {
+			return line + theme.FaintStyle.Render("   type to filter dishes")
+		}
+		return line + theme.FaintStyle.Render("   "+plural(n, "dish", "dishes"))
+	}
+	return theme.DimStyle.Render("⌕ "+f) +
+		theme.FaintStyle.Render("   "+plural(n, "dish", "dishes")+" · / edit")
 }
 
 // InfoView renders the centered item-detail modal for the selected dish. It

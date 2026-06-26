@@ -143,3 +143,29 @@ func TestDishRowShowsRatingColumn(t *testing.T) {
 		t.Fatalf("dish row missing price:\n%s", v)
 	}
 }
+
+func TestRestaurantSearchUI(t *testing.T) {
+	repo := mem.New()
+	p, _ := repo.Menu("blue-tokai")
+
+	// Idle: the key hint advertises "/ search".
+	if !strings.Contains(NewRestaurant(p, map[string]int{}, "").View(), "search") {
+		t.Fatal("idle hint should advertise / search")
+	}
+
+	// Enter search via "/", type a query: ⌕ prompt + a focused search hint.
+	s := NewRestaurant(p, map[string]int{}, "")
+	ns, _ := s.Update(key("/"))
+	s = ns.(Restaurant)
+	for _, r := range "cold" {
+		ns, _ = s.Update(key(string(r)))
+		s = ns.(Restaurant)
+	}
+	v := s.View()
+	if !strings.Contains(v, "⌕") {
+		t.Fatalf("search input missing ⌕ prompt:\n%s", v)
+	}
+	if !strings.Contains(v, "done") || !strings.Contains(v, "clear") {
+		t.Fatalf("search-mode hint missing done/clear:\n%s", v)
+	}
+}
