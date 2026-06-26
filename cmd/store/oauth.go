@@ -10,8 +10,7 @@ import (
 
 const oauthScope = "mcp:tools"
 
-// oauthRefresher implements broker.Refresher via the OAuth refresh_token grant
-// (moved from the deleted cmd/broker/adapters.go).
+// oauthRefresher implements broker.Refresher via the OAuth refresh_token grant.
 type oauthRefresher struct {
 	httpc    *http.Client
 	tokenURL string

@@ -23,9 +23,9 @@ type brokerRPC interface {
 }
 
 // BrokerBackend adapts the broker RPC client into a datasource.Backend, pinned
-// to ONE account id (resolved from the SSH session's pubkey by cmd/sshd). The
-// account id is fixed at construction and never read from a call argument, so a
-// session can only ever act as its own account.
+// to ONE account id (the fixed local account; see localstore.LocalAccountID).
+// The account id is fixed at construction and never read from a call argument,
+// so a session can only ever act as its own account.
 type BrokerBackend struct {
 	rpc       brokerRPC
 	accountID string

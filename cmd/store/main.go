@@ -162,7 +162,7 @@ func envOr(key, def string) string {
 }
 
 // seedSnapshot pre-populates snap with the config's restaurant + curated items
-// for an instant first paint (moved from the deleted cmd/sshd).
+// for an instant first paint.
 func seedSnapshot(snap *swiggysnap.Snapshot, cfg *config.Config) {
 	s := cfg.Seed
 	section := catalog.Section(s.Section)
