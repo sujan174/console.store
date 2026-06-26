@@ -47,7 +47,6 @@ func DefaultCategories() []Category {
 		{Label: "Pizza", Query: "pizza"},
 		{Label: "Biryani", Query: "biryani"},
 		{Label: "Burgers", Query: "burger"},
-		{Label: "Sandwich", Query: "sandwich"},
 		{Label: "Rolls", Query: "rolls"},
 		{Label: "Desserts", Query: "dessert"},
 	}

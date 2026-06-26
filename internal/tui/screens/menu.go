@@ -193,28 +193,66 @@ func (m Menu) mainPlaces() []catalog.Place {
 // background. When focus is on the rail the cursor row is shown only faintly (a
 // dim · marker, no highlight) so there is exactly one active cursor on screen.
 func (m Menu) placeRow(p catalog.Place, selected bool) string {
+	w := components.ContentWidth() - railWidth - 5
+	if w < 16 {
+		w = 16
+	}
+
+	// meta = ★rating + ETA, RIGHT-aligned to the row edge (dim, so it reads as
+	// secondary to the name).
 	rating := ""
 	if p.Rating > 0 {
-		rating = "  " + theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
+		rating = theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
 	}
 	eta := ""
 	if p.ETA != "" {
-		eta = "   " + theme.EtaStyle.Render(p.ETA)
+		eta = theme.EtaStyle.Render(p.ETA)
 	}
+	meta := rating
+	if rating != "" && eta != "" {
+		meta += "  " + eta
+	} else {
+		meta += eta
+	}
+	metaW := lipgloss.Width(meta)
+
+	const leadW = 4 // every lead ("▌ > ", "  · ", "    ") is 4 cells wide
+	name := railTrunc2(p.Name, w-leadW-metaW-1)
+
+	var lead, styledName string
 	switch {
 	case selected && !m.railFocus:
-		name := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(p.Name)
-		content := theme.CursorStyle.Render("▌ > ") + name + rating + eta
-		w := components.ContentWidth() - railWidth - 5
-		if w < 12 {
-			w = 12
-		}
-		return lipgloss.NewStyle().Background(lipgloss.Color(theme.SelRowBg)).Width(w).Render(content)
+		lead = theme.CursorStyle.Render("▌ > ")
+		styledName = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(name)
 	case selected:
-		return "  " + theme.FaintStyle.Render("· ") + theme.TextStyle.Render(p.Name) + rating + eta
+		lead = theme.FaintStyle.Render("  · ")
+		styledName = theme.TextStyle.Render(name)
 	default:
-		return "    " + theme.ItemStyle.Render(p.Name) + rating + eta
+		lead = "    "
+		styledName = theme.ItemStyle.Render(name)
 	}
+
+	pad := w - leadW - lipgloss.Width(name) - metaW
+	if pad < 1 {
+		pad = 1
+	}
+	content := lead + styledName + strings.Repeat(" ", pad) + meta
+	if selected && !m.railFocus {
+		return lipgloss.NewStyle().Background(lipgloss.Color(theme.SelRowBg)).Render(content)
+	}
+	return content
+}
+
+// railTrunc2 shortens s to at most max cells, adding an ellipsis. max<1 → "".
+func railTrunc2(s string, max int) string {
+	if max < 1 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
 }
 
 // sectionedListView renders the Home main pane: optional usuals block (omitted

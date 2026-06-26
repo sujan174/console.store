@@ -5,8 +5,8 @@ import "testing"
 func TestDefaultCategoriesUsedWhenEmpty(t *testing.T) {
 	var c *Config // nil config (no file)
 	got := c.ChipCategories()
-	if len(got) != 7 {
-		t.Fatalf("want 7 default chips, got %d", len(got))
+	if len(got) != 6 {
+		t.Fatalf("want 6 default chips, got %d", len(got))
 	}
 	if got[0].Label != "Coffee" || got[0].Query != "coffee" {
 		t.Errorf("first chip = %+v", got[0])
