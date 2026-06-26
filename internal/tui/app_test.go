@@ -391,15 +391,16 @@ func TestAddToCartPreservesCursor(t *testing.T) {
 func TestCartHeaderFromMenuNotNonsense(t *testing.T) {
 	m := newAtMenu()
 
-	// Press 'c' to open cart from menu with zero items.
+	// Press 'c' to open the merged checkout from menu with zero items.
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
 	view := m2.View()
 
-	if strings.Contains(view, "cart · cart") {
-		t.Fatal("cart header must not contain 'cart · cart'")
+	// No dangling restaurant in the header (e.g. "checkout · ") when empty.
+	if strings.Contains(view, "checkout ·") {
+		t.Fatal("checkout header must not show a dangling restaurant when cart is empty")
 	}
-	if !strings.Contains(view, "your order") {
-		t.Fatalf("cart header should say 'your order' when cart is empty, got view:\n%s", view)
+	if !strings.Contains(view, "your cart is empty") {
+		t.Fatalf("empty checkout should say 'your cart is empty', got view:\n%s", view)
 	}
 }
 

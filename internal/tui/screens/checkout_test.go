@@ -12,7 +12,7 @@ func TestCheckoutShowsBillAndPayToRider(t *testing.T) {
 	lines := []screens.CartLine{{Item: catalog.Item{Name: "Cold Coffee", Price: 149}, Qty: 1}}
 	co := screens.NewCheckout("Blue Tokai", catalog.Address{Line: "HSR Layout", Label: "home"}, lines, "~45 min")
 	v := co.View(0)
-	for _, want := range []string{"checkout", "Blue Tokai · ~45 min", "Cash / UPI to rider on delivery", "to pay (COD)", "₹128", "place order", "can't be cancelled"} {
+	for _, want := range []string{"checkout", "Blue Tokai", "~45 min", "pay the rider", "cash / UPI", "to pay (COD)", "₹128", "place order", "can't cancel"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("missing %q:\n%s", want, v)
 		}
@@ -65,5 +65,23 @@ func TestCheckoutRendersStepperOnFocusedLine(t *testing.T) {
 	}
 	if !strings.Contains(v, "₹338") { // 169 × 2
 		t.Fatalf("focused line missing line total ₹338:\n%s", v)
+	}
+}
+
+// TestCheckoutEmptyNoSyncingForever is the regression for the empty-cart bug:
+// an empty live cart must show the empty state, never the perpetual
+// "syncing cart…" (no live bill ever arrives for an empty cart).
+func TestCheckoutEmptyNoSyncingForever(t *testing.T) {
+	co := screens.NewCheckout("Blue Tokai", catalog.Address{Line: "HSR", Label: "home"}, nil, "~30 min").
+		WithLiveSync(true, "")
+	v := co.View(0)
+	if strings.Contains(v, "syncing cart") {
+		t.Fatalf("empty cart must not show 'syncing cart…':\n%s", v)
+	}
+	if !strings.Contains(v, "your cart is empty") {
+		t.Fatalf("empty cart should show the empty state:\n%s", v)
+	}
+	if strings.Contains(v, "place order") {
+		t.Fatalf("empty cart must not show the place-order CTA:\n%s", v)
 	}
 }

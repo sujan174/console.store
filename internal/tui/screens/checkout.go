@@ -132,49 +132,66 @@ func (c Checkout) summaryView() string {
 	var b strings.Builder
 	w := components.ContentWidth()
 
-	b.WriteString("  " + theme.BrandStyle.Render("checkout") + "\n")
+	// Header: "checkout · {restaurant}" — the restaurant gives the page context.
+	title := theme.BrandStyle.Render("checkout")
+	if c.restaurant != "" && len(c.lines) > 0 {
+		title += theme.FaintStyle.Render("  ·  ") + theme.DimStyle.Render(c.restaurant)
+	}
+	b.WriteString("  " + title + "\n")
 	b.WriteString(components.Divider())
 	b.WriteString("\n")
 
-	label := func(s string) string { return theme.DimStyle.Render(padTo(s, 10)) }
-	b.WriteString("  " + label("deliver to") + theme.TextStyle.Render(addrLine(c.addr)+" · "+c.addr.Label) + "\n")
-	from := c.restaurant
+	// Empty state — no bill, no place-order bar; a calm prompt back to browsing.
+	if len(c.lines) == 0 {
+		b.WriteString("\n  " + theme.DimStyle.Render("your cart is empty") + "\n\n")
+		b.WriteString("  " + theme.FaintStyle.Render("press ") + theme.CursorStyle.Render("esc") +
+			theme.FaintStyle.Render(" to browse the menu") + "\n\n\n")
+		b.WriteString(components.Hint("esc", "back"))
+		return b.String()
+	}
+
+	// Delivery meta — two aligned lines, then a blank for breathing room.
+	label := func(s string) string { return theme.DimStyle.Render(padTo(s, 11)) }
+	b.WriteString("  " + label("deliver to") + theme.TextStyle.Render(addrLine(c.addr)) +
+		theme.DimStyle.Render("  ·  "+c.addr.Label) + "\n")
+	fromLine := theme.TextStyle.Render(c.restaurant)
 	if c.eta != "" {
-		from += " · " + c.eta
+		fromLine += theme.FaintStyle.Render("  ·  ") + theme.DimStyle.Render(c.eta)
 	}
-	b.WriteString("  " + label("from") + theme.TextStyle.Render(from) + "\n")
-	b.WriteString("  " + label("pay") + theme.GoldStyle.Render("Cash / UPI to rider on delivery") + "\n")
+	b.WriteString("  " + label("from") + fromLine + "\n\n")
 
-	// Item list: one row per line, full-bleed cursor bar. The focused row shows
-	// the restaurant-style − ×N + stepper; others show a plain ×N. Customized
-	// lines keep a faint "+ <add-ons>" summary after the name.
-	if len(c.lines) > 0 {
-		cur := c.clampCursor()
-		list := components.List{Cursor: cur}
-		for i, l := range c.lines {
-			name := theme.BrightStyle.Render(l.Item.Name)
-			if s := AddOnSummary(l.AddOns); s != "" {
-				name += theme.FaintStyle.Render("  + " + s)
-			}
-			total := theme.PriceStyle.Render(fmt.Sprintf("₹%d", l.UnitPrice()*l.Qty))
-			var right string
-			if i == cur {
-				updating := ""
-				if c.mutating {
-					updating = "  " + theme.DimStyle.Render("updating…")
-				}
-				stepper := theme.FavStyle.Render("−") + " " +
-					theme.GreenStyle.Render(fmt.Sprintf("×%d", l.Qty)) + " " +
-					theme.GreenStyle.Render("+")
-				right = stepper + updating + "    " + total
-			} else {
-				right = theme.DimStyle.Render(fmt.Sprintf("×%d", l.Qty)) + "    " + total
-			}
-			list.Rows = append(list.Rows, components.Row{Left: name, Right: right, BarGreen: i == cur})
+	// Item rows — full-bleed cursor bar. The focused row carries the − ×N +
+	// stepper; others a dim ×N. Fixed-width qty + price cells keep the ₹ column
+	// aligned straight down the list.
+	cur := c.clampCursor()
+	stepW := lipgloss.Width("−  ×99  +")
+	priceW := lipgloss.Width("₹9999")
+	list := components.List{Cursor: cur}
+	for i, l := range c.lines {
+		name := theme.BrightStyle.Render(l.Item.Name)
+		if s := AddOnSummary(l.AddOns); s != "" {
+			name += theme.FaintStyle.Render("  + " + s)
 		}
-		b.WriteString(list.View())
+		var qty string
+		if i == cur {
+			qty = theme.FavStyle.Render("−") + "  " +
+				theme.GreenStyle.Render(fmt.Sprintf("×%d", l.Qty)) + "  " +
+				theme.GreenStyle.Render("+")
+		} else {
+			qty = theme.DimStyle.Render(fmt.Sprintf("×%d", l.Qty))
+		}
+		qtyCell := lipgloss.PlaceHorizontal(stepW, lipgloss.Right, qty)
+		priceCell := lipgloss.PlaceHorizontal(priceW, lipgloss.Right,
+			theme.PriceStyle.Render(fmt.Sprintf("₹%d", l.UnitPrice()*l.Qty)))
+		list.Rows = append(list.Rows, components.Row{
+			Left: name, Right: qtyCell + "    " + priceCell, BarGreen: i == cur,
+		})
 	}
+	b.WriteString(list.View())
+	b.WriteString("\n")
 
+	// Bill split — Swiggy's real numbers when synced; a syncing/error state in
+	// live mode before they arrive; design math in mock mode.
 	switch {
 	case c.bill.Live:
 		b.WriteString(renderBill(w, c.bill))
@@ -199,9 +216,10 @@ func (c Checkout) summaryView() string {
 		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
 			theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
 	}
+	b.WriteString("\n")
 
 	// Full-bleed place-order bar: green left bar + selected-row background.
-	barLabel := " > place order "
+	barLabel := " ❯ place order "
 	switch {
 	case c.placing:
 		barLabel = " placing order… "
@@ -215,8 +233,9 @@ func (c Checkout) summaryView() string {
 			Render(padTo(barLabel, components.FrameWidth()-1))
 	b.WriteString(bar + "\n\n")
 
-	b.WriteString("  " + theme.FavStyle.Render("no online payment — pay the rider on delivery") + "\n")
-	b.WriteString("  " + theme.DimStyle.Render("orders can't be cancelled once placed") + "\n\n")
+	// One tidy COD line instead of two stacked notices.
+	b.WriteString("  " + theme.GoldStyle.Render("pay the rider — cash / UPI") +
+		theme.FaintStyle.Render("   ·   ") + theme.DimStyle.Render("can't cancel once placed") + "\n\n")
 	b.WriteString(components.Hint("↑↓", "move", "←→", "qty", "⌫", "remove", "↵", "place order", "esc", "back"))
 	return b.String()
 }

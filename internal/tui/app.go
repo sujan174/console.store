@@ -2375,6 +2375,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lines = append(m.lines[:i], m.lines[i+1:]...)
 				return m.afterCheckoutReduce()
 			case "enter":
+				if len(m.lines) == 0 {
+					return m, nil // nothing to order — empty cart
+				}
 				if m.live && !m.placingOrder {
 					m.placingOrder = true
 					m.orderErr = ""
