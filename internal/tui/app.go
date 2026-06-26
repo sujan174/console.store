@@ -2811,10 +2811,14 @@ func (m Model) afterCheckoutReduce() (tea.Model, tea.Cmd) {
 		m.cartRestaurant = ""
 		m.cartSection = ""
 	}
-	m.cartMutating = true
+	cmd := m.liveCartCmd()
+	// Freeze input only when a real sync is in flight. In mock mode
+	// liveCartCmd() is nil — no CartSyncedMsg would ever arrive to clear the
+	// freeze, so freezing here would hard-lock the screen.
+	m.cartMutating = m.live && cmd != nil
 	m.menu = m.menu.WithCartChip(m.cartChip())
 	m.checkout = m.buildCheckout()
-	return m, m.liveCartCmd()
+	return m, cmd
 }
 
 // clampIdx clamps a cursor index into [0, n-1], or 0 when n==0.

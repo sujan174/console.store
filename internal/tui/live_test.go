@@ -415,6 +415,34 @@ func TestCheckoutCursorClampsAfterRemove(t *testing.T) {
 	}
 }
 
+// TestCheckoutReduceMockNoFreeze guards the mock-mode hard-lock: a reduce with
+// no live backend must NOT freeze the screen (no CartSyncedMsg would ever
+// arrive to clear it), so esc still works afterward.
+func TestCheckoutReduceMockNoFreeze(t *testing.T) {
+	m := New(render.Caps{}) // mock mode (not live)
+	m.w, m.h = 100, 40
+	m.screen = scrCheckout
+	m.lines = []screens.CartLine{
+		{Item: catalog.Item{ID: "i1", Name: "Latte", Price: 250}, Qty: 2},
+	}
+	m.checkout = m.buildCheckout()
+
+	nm, _ := m.Update(keyRunes("-"))
+	m = nm.(Model)
+	if m.cartMutating {
+		t.Fatal("mock-mode reduce must NOT freeze (no sync to confirm it)")
+	}
+	if m.lines[0].Qty != 1 {
+		t.Fatalf("mock reduce should drop qty to 1, got %d", m.lines[0].Qty)
+	}
+	// esc must still work — not swallowed by a stuck freeze.
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = nm.(Model)
+	if m.screen != scrMenu {
+		t.Fatalf("esc after mock reduce must leave checkout; screen=%v", m.screen)
+	}
+}
+
 // delivery + taxes, not the local item subtotal.
 func TestCartChipShowsLiveGrandTotal(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
