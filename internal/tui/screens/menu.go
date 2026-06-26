@@ -386,18 +386,7 @@ func (m Menu) focusedDetail() string {
 	if stats != "" {
 		out += "   " + stats
 	}
-	// A right-aligned "i · more info" affordance below the strip (i opens the
-	// restaurant-info modal for the focused place). Same keycap family + right
-	// edge as the switcher's "tab" hint so the two read as one set.
-	hint := keycapHint("i", "more info")
-	// Right edge lands at ContentWidth-2 absolute: the main pane is offset by
-	// the rail block (railWidth+1), so the in-pane width is ContentWidth-railWidth-3.
-	mw := components.ContentWidth() - railWidth - 3
-	pad := mw - lipgloss.Width(hint)
-	if pad < 0 {
-		pad = 0
-	}
-	return "  " + out + "\n" + strings.Repeat(" ", pad) + hint
+	return "  " + out
 }
 
 // keycapHint renders a "<key> label" affordance: the key in a subtle grey cap,

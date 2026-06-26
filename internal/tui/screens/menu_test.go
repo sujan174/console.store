@@ -235,10 +235,3 @@ func TestTwoPaneShowsStoreSwitcher(t *testing.T) {
 		}
 	}
 }
-
-func TestBrowseDetailStripShowsInfoHint(t *testing.T) {
-	v := liveMenu().WithSections(nil, []catalog.Place{{Name: "Blue Tokai", Rating: 4.7}}).View()
-	if !strings.Contains(v, "more info") {
-		t.Fatalf("detail strip missing the 'i · more info' affordance:\n%s", v)
-	}
-}
