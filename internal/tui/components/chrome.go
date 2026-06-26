@@ -72,14 +72,20 @@ func StatusBar(addr, screen, hint, latency string, blink bool) string {
 	if blink {
 		cur = seg(theme.Cursor, "▋")
 	}
+	// The link indicator breathes in sync with the cursor — a live-connection
+	// heartbeat. The "linked" label is constant (status tiers key off it).
+	link := "◌ linked"
+	if blink {
+		link = "⊙ linked"
+	}
 
 	// Left segment at three verbosity tiers; right segment at three. We pick the
 	// richest pair that fits the interior so the bar NEVER exceeds the frame
 	// (an over-wide bar wraps past the last column → a phantom "second column").
-	leftFull := seg(theme.Green, "⊙ linked") + seg(theme.Faint, " · ") +
+	leftFull := seg(theme.Green, link) + seg(theme.Faint, " · ") +
 		seg(theme.Dim, addr+" · home") + seg(theme.Faint, " · ") + seg(theme.Dim, screen)
-	leftMid := seg(theme.Green, "⊙ linked") + seg(theme.Faint, " · ") + seg(theme.Dim, screen)
-	leftTiny := seg(theme.Green, "⊙ linked")
+	leftMid := seg(theme.Green, link) + seg(theme.Faint, " · ") + seg(theme.Dim, screen)
+	leftTiny := seg(theme.Green, link)
 
 	rightFull := seg(theme.Dim, hint) + seg(theme.Faint, " · ↑"+latency+"ms ") + cur
 	rightMid := seg(theme.Faint, "↑"+latency+"ms ") + cur

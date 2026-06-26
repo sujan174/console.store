@@ -41,13 +41,23 @@ func buildRows(items []catalog.Item, qtyByItemID map[string]int) []components.Ro
 		}
 		left := nameStyle.Render(it.Name)
 
-		price := theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price))
-		right := price
+		// Two fixed-width right columns so rating AND price line up vertically
+		// down the whole list (the list right-aligns the Right block as a unit,
+		// so each sub-cell must be a constant width to stay columnar).
+		ratingW := lipgloss.Width("★0.0")
+		ratingCell := strings.Repeat(" ", ratingW) // blank when the dish has no rating
+		if it.Rating > 0 {
+			ratingCell = theme.GoldStyle.Render(fmt.Sprintf("★%.1f", it.Rating))
+		}
+		priceW := lipgloss.Width("₹9999")
+		priceCell := lipgloss.PlaceHorizontal(priceW, lipgloss.Right, theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price)))
+
+		right := ratingCell + "    " + priceCell
 		if qty > 0 {
 			stepper := theme.FavStyle.Render("−") + " " +
 				theme.GreenStyle.Render(fmt.Sprintf("×%d", qty)) + " " +
 				theme.GreenStyle.Render("+") + "   "
-			right = stepper + price
+			right = ratingCell + "    " + stepper + priceCell
 		}
 
 		rows = append(rows, components.Row{Left: left, Right: right, BarGreen: qty > 0})

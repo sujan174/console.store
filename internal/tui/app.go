@@ -2476,9 +2476,29 @@ func (m Model) screenLabel() string {
 	}
 }
 
+// screenKeybinds returns the real key affordances for the two main screens, so
+// the status bar reads as a command line (power-tool feel) instead of rotating
+// marketing copy. "" falls back to the flavor rotation on other screens.
+func (m Model) screenKeybinds() string {
+	switch m.screen {
+	case scrMenu:
+		if m.searchMode {
+			return "↑↓ move · ↵ open · esc home · : cmd"
+		}
+		return "↑↓ move · ↵ open · / search · : cmd"
+	case scrRestaurant:
+		return "↑↓ move · ↵/+ add · − remove · c cart · i info · : cmd"
+	default:
+		return ""
+	}
+}
+
 // statusBar renders the bottom bar for the current frame/screen.
 func (m Model) statusBar() string {
 	hint := statusHints[(m.frame/27)%len(statusHints)]
+	if kb := m.screenKeybinds(); kb != "" {
+		hint = kb // real keybinds on the screens users live on
+	}
 	if m.orderErr != "" {
 		hint = m.orderErr
 	} else if m.cartSyncErr != "" {

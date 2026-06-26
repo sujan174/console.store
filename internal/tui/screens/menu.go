@@ -345,19 +345,28 @@ func (m Menu) twoPaneView() string {
 
 	var main strings.Builder
 
-	header := theme.DimStyle.Render("deliver to ") +
-		theme.BrightStyle.Render(m.address.Line)
-	if m.address.Label != "" {
-		header += theme.DimStyle.Render(" · " + m.address.Label)
-	}
 	// Right-align the cart chip on the header so the live browse screen shows the
 	// cart too (the old single-pane path rendered it; twoPaneView did not).
 	cartStyle := theme.CartStyle
 	if strings.Contains(m.cartChip, "empty") {
 		cartStyle = theme.DimStyle
 	}
+	chip := cartStyle.Render(m.cartChip)
 	mainW := components.ContentWidth() - railWidth - 5
-	main.WriteString(justify(header, cartStyle.Render(m.cartChip), mainW) + "\n\n")
+	label := ""
+	if m.address.Label != "" {
+		label = " · " + m.address.Label
+	}
+	// Truncate the (often long) address so the header never overflows past the
+	// cart chip / pane edge — the full address lives in the address modal.
+	lineBudget := mainW - lipgloss.Width("deliver to ") - lipgloss.Width(label) - lipgloss.Width(chip) - 3
+	if lineBudget < 8 {
+		lineBudget = 8
+	}
+	header := theme.DimStyle.Render("deliver to ") +
+		theme.BrightStyle.Render(railTrunc2(m.address.Line, lineBudget)) +
+		theme.DimStyle.Render(label)
+	main.WriteString(justify(header, chip, mainW) + "\n\n")
 
 	switch {
 	case m.searchMode:

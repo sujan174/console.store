@@ -51,3 +51,17 @@ func TestDividerWidth(t *testing.T) {
 		t.Errorf("divider width != FrameWidth() (%d)", FrameWidth())
 	}
 }
+
+// System 5: the link indicator breathes with the blink phase (⊙ on, ◌ off);
+// the "linked" label stays constant for the status tiers.
+func TestStatusBarLinkPulses(t *testing.T) {
+	SetFrameWidth(90)
+	on := StatusBar("HSR", "menu", "h", "12.4", true)
+	off := StatusBar("HSR", "menu", "h", "12.4", false)
+	if !strings.Contains(on, "⊙ linked") {
+		t.Errorf("blink-on should show ⊙:\n%s", on)
+	}
+	if !strings.Contains(off, "◌ linked") {
+		t.Errorf("blink-off should show ◌:\n%s", off)
+	}
+}
