@@ -54,10 +54,12 @@ func buildRows(items []catalog.Item, qtyByItemID map[string]int) []components.Ro
 
 		right := ratingCell + "    " + priceCell
 		if qty > 0 {
+			// Stepper goes to the LEFT of the rating so the ★rating and ₹price
+			// columns stay aligned with every other (non-cart) row.
 			stepper := theme.FavStyle.Render("−") + " " +
 				theme.GreenStyle.Render(fmt.Sprintf("×%d", qty)) + " " +
-				theme.GreenStyle.Render("+") + "   "
-			right = ratingCell + "    " + stepper + priceCell
+				theme.GreenStyle.Render("+")
+			right = stepper + "    " + ratingCell + "    " + priceCell
 		}
 
 		rows = append(rows, components.Row{Left: left, Right: right, BarGreen: qty > 0})
