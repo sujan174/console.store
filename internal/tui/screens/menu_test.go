@@ -229,7 +229,7 @@ func TestSearchRowsKeepRating(t *testing.T) {
 
 func TestTwoPaneShowsStoreSwitcher(t *testing.T) {
 	v := liveMenu().WithSections(nil, []catalog.Place{{Name: "Blue Tokai"}}).View()
-	for _, want := range []string{"FOOD", "Instamart", "soon", "tab to switch"} {
+	for _, want := range []string{"FOOD", "Instamart", "soon", "tab", "switch"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("two-pane store switcher missing %q:\n%s", want, v)
 		}

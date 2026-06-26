@@ -387,14 +387,28 @@ func (m Menu) focusedDetail() string {
 		out += "   " + stats
 	}
 	// A right-aligned "i · more info" affordance below the strip (i opens the
-	// restaurant-info modal for the focused place).
-	hint := theme.GoldStyle.Render("i") + theme.FaintStyle.Render(" · more info")
-	mw := components.ContentWidth() - railWidth - 5
+	// restaurant-info modal for the focused place). Same keycap family + right
+	// edge as the switcher's "tab" hint so the two read as one set.
+	hint := keycapHint("i", "more info")
+	// Right edge lands at ContentWidth-2 absolute: the main pane is offset by
+	// the rail block (railWidth+1), so the in-pane width is ContentWidth-railWidth-3.
+	mw := components.ContentWidth() - railWidth - 3
 	pad := mw - lipgloss.Width(hint)
 	if pad < 0 {
 		pad = 0
 	}
 	return "  " + out + "\n" + strings.Repeat(" ", pad) + hint
+}
+
+// keycapHint renders a "<key> label" affordance: the key in a subtle grey cap,
+// the label dim. Shared by the store switcher and the focused detail strip so
+// their two right-aligned hints look like one family.
+func keycapHint(key, label string) string {
+	cap := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.Bright)).
+		Background(lipgloss.Color(theme.SelRowBg)).
+		Bold(true).Render(" " + key + " ")
+	return cap + theme.DimStyle.Render(" "+label)
 }
 
 // verticalSwitcher is the top-level store switcher (Food ⟷ Instamart) — a full
@@ -407,7 +421,7 @@ func (m Menu) verticalSwitcher() string {
 		Background(lipgloss.Color(theme.Gold)).
 		Bold(true).Render(" FOOD ")
 	inactive := theme.CatOffStyle.Render("Instamart") + theme.FaintStyle.Render("  ·  soon")
-	hint := theme.FaintStyle.Render("tab to switch")
+	hint := keycapHint("tab", "switch")
 	left := "  " + active + "    " + inactive
 	gap := w - lipgloss.Width(left) - lipgloss.Width(hint) - 2
 	if gap < 2 {
