@@ -386,7 +386,15 @@ func (m Menu) focusedDetail() string {
 	if stats != "" {
 		out += "   " + stats
 	}
-	return "  " + out
+	// A right-aligned "i · more info" affordance below the strip (i opens the
+	// restaurant-info modal for the focused place).
+	hint := theme.GoldStyle.Render("i") + theme.FaintStyle.Render(" · more info")
+	mw := components.ContentWidth() - railWidth - 5
+	pad := mw - lipgloss.Width(hint)
+	if pad < 0 {
+		pad = 0
+	}
+	return "  " + out + "\n" + strings.Repeat(" ", pad) + hint
 }
 
 // verticalSwitcher is the top-level store switcher (Food ⟷ Instamart) — a full
