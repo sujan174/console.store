@@ -1562,6 +1562,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cartSyncErr = ""
 			m.liveCart = dm.Cart // real Swiggy pricing for an accurate bill
 		}
+		m.cartMutating = false // confirmed — unfreeze (success or error)
+		if m.screen == scrCheckout {
+			m.checkout = m.buildCheckout()
+		}
 		return m, nil
 	case datasource.CartLoadedMsg:
 		if dm.Err != nil {
@@ -2380,10 +2384,51 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case scrCheckout:
+			// Freeze: while a reduce/delete sync is in flight, ignore all keys
+			// until CartSyncedMsg clears cartMutating (race guard).
+			if m.cartMutating {
+				return m, nil
+			}
 			switch k.String() {
 			case "esc":
 				m.screen = scrMenu
 				return m, nil
+			case "up", "k":
+				m.checkout = m.checkout.Up()
+				return m, nil
+			case "down", "j":
+				m.checkout = m.checkout.Down()
+				return m, nil
+			case "+", "=", "right", "l":
+				// Optimistic increment of the focused line — no freeze.
+				i := m.checkout.Cursor()
+				if i >= 0 && i < len(m.lines) {
+					m.lines[i].Qty++
+					m.menu = m.menu.WithCartChip(m.cartChip())
+					m.checkout = m.buildCheckout()
+					return m, m.liveCartCmd()
+				}
+				return m, nil
+			case "-", "_", "left", "h":
+				// Reduce (remove at qty 1) — freeze until confirmed.
+				i := m.checkout.Cursor()
+				if i < 0 || i >= len(m.lines) {
+					return m, nil
+				}
+				if m.lines[i].Qty <= 1 {
+					m.lines = append(m.lines[:i], m.lines[i+1:]...)
+				} else {
+					m.lines[i].Qty--
+				}
+				return m.afterCheckoutReduce()
+			case "delete", "backspace":
+				// Remove the whole line — freeze until confirmed.
+				i := m.checkout.Cursor()
+				if i < 0 || i >= len(m.lines) {
+					return m, nil
+				}
+				m.lines = append(m.lines[:i], m.lines[i+1:]...)
+				return m.afterCheckoutReduce()
 			case "enter":
 				if m.live && !m.placingOrder {
 					m.placingOrder = true
@@ -2756,6 +2801,20 @@ func (m Model) cartScreenLines() []screens.CartLine { return m.lines }
 func (m Model) buildCart() screens.Cart {
 	return screens.NewCart(m.cartHeader(), m.cartScreenLines()).
 		WithEta(m.cartEta()).WithBill(m.billFromLive()).WithLiveSync(m.live, m.cartSyncErr)
+}
+
+// afterCheckoutReduce finalizes a reduce/delete on the checkout: releases the
+// restaurant binding if the cart is now empty, sets the freeze, rebuilds the
+// page, and fires the cart sync (UpdateCart, or flush when empty).
+func (m Model) afterCheckoutReduce() (tea.Model, tea.Cmd) {
+	if len(m.lines) == 0 {
+		m.cartRestaurant = ""
+		m.cartSection = ""
+	}
+	m.cartMutating = true
+	m.menu = m.menu.WithCartChip(m.cartChip())
+	m.checkout = m.buildCheckout()
+	return m, m.liveCartCmd()
 }
 
 // buildCheckout assembles the merged checkout screen. The live item list is

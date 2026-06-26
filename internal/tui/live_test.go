@@ -317,6 +317,82 @@ func TestStaleMenuLoadIgnored(t *testing.T) {
 
 // TestCartChipShowsLiveGrandTotal: once Swiggy's real cart is known, the chip
 // (shown on every page) reflects the true line count + grand total including
+func checkoutModel(t *testing.T) Model {
+	t.Helper()
+	snap := swiggysnap.NewSnapshot()
+	addr := catalog.Address{ID: "a1", Label: "home"}
+	place := catalog.Place{ID: "bt1", Name: "Blue Tokai", SwiggyID: "swiggy-bt1", Section: catalog.SectionCoffee}
+	snap.SetAddresses([]catalog.Address{addr})
+	snap.SetPlaces("a1", string(catalog.SectionCoffee), []catalog.Place{place})
+	snap.SetMenu(catalog.Place{ID: "bt1", Name: "Blue Tokai", SwiggyID: "swiggy-bt1",
+		Items: []catalog.Item{{ID: "i1", Name: "Latte", Price: 250, SwiggyID: "swiggy-i1"}}})
+	m := New(render.Caps{}, WithLiveBackend(&liveFake{}, snap, "acct-1", ""), WithSeededSnapshot())
+	m.w, m.h = 100, 40
+	m.screen = scrCheckout
+	m.cartRestaurant = "Blue Tokai"
+	m.lines = []screens.CartLine{
+		{Item: catalog.Item{ID: "i1", Name: "Latte", Price: 250, SwiggyID: "swiggy-i1"}, Qty: 2},
+	}
+	m.checkout = m.buildCheckout()
+	return m
+}
+
+func TestCheckoutIncrementOptimistic(t *testing.T) {
+	m := checkoutModel(t)
+	nm, cmd := m.Update(keyRunes("+"))
+	m = nm.(Model)
+	if m.lines[0].Qty != 3 {
+		t.Fatalf("+ should bump qty to 3, got %d", m.lines[0].Qty)
+	}
+	if m.cartMutating {
+		t.Fatal("+ is optimistic and must NOT freeze input")
+	}
+	if cmd == nil {
+		t.Fatal("+ must return a sync cmd")
+	}
+}
+
+func TestCheckoutReduceFreezesUntilSynced(t *testing.T) {
+	m := checkoutModel(t)
+	// − reduces qty and freezes.
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("-")})
+	m = nm.(Model)
+	if m.lines[0].Qty != 1 {
+		t.Fatalf("− should reduce qty to 1, got %d", m.lines[0].Qty)
+	}
+	if !m.cartMutating {
+		t.Fatal("− must freeze input (cartMutating) until confirmed")
+	}
+	if cmd == nil {
+		t.Fatal("− must return a sync cmd")
+	}
+	// While frozen, another key is ignored.
+	nm, _ = m.Update(keyRunes("+"))
+	m2 := nm.(Model)
+	if m2.lines[0].Qty != 1 {
+		t.Fatalf("input must be frozen while mutating; qty changed to %d", m2.lines[0].Qty)
+	}
+	// Sync confirmation clears the freeze.
+	nm, _ = m.Update(datasource.CartSyncedMsg{})
+	m = nm.(Model)
+	if m.cartMutating {
+		t.Fatal("CartSyncedMsg must clear cartMutating")
+	}
+}
+
+func TestCheckoutEnterBlockedWhileMutating(t *testing.T) {
+	m := checkoutModel(t)
+	m.cartMutating = true
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if m.placingOrder {
+		t.Fatal("enter must be a no-op while mutating")
+	}
+	if cmd != nil {
+		t.Fatal("enter must not start the place sequence while mutating")
+	}
+}
+
 // delivery + taxes, not the local item subtotal.
 func TestCartChipShowsLiveGrandTotal(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
