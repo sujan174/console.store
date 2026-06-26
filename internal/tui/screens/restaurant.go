@@ -330,19 +330,14 @@ func (s Restaurant) View() string {
 	if s.vegOnly {
 		veg = "   " + theme.GreenStyle.Render("veg ●")
 	}
-	cartStyle := theme.CartStyle
-	if strings.Contains(s.cartChip, "empty") {
-		cartStyle = theme.DimStyle
-	}
-	chip := cartStyle.Render(s.cartChip)
-	// Budget for the scrolling categories = full width minus the right-aligned
-	// cart chip, the veg indicator (when shown), and the leading/trailing margins.
-	budget := w - lipgloss.Width(chip) - lipgloss.Width(veg) - 4
+	// The cart chip now lives in the top brand bar; the category bar gets the
+	// full width (minus the veg indicator when shown).
+	budget := w - lipgloss.Width(veg) - 4
 	if budget < 12 {
 		budget = 12
 	}
 	catBar := s.categoryBar(budget) + veg
-	b.WriteString("  " + justify(catBar, chip, w) + "\n")
+	b.WriteString("  " + catBar + "\n")
 
 	// search prompt (when active)
 	if s.searching || s.list.Filter() != "" {

@@ -345,17 +345,10 @@ func (m Menu) twoPaneView() string {
 
 	var main strings.Builder
 
-	// Right-align the cart chip on the header so the live browse screen shows the
-	// cart too (the old single-pane path rendered it; twoPaneView did not).
-	cartStyle := theme.CartStyle
-	if strings.Contains(m.cartChip, "empty") {
-		cartStyle = theme.DimStyle
-	}
-	chip := cartStyle.Render(m.cartChip)
-	mainW := components.ContentWidth() - railWidth - 5
-	// The delivery address now lives in the top brand bar; this line carries just
-	// the cart chip, right-aligned, so the cart stays visible while browsing.
-	main.WriteString(justify("", chip, mainW) + "\n\n")
+	// The delivery address and the cart chip both live in the top brand bar now,
+	// so the main pane opens straight into the sections (one spacer keeps it off
+	// the banner rule).
+	main.WriteString("\n")
 
 	switch {
 	case m.searchMode:

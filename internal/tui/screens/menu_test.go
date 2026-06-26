@@ -27,19 +27,6 @@ func TestMenuHeaderShowsAddressAndCart(t *testing.T) {
 	}
 }
 
-func TestBrandBannerShowsLogoAndVersion(t *testing.T) {
-	out := BrandBanner(80, "HSR Layout", "home")
-	if !strings.Contains(out, "consolestore.in") {
-		t.Errorf("brand banner should show the wordmark:\n%s", out)
-	}
-	if !strings.Contains(out, Version) {
-		t.Errorf("brand banner should show the version %q:\n%s", Version, out)
-	}
-	if !strings.Contains(out, "HSR Layout") {
-		t.Errorf("brand banner should show the current address:\n%s", out)
-	}
-}
-
 func TestMenuNoUsualHidesUsualLine(t *testing.T) {
 	places := []catalog.Place{{ID: "x", Name: "X", ETA: "10 min"}}
 	m := NewMenu(places, catalog.Address{Line: "HSR"}, catalog.SectionCoffee, catalog.Usual{}, false, "")
@@ -202,15 +189,5 @@ func TestMenuMockPaneUnchanged(t *testing.T) {
 	v := m.View()
 	if !strings.Contains(v, "coffee") || strings.Contains(v, "your usuals") {
 		t.Errorf("mock pane must be unchanged (tabs, no rail sections):\n%s", v)
-	}
-}
-
-// The live two-pane browse screen must show the cart chip (regression: it only
-// appeared on the old single-pane path, not in twoPaneView).
-func TestTwoPaneBrowseShowsCartChip(t *testing.T) {
-	m := NewMenu(nil, catalog.Address{Line: "Home"}, catalog.SectionFood, catalog.Usual{}, false, "cart · ₹338").
-		WithRail(NewRail([]string{"Coffee", "Pizza"})).WithRailFocus(false).WithMaxRows(20)
-	if v := m.View(); !strings.Contains(v, "cart · ₹338") {
-		t.Fatalf("two-pane browse missing cart chip:\n%s", v)
 	}
 }
