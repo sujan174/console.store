@@ -8,9 +8,9 @@ import (
 	"console.store/internal/tui/theme"
 )
 
-// BrandHeaderLines is the rendered height of BrandBanner (brand line + address
-// line + gold rule), so the root can reserve list space for it.
-const BrandHeaderLines = 3
+// BrandHeaderLines is the rendered height of BrandBanner (brand line + gold
+// rule), so the root can reserve list space for it.
+const BrandHeaderLines = 2
 
 // brandGlint is the white highlight that sweeps across the wordmark.
 var brandGlint = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true)
@@ -41,20 +41,32 @@ func shimmerBrand(s string, frame int) string {
 	return b.String()
 }
 
-// BrandBanner is the top bar above every post-landing screen. Line 1: the
-// shimmering consolestore.in wordmark (left, with version) + the cart chip
-// (right). Line 2: the current delivery address, right-aligned, with semantic
-// glyph colours. Line 3: a full-width gold rule. addrLine/addrLabel/cartChip may
-// be "" to omit.
+// BrandBanner is the single top bar above every post-landing screen: the
+// shimmering consolestore.in wordmark (left, with version), then the compact
+// delivery address + cart chip (right), under a full-width gold rule. The
+// address shows just its label (e.g. "Home") — the full street lives in the
+// address modal — so it stays one line, not a paragraph. Any of
+// addrLine/addrLabel/cartChip may be "" to omit.
 func BrandBanner(width, frame int, addrLine, addrLabel, cartChip string) string {
 	inner := width - 4 // 2-space margin each side, matching the body grid
 	if inner < 24 {
 		inner = 24
 	}
 
-	// Line 1 — wordmark + version + cart chip.
 	brand := theme.Fg(theme.Cursor).Bold(true).Render("▍ ") +
 		shimmerBrand("consolestore.in", frame) + "  " + theme.PurpleStyle.Render(Version)
+
+	// Compact address: prefer the short label ("Home"); fall back to a tightly
+	// truncated street so the bar never wraps.
+	addr := ""
+	if who := addrLabel; who != "" || addrLine != "" {
+		if who == "" {
+			who = railTrunc2(addrLine, 18)
+		}
+		addr = theme.DimStyle.Render("deliver to ") + theme.GreenStyle.Render("⊕ ") +
+			theme.BrightStyle.Render(who) + theme.FaintStyle.Render(" ⌄")
+	}
+
 	chip := ""
 	if cartChip != "" {
 		cs := theme.CartStyle
@@ -63,33 +75,20 @@ func BrandBanner(width, frame int, addrLine, addrLabel, cartChip string) string 
 		}
 		chip = cs.Render(cartChip)
 	}
-	gap1 := inner - lipgloss.Width(brand) - lipgloss.Width(chip)
-	if gap1 < 1 {
-		gap1 = 1
-	}
-	line1 := "  " + brand + strings.Repeat(" ", gap1) + chip + "  "
 
-	// Line 2 — address, right-aligned, semantic colours (green pin, gold label).
-	addr := ""
-	if addrLine != "" {
-		label := ""
-		if addrLabel != "" {
-			label = theme.GoldStyle.Render(" · " + addrLabel)
-		}
-		budget := inner - lipgloss.Width("deliver to ⊕  ⌄") - lipgloss.Width(addrLabel) - 4
-		if budget < 10 {
-			budget = 10
-		}
-		addr = theme.DimStyle.Render("deliver to ") + theme.GreenStyle.Render("⊕ ") +
-			theme.BrightStyle.Render(railTrunc2(addrLine, budget)) + label +
-			theme.FaintStyle.Render(" ⌄")
+	// Right cluster: address then cart, separated when both present.
+	right := addr
+	if addr != "" && chip != "" {
+		right += theme.FaintStyle.Render("   ·   ") + chip
+	} else {
+		right += chip
 	}
-	gap2 := inner - lipgloss.Width(addr)
-	if gap2 < 0 {
-		gap2 = 0
-	}
-	line2 := "  " + strings.Repeat(" ", gap2) + addr + "  "
 
+	gap := inner - lipgloss.Width(brand) - lipgloss.Width(right)
+	if gap < 1 {
+		gap = 1
+	}
+	line1 := "  " + brand + strings.Repeat(" ", gap) + right + "  "
 	rule := "  " + theme.GoldStyle.Render(strings.Repeat("─", inner)) + "  "
-	return line1 + "\n" + line2 + "\n" + rule + "\n"
+	return line1 + "\n" + rule + "\n"
 }
