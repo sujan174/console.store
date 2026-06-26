@@ -13,6 +13,10 @@ type fakePoller struct{ ok bool }
 
 func (f fakePoller) Authorized(string) bool { return f.ok }
 
+func (f fakePoller) StartAuth(string) (string, string, error) {
+	return "flow-2", "https://authz/y", nil
+}
+
 func TestAuthGateViewNative(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
 	m := New(render.Caps{},

@@ -150,3 +150,15 @@ func TestBrokerBackendNonAuthErrPassedThrough(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func (f *fakeRPC) Logout(accountID string) error { f.lastAccount = accountID; return nil }
+
+func TestBrokerBackendLogoutForwardsAccount(t *testing.T) {
+	f := &fakeRPC{}
+	if err := NewBrokerBackend(f, "acct-9").Logout(); err != nil {
+		t.Fatalf("Logout: %v", err)
+	}
+	if f.lastAccount != "acct-9" {
+		t.Fatalf("Logout forwarded account %q, want acct-9", f.lastAccount)
+	}
+}

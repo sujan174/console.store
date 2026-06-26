@@ -74,7 +74,15 @@ func run() error {
 	caps := render.DetectCaps(os.Getenv("TERM"), os.Environ(), truecolor())
 	snap := swiggysnap.NewSnapshot()
 
-	opts := []consoletui.Option{consoletui.WithLiveBackend(be, snap, localstore.LocalAccountID, "")}
+	// authClient lets the TUI poll the loopback callback and start a fresh flow
+	// (Settings → Disconnect re-authorizes in place). Always supplied, even on
+	// the token-present path, so logout can re-auth without a restart.
+	ac := authClient{m: authMgr}
+
+	opts := []consoletui.Option{
+		consoletui.WithLiveBackend(be, snap, localstore.LocalAccountID, ""),
+		consoletui.WithAuthFlow("", ac),
+	}
 
 	// Token check: present → straight in; absent → auth gate.
 	if _, _, _, ok, err := ls.GetTokenFull(ctx, localstore.LocalAccountID); err != nil {
@@ -86,7 +94,7 @@ func run() error {
 		}
 		opts = []consoletui.Option{
 			consoletui.WithLiveBackend(be, snap, localstore.LocalAccountID, start.AuthorizeURL),
-			consoletui.WithAuthFlow(start.FlowID, authMgr),
+			consoletui.WithAuthFlow(start.FlowID, ac),
 			consoletui.WithPendingAuth(),
 		}
 	}

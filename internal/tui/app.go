@@ -171,7 +171,7 @@ type Model struct {
 	authorizeURL string
 	needsAuth    bool       // set when a load returns datasource.ErrNeedsAuth
 	authFlowID   string     // authorize flow id (native gate poll)
-	authPoller   AuthPoller // polls callback completion; nil on the mock path
+	authClient   AuthClient // polls callback completion + starts re-auth; nil on the mock path
 	seeded       bool       // true when catalog/swiggy.Snapshot was pre-seeded from config; skips live init loads
 
 	placingOrder bool     // true while PlaceOrderCmd is in-flight; blocks double-fire
@@ -204,6 +204,8 @@ type Model struct {
 	catPendingQuery  string // the category query catPending is waiting on
 	restInfoOpen     bool   // restaurant-info modal ('i' on the browse list) is open
 	addrOpen         bool   // address switcher modal ('a') is open
+	settingsOpen     bool   // settings modal (from the splash) is open
+	settingsSel      int    // selected row in the settings modal
 	homePending      bool   // Home's "popular near you" load is in flight (shows "loading…")
 	usualsLoaded     bool   // true once LoadUsuals has been fired for the current addr
 }
@@ -1287,7 +1289,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.onTick()
 		// Native auth gate: poll the loopback callback. When the browser
 		// authorize completes, clear the gate and fire the live loads.
-		if m.needsAuth && m.authPoller != nil && m.authFlowID != "" && m.authPoller.Authorized(m.authFlowID) {
+		if m.needsAuth && m.authClient != nil && m.authFlowID != "" && m.authClient.Authorized(m.authFlowID) {
 			m.needsAuth = false
 			return m, tea.Batch(tick(), m.liveInitCmds())
 		}
@@ -1558,6 +1560,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.usualsLoaded = true // fetched (success or empty); don't refire for this addr
 		m.menu = m.buildMenu()
 		return m, nil
+	case datasource.LoggedOutMsg:
+		// Token purged → drop the cart/session state and re-authorize in place:
+		// start a fresh OAuth flow and show the gate (which auto-opens the browser
+		// and polls for completion). dm.Err is logged; the gate shows regardless.
+		if dm.Err != nil {
+			dbgTUI("logout: %v", dm.Err)
+		}
+		m.lines = nil
+		m.cartRestaurant = ""
+		m.cartSection = ""
+		m.liveCart = api.Cart{}
+		m.cartLoaded = false
+		m.screen = scrSplash
+		if m.authClient != nil {
+			fid, url, err := m.authClient.StartAuth(m.accountID)
+			if err == nil {
+				m.authFlowID = fid
+				m.authorizeURL = url
+				m.needsAuth = true
+				return m, openBrowserCmd(url)
+			}
+			dbgTUI("logout: re-auth start failed: %v", err)
+		}
+		m.needsAuth = true // no client (mock) → just show the gate
+		return m, nil
 	case datasource.OrderPlacedMsg:
 		m.placingOrder = false
 		if dm.Err != nil {
@@ -1821,9 +1848,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// fall through to per-screen single-Esc handling
 		}
 		if m.screen == scrSplash {
+			// Settings modal (opened from the splash) captures keys while open.
+			if m.settingsOpen {
+				switch k.String() {
+				case "up", "k":
+					if m.settingsSel > 0 {
+						m.settingsSel--
+					}
+				case "down", "j":
+					if m.settingsSel < screens.SettingsItemCount()-1 {
+						m.settingsSel++
+					}
+				case "esc", "q":
+					m.settingsOpen = false
+				case "enter", " ":
+					st := screens.NewSettings(m.live && m.backend != nil).WithSelection(m.settingsSel)
+					m.settingsOpen = false
+					if st.SelectedAction() == "disconnect" {
+						return m, datasource.Logout(m.backend)
+					}
+				}
+				return m, nil
+			}
 			// The decode plays on its own; the user never has to wait for it.
-			// Arrows move the cursor; any other key activates the selection and
-			// goes straight to the shop — even mid-animation.
+			// Arrows move the cursor; any other key activates the highlighted item:
+			// "go to shop" enters the shop, "settings" opens the settings modal.
 			switch k.String() {
 			case "up", "k":
 				if m.homeSel > 0 {
@@ -1834,7 +1883,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.homeSel++
 				}
 			default:
-				m.screen = scrMenu
+				if screens.IsSettings(m.homeSel) {
+					m.settingsOpen = true
+					m.settingsSel = 0
+				} else {
+					m.screen = scrMenu
+				}
 			}
 			return m, nil
 		}
@@ -2458,6 +2512,16 @@ func (m Model) View() string {
 			return gate
 		}
 		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, gate)
+	}
+
+	// Settings modal (opened from the splash) — a centered overlay matching the
+	// other modal cards.
+	if m.settingsOpen {
+		card := screens.NewSettings(m.live && m.backend != nil).WithSelection(m.settingsSel).ModalView()
+		if m.w == 0 || m.h == 0 {
+			return card
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card)
 	}
 
 	// Splash is centered in the viewport (design lines 196-228). We render on

@@ -22,6 +22,21 @@ func (r oauthRefresher) Refresh(ctx context.Context, refreshToken string) (auth.
 	return auth.Refresh(ctx, r.httpc, r.tokenURL, r.clientID, refreshToken)
 }
 
+// authClient adapts *auth.Manager to the TUI's consoletui.AuthClient: it reports
+// loopback-flow completion and starts a fresh authorize flow (Settings →
+// Disconnect re-authorizes in place).
+type authClient struct{ m *auth.Manager }
+
+func (a authClient) Authorized(flowID string) bool { return a.m.Authorized(flowID) }
+
+func (a authClient) StartAuth(accountID string) (flowID, url string, err error) {
+	p, perr := a.m.Start(accountID)
+	if perr != nil {
+		return "", "", perr
+	}
+	return p.FlowID, p.AuthorizeURL, nil
+}
+
 // resolveRegistration returns the OAuth client registration, using the cached
 // client.json when present (no network) and performing Discover + DCR + cache
 // write on first run. metaURL/redirect are the discovery + callback endpoints.

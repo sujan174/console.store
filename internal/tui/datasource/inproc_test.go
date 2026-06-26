@@ -84,3 +84,5 @@ func TestInProcRestaurantsVsSearchOrganic(t *testing.T) {
 		t.Fatal("SearchOrganic should call the service with organic=true")
 	}
 }
+
+func (f *fakeService) Logout(_ context.Context, a string) error { f.gotAccount = a; return nil }

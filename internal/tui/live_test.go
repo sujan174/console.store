@@ -278,3 +278,5 @@ func TestLivePlaceOrderErrShowsError(t *testing.T) {
 		t.Fatal("orderErr must be set after PlaceOrder error")
 	}
 }
+
+func (f *liveFake) Logout() error { return f.err }

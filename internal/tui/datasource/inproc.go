@@ -20,6 +20,7 @@ type inprocService interface {
 	GetCart(ctx context.Context, accountID, addressID, restaurantName string) (api.Cart, error)
 	ClearCart(ctx context.Context, accountID string) error
 	PlaceOrder(ctx context.Context, accountID, addressID string) (api.Order, error)
+	Logout(ctx context.Context, accountID string) error
 }
 
 // InProc adapts a broker.Service into the brokerRPC interface that
@@ -32,6 +33,10 @@ func NewInProc(svc inprocService) InProc { return InProc{svc: svc} }
 
 func (p InProc) Addresses(accountID string) ([]api.Address, error) {
 	return p.svc.Addresses(context.Background(), accountID)
+}
+
+func (p InProc) Logout(accountID string) error {
+	return p.svc.Logout(context.Background(), accountID)
 }
 
 func (p InProc) Restaurants(accountID, addressID, query string) ([]api.Restaurant, error) {

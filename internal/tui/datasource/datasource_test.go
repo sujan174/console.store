@@ -147,3 +147,5 @@ func TestLoadUsualsCachesUnderUsualsKey(t *testing.T) {
 		t.Fatalf("usuals not cached under UsualsKey: %+v", got)
 	}
 }
+
+func (f *fakeBackend) Logout() error { return f.err }

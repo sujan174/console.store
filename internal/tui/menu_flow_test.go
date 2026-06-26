@@ -359,3 +359,5 @@ func TestCategoryViewNoNearbyHeader(t *testing.T) {
 		t.Errorf("category view must show category results\n%s", v)
 	}
 }
+
+func (f *railFake) Logout() error { return f.err }

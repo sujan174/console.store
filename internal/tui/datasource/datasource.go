@@ -33,6 +33,7 @@ type Backend interface {
 	GetCart(addressID, restaurantName string) (api.Cart, error)
 	ClearCart() error
 	PlaceOrder(addressID string) (api.Order, error)
+	Logout() error
 }
 
 type (
@@ -70,7 +71,15 @@ type (
 	// fetched into the snapshot (under UsualsKey). Err non-nil on failure;
 	// empty history is NOT an error (the section just renders nothing).
 	UsualsLoadedMsg struct{ Err error }
+	// LoggedOutMsg reports the result of disconnecting the Swiggy account
+	// (purging the stored token). Err is non-nil if the purge failed.
+	LoggedOutMsg struct{ Err error }
 )
+
+// Logout purges the stored Swiggy token (disconnects the account).
+func Logout(b Backend) tea.Cmd {
+	return func() tea.Msg { return LoggedOutMsg{Err: b.Logout()} }
+}
 
 func LoadAddresses(b Backend, snap *swiggysnap.Snapshot) tea.Cmd {
 	return func() tea.Msg {

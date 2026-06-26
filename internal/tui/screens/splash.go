@@ -9,9 +9,11 @@ import (
 	"console.store/internal/tui/theme"
 )
 
-// homeItems are the splash menu choices. Only "go to shop" is live today; the
-// list is the seam for future home destinations (orders, the usual, settings).
-var homeItems = []string{"go to shop"}
+// homeItems are the splash menu choices: start the shop, or open settings.
+var homeItems = []string{"go to shop", "settings"}
+
+// IsSettings reports whether home item i is the settings entry.
+func IsSettings(i int) bool { return i >= 0 && i < len(homeItems) && homeItems[i] == "settings" }
 
 // Indentation: the splash reads as a real terminal session. Prompt lines sit at
 // the left gutter; the banner (wordmark + tagline) is inset one step further so
@@ -168,12 +170,29 @@ func (s Splash) prompt() string {
 	if (s.frame/9)%2 == 0 { // ~1s blink, matched to the rest of the app
 		cur = "▉"
 	}
-	return strings.Repeat(" ", promptIndent) +
-		theme.BrandStyle.Render("consolestore.in") + " " +
-		theme.CursorStyle.Render("▸") + " " +
+	ind := strings.Repeat(" ", promptIndent)
+
+	// line 1 — start the shop (the default selection).
+	startTick := theme.FaintStyle.Render("  ")
+	if s.sel == 0 {
+		startTick = theme.CursorStyle.Render("▸ ")
+	}
+	start := ind + theme.BrandStyle.Render("consolestore.in") + " " + startTick +
 		theme.DimStyle.Render("press ↵ to enter") +
 		theme.CursorStyle.Render(cur) +
 		theme.FaintStyle.Render("    ·  q quit")
+
+	// line 2 — settings, a navigable button below, aligned under the prompt.
+	pad := strings.Repeat(" ", lipgloss.Width("consolestore.in")+1)
+	setTick := theme.FaintStyle.Render("  ")
+	setLabel := theme.DimStyle.Render("settings")
+	if s.sel == 1 {
+		setTick = theme.CursorStyle.Render("▸ ")
+		setLabel = theme.BrightStyle.Render("settings")
+	}
+	settings := ind + pad + setTick + setLabel
+
+	return start + "\n" + settings
 }
 
 func (s Splash) View() string { return s.view() }

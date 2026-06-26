@@ -19,6 +19,7 @@ type brokerRPC interface {
 	GetCart(accountID, addressID, restaurantName string) (api.Cart, error)
 	ClearCart(accountID string) error
 	PlaceOrder(accountID, addressID string) (api.Order, error)
+	Logout(accountID string) error
 }
 
 // BrokerBackend adapts the broker RPC client into a datasource.Backend, pinned
@@ -109,6 +110,8 @@ func (b *BrokerBackend) PlaceOrder(addressID string) (api.Order, error) {
 	r, err := b.rpc.PlaceOrder(b.accountID, addressID)
 	return r, wrapAuthErr(err)
 }
+
+func (b *BrokerBackend) Logout() error { return b.rpc.Logout(b.accountID) }
 
 // sectionQuery maps a catalogue lane to a Swiggy restaurant-search query.
 func sectionQuery(s catalog.Section) string {

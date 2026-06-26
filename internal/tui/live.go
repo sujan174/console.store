@@ -42,17 +42,23 @@ func WithPendingAuth() Option {
 	return func(m *Model) { m.needsAuth = true }
 }
 
-// AuthPoller reports whether the loopback callback for a given flow has
-// completed. *auth.Manager satisfies it (Authorized(flowID) bool).
-type AuthPoller interface{ Authorized(flowID string) bool }
+// AuthClient drives the loopback authorize flow from inside the TUI: it reports
+// when a flow completes (Authorized) and can begin a fresh flow (StartAuth, used
+// by Settings → Disconnect to re-authorize in place). A small adapter over
+// *auth.Manager in cmd/store satisfies it.
+type AuthClient interface {
+	Authorized(flowID string) bool
+	StartAuth(accountID string) (flowID, url string, err error)
+}
 
-// WithAuthFlow supplies the authorize flow id and a poller. While the auth gate
-// is showing, each tick polls the poller; when it reports authorized the gate
-// clears and the live loads fire. Set alongside WithPendingAuth + WithLiveBackend.
-func WithAuthFlow(flowID string, p AuthPoller) Option {
+// WithAuthFlow supplies the authorize flow id and the auth client. While the
+// auth gate is showing, each tick polls the client; when it reports authorized
+// the gate clears and the live loads fire. Pass flowID "" when starting with a
+// valid token (no pending flow) — the client is still kept for logout re-auth.
+func WithAuthFlow(flowID string, c AuthClient) Option {
 	return func(m *Model) {
 		m.authFlowID = flowID
-		m.authPoller = p
+		m.authClient = c
 	}
 }
 
