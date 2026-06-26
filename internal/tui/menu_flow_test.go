@@ -242,6 +242,7 @@ func TestLiveBrowseSearchEscExitsSearch(t *testing.T) {
 	m := buildRailModel(t)
 	m.searchMode = true
 	m.searchQuery = "pizza"
+	m.railFocus = false // actively typing in the search input
 	m.menu = m.buildMenu()
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	um := m2.(Model)

@@ -347,6 +347,19 @@ func (m Model) searchLoad(query string) tea.Cmd {
 
 // ensureHomeLoaded fires LoadUsuals + LoadPlacesQuery("") if not already cached.
 // Called when the user selects Home on the rail or on initial browse entry.
+// syncSearchEntry keeps the search input shown exactly while the rail cursor
+// sits on the Search entry — landing on Search opens a fresh input (no Enter),
+// leaving it closes the input.
+func (m *Model) syncSearchEntry() {
+	if m.railActive == screens.RailSearch {
+		m.searchMode = true
+		m.searchQuery = ""
+		m.searchSubmitted = ""
+	} else {
+		m.searchMode = false
+	}
+}
+
 // loadForRail fires the (deduped) load for the currently-active rail entry, so
 // the main pane populates as the user arrows through the rail.
 func (m *Model) loadForRail(rail screens.Rail) tea.Cmd {
@@ -1752,7 +1765,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Printable runes always append to the query. Named nav keys (↑↓ and the
 			// j/k aliases when NOT typed as runes) move the result cursor. Enter either
 			// submits the query (if it changed since last submit) or opens the selection.
-			if m.live && len(m.chips) > 0 && m.searchMode {
+			if m.live && len(m.chips) > 0 && m.searchMode && !m.railFocus {
 				// Printable rune: always append to query (j/k are letters here, not nav).
 				if k.Type == tea.KeyRunes {
 					m.searchQuery += string(k.Runes)
@@ -1781,11 +1794,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, cmd
 				case "left", "h":
 					// Left at the leftmost of an EMPTY field hands control back to the
-					// rail (Search stays selected) so the next ↓ navigates the sidebar.
+					// rail (Search stays selected, input still shown) so the next ↓
+					// navigates the sidebar.
 					if m.searchQuery == "" {
-						m.searchMode = false
 						m.railActive = screens.RailSearch
 						m.railFocus = true
+						m.syncSearchEntry()
 						m.menu = m.buildMenu()
 						return m, nil
 					}
@@ -1846,6 +1860,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cats[i] = c.Label
 				}
 				rail := screens.NewRail(cats).WithActive(m.railActive)
+				// On the Search entry, typing starts searching immediately (no Enter):
+				// commit into the input (drop rail focus) and append the character.
+				if m.railActive == screens.RailSearch {
+					if k.Type == tea.KeyRunes || k.Type == tea.KeySpace {
+						m.searchMode = true
+						m.railFocus = false
+						if k.Type == tea.KeySpace {
+							m.searchQuery += " "
+						} else {
+							m.searchQuery += string(k.Runes)
+						}
+						m.menu = m.buildMenu()
+						return m, nil
+					}
+				}
 				switch k.String() {
 				case "right", "l", "esc":
 					m.railFocus = false
@@ -1855,7 +1884,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.railActive > 0 {
 						m.railActive--
 					}
-					m.searchMode = false
+					m.syncSearchEntry()
 					cmd := m.loadForRail(rail)
 					m.menu = m.buildMenu()
 					return m, cmd
@@ -1863,7 +1892,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.railActive < rail.Len()-1 {
 						m.railActive++
 					}
-					m.searchMode = false
+					m.syncSearchEntry()
 					cmd := m.loadForRail(rail)
 					m.menu = m.buildMenu()
 					return m, cmd
