@@ -180,6 +180,7 @@ type Model struct {
 	orderErr     string   // last order-placement error; shown in status bar
 	liveCart     api.Cart // last synced/fetched Swiggy cart (real lines + pricing)
 	cartLoaded   bool     // true once the live Swiggy cart is fetched for the cart screen
+	cartMutating bool     // true while a reduce/delete cart sync is in flight (freezes input)
 
 	// vertical selects the top-level vertical: 0 = Restaurants, 1 = Instamart.
 	vertical int
@@ -1570,8 +1571,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cartSyncErr = ""
 		m.liveCart = dm.Cart
 		m.cartLoaded = true
-		if m.screen == scrCart {
-			m.cart = m.buildCart()
+		if m.screen == scrCheckout {
+			m.checkout = m.buildCheckout()
 		}
 		return m, nil
 	case datasource.UsualsLoadedMsg:
@@ -2381,7 +2382,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case scrCheckout:
 			switch k.String() {
 			case "esc":
-				m.screen = scrCart
+				m.screen = scrMenu
 				return m, nil
 			case "enter":
 				if m.live && !m.placingOrder {
@@ -2744,25 +2745,12 @@ func errIsNeedsAuth(err error) bool {
 // to keep Swiggy's cart in sync. No-op when not live, cart is empty, or the
 // restaurant has no SwiggyID (e.g. if menu hasn't loaded yet). Items without
 // a SwiggyID are skipped — they can't be referenced by Swiggy.
-// cartScreenLines are the lines to DISPLAY on the cart/checkout screens. In live
-// mode, once the Swiggy cart is fetched, they come straight from Swiggy (the
-// source of truth: real names, per-unit prices, and any pre-existing items) —
-// not the local in-memory approximation. Falls back to the local lines in mock
-// mode or before the fetch returns.
-func (m Model) cartScreenLines() []screens.CartLine {
-	if m.live && m.cartLoaded {
-		out := make([]screens.CartLine, 0, len(m.liveCart.Lines))
-		for _, l := range m.liveCart.Lines {
-			out = append(out, screens.CartLine{
-				Item:  catalog.Item{ID: l.ItemID, SwiggyID: l.ItemID, Name: l.Name, Price: l.Price},
-				Qty:   l.Quantity,
-				Price: l.Price, // Swiggy final per-unit price (incl. variant + add-ons)
-			})
-		}
-		return out
-	}
-	return m.lines
-}
+// cartScreenLines returns the authoritative lines to DISPLAY on the checkout
+// screen. The merged checkout drives the list from m.lines — which carry the
+// add-on/variant selections — so the bill (from liveCart via billFromLive) and
+// the item list are always in sync without the flattened Swiggy copy overwriting
+// local selections.
+func (m Model) cartScreenLines() []screens.CartLine { return m.lines }
 
 // buildCart constructs the cart screen from the display lines + live bill.
 func (m Model) buildCart() screens.Cart {
@@ -2770,12 +2758,23 @@ func (m Model) buildCart() screens.Cart {
 		WithEta(m.cartEta()).WithBill(m.billFromLive()).WithLiveSync(m.live, m.cartSyncErr)
 }
 
-// openCartCmd opens the cart screen and, in live mode, fetches the real Swiggy
-// cart so the display reflects exactly what Place Order will charge.
+// buildCheckout assembles the merged checkout screen. The live item list is
+// driven by the authoritative m.lines (carries add-on/variant selections);
+// liveCart feeds only the bill via billFromLive().
+func (m Model) buildCheckout() screens.Checkout {
+	return screens.NewCheckout(m.cartHeader(), m.addr, m.cartScreenLines(), m.cartEta()).
+		WithBill(m.billFromLive()).
+		WithLiveSync(m.live, m.cartSyncErr).
+		WithMutating(m.cartMutating).
+		WithCursor(m.checkout.Cursor())
+}
+
+// openCartCmd opens the merged checkout screen and, in live mode, fetches the
+// real Swiggy cart so the bill reflects exactly what Place Order will charge.
 func (m *Model) openCartCmd() tea.Cmd {
 	m.cartLoaded = false
-	m.cart = m.buildCart()
-	m.screen = scrCart
+	m.checkout = m.buildCheckout()
+	m.screen = scrCheckout
 	if !m.live {
 		return nil
 	}

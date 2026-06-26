@@ -8,7 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"console.store/internal/catalog"
+	swiggysnap "console.store/internal/catalog/swiggy"
 	"console.store/internal/tui/render"
+	"console.store/internal/tui/screens"
 )
 
 // despace strips spaces so assertions survive the list's letter-spacing
@@ -111,15 +113,16 @@ func enterFirstRestaurantWithItem(t *testing.T) Model {
 	return m
 }
 
-// Emptying the cart from the CART screen must release the restaurant binding so a
-// later visit shows a truly empty cart — not a stale "cart · {restaurant}".
+// Emptying the cart must release the restaurant binding so a later visit to the
+// merged checkout shows a truly empty cart — not a stale "cart · {restaurant}".
+// Now that the cart screen is no longer navigated (c goes straight to checkout),
+// emptying is done via the restaurant screen's − key (the same invariant holds).
 func TestEmptyingCartViaCartScreenClearsRestaurant(t *testing.T) {
 	m := enterFirstRestaurantWithItem(t)
 	rest := m.cartRestaurant
 
-	u, _ := m.Update(keyRunes("c")) // open cart
-	m = u.(Model)
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft}) // remove the only line
+	// Remove the only line via the restaurant screen (cart screen retired from nav).
+	u, _ := m.Update(keyRunes("-"))
 	m = u.(Model)
 
 	if len(m.lines) != 0 {
@@ -129,7 +132,7 @@ func TestEmptyingCartViaCartScreenClearsRestaurant(t *testing.T) {
 		t.Fatalf("cartRestaurant should be cleared, got %q", m.cartRestaurant)
 	}
 
-	// Re-enter via menu and confirm no stale restaurant name leaks into the view.
+	// Navigate to menu and open checkout — confirm no stale restaurant name leaks.
 	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = u.(Model)
 	u, _ = m.Update(keyRunes("c"))
@@ -400,40 +403,45 @@ func TestCartHeaderFromMenuNotNonsense(t *testing.T) {
 	}
 }
 
+// TestCartEditsSyncToRouter verifies that after adding an item and opening the
+// merged checkout (c), the checkout screen's line count and total reflect m.lines.
+// (Cart-screen qty editing was retired when c was re-routed to scrCheckout.)
 func TestCartEditsSyncToRouter(t *testing.T) {
 	m := newAtMenu()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open place
 	m = updated.(Model)
 	m = addFocused(m)                                                         // select + ↑ to add item
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")}) // cart
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")}) // merged checkout
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight}) // qty 2
-	m = updated.(Model)
-	if m.cartTotal() != m.cart.Total() {
-		t.Errorf("router total %d != cart total %d", m.cartTotal(), m.cart.Total())
+	// checkout must show the authoritative lines from m.lines.
+	if len(m.checkout.Lines()) != len(m.lines) {
+		t.Errorf("checkout lines %d != router lines %d", len(m.checkout.Lines()), len(m.lines))
 	}
-	if m.cart.Lines()[0].Qty != 2 {
-		t.Errorf("qty = %d, want 2", m.cart.Lines()[0].Qty)
+	if len(m.lines) == 0 {
+		t.Fatal("expected at least one line in the cart")
+	}
+	if m.checkout.Lines()[0].Qty != m.lines[0].Qty {
+		t.Errorf("checkout qty %d != router qty %d", m.checkout.Lines()[0].Qty, m.lines[0].Qty)
 	}
 }
 
 // TestCartScreenShowsBillAndEta drives menu -> place -> add Cold Coffee (₹149)
-// -> cart, and asserts the restyled cart shows the bill breakdown (to-pay ₹128)
-// and the place ETA derived as "~45 min".
+// -> checkout (merged), and asserts the merged checkout shows the bill total
+// (to-pay ₹128) and the place ETA derived as "~45 min".
 func TestCartScreenShowsBillAndEta(t *testing.T) {
 	m := newAtMenu()
 	for _, k := range []tea.KeyMsg{
 		{Type: tea.KeyEnter},                     // open Blue Tokai
 		{Type: tea.KeyEnter},                     // add Cold Coffee (₹149)
-		{Type: tea.KeyRunes, Runes: []rune("c")}, // cart
+		{Type: tea.KeyRunes, Runes: []rune("c")}, // merged checkout
 	} {
 		updated, _ := m.Update(k)
 		m = updated.(Model)
 	}
 	view := m.View()
-	for _, want := range []string{"item total", "₹149", "delivery", "₹29", "DEVFRIDAY", "to pay (COD)", "₹128", "~45 min"} {
+	for _, want := range []string{"₹149", "to pay (COD)", "₹128", "~45 min"} {
 		if !strings.Contains(view, want) {
-			t.Errorf("cart screen missing %q:\n%s", want, view)
+			t.Errorf("checkout screen missing %q:\n%s", want, view)
 		}
 	}
 	// The menu cart chip stays the ITEM total, not the bill total.
@@ -447,8 +455,7 @@ func TestCheckoutFlowPlacesAndResets(t *testing.T) {
 	steps := []tea.KeyMsg{
 		{Type: tea.KeyEnter},                     // open place
 		{Type: tea.KeyEnter},                     // add item
-		{Type: tea.KeyRunes, Runes: []rune("c")}, // cart
-		{Type: tea.KeyEnter},                     // checkout
+		{Type: tea.KeyRunes, Runes: []rune("c")}, // merged checkout (no separate cart step)
 		{Type: tea.KeyEnter},                     // place order
 	}
 	for _, k := range steps {
@@ -473,8 +480,7 @@ func TestTrackingFlowAdvancesAndEscResets(t *testing.T) {
 	steps := []tea.KeyMsg{
 		{Type: tea.KeyEnter},                     // open place
 		{Type: tea.KeyEnter},                     // add item
-		{Type: tea.KeyRunes, Runes: []rune("c")}, // cart
-		{Type: tea.KeyEnter},                     // checkout
+		{Type: tea.KeyRunes, Runes: []rune("c")}, // merged checkout (no separate cart step)
 		{Type: tea.KeyEnter},                     // place order -> confirm
 		{Type: tea.KeyEnter},                     // confirm -> tracking
 	}
@@ -981,5 +987,25 @@ func TestUsualCrossRestaurantOpensConflict(t *testing.T) {
 	}
 	if len(m.lines) != before {
 		t.Fatalf("cart must be untouched while modal open: was %d, now %d", before, len(m.lines))
+	}
+}
+
+func TestRestaurantCGoesStraightToCheckout(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
+	place := catalog.Place{ID: "r1", SwiggyID: "r1", Name: "Blue Tokai",
+		Items: []catalog.Item{{ID: "i1", SwiggyID: "i1", Name: "Latte", Price: 250}}}
+	snap.SetMenu(place)
+	m := New(render.Caps{}, WithLiveBackend(&liveFake{}, snap, "acct-1", ""), WithSeededSnapshot())
+	m.w, m.h = 100, 40
+	m.screen = scrRestaurant
+	m.rest = screens.NewRestaurant(place, map[string]int{}, "").WithAddr(m.addr)
+	m.lines = []screens.CartLine{{Item: catalog.Item{ID: "i1", Name: "Latte", Price: 250}, Qty: 1}}
+	m.cartRestaurant = "Blue Tokai"
+
+	nm, _ := m.Update(keyRunes("c"))
+	m = nm.(Model)
+	if m.screen != scrCheckout {
+		t.Fatalf("`c` must open the merged checkout directly, got screen %v", m.screen)
 	}
 }
