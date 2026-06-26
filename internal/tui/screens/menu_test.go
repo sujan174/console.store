@@ -235,3 +235,12 @@ func TestTwoPaneShowsStoreSwitcher(t *testing.T) {
 		}
 	}
 }
+
+func TestTwoPaneShowsNavHint(t *testing.T) {
+	v := liveMenu().WithSections(nil, []catalog.Place{{Name: "Blue Tokai"}}).View()
+	for _, want := range []string{"move", "open", "search", "cart", "cmd"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("two-pane browse missing nav hint %q:\n%s", want, v)
+		}
+	}
+}

@@ -473,8 +473,13 @@ func (m Menu) twoPaneView() string {
 	// No extra indent before the main pane — each row already leads with a
 	// 4-cell cursor column, which is enough gap from the rail divider.
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, mainStr)
+	// Trailing key-affordance line — floats after a blank so the root's
+	// splitHint lifts it to sit with the status bar (same pattern as the
+	// restaurant screen). The mock single-pane path renders its own below.
+	hint := components.Hint("↑↓", "move", "↵", "open", "/", "search", "i", "info", "c", "cart") +
+		"   " + theme.PurpleStyle.Render(":") + " " + theme.FaintStyle.Render("cmd")
 	// The store switcher (Food ⟷ Instamart) sits above the rail/main split.
-	return m.verticalSwitcher() + body
+	return m.verticalSwitcher() + body + "\n\n" + hint
 }
 
 func (m Menu) Init() tea.Cmd { return nil }
