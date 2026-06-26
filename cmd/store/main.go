@@ -118,9 +118,19 @@ func run() error {
 }
 
 // truecolor reports whether the terminal advertises 24-bit color via COLORTERM.
+// truecolor reports whether the terminal advertises 24-bit color. Windows
+// Terminal (WT_SESSION) and the VS Code integrated terminal (TERM_PROGRAM=vscode)
+// support truecolor but don't set COLORTERM, so without these checks lipgloss
+// strips the whole palette on Windows.
 func truecolor() bool {
 	ct := strings.ToLower(os.Getenv("COLORTERM"))
-	return ct == "truecolor" || ct == "24bit"
+	if ct == "truecolor" || ct == "24bit" {
+		return true
+	}
+	if os.Getenv("WT_SESSION") != "" {
+		return true
+	}
+	return strings.EqualFold(os.Getenv("TERM_PROGRAM"), "vscode")
 }
 
 func serveCallback(ctx context.Context, m *auth.Manager, redirect string) {
