@@ -188,10 +188,16 @@ func (c Checkout) summaryView() string {
 		b.WriteString(components.DashRule())
 	default:
 		b.WriteString(components.DashRule())
+		b.WriteString("  " + justify(theme.DimStyle.Render("item total"),
+			theme.TextStyle.Render(fmt.Sprintf("₹%d", c.Total())), w) + "\n")
+		b.WriteString("  " + justify(theme.DimStyle.Render("delivery"),
+			theme.TextStyle.Render(fmt.Sprintf("₹%d", DeliveryFee)), w) + "\n")
 		b.WriteString("  " + justify(
-			theme.BrightStyle.Render("to pay (COD)"),
-			theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
+			theme.GreenStyle.Render(fmt.Sprintf("%s  −₹%d", CouponCode, CouponAmount)),
+			theme.GreenStyle.Render("applied"), w) + "\n")
 		b.WriteString(components.DashRule())
+		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
+			theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
 	}
 
 	// Full-bleed place-order bar: green left bar + selected-row background.

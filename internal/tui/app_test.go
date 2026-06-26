@@ -439,7 +439,7 @@ func TestCartScreenShowsBillAndEta(t *testing.T) {
 		m = updated.(Model)
 	}
 	view := m.View()
-	for _, want := range []string{"₹149", "to pay (COD)", "₹128", "~45 min"} {
+	for _, want := range []string{"item total", "₹149", "delivery", "₹29", "DEVFRIDAY", "to pay (COD)", "₹128", "~45 min"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("checkout screen missing %q:\n%s", want, view)
 		}
