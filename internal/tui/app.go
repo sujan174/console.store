@@ -199,6 +199,7 @@ type Model struct {
 	searchAtLeftEdge bool   // last key was ← at caret 0 (a second ← exits to the rail)
 	catPending       bool   // a category load is in flight (shows "loading…")
 	catPendingQuery  string // the category query catPending is waiting on
+	restInfoOpen     bool   // restaurant-info modal ('i' on the browse list) is open
 	usualsLoaded     bool   // true once LoadUsuals has been fired for the current addr
 }
 
@@ -1780,6 +1781,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 
+			// Restaurant-info modal captures keys while open: i/esc/q close it; ↑/↓
+			// browse to the prev/next restaurant (the modal follows). Everything else
+			// is swallowed so the list behind it can't act.
+			if m.restInfoOpen {
+				switch k.String() {
+				case "i", "esc", "q":
+					m.restInfoOpen = false
+				case "up", "k":
+					if m.menu.ListCursor() > 0 {
+						m.menu = m.menu.WithListCursor(m.menu.ListCursor() - 1)
+					}
+				case "down", "j":
+					m.menu = m.menu.WithListCursor(m.menu.ListCursor() + 1)
+				}
+				return m, nil
+			}
+
 			// Live rail: search mode captures all printable keys + backspace + enter + esc.
 			// Printable runes always append to the query. Named nav keys (↑↓ and the
 			// j/k aliases when NOT typed as runes) move the result cursor. Enter either
@@ -1998,6 +2016,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if p.SwiggyID != "" {
 							return m, datasource.LoadMenu(m.backend, m.snap, m.addr.ID, p.SwiggyID)
 						}
+					}
+					return m, nil
+				case "i":
+					// Open the restaurant-info modal for the selected place.
+					if _, ok := m.menu.Selected(); ok {
+						m.restInfoOpen = true
 					}
 					return m, nil
 				case "c":
@@ -2414,6 +2438,16 @@ func (m Model) View() string {
 	// Item-info modal ('i' on the restaurant screen) — a centered overlay.
 	if m.screen == scrRestaurant && m.rest.InfoOpen() {
 		if card := m.rest.InfoView(0); card != "" {
+			if m.w == 0 || m.h == 0 {
+				return card
+			}
+			return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card)
+		}
+	}
+	// Restaurant-info modal ('i' on the browse list) — a centered overlay.
+	if m.screen == scrMenu && m.restInfoOpen {
+		if p, ok := m.menu.Selected(); ok {
+			card := screens.RestaurantInfoCard(p)
 			if m.w == 0 || m.h == 0 {
 				return card
 			}

@@ -508,7 +508,7 @@ func (m Menu) View() string {
 
 	b.WriteString("\n\n\n") // padding below the list
 
-	hint := components.Hint("↑↓", "move", "←→", "category", "↵", "open", "a", "address", "c", "cart") +
+	hint := components.Hint("↑↓", "move", "←→", "category", "↵", "open", "i", "info", "a", "address", "c", "cart") +
 		"   " + theme.PurpleStyle.Render(":") + " " + theme.FaintStyle.Render("cmd")
 	b.WriteString(hint)
 

@@ -104,7 +104,8 @@ type Place struct {
 	ETA              string // "35-45 min"
 	Fav              bool
 	Rating           float64
-	Description      string // one-line "quick look" blurb; empty in older data
+	Description      string // cuisines · cost-for-two blurb; empty in older data
+	Offer            string // live promo line, e.g. "50% OFF up to ₹100"; "" if none
 	Items            []Item
 	ServesAddressIDs []string
 }

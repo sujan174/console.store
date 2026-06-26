@@ -406,9 +406,50 @@ func (s Restaurant) InfoView(int) string {
 // into the top border and a centered hint set into the bottom border. It is
 // self-contained (no left margin) so the root can center it in the viewport.
 //
-//	╭─ <title> ─────────────╮
-//	│ <line>                │
-//	╰──── <footer> ─────────╯
+// RestaurantInfoCard renders the centered restaurant-detail modal for a place in
+// the browse list ('i'). Real Swiggy fields only: ★rating · delivery time · area,
+// the cuisines/cost blurb, and the live offer when present.
+func RestaurantInfoCard(p catalog.Place) string {
+	const cardW = 52
+	inner := cardW - 4
+
+	badge := []string{}
+	if p.Rating > 0 {
+		badge = append(badge, theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", p.Rating)))
+	}
+	if p.ETA != "" {
+		badge = append(badge, theme.DimStyle.Render(p.ETA))
+	}
+	if p.City != "" {
+		badge = append(badge, theme.DimStyle.Render(p.City))
+	}
+
+	var lines []string
+	if len(badge) > 0 {
+		lines = append(lines, strings.Join(badge, theme.FaintStyle.Render("    ")), "")
+	}
+	if strings.TrimSpace(p.Description) != "" {
+		wrapped := lipgloss.NewStyle().Width(inner).Render(p.Description)
+		for _, dl := range strings.Split(wrapped, "\n") {
+			lines = append(lines, theme.ItemStyle.Render(dl))
+		}
+	}
+	if strings.TrimSpace(p.Offer) != "" {
+		wrapped := lipgloss.NewStyle().Width(inner).Render("🎁 " + p.Offer)
+		lines = append(lines, "")
+		for _, dl := range strings.Split(wrapped, "\n") {
+			lines = append(lines, theme.GreenStyle.Render(dl))
+		}
+	}
+	if len(lines) == 0 {
+		lines = append(lines, theme.DimStyle.Render("no details available"))
+	}
+	return modalCard(p.Name, lines, "↑↓ browse  ·  i/esc close", cardW)
+}
+
+// ╭─ <title> ─────────────╮
+// │ <line>                │
+// ╰──── <footer> ─────────╯
 func modalCard(title string, lines []string, footer string, w int) string {
 	bd := theme.Fg(theme.Gold)
 	inner := w - 4

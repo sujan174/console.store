@@ -19,6 +19,7 @@ func toPlaces(in []api.Restaurant, section catalog.Section) []catalog.Place {
 		out[i] = catalog.Place{
 			ID: r.ID, SwiggyID: r.ID, Name: r.Name, City: r.City,
 			Section: section, ETA: r.ETA, Rating: r.Rating, Description: r.Description,
+			Offer: r.Offer,
 		}
 	}
 	return out

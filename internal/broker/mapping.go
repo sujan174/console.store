@@ -36,6 +36,7 @@ func mapRestaurants(in []swiggy.Restaurant) []api.Restaurant {
 		out[i] = api.Restaurant{
 			ID: r.ID, Name: r.Name, City: r.AreaName,
 			ETA: r.DeliveryTimeRange, Description: desc, Rating: r.AvgRating,
+			Offer: r.Offer,
 		}
 	}
 	return out

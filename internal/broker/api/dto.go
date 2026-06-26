@@ -21,6 +21,7 @@ type Restaurant struct {
 	ETA         string
 	Description string
 	Rating      float64
+	Offer       string
 }
 
 type MenuItem struct {
