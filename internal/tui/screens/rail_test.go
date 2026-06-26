@@ -7,7 +7,7 @@ import (
 
 func TestRailEntriesOrder(t *testing.T) {
 	r := NewRail([]string{"Coffee", "Pizza"})
-	// 🔍 Search, Home, Coffee, Pizza
+	// ⌕ Search, Home, Coffee, Pizza
 	if r.Len() != 4 {
 		t.Fatalf("expected 4 entries, got %d", r.Len())
 	}
@@ -24,7 +24,7 @@ func TestRailEntriesOrder(t *testing.T) {
 
 func TestRailViewShowsEntriesAndSearchIcon(t *testing.T) {
 	v := NewRail([]string{"Coffee"}).WithActive(RailHome).WithHeight(10).View()
-	for _, want := range []string{"🔍", "Search", "Home", "Coffee"} {
+	for _, want := range []string{"⌕", "Search", "Home", "Coffee"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("rail view missing %q:\n%s", want, v)
 		}

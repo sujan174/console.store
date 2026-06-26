@@ -1,7 +1,7 @@
 package tui
 
 // TestLiveBrowseRailFocusAndSearch drives the live browse rail:
-//   (a) landing on the live browse renders the rail (🔍, Home, a category label)
+//   (a) landing on the live browse renders the rail (⌕, Home, a category label)
 //   (b) ← focuses the rail; ↓ + enter on a category loads that category's restaurants
 //   (c) ← to Search entry + enter + typed query + enter shows results
 //
@@ -93,7 +93,7 @@ func TestLiveBrowseRailRenders(t *testing.T) {
 	m := buildRailModel(t)
 	m.menu = m.buildMenu()
 	v := m.menu.View()
-	for _, want := range []string{"🔍", "Home", "Coffee"} {
+	for _, want := range []string{"⌕", "Home", "Coffee"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("live browse must render rail entry %q\n%s", want, v)
 		}
@@ -197,8 +197,8 @@ func TestLiveBrowseSearchMode(t *testing.T) {
 
 	// The menu in search mode must show the search input
 	v := um4.menu.View()
-	if !strings.Contains(v, "🔍") {
-		t.Errorf("search mode view must contain 🔍\n%s", v)
+	if !strings.Contains(v, "⌕") {
+		t.Errorf("search mode view must contain ⌕\n%s", v)
 	}
 	if !strings.Contains(v, "blue tokai") {
 		t.Errorf("search mode view must contain the query\n%s", v)

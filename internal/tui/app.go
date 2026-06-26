@@ -2191,8 +2191,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Enter / + add the focused dish (opens the customise sheet when
 				// needed). ↑/↓ stay free for moving through the list.
 				return m.restIncSelected()
-			case "-", "_":
-				// − removes a unit of the focused dish (to zero it leaves the cart).
+			case "-", "_", "backspace", "delete":
+				// − / Del / Backspace removes a unit of the focused dish (to zero it
+				// leaves the cart).
 				return m.restDecSelected()
 			case "c":
 				cmd := m.openCartCmd()

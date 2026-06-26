@@ -30,7 +30,7 @@ const (
 // NewRail builds the rail entries: Search, Home, then the categories.
 func NewRail(categories []string) Rail {
 	entries := make([]string, 0, len(categories)+2)
-	entries = append(entries, "🔍 Search", "Home")
+	entries = append(entries, "⌕ Search", "Home")
 	entries = append(entries, categories...)
 	return Rail{entries: entries, active: RailHome}
 }
@@ -57,7 +57,7 @@ func (r Rail) EntryLabel(i int) string {
 		return ""
 	}
 	// strip the icon prefix for the Search entry's logical label
-	return strings.TrimPrefix(r.entries[i], "🔍 ")
+	return strings.TrimPrefix(r.entries[i], "⌕ ")
 }
 
 // IsCategory reports whether entry i is a cuisine category (vs Search/Home), and

@@ -152,7 +152,7 @@ func TestMenuTwoPaneHomeSections(t *testing.T) {
 		[]catalog.Place{{Name: "Pizza Hut", ETA: "20 min"}},
 	)
 	v := m.View()
-	for _, want := range []string{"🔍", "Home", "your usuals", "Blue Tokai", "popular near you", "Pizza Hut"} {
+	for _, want := range []string{"⌕", "Home", "your usuals", "Blue Tokai", "popular near you", "Pizza Hut"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("home view missing %q:\n%s", want, v)
 		}

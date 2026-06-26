@@ -201,7 +201,7 @@ func (m Menu) searchInputLine() string {
 		Foreground(lipgloss.Color(theme.Bg)).
 		Background(lipgloss.Color(theme.Cursor)).
 		Render(at)
-	return theme.CursorStyle.Render("🔍 "+before) + caret + theme.CursorStyle.Render(after)
+	return theme.CursorStyle.Render("⌕ "+before) + caret + theme.CursorStyle.Render(after)
 }
 
 // mainPlaces is the flat, cursor-addressable slice for the active view:
