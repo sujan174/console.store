@@ -36,3 +36,14 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+
+# build artifacts (native binaries)
+/store
+/safestore
+
+# runtime logs — never publish
+broker.log
+sshd.log
+
+# SDD orchestration scratch
+.superpowers/

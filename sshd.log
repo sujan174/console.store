@@ -1,5 +1,0 @@
-2026/06/26 19:16:33 SSH server listening on 127.0.0.1:2222 — connect with: ssh localhost -p 2222
-2026/06/26 19:18:15 INFO sujan connect 127.0.0.1:60722 true [] xterm-ghostty 104 35 SSH-2.0-OpenSSH_10.3
-2026/06/26 19:19:32 TUI-DEBUG add: item="Iced Americano" swiggyID="196459401" rest="Third Wave Coffee"
-2026/06/26 19:19:32 TUI-DEBUG add: fetching options for "Iced Americano"
-2026/06/26 19:19:38 TUI-DEBUG wizardOptionalCmd: probe 1/1 group="Add On"

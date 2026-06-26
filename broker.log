@@ -1,2 +1,0 @@
-2026/06/26 19:16:30 broker serving on /tmp/console-broker.sock
-2026/06/26 19:18:15 authorize URL: https://mcp.swiggy.com/auth/authorize?client_id=swiggy-mcp&code_challenge=14UJ8leEvPMjHaD81NJFusCatpRtjOhCV-0iiIUuS1s&code_challenge_method=S256&redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fcb&response_type=code&scope=mcp%3Atools&state=ttWN3AHnNcEKrTPKjTnOZ9fvaEhhta6s
