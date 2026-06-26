@@ -53,8 +53,9 @@ func (a *rpcAdapter) Addresses(args api.AddressesArgs, rep *api.AddressesReply) 
 }
 
 func (a *rpcAdapter) Restaurants(args api.RestaurantsArgs, rep *api.RestaurantsReply) error {
-	out, err := a.svc.Restaurants(context.Background(), args.AccountID, args.AddressID, args.Query, args.Organic)
+	out, eff, err := a.svc.Restaurants(context.Background(), args.AccountID, args.AddressID, args.Query, args.Organic)
 	rep.Restaurants = out
+	rep.Query = eff
 	return err
 }
 

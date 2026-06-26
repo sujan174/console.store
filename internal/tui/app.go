@@ -196,6 +196,7 @@ type Model struct {
 	searchSubmitted  string // last query submitted to ensureQuery; "" = none
 	searchPending    bool   // a search query is in flight (shows "searching…")
 	searchCaret      int    // caret position in searchQuery, in runes
+	searchCorrected  string // effective query when search spell-corrected; "" otherwise
 	searchAtLeftEdge bool   // last key was ← at caret 0 (a second ← exits to the rail)
 	catPending       bool   // a category load is in flight (shows "loading…")
 	catPendingQuery  string // the category query catPending is waiting on
@@ -305,7 +306,7 @@ func (m Model) buildMenu() screens.Menu {
 		if isSearch {
 			results := m.liveRepo().PlacesByQuery(m.addr, datasource.SearchKey(m.searchQuery))
 			menu = menu.WithSearchMode(true, m.searchQuery, results, len(results), m.searchPending).
-				WithSearchCaret(m.searchCaret)
+				WithSearchCaret(m.searchCaret).WithSearchCorrected(m.searchCorrected)
 		} else if _, isCat := rail.IsCategory(m.railActive); isCat {
 			// Category view: use the flat places path (no sections header).
 			// viewPlaces already holds catPlaces; WithSections is intentionally NOT
@@ -367,6 +368,7 @@ func (m *Model) syncSearchEntry() {
 		m.searchQuery = ""
 		m.searchSubmitted = ""
 		m.searchCaret = 0
+		m.searchCorrected = ""
 		m.searchAtLeftEdge = false
 	} else {
 		m.searchMode = false
@@ -1308,7 +1310,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.searchPending && dm.Query == m.searchSubmitted {
-			m.searchPending = false // results for the submitted query landed
+			m.searchPending = false          // results for the submitted query landed
+			m.searchCorrected = dm.Corrected // "" unless a spelling correction matched
 		}
 		if m.catPending && dm.Query == m.catPendingQuery {
 			m.catPending = false // category results landed
@@ -1944,6 +1947,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.searchSubmitted = m.searchQuery
 						cmd = m.searchLoad(m.searchQuery)
 						m.searchPending = cmd != nil // show "searching…" until results land
+						m.searchCorrected = ""       // cleared; the load's msg may set it
 					}
 					m.menu = m.buildMenu()
 					return m, cmd

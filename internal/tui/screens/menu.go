@@ -37,19 +37,20 @@ type Menu struct {
 	chipActive      int
 	hideSectionTabs bool
 	// two-pane live fields (only active when hasRail is true)
-	rail          Rail
-	hasRail       bool
-	railFocus     bool
-	usuals        []catalog.Place
-	nearby        []catalog.Place
-	hasSections   bool
-	loading       bool
-	searchMode    bool
-	searchPending bool
-	searchQuery   string
-	searchCaret   int // caret position in searchQuery, in runes
-	results       []catalog.Place
-	resultCount   int
+	rail            Rail
+	hasRail         bool
+	railFocus       bool
+	usuals          []catalog.Place
+	nearby          []catalog.Place
+	hasSections     bool
+	loading         bool
+	searchMode      bool
+	searchPending   bool
+	searchQuery     string
+	searchCaret     int    // caret position in searchQuery, in runes
+	searchCorrected string // non-empty when results came from a spell-correction
+	results         []catalog.Place
+	resultCount     int
 }
 
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartChip string) Menu {
@@ -173,6 +174,10 @@ func (m Menu) WithLoading(loading bool) Menu { m.loading = loading; return m }
 
 // WithSearchCaret sets the caret position (in runes) for the search input.
 func (m Menu) WithSearchCaret(caret int) Menu { m.searchCaret = caret; return m }
+
+// WithSearchCorrected notes the spelling Swiggy was searched with when the typed
+// query found nothing and a correction matched (shown as "showing results for…").
+func (m Menu) WithSearchCorrected(s string) Menu { m.searchCorrected = s; return m }
 
 // searchInputLine renders the 🔍 search field with a block caret drawn at the
 // caret position, so ←/→ editing is visible mid-string.
@@ -357,7 +362,11 @@ func (m Menu) twoPaneView() string {
 		case m.searchQuery == "":
 			main.WriteString(theme.DimStyle.Render("type to search restaurants, ↵ to search") + "\n")
 		case len(m.results) == 0:
-			main.WriteString(theme.DimStyle.Render(fmt.Sprintf(`no restaurants for "%s"`, m.searchQuery)) + "\n")
+			main.WriteString(theme.DimStyle.Render(fmt.Sprintf(`no restaurants for "%s"`, m.searchQuery)) +
+				theme.FaintStyle.Render(" · check your spelling") + "\n")
+		case m.searchCorrected != "":
+			main.WriteString(theme.DimStyle.Render("showing results for ") +
+				theme.GoldStyle.Render(`"`+m.searchCorrected+`"`) + "\n\n")
 		default:
 			main.WriteString(theme.DimStyle.Render(plural(m.resultCount, "result", "results")) + "\n\n")
 		}

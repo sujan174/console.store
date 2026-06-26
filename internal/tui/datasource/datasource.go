@@ -25,7 +25,7 @@ type Backend interface {
 	Addresses() ([]api.Address, error)
 	Places(addressID string, section catalog.Section) ([]api.Restaurant, error)
 	PlacesQuery(addressID, query string) ([]api.Restaurant, error)
-	SearchOrganic(addressID, query string) ([]api.Restaurant, error)
+	SearchOrganic(addressID, query string) ([]api.Restaurant, string, error)
 	Usuals(addressID string) ([]api.Restaurant, error)
 	Menu(addressID, restaurantID string) (api.Menu, error)
 	ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
@@ -38,9 +38,10 @@ type Backend interface {
 type (
 	AddressesLoadedMsg struct{ Err error }
 	PlacesLoadedMsg    struct {
-		Section catalog.Section
-		Query   string
-		Err     error
+		Section   catalog.Section
+		Query     string
+		Corrected string // non-empty when search spell-corrected to a different query
+		Err       error
 	}
 	MenuLoadedMsg struct {
 		PlaceID string
@@ -117,12 +118,16 @@ func SearchKey(query string) string { return "__search__:" + query }
 // searchPending gate matches what the user submitted.
 func LoadSearch(b Backend, snap *swiggysnap.Snapshot, addressID, query string) tea.Cmd {
 	return func() tea.Msg {
-		got, err := b.SearchOrganic(addressID, query)
+		got, effective, err := b.SearchOrganic(addressID, query)
 		if err != nil {
 			return PlacesLoadedMsg{Query: query, Err: err}
 		}
 		snap.SetPlaces(addressID, SearchKey(query), toPlaces(got, catalog.SectionCoffee))
-		return PlacesLoadedMsg{Query: query}
+		corrected := ""
+		if effective != "" && effective != query {
+			corrected = effective // a spelling correction matched
+		}
+		return PlacesLoadedMsg{Query: query, Corrected: corrected}
 	}
 }
 

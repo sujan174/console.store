@@ -11,7 +11,7 @@ import (
 type brokerRPC interface {
 	Addresses(accountID string) ([]api.Address, error)
 	Restaurants(accountID, addressID, query string) ([]api.Restaurant, error)
-	SearchOrganic(accountID, addressID, query string) ([]api.Restaurant, error)
+	SearchOrganic(accountID, addressID, query string) ([]api.Restaurant, string, error)
 	Usuals(accountID, addressID string) ([]api.Restaurant, error)
 	Menu(accountID, addressID, restaurantID string) (api.Menu, error)
 	ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
@@ -65,9 +65,9 @@ func (b *BrokerBackend) PlacesQuery(addressID, query string) ([]api.Restaurant, 
 	return r, wrapAuthErr(err)
 }
 
-func (b *BrokerBackend) SearchOrganic(addressID, query string) ([]api.Restaurant, error) {
-	r, err := b.rpc.SearchOrganic(b.accountID, addressID, query)
-	return r, wrapAuthErr(err)
+func (b *BrokerBackend) SearchOrganic(addressID, query string) ([]api.Restaurant, string, error) {
+	r, eff, err := b.rpc.SearchOrganic(b.accountID, addressID, query)
+	return r, eff, wrapAuthErr(err)
 }
 
 func (b *BrokerBackend) Usuals(addressID string) ([]api.Restaurant, error) {

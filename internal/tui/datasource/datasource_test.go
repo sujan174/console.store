@@ -28,8 +28,8 @@ func (f *fakeBackend) Places(string, catalog.Section) ([]api.Restaurant, error) 
 func (f *fakeBackend) PlacesQuery(string, string) ([]api.Restaurant, error) {
 	return f.rests, f.err
 }
-func (f *fakeBackend) SearchOrganic(string, string) ([]api.Restaurant, error) {
-	return f.rests, f.err
+func (f *fakeBackend) SearchOrganic(string, string) ([]api.Restaurant, string, error) {
+	return f.rests, "", f.err
 }
 func (f *fakeBackend) Usuals(string) ([]api.Restaurant, error) { return f.restaurants, f.err }
 func (f *fakeBackend) Menu(string, string) (api.Menu, error)   { return f.menu, f.err }

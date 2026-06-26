@@ -485,9 +485,16 @@ func modalCard(title string, lines []string, footer string, w int) string {
 		fill = 0
 	}
 
+	// One blank line of padding after the top border and before the bottom
+	// border, so every modal has uniform breathing room.
+	body := make([]string, 0, len(lines)+2)
+	body = append(body, "")
+	body = append(body, lines...)
+	body = append(body, "")
+
 	var b strings.Builder
 	b.WriteString(bd.Render("╭─ ") + titleStr + bd.Render(" "+strings.Repeat("─", fill)+"╮") + "\n")
-	for _, ln := range lines {
+	for _, ln := range body {
 		b.WriteString(bd.Render("│ ") + components.PadTo(ln, inner) + bd.Render(" │") + "\n")
 	}
 	footStr := theme.FaintStyle.Render(footer)

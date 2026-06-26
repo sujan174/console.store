@@ -28,12 +28,12 @@ func (f *fakeRPC) Restaurants(accountID, addressID, query string) ([]api.Restaur
 	}
 	return []api.Restaurant{{ID: "r1"}}, nil
 }
-func (f *fakeRPC) SearchOrganic(accountID, addressID, query string) ([]api.Restaurant, error) {
+func (f *fakeRPC) SearchOrganic(accountID, addressID, query string) ([]api.Restaurant, string, error) {
 	f.lastAccount, f.lastQuery = accountID, query
 	if f.err != nil {
-		return nil, f.err
+		return nil, query, f.err
 	}
-	return []api.Restaurant{{ID: "r1"}}, nil
+	return []api.Restaurant{{ID: "r1"}}, query, nil
 }
 func (f *fakeRPC) Usuals(accountID, addressID string) ([]api.Restaurant, error) {
 	f.lastAccount = accountID

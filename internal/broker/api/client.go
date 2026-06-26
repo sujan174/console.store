@@ -48,11 +48,13 @@ func (c *Client) Restaurants(accountID, addressID, query string) ([]Restaurant, 
 	return rep.Restaurants, err
 }
 
-// SearchOrganic is Restaurants with sponsored "(Ad)" listings dropped (global search).
-func (c *Client) SearchOrganic(accountID, addressID, query string) ([]Restaurant, error) {
+// SearchOrganic is Restaurants with sponsored "(Ad)" listings dropped (global
+// search). It returns the effective query — the same query, or a spelling
+// correction the broker fell back to when the original found nothing.
+func (c *Client) SearchOrganic(accountID, addressID, query string) ([]Restaurant, string, error) {
 	var rep RestaurantsReply
 	err := c.rc.Call(ServiceName+".Restaurants", RestaurantsArgs{AccountID: accountID, AddressID: addressID, Query: query, Organic: true}, &rep)
-	return rep.Restaurants, err
+	return rep.Restaurants, rep.Query, err
 }
 
 func (c *Client) Menu(accountID, addressID, restaurantID string) (Menu, error) {

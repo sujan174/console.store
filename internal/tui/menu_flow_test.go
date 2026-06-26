@@ -39,8 +39,8 @@ func (f *railFake) PlacesQuery(_, q string) ([]api.Restaurant, error) {
 	}
 	return f.queryResult, f.err
 }
-func (f *railFake) SearchOrganic(_, q string) ([]api.Restaurant, error) {
-	return f.queryResult, f.err
+func (f *railFake) SearchOrganic(_, q string) ([]api.Restaurant, string, error) {
+	return f.queryResult, q, f.err
 }
 func (f *railFake) Usuals(string) ([]api.Restaurant, error) { return f.usuals, f.err }
 func (f *railFake) Menu(string, string) (api.Menu, error)   { return api.Menu{}, f.err }

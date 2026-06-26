@@ -77,22 +77,35 @@ func (s *Service) Addresses(ctx context.Context, accountID string) ([]api.Addres
 }
 
 // Restaurants searches restaurants for a query. organic drops sponsored "(Ad)"
-// listings (global search); categories pass organic=false to keep them.
-func (s *Service) Restaurants(ctx context.Context, accountID, addressID, query string, organic bool) ([]api.Restaurant, error) {
+// listings (global search); categories pass organic=false to keep them. For an
+// organic search that returns nothing, it retries with spelling variants and
+// returns the effective query (different from query when a correction matched).
+func (s *Service) Restaurants(ctx context.Context, accountID, addressID, query string, organic bool) ([]api.Restaurant, string, error) {
 	fc := s.foodClient(accountID)
-	var (
-		r   []swiggy.Restaurant
-		err error
-	)
-	if organic {
-		r, err = fc.SearchOrganic(ctx, addressID, query)
-	} else {
-		r, err = fc.SearchRestaurants(ctx, addressID, query, 0)
+	if !organic {
+		r, err := fc.SearchRestaurants(ctx, addressID, query, 0)
+		if err != nil {
+			return nil, query, err
+		}
+		return mapRestaurants(r), query, nil
 	}
+
+	r, err := fc.SearchOrganic(ctx, addressID, query)
 	if err != nil {
-		return nil, err
+		return nil, query, err
 	}
-	return mapRestaurants(r), nil
+	effective := query
+	if len(r) == 0 {
+		// Typo recovery: retry Swiggy with corrected spellings, first hit wins.
+		for _, v := range swiggy.SpellingVariants(query) {
+			alt, aerr := fc.SearchOrganic(ctx, addressID, v)
+			if aerr == nil && len(alt) > 0 {
+				r, effective = alt, v
+				break
+			}
+		}
+	}
+	return mapRestaurants(r), effective, nil
 }
 
 func (s *Service) Menu(ctx context.Context, accountID, addressID, restaurantID string) (api.Menu, error) {

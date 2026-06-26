@@ -27,7 +27,10 @@ type RestaurantsArgs struct {
 	Query     string
 	Organic   bool // drop sponsored "(Ad)" listings (global search; categories keep them)
 }
-type RestaurantsReply struct{ Restaurants []Restaurant }
+type RestaurantsReply struct {
+	Restaurants []Restaurant
+	Query       string // effective query used (differs from the request when spell-corrected)
+}
 
 type MenuArgs struct {
 	AccountID    string
