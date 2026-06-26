@@ -168,6 +168,26 @@ func (s *Service) PlaceOrder(ctx context.Context, accountID, addressID string) (
 	return mapOrder(o), nil
 }
 
+// ActiveFoodOrders returns the account's currently-active food orders.
+func (s *Service) ActiveFoodOrders(ctx context.Context, accountID, addressID string) ([]api.Order, error) {
+	os, err := s.foodClient(accountID).GetFoodOrders(ctx, addressID, true)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]api.Order, len(os))
+	for i, o := range os {
+		out[i] = mapOrder(o)
+	}
+	return out, nil
+}
+
+// CaptureTracking fires every read-only tracking tool for an order so their raw
+// shapes land in the debug log (CONSOLE_DEBUG_SWIGGY=1). Used by cmd/capture to
+// poll a live delivery's lifecycle.
+func (s *Service) CaptureTracking(ctx context.Context, accountID, addressID, orderID string) {
+	s.foodClient(accountID).CaptureOrderTracking(ctx, addressID, orderID)
+}
+
 func (s *Service) Logout(ctx context.Context, accountID string) error {
 	// drop the cached client (and its token source) then purge the token.
 	s.mu.Lock()

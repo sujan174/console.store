@@ -10,18 +10,32 @@ import (
 	"sync"
 )
 
+// swiggyDebugOn reports whether raw MCP request/response logging is enabled
+// (CONSOLE_DEBUG_SWIGGY=1). Pair with CONSOLE_DEBUG_LOG=<file> in cmd/store to
+// send the log to a file (the TUI altscreen hides stderr).
+func swiggyDebugOn() bool { return os.Getenv("CONSOLE_DEBUG_SWIGGY") == "1" }
+
+// debugSwiggyReq logs the outgoing request (tool + args) for every tool call.
+func debugSwiggyReq(tool string, args map[string]any) {
+	if !swiggyDebugOn() {
+		return
+	}
+	b, _ := json.Marshal(args)
+	log.Printf("SWIGGY-DEBUG → tool=%s args=%s", tool, string(b))
+}
+
 // debugSwiggy, when CONSOLE_DEBUG_SWIGGY=1, logs the raw parsed result of every
 // tool call. Used to harvest real Swiggy response schemas against a live account
 // (e.g. the order/tracking shapes that only appear after a real order).
 func debugSwiggy(tool string, raw json.RawMessage, err error) {
-	if os.Getenv("CONSOLE_DEBUG_SWIGGY") != "1" {
+	if !swiggyDebugOn() {
 		return
 	}
 	s := string(raw)
 	if len(s) > 200000 {
 		s = s[:200000] + "…(trunc)"
 	}
-	log.Printf("SWIGGY-DEBUG tool=%s err=%v raw=%s", tool, err, s)
+	log.Printf("SWIGGY-DEBUG ← tool=%s err=%v raw=%s", tool, err, s)
 }
 
 // FoodBaseURL is the Swiggy MCP endpoint for the Food (restaurant) vertical.
@@ -110,11 +124,7 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 	if args == nil {
 		args = map[string]any{}
 	}
-	if os.Getenv("CONSOLE_DEBUG_SWIGGY") == "1" && name == "update_food_cart" {
-		if b, mErr := json.Marshal(args); mErr == nil {
-			log.Printf("SWIGGY-DEBUG REQUEST tool=%s args=%s", name, string(b))
-		}
-	}
+	debugSwiggyReq(name, args)
 	res, err := rpc(ctx, c.http, c.base, bearer, sid, map[string]any{
 		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
 		"params": map[string]any{"name": name, "arguments": args},

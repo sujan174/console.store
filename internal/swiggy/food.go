@@ -193,3 +193,21 @@ func (c *Client) GetFoodOrderDetails(ctx context.Context, orderID string) (Order
 func (c *Client) TrackFoodOrder(ctx context.Context, orderID string) (Tracking, error) {
 	return decodeResult[Tracking](c.CallTool(ctx, "track_food_order", map[string]any{"orderId": orderID}))
 }
+
+// GetFoodDeliveryStatus calls Swiggy's order-success live-ETA widget tool. The
+// real response shape is unknown until a live order — the raw JSON is captured
+// by the debug logger (CONSOLE_DEBUG_SWIGGY) so we can model it afterward.
+func (c *Client) GetFoodDeliveryStatus(ctx context.Context, orderID string) (json.RawMessage, error) {
+	return c.CallTool(ctx, "get_food_delivery_status", map[string]any{"orderId": orderID})
+}
+
+// CaptureOrderTracking fires every read-only tracking tool for a freshly placed
+// order, best-effort, so the debug log captures their raw shapes. It is invoked
+// after a successful place when debug logging is on; errors are intentionally
+// ignored (the raw JSON is already logged at the CallTool seam).
+func (c *Client) CaptureOrderTracking(ctx context.Context, addressID, orderID string) {
+	_, _ = c.GetFoodOrders(ctx, addressID, true)
+	_, _ = c.GetFoodOrderDetails(ctx, orderID)
+	_, _ = c.TrackFoodOrder(ctx, orderID)
+	_, _ = c.GetFoodDeliveryStatus(ctx, orderID)
+}

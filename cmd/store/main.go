@@ -39,6 +39,21 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Debug capture: CONSOLE_DEBUG_LOG=<file> sends the std logger (incl. the
+	// raw Swiggy MCP request/response dumps gated by CONSOLE_DEBUG_SWIGGY=1) to
+	// a file — the TUI alt-screen otherwise hides stderr. Used to harvest the
+	// real order/tracking shapes from a live order.
+	if p := os.Getenv("CONSOLE_DEBUG_LOG"); p != "" {
+		f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		if err != nil {
+			return fmt.Errorf("open debug log %s: %w", p, err)
+		}
+		defer f.Close()
+		log.SetOutput(f)
+		log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+		log.Printf("=== console.store debug log opened ===")
+	}
+
 	metaURL := envOr("CONSOLE_SWIGGY_METADATA", "https://mcp.swiggy.com/.well-known/oauth-authorization-server")
 	redirect := envOr("CONSOLE_REDIRECT_URI", "http://127.0.0.1:8765/cb")
 	httpc := &http.Client{Timeout: 30 * time.Second}

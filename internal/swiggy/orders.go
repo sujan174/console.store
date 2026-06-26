@@ -194,7 +194,13 @@ func (c *Client) PlaceFoodOrder(ctx context.Context, req PlaceFoodOrderRequest) 
 			"addressId": req.AddressID, "paymentMethod": pay,
 		})
 	}
-	return c.placeWithVerify(ctx, snapshot, place)
+	o, err := c.placeWithVerify(ctx, snapshot, place)
+	// Recon (debug only): capture every tracking tool's raw shape for the new
+	// order, so the live-tracking feature can be built from real data. Read-only.
+	if err == nil && o.ID != "" && swiggyDebugOn() {
+		c.CaptureOrderTracking(ctx, req.AddressID, string(o.ID))
+	}
+	return o, err
 }
 
 type CheckoutRequest struct {
