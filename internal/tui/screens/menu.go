@@ -362,8 +362,7 @@ func (m Menu) twoPaneView() string {
 		case m.searchQuery == "":
 			main.WriteString(theme.DimStyle.Render("type to search restaurants, ↵ to search") + "\n")
 		case len(m.results) == 0:
-			main.WriteString(theme.DimStyle.Render(fmt.Sprintf(`no restaurants for "%s"`, m.searchQuery)) +
-				theme.FaintStyle.Render(" · check your spelling") + "\n")
+			main.WriteString(theme.DimStyle.Render(fmt.Sprintf(`no restaurants for "%s"`, m.searchQuery)) + "\n")
 		case m.searchCorrected != "":
 			main.WriteString(theme.DimStyle.Render("showing results for ") +
 				theme.GoldStyle.Render(`"`+m.searchCorrected+`"`) + "\n\n")
