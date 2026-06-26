@@ -26,7 +26,22 @@ func (c *Client) SearchRestaurants(ctx context.Context, addressID, query string,
 	env, err := decodeResult[restaurantsEnvelope](c.CallTool(ctx, "search_restaurants", map[string]any{
 		"addressId": addressID, "query": query, "offset": offset,
 	}))
-	return env.Restaurants, err
+	return onlyRestaurants(env.Restaurants), err
+}
+
+// onlyRestaurants drops the DISH entries search_restaurants mixes into its
+// results. Swiggy returns matching dishes alongside restaurants, but a dish
+// entry is sparse — only {id, name, cuisines:[]} — and carries no restaurant
+// link, so opening it is a dead end. A real restaurant always has at least one
+// of: availabilityStatus, areaName, a delivery-time range, or a rating.
+func onlyRestaurants(in []Restaurant) []Restaurant {
+	out := in[:0:0] // new backing array; nil stays nil-ish, empty stays empty
+	for _, r := range in {
+		if r.Availability != "" || r.AreaName != "" || r.DeliveryTimeRange != "" || r.AvgRating > 0 {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func (c *Client) GetRestaurantMenu(ctx context.Context, addressID, restaurantID string, page, pageSize int) (Menu, error) {
