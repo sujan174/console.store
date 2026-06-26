@@ -3,6 +3,7 @@ package swiggy
 import (
 	"context"
 	"encoding/json"
+	"strings"
 )
 
 // decodeResult unmarshals a CallTool result into T, propagating any call error.
@@ -54,6 +55,9 @@ func (c *Client) SearchRestaurants(ctx context.Context, addressID, query string,
 			break // no more results
 		}
 		for _, r := range onlyRestaurants(page) {
+			if isAd(r.Name) {
+				continue // sponsored "(Ad)" listing — keep search organic
+			}
 			if r.ID != "" && !seen[r.ID] {
 				seen[r.ID] = true
 				out = append(out, r)
@@ -65,6 +69,12 @@ func (c *Client) SearchRestaurants(ctx context.Context, addressID, query string,
 		}
 	}
 	return out, nil
+}
+
+// isAd reports whether a restaurant name is a sponsored "(Ad)" listing. Swiggy
+// appends " (Ad)" to promoted results; we drop them so search stays organic.
+func isAd(name string) bool {
+	return strings.HasSuffix(strings.TrimSpace(name), "(Ad)")
 }
 
 // onlyRestaurants drops the DISH entries search_restaurants mixes into its

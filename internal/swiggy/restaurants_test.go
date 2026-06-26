@@ -21,6 +21,19 @@ func TestOnlyRestaurantsKeepsRealRestaurants(t *testing.T) {
 	}
 }
 
+func TestIsAd(t *testing.T) {
+	for _, name := range []string{"Thalaiva Biryani (Ad)", "Bakingo (Ad)", "Food Star (Ad) "} {
+		if !isAd(name) {
+			t.Errorf("%q should be detected as an ad", name)
+		}
+	}
+	for _, name := range []string{"Starbucks Coffee", "Five Star Chicken", "Kink Coffee", "Adda Cafe"} {
+		if isAd(name) {
+			t.Errorf("%q is NOT an ad", name)
+		}
+	}
+}
+
 func TestOnlyRestaurantsEmptyAndAllDishes(t *testing.T) {
 	if got := onlyRestaurants(nil); len(got) != 0 {
 		t.Fatalf("nil → empty, got %d", len(got))
