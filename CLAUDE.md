@@ -83,4 +83,3 @@ internal/config/      optional seed config (instant first paint) + cuisine chips
 
 - Some comments still cite a design script (`design line NNN`); that spec is gone. Treat the existing rendered copy/spacing in the code and its tests as the source of truth.
 - Keep packages single-responsibility; one screen per file.
-- `docs/` holds the Swiggy Builders Club application package (the approval submission). Parts predate the native-CLI pivot — when docs and code disagree, the code wins.

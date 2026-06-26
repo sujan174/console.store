@@ -2,7 +2,7 @@ package theme
 
 import "github.com/charmbracelet/lipgloss"
 
-// Tokyo Night — exact hexes from the approved design (docs/design/console.store.reference.html).
+// Tokyo Night — the approved palette hexes.
 const (
 	BgDeep   = "#0a0a10" // html/body, overlay base
 	Bg       = "#15161f" // app background
