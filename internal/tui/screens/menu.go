@@ -404,11 +404,8 @@ func (m Menu) focusedDetail() string {
 // the label dim. Shared by the store switcher and the focused detail strip so
 // their two right-aligned hints look like one family.
 func keycapHint(key, label string) string {
-	cap := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.Bright)).
-		Background(lipgloss.Color(theme.SelRowBg)).
-		Bold(true).Render(" " + key + " ")
-	return cap + theme.DimStyle.Render(" "+label)
+	// Key glyph is darker/dimmer than its label (Faint < Dim), no highlight.
+	return theme.FaintStyle.Render(key) + theme.DimStyle.Render(" "+label)
 }
 
 // verticalSwitcher is the top-level store switcher (Food ⟷ Instamart) — a full
