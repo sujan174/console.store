@@ -306,10 +306,9 @@ func (s Restaurant) View() string {
 	var b strings.Builder
 	w := components.ContentWidth()
 
-	// row 1: esc  <name>            deliver to ⊕ <addr>
+	// row 1: esc  <name>   (the delivery address now lives in the top brand bar)
 	left := theme.PriceStyle.Render("esc") + "  " + theme.BrightStyle.Bold(true).Render(s.p.Name)
-	right := theme.DimStyle.Render("deliver to ") + theme.CursorStyle.Render("⊕ ") + theme.BrightStyle.Render(s.addr.Line)
-	b.WriteString("  " + justify(left, right, w) + "\n")
+	b.WriteString("  " + left + "\n")
 
 	// row 2 meta: the real live ★ rating · delivery time. (No cuisine/section — it
 	// was the browse enum, not the real cuisine — and no item count, which reads 0

@@ -353,20 +353,9 @@ func (m Menu) twoPaneView() string {
 	}
 	chip := cartStyle.Render(m.cartChip)
 	mainW := components.ContentWidth() - railWidth - 5
-	label := ""
-	if m.address.Label != "" {
-		label = " · " + m.address.Label
-	}
-	// Truncate the (often long) address so the header never overflows past the
-	// cart chip / pane edge — the full address lives in the address modal.
-	lineBudget := mainW - lipgloss.Width("deliver to ") - lipgloss.Width(label) - lipgloss.Width(chip) - 3
-	if lineBudget < 8 {
-		lineBudget = 8
-	}
-	header := theme.DimStyle.Render("deliver to ") +
-		theme.BrightStyle.Render(railTrunc2(m.address.Line, lineBudget)) +
-		theme.DimStyle.Render(label)
-	main.WriteString(justify(header, chip, mainW) + "\n\n")
+	// The delivery address now lives in the top brand bar; this line carries just
+	// the cart chip, right-aligned, so the cart stays visible while browsing.
+	main.WriteString(justify("", chip, mainW) + "\n\n")
 
 	switch {
 	case m.searchMode:

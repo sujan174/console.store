@@ -28,12 +28,15 @@ func TestMenuHeaderShowsAddressAndCart(t *testing.T) {
 }
 
 func TestBrandBannerShowsLogoAndVersion(t *testing.T) {
-	out := BrandBanner(80)
+	out := BrandBanner(80, "HSR Layout", "home")
 	if !strings.Contains(out, "consolestore.in") {
 		t.Errorf("brand banner should show the wordmark:\n%s", out)
 	}
 	if !strings.Contains(out, Version) {
 		t.Errorf("brand banner should show the version %q:\n%s", Version, out)
+	}
+	if !strings.Contains(out, "HSR Layout") {
+		t.Errorf("brand banner should show the current address:\n%s", out)
 	}
 }
 

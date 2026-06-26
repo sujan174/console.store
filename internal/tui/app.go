@@ -2652,7 +2652,7 @@ func (m Model) View() string {
 
 	// Centered brand logo at the top of every post-landing screen, with a gap
 	// below it (the splash has its own big wordmark, so it is excluded above).
-	content = screens.BrandBanner(components.FrameWidth()) + content
+	content = screens.BrandBanner(components.FrameWidth(), m.addr.Line, m.addr.Label) + content
 
 	footer := ""
 	if hint != "" {
