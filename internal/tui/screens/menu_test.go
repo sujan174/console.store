@@ -141,6 +141,56 @@ func TestMenuRendersChips(t *testing.T) {
 	}
 }
 
+func liveMenu() Menu {
+	return NewMenu(nil, catalog.Address{Line: "Home"}, catalog.SectionFood, catalog.Usual{}, false, "🛒 empty").
+		WithRail(NewRail([]string{"Coffee", "Pizza"})).WithRailFocus(false).WithMaxRows(20)
+}
+
+func TestMenuTwoPaneHomeSections(t *testing.T) {
+	m := liveMenu().WithSections(
+		[]catalog.Place{{Name: "Blue Tokai", ETA: "25 min"}},
+		[]catalog.Place{{Name: "Pizza Hut", ETA: "20 min"}},
+	)
+	v := m.View()
+	for _, want := range []string{"🔍", "Home", "your usuals", "Blue Tokai", "nearby", "Pizza Hut"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("home view missing %q:\n%s", want, v)
+		}
+	}
+}
+
+func TestMenuUsualsOmittedWhenEmpty(t *testing.T) {
+	m := liveMenu().WithSections(nil, []catalog.Place{{Name: "Pizza Hut"}})
+	if strings.Contains(m.View(), "your usuals") {
+		t.Errorf("empty usuals must omit the section:\n%s", m.View())
+	}
+}
+
+func TestMenuSearchModeResults(t *testing.T) {
+	m := liveMenu().WithSearchMode(true, "pizza", []catalog.Place{{Name: "Pizza Hut"}}, 1)
+	v := m.View()
+	if !strings.Contains(v, "pizza") || !strings.Contains(v, "Pizza Hut") || !strings.Contains(v, "1 result") {
+		t.Errorf("search view missing query/results/count:\n%s", v)
+	}
+}
+
+func TestMenuSearchNoResults(t *testing.T) {
+	m := liveMenu().WithSearchMode(true, "xyz", nil, 0)
+	if !strings.Contains(m.View(), `no restaurants for "xyz"`) {
+		t.Errorf("empty-results copy missing:\n%s", m.View())
+	}
+}
+
+func TestMenuMockPaneUnchanged(t *testing.T) {
+	// No rail set → the existing single-pane mock render (section tabs present).
+	m := NewMenu([]catalog.Place{{Name: "Blue Tokai"}}, catalog.Address{Line: "Home"},
+		catalog.SectionCoffee, catalog.Usual{}, false, "🛒 empty")
+	v := m.View()
+	if !strings.Contains(v, "coffee") || strings.Contains(v, "your usuals") {
+		t.Errorf("mock pane must be unchanged (tabs, no rail sections):\n%s", v)
+	}
+}
+
 // itoa is a tiny int-to-string helper for tests (avoids importing strconv twice).
 func itoa(n int) string {
 	if n == 0 {

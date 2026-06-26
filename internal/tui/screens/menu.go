@@ -12,6 +12,14 @@ import (
 	"console.store/internal/tui/theme"
 )
 
+// plural renders "1 result" / "N results".
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", one)
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
 // Version is the build tag shown under the brand logo (rendered by the root).
 const Version = "v1.4"
 
@@ -28,6 +36,17 @@ type Menu struct {
 	chipLabels      []string
 	chipActive      int
 	hideSectionTabs bool
+	// two-pane live fields (only active when hasRail is true)
+	rail        Rail
+	hasRail     bool
+	railFocus   bool
+	usuals      []catalog.Place
+	nearby      []catalog.Place
+	hasSections bool
+	searchMode  bool
+	searchQuery string
+	results     []catalog.Place
+	resultCount int
 }
 
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartChip string) Menu {
@@ -50,12 +69,27 @@ func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Secti
 }
 
 // Selected returns the place under the cursor (false if the list is empty).
+// When a rail is set (live two-pane mode) the cursor maps into mainPlaces()
+// so selection crosses usuals/nearby/results seamlessly.
 func (m Menu) Selected() (catalog.Place, bool) {
-	i := m.list.SelectedIndex()
-	if i < 0 || i >= len(m.places) {
+	src := m.places
+	if m.hasRail {
+		src = m.mainPlaces()
+	}
+	i := m.list.Cursor
+	if m.hasRail {
+		// In two-pane mode cursor is a direct index into mainPlaces().
+		if i < 0 || i >= len(src) {
+			return catalog.Place{}, false
+		}
+		return src[i], true
+	}
+	// Mock path: use the list's filtered SelectedIndex.
+	i = m.list.SelectedIndex()
+	if i < 0 || i >= len(src) {
 		return catalog.Place{}, false
 	}
-	return m.places[i], true
+	return src[i], true
 }
 
 // WithCartTotal returns a copy with an updated cart total, preserving the cursor.
@@ -80,6 +114,176 @@ func (m Menu) WithChips(labels []string, active int) Menu {
 
 // ChipCount returns the number of cuisine chips.
 func (m Menu) ChipCount() int { return len(m.chipLabels) }
+
+// WithRail attaches the left rail to the menu, enabling the two-pane render
+// path. When a rail is set, View() renders the two-pane layout; without it
+// the existing single-pane (mock) render runs unchanged.
+func (m Menu) WithRail(r Rail) Menu { m.rail = r; m.hasRail = true; return m }
+
+// WithRailFocus sets whether the rail column has keyboard focus (the main list
+// is focused when false).
+func (m Menu) WithRailFocus(f bool) Menu { m.railFocus = f; return m }
+
+// WithSections sets the Home view's usuals + nearby slices. The usuals block
+// is omitted from View() entirely when usuals is empty. Clears search mode.
+func (m Menu) WithSections(usuals, nearby []catalog.Place) Menu {
+	m.usuals = usuals
+	m.nearby = nearby
+	m.hasSections = true
+	m.searchMode = false
+	return m
+}
+
+// WithSearchMode sets the live search state. When active is true the main pane
+// shows the search input, result count, and result list. Clears sections view.
+func (m Menu) WithSearchMode(active bool, query string, results []catalog.Place, count int) Menu {
+	m.searchMode = active
+	m.searchQuery = query
+	m.results = results
+	m.resultCount = count
+	if active {
+		m.hasSections = false
+	}
+	return m
+}
+
+// mainPlaces is the flat, cursor-addressable slice for the active view:
+// search → results; Home (hasSections) → usuals then nearby; else → places.
+// The components.List rows must be in the same order.
+func (m Menu) mainPlaces() []catalog.Place {
+	switch {
+	case m.searchMode:
+		return m.results
+	case m.hasSections:
+		out := make([]catalog.Place, 0, len(m.usuals)+len(m.nearby))
+		out = append(out, m.usuals...)
+		out = append(out, m.nearby...)
+		return out
+	default:
+		return m.places
+	}
+}
+
+// sectionedListView renders the Home main pane: optional usuals block (omitted
+// when empty) + always-present nearby block. Section header labels are dim
+// hairlines drawn between the restaurant rows; the cursor list spans both.
+func (m Menu) sectionedListView() string {
+	var b strings.Builder
+
+	// Build a cursor list over mainPlaces() for selection highlighting.
+	places := m.mainPlaces()
+	cursor := m.list.Cursor
+
+	renderRow := func(p catalog.Place, idx int) {
+		name := theme.ItemStyle.Render(p.Name)
+		eta := theme.EtaStyle.Render(p.ETA)
+		rating := ""
+		if p.Rating > 0 {
+			rating = " " + theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
+		}
+		body := name + rating + "   " + eta
+		if idx == cursor {
+			brightName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(p.Name)
+			selBody := brightName + rating + "   " + eta
+			b.WriteString("  > " + selBody + "\n")
+		} else {
+			b.WriteString("    " + body + "\n")
+		}
+	}
+
+	renderHeader := func(label string) {
+		rule := theme.Fg(theme.Div2).Render(strings.Repeat("─", 20))
+		b.WriteString("  " + rule + " " + theme.DimStyle.Render(label) + " " + rule + "\n")
+	}
+
+	idx := 0
+	if len(m.usuals) > 0 {
+		renderHeader("your usuals")
+		for _, p := range m.usuals {
+			renderRow(p, idx)
+			idx++
+		}
+	}
+
+	if len(m.nearby) > 0 || len(m.usuals) == 0 {
+		renderHeader("nearby")
+		for _, p := range m.nearby {
+			renderRow(p, idx)
+			idx++
+		}
+	}
+
+	if len(places) == 0 {
+		b.WriteString("  " + theme.DimStyle.Render("no restaurants nearby") + "\n")
+	}
+	return b.String()
+}
+
+// twoPaneView renders the rail + main pane layout used in live mode.
+func (m Menu) twoPaneView() string {
+	railH := m.list.MaxRows + 6
+	if railH < m.rail.Len()+1 {
+		railH = m.rail.Len() + 1
+	}
+	left := m.rail.WithFocus(m.railFocus).WithActive(m.rail.Active()).WithHeight(railH).View()
+
+	var main strings.Builder
+
+	header := theme.DimStyle.Render("deliver to ") +
+		theme.BrightStyle.Render(m.address.Line)
+	if m.address.Label != "" {
+		header += theme.DimStyle.Render(" · " + m.address.Label)
+	}
+	main.WriteString(header + "\n\n")
+
+	switch {
+	case m.searchMode:
+		main.WriteString(theme.CursorStyle.Render("🔍 "+m.searchQuery+"▏") + "\n")
+		if m.searchQuery != "" {
+			main.WriteString(theme.DimStyle.Render(plural(m.resultCount, "result", "results")) + "\n\n")
+		}
+		if m.searchQuery != "" && len(m.results) == 0 {
+			main.WriteString(theme.DimStyle.Render(fmt.Sprintf(`no restaurants for "%s"`, m.searchQuery)) + "\n")
+		} else {
+			// Render results list
+			for i, p := range m.results {
+				name := theme.ItemStyle.Render(p.Name)
+				eta := theme.EtaStyle.Render(p.ETA)
+				rating := ""
+				if p.Rating > 0 {
+					rating = " " + theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
+				}
+				if i == m.list.Cursor {
+					brightName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(p.Name)
+					main.WriteString("> " + brightName + rating + "   " + eta + "\n")
+				} else {
+					main.WriteString("  " + name + rating + "   " + eta + "\n")
+				}
+			}
+		}
+	case m.hasSections:
+		main.WriteString(m.sectionedListView())
+	default:
+		// plain flat list (live mode, non-Home category, no sections set)
+		for i, p := range m.places {
+			name := theme.ItemStyle.Render(p.Name)
+			eta := theme.EtaStyle.Render(p.ETA)
+			rating := ""
+			if p.Rating > 0 {
+				rating = " " + theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
+			}
+			if i == m.list.Cursor {
+				brightName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(p.Name)
+				main.WriteString("> " + brightName + rating + "   " + eta + "\n")
+			} else {
+				main.WriteString("  " + name + rating + "   " + eta + "\n")
+			}
+		}
+	}
+
+	mainStr := main.String()
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, "  "+strings.ReplaceAll(mainStr, "\n", "\n  "))
+}
 
 func (m Menu) Init() tea.Cmd { return nil }
 
@@ -131,6 +335,13 @@ func justify(left, right string, width int) string {
 }
 
 func (m Menu) View() string {
+	// Two-pane live render: rail column + sectioned main pane.
+	// This branch is ONLY taken when a rail has been attached via WithRail().
+	// The mock single-pane path below runs byte-for-byte as before.
+	if m.hasRail {
+		return m.twoPaneView()
+	}
+
 	var b strings.Builder
 	w := components.ContentWidth()
 
