@@ -43,6 +43,7 @@ type Menu struct {
 	usuals        []catalog.Place
 	nearby        []catalog.Place
 	hasSections   bool
+	loading       bool
 	searchMode    bool
 	searchPending bool
 	searchQuery   string
@@ -164,6 +165,10 @@ func (m Menu) WithSearchMode(active bool, query string, results []catalog.Place,
 	}
 	return m
 }
+
+// WithLoading marks the flat (category) list as still loading, so an empty list
+// shows a "loading…" cue instead of "no restaurants" while results stream in.
+func (m Menu) WithLoading(loading bool) Menu { m.loading = loading; return m }
 
 // mainPlaces is the flat, cursor-addressable slice for the active view:
 // search → results; Home (hasSections) → usuals then nearby; else → places.
@@ -294,6 +299,9 @@ func (m Menu) twoPaneView() string {
 		main.WriteString(m.sectionedListView())
 	default:
 		// plain flat list (live mode, non-Home category, no sections set)
+		if len(m.places) == 0 && m.loading {
+			main.WriteString(theme.GoldStyle.Render("loading restaurants…") + "\n")
+		}
 		for i, p := range m.places {
 			main.WriteString(m.placeRow(p, i == m.list.Cursor) + "\n")
 		}

@@ -48,6 +48,13 @@ func (c *Client) Restaurants(accountID, addressID, query string) ([]Restaurant, 
 	return rep.Restaurants, err
 }
 
+// SearchOrganic is Restaurants with sponsored "(Ad)" listings dropped (global search).
+func (c *Client) SearchOrganic(accountID, addressID, query string) ([]Restaurant, error) {
+	var rep RestaurantsReply
+	err := c.rc.Call(ServiceName+".Restaurants", RestaurantsArgs{AccountID: accountID, AddressID: addressID, Query: query, Organic: true}, &rep)
+	return rep.Restaurants, err
+}
+
 func (c *Client) Menu(accountID, addressID, restaurantID string) (Menu, error) {
 	var rep MenuReply
 	err := c.rc.Call(ServiceName+".Menu", MenuArgs{AccountID: accountID, AddressID: addressID, RestaurantID: restaurantID}, &rep)

@@ -76,8 +76,19 @@ func (s *Service) Addresses(ctx context.Context, accountID string) ([]api.Addres
 	return mapAddresses(a), nil
 }
 
-func (s *Service) Restaurants(ctx context.Context, accountID, addressID, query string) ([]api.Restaurant, error) {
-	r, err := s.foodClient(accountID).SearchRestaurants(ctx, addressID, query, 0)
+// Restaurants searches restaurants for a query. organic drops sponsored "(Ad)"
+// listings (global search); categories pass organic=false to keep them.
+func (s *Service) Restaurants(ctx context.Context, accountID, addressID, query string, organic bool) ([]api.Restaurant, error) {
+	fc := s.foodClient(accountID)
+	var (
+		r   []swiggy.Restaurant
+		err error
+	)
+	if organic {
+		r, err = fc.SearchOrganic(ctx, addressID, query)
+	} else {
+		r, err = fc.SearchRestaurants(ctx, addressID, query, 0)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -39,6 +39,9 @@ func (f *railFake) PlacesQuery(_, q string) ([]api.Restaurant, error) {
 	}
 	return f.queryResult, f.err
 }
+func (f *railFake) SearchOrganic(_, q string) ([]api.Restaurant, error) {
+	return f.queryResult, f.err
+}
 func (f *railFake) Usuals(string) ([]api.Restaurant, error) { return f.usuals, f.err }
 func (f *railFake) Menu(string, string) (api.Menu, error)   { return api.Menu{}, f.err }
 func (f *railFake) ItemOptions(string, string, string, string) ([]api.OptionGroup, error) {
@@ -257,9 +260,9 @@ func TestLiveBrowseSearchEscExitsSearch(t *testing.T) {
 func TestSearchResultsNavigableAndOpenable(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
 	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
-	// Pre-seed results for "tokai" so ensureQuery returns nil and results are
-	// immediately visible after the submit Enter.
-	snap.SetPlaces("a1", "tokai", []catalog.Place{
+	// Pre-seed results under the SEARCH key for "tokai" so searchLoad returns nil
+	// and results are immediately visible after the submit Enter.
+	snap.SetPlaces("a1", datasource.SearchKey("tokai"), []catalog.Place{
 		{ID: "r1", SwiggyID: "sr1", Name: "Blue Tokai", ETA: "25 min"},
 	})
 	snap.SetPlaces("a1", "", []catalog.Place{})

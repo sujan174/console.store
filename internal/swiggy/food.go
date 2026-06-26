@@ -31,14 +31,24 @@ func (c *Client) searchRestaurantsPage(ctx context.Context, addressID, query str
 	return env.Restaurants, err
 }
 
-// SearchRestaurants returns REAL restaurants for a query. Because search_restaurants
-// interleaves dishes (which we drop), a single page can yield few/zero
-// restaurants for a dish-heavy term (e.g. "blue"). So it paginates — fetching
-// successive pages and accumulating filtered, de-duplicated restaurants — until
-// it has enough (searchWant) or results run out (bounded by searchMaxPages).
+// SearchRestaurants returns REAL restaurants for a query (dishes filtered out,
+// ADS KEPT). Used by the cuisine categories — where sponsored listings are fine.
+// search_restaurants interleaves dishes, so it paginates to fill enough.
 func (c *Client) SearchRestaurants(ctx context.Context, addressID, query string, offset int) ([]Restaurant, error) {
+	return c.searchFill(ctx, addressID, query, offset, false)
+}
+
+// SearchOrganic is like SearchRestaurants but ALSO drops sponsored "(Ad)"
+// listings. Used by the global search box, which the user wants ad-free.
+func (c *Client) SearchOrganic(ctx context.Context, addressID, query string) ([]Restaurant, error) {
+	return c.searchFill(ctx, addressID, query, 0, true)
+}
+
+// searchFill paginates search_restaurants, dropping dishes (always) and ads
+// (when dropAds), de-duplicating, until it has ~searchWant or results run out.
+func (c *Client) searchFill(ctx context.Context, addressID, query string, offset int, dropAds bool) ([]Restaurant, error) {
 	const (
-		searchWant     = 10
+		searchWant     = 12
 		searchMaxPages = 6
 	)
 	var out []Restaurant
@@ -55,8 +65,8 @@ func (c *Client) SearchRestaurants(ctx context.Context, addressID, query string,
 			break // no more results
 		}
 		for _, r := range onlyRestaurants(page) {
-			if isAd(r.Name) {
-				continue // sponsored "(Ad)" listing — keep search organic
+			if dropAds && isAd(r.Name) {
+				continue // sponsored "(Ad)" listing — search only
 			}
 			if r.ID != "" && !seen[r.ID] {
 				seen[r.ID] = true

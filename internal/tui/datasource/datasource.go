@@ -25,6 +25,7 @@ type Backend interface {
 	Addresses() ([]api.Address, error)
 	Places(addressID string, section catalog.Section) ([]api.Restaurant, error)
 	PlacesQuery(addressID, query string) ([]api.Restaurant, error)
+	SearchOrganic(addressID, query string) ([]api.Restaurant, error)
 	Usuals(addressID string) ([]api.Restaurant, error)
 	Menu(addressID, restaurantID string) (api.Menu, error)
 	ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
@@ -101,6 +102,26 @@ func LoadPlacesQuery(b Backend, snap *swiggysnap.Snapshot, addressID, query stri
 			return PlacesLoadedMsg{Query: query, Err: err}
 		}
 		snap.SetPlaces(addressID, query, toPlaces(got, catalog.SectionCoffee))
+		return PlacesLoadedMsg{Query: query}
+	}
+}
+
+// SearchKey is the snapshot key prefix for global-search results. Search is
+// cached separately from the cuisine categories so an ad-free search for
+// "pizza" never overwrites (or is overwritten by) the ads-allowed "pizza"
+// category, even though both share the raw query string.
+func SearchKey(query string) string { return "__search__:" + query }
+
+// LoadSearch runs an ad-free global restaurant search (SearchOrganic) and caches
+// it under SearchKey(query). The returned msg carries the RAW query so the app's
+// searchPending gate matches what the user submitted.
+func LoadSearch(b Backend, snap *swiggysnap.Snapshot, addressID, query string) tea.Cmd {
+	return func() tea.Msg {
+		got, err := b.SearchOrganic(addressID, query)
+		if err != nil {
+			return PlacesLoadedMsg{Query: query, Err: err}
+		}
+		snap.SetPlaces(addressID, SearchKey(query), toPlaces(got, catalog.SectionCoffee))
 		return PlacesLoadedMsg{Query: query}
 	}
 }

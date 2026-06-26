@@ -1,17 +1,1 @@
-2026/06/26 14:57:09 SSH server listening on 127.0.0.1:2222 — connect with: ssh localhost -p 2222
-2026/06/26 15:05:23 INFO sujan connect 127.0.0.1:62827 true [] xterm-ghostty 82 35 SSH-2.0-OpenSSH_10.3
-2026/06/26 15:06:51 TUI-DEBUG add: item="Margherita Pizza" swiggyID="91826973" rest="Domino's Pizza"
-2026/06/26 15:06:51 TUI-DEBUG add: fetching options for "Margherita Pizza"
-2026/06/26 15:06:58 TUI-DEBUG scopeVariantCmd: probe "Regular" (1/3) of "Size"
-2026/06/26 15:07:00 TUI-DEBUG scopeVariantCmd: probe "Medium" (2/3) of "Size"
-2026/06/26 15:07:01 TUI-DEBUG scopeVariantCmd: probe "Large" (3/3) of "Size"
-2026/06/26 15:07:08 TUI-DEBUG wizardOptionalCmd: probe 1/9 group="Extra Cheese Regular"
-2026/06/26 15:07:09 TUI-DEBUG wizardOptionalCmd: probe 2/9 group="Non-Veg Toppings Regular"
-2026/06/26 15:07:10 TUI-DEBUG wizardOptionalCmd: probe 3/9 group="Veg Toppings Regular"
-2026/06/26 15:07:10 TUI-DEBUG wizardOptionalCmd: probe 4/9 group="Extra Cheese Medium"
-2026/06/26 15:07:12 TUI-DEBUG wizardOptionalCmd: probe 5/9 group="Veg Toppings Medium"
-2026/06/26 15:07:13 TUI-DEBUG wizardOptionalCmd: probe 6/9 group="Non-Veg Toppings Medium"
-2026/06/26 15:07:14 TUI-DEBUG wizardOptionalCmd: probe 7/9 group="Extra Cheese Large"
-2026/06/26 15:07:15 TUI-DEBUG wizardOptionalCmd: probe 8/9 group="Veg Toppings Large"
-2026/06/26 15:07:15 TUI-DEBUG wizardOptionalCmd: probe 9/9 group="Non-Veg Toppings Large"
-2026/06/26 15:08:24 INFO sujan connect 127.0.0.1:62988 true [] xterm-256color 67 29 SSH-2.0-OpenSSH_10.3
+2026/06/26 15:51:07 SSH server listening on 127.0.0.1:2222 — connect with: ssh localhost -p 2222

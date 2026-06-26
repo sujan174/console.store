@@ -24,9 +24,10 @@ func (f *liveFake) Addresses() ([]api.Address, error) { return f.addrs, f.err }
 func (f *liveFake) Places(string, catalog.Section) ([]api.Restaurant, error) {
 	return nil, f.err
 }
-func (f *liveFake) PlacesQuery(string, string) ([]api.Restaurant, error) { return nil, f.err }
-func (f *liveFake) Usuals(string) ([]api.Restaurant, error)              { return nil, f.err }
-func (f *liveFake) Menu(string, string) (api.Menu, error)                { return api.Menu{}, f.err }
+func (f *liveFake) PlacesQuery(string, string) ([]api.Restaurant, error)   { return nil, f.err }
+func (f *liveFake) SearchOrganic(string, string) ([]api.Restaurant, error) { return nil, f.err }
+func (f *liveFake) Usuals(string) ([]api.Restaurant, error)                { return nil, f.err }
+func (f *liveFake) Menu(string, string) (api.Menu, error)                  { return api.Menu{}, f.err }
 func (f *liveFake) ItemOptions(string, string, string, string) ([]api.OptionGroup, error) {
 	return nil, f.err
 }

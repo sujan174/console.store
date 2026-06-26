@@ -25,6 +25,7 @@ type RestaurantsArgs struct {
 	AccountID string
 	AddressID string
 	Query     string
+	Organic   bool // drop sponsored "(Ad)" listings (global search; categories keep them)
 }
 type RestaurantsReply struct{ Restaurants []Restaurant }
 

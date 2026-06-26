@@ -195,6 +195,8 @@ type Model struct {
 	searchQuery     string
 	searchSubmitted string // last query submitted to ensureQuery; "" = none
 	searchPending   bool   // a search query is in flight (shows "searching…")
+	catPending      bool   // a category load is in flight (shows "loading…")
+	catPendingQuery string // the category query catPending is waiting on
 	usualsLoaded    bool   // true once LoadUsuals has been fired for the current addr
 }
 
@@ -271,7 +273,7 @@ func (m Model) buildMenu() screens.Menu {
 
 		if m.searchMode {
 			isSearch = true
-			results := m.liveRepo().PlacesByQuery(m.addr, m.searchQuery)
+			results := m.liveRepo().PlacesByQuery(m.addr, datasource.SearchKey(m.searchQuery))
 			viewPlaces = results
 		} else if catIdx, isCat := rail.IsCategory(m.railActive); isCat {
 			viewPlaces = m.liveRepo().PlacesByQuery(m.addr, m.chips[catIdx].Query)
@@ -291,13 +293,15 @@ func (m Model) buildMenu() screens.Menu {
 			WithSectionTabsHidden(true)
 
 		if isSearch {
-			results := m.liveRepo().PlacesByQuery(m.addr, m.searchQuery)
+			results := m.liveRepo().PlacesByQuery(m.addr, datasource.SearchKey(m.searchQuery))
 			menu = menu.WithSearchMode(true, m.searchQuery, results, len(results), m.searchPending)
 		} else if _, isCat := rail.IsCategory(m.railActive); isCat {
 			// Category view: use the flat places path (no sections header).
 			// viewPlaces already holds catPlaces; WithSections is intentionally NOT
 			// called so mainPlaces() falls through to the default flat-list branch
-			// and no "nearby" section header is printed.
+			// and no "nearby" section header is printed. WithLoading shows a cue
+			// while the (auto-fired, on-hover) category load is still in flight.
+			menu = menu.WithLoading(m.catPending)
 		} else {
 			menu = menu.WithSections(usuals, nearby)
 		}
@@ -330,11 +334,23 @@ func (m Model) ensureQuery(query string) tea.Cmd {
 	return datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, query)
 }
 
+// searchLoad fires an ad-free global search for query, cached under the search
+// key. Deduplicates: if the search cache already holds this query, no-ops.
+func (m Model) searchLoad(query string) tea.Cmd {
+	if r := m.liveRepo(); r != nil {
+		if places := r.PlacesByQuery(m.addr, datasource.SearchKey(query)); len(places) > 0 {
+			return nil // already searched
+		}
+	}
+	return datasource.LoadSearch(m.backend, m.snap, m.addr.ID, query)
+}
+
 // ensureHomeLoaded fires LoadUsuals + LoadPlacesQuery("") if not already cached.
 // Called when the user selects Home on the rail or on initial browse entry.
 // loadForRail fires the (deduped) load for the currently-active rail entry, so
 // the main pane populates as the user arrows through the rail.
 func (m *Model) loadForRail(rail screens.Rail) tea.Cmd {
+	m.catPending = false
 	switch m.railActive {
 	case screens.RailSearch:
 		return nil
@@ -342,7 +358,12 @@ func (m *Model) loadForRail(rail screens.Rail) tea.Cmd {
 		return m.ensureHomeLoaded()
 	default:
 		if catIdx, isCat := rail.IsCategory(m.railActive); isCat && catIdx < len(m.chips) {
-			return m.ensureQuery(m.chips[catIdx].Query)
+			q := m.chips[catIdx].Query
+			cmd := m.ensureQuery(q)
+			// A non-nil cmd means results aren't cached yet — show "loading…".
+			m.catPending = cmd != nil
+			m.catPendingQuery = q
+			return cmd
 		}
 	}
 	return nil
@@ -1248,6 +1269,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.searchPending && dm.Query == m.searchSubmitted {
 			m.searchPending = false // results for the submitted query landed
 		}
+		if m.catPending && dm.Query == m.catPendingQuery {
+			m.catPending = false // category results landed
+		}
 		m.menu = m.buildMenu()
 		return m, nil
 	case datasource.MenuLoadedMsg:
@@ -1783,7 +1807,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					var cmd tea.Cmd
 					if m.searchQuery != "" {
 						m.searchSubmitted = m.searchQuery
-						cmd = m.ensureQuery(m.searchQuery)
+						cmd = m.searchLoad(m.searchQuery)
 						m.searchPending = cmd != nil // show "searching…" until results land
 					}
 					m.menu = m.buildMenu()
@@ -1837,10 +1861,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.menu = m.buildMenu()
 						return m, m.ensureHomeLoaded()
 					default:
-						if catIdx, isCat := rail.IsCategory(m.railActive); isCat {
+						if _, isCat := rail.IsCategory(m.railActive); isCat {
 							m.searchMode = false
+							cmd := m.loadForRail(rail)
 							m.menu = m.buildMenu()
-							return m, m.ensureQuery(m.chips[catIdx].Query)
+							return m, cmd
 						}
 					}
 					m.menu = m.buildMenu()

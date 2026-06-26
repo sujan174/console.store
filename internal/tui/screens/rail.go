@@ -95,7 +95,8 @@ func (r Rail) View() string {
 		}
 		rows = append(rows, row)
 		if i == RailSearch {
-			rows = append(rows, "") // blank line sets Search apart from the nav list
+			// solid divider sets Search apart from Home + the cuisine categories
+			rows = append(rows, theme.Fg(theme.Div2).Render(strings.Repeat("─", railWidth-1)))
 		}
 	}
 
