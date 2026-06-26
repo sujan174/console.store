@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -100,10 +101,32 @@ type Model struct {
 	customizeOpen bool
 	customize     screens.Customize
 
-	// wizard: multi-page flow for items with BOTH a variant group AND an add-on
-	// group, where valid add-ons depend on the chosen variant.
-	wizardOpen bool
-	wizard     screens.Wizard
+	// wizard: two-step flow for items with BOTH a variant group AND an add-on
+	// group. Swiggy's MCP gives no structured variant→add-on link and its
+	// valid_addons echoes ALL groups regardless of variant — so after the user
+	// picks a size we DISCOVER its required add-on group by trial: send
+	// size+candidate to the live cart and keep the one the server accepts (the
+	// server is the only authority on the pairing). Names only order the trials.
+	wizardOpen         bool
+	wizard             screens.Wizard
+	wizardRequired     []catalog.OptionGroup            // required (min≥1) add-on groups — trial candidates
+	wizardOptional     []catalog.OptionGroup            // optional (min0) add-on groups — ALSO variant-scoped, trialed
+	wizardCandidates   []catalog.OptionGroup            // required groups ranked for the chosen variant, being trialed
+	wizardTrialPos     int                              // index into wizardCandidates of the in-flight required trial
+	wizardPhase        int                              // wzCrust | wzOptional | wzChoosing — what the next CartSyncedMsg means
+	wizardBaseSels     []catalog.Selection              // validated base (variant + discovered crust) for optional probes
+	wizardCrust        catalog.OptionGroup              // the discovered required group for the chosen variant
+	wizardOptIdx       int                              // index into wizardOptional of the in-flight optional trial
+	wizardOptValid     []catalog.OptionGroup            // optional groups the server accepted for the chosen variant
+	wizardCache        map[string][]catalog.OptionGroup // variationID → discovered add-on page (crust + valid optionals)
+	wizardStock        map[string]bool                  // choiceID → in-stock, harvested from the cart's valid_addons (search_menu omits availability)
+	wizardSubtotal     int                              // live price of the current variant selection, probed from the cart
+	wizardVarGroups    []catalog.OptionGroup            // ordered variant groups (e.g. Crust, then Size) — shown as sequential pages
+	wizardVarShown     int                              // number of variant pages shown so far (the rest are scoped on demand)
+	wizardScopeIdx     int                              // index into wizardScopeChoices being probed while scoping the next variant group
+	wizardScopeChoices []catalog.Choice                 // the next variant group's choices, ordered name-grouped + cheapest-first for early exit
+	wizardScopeValid   []catalog.Choice                 // variations the server accepted for the current selection (deduped by name)
+	wizardScopeSeen    map[string]bool                  // variation names already resolved during scoping (skip remaining candidates)
 
 	// conflict modal: shown when adding an item from a restaurant other than
 	// the one the cart holds (Swiggy allows one restaurant per cart).
@@ -152,18 +175,29 @@ type Model struct {
 	placingOrder bool     // true while PlaceOrderCmd is in-flight; blocks double-fire
 	cartSyncErr  string   // last cart-sync error; shown in status bar (non-fatal)
 	orderErr     string   // last order-placement error; shown in status bar
-	liveCart     api.Cart // last synced Swiggy cart (real pricing for the bill)
+	liveCart     api.Cart // last synced/fetched Swiggy cart (real lines + pricing)
+	cartLoaded   bool     // true once the live Swiggy cart is fetched for the cart screen
 
 	// vertical selects the top-level vertical: 0 = Restaurants, 1 = Instamart.
 	vertical int
 	chips    []config.Category // cuisine chips for the live browse; set from config
-	chipIdx  int               // index of the currently active chip
+	chipIdx  int               // index of the currently active chip (kept for cartPlaceID compat)
+
+	// Rail nav state (live browse only). railActive is the selected rail entry
+	// index (RailSearch=0, RailHome=1, categories from index 2). railFocus is
+	// true when the left rail column has keyboard focus. searchMode/searchQuery
+	// hold the global search state (submit-only — never per-keystroke).
+	railActive   int
+	railFocus    bool
+	searchMode   bool
+	searchQuery  string
+	usualsLoaded bool // true once LoadUsuals has been fired for the current addr
 }
 
 func New(caps render.Caps, opts ...Option) Model {
 	repo := mem.New()
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1}
+	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome}
 	for _, o := range opts {
 		o(&m)
 	}
@@ -217,26 +251,106 @@ func (m Model) buildMenu() screens.Menu {
 	for _, sec := range catalog.MenuSections {
 		counts[sec] = len(m.repo.Places(m.addr, sec))
 	}
-	menu := screens.NewMenu(m.browsePlaces(), m.addr, m.section, usual, ok, m.cartChip()).
-		WithCounts(counts)
-	// In live mode attach the cuisine chips and hide the coffee/food/snacks tab
-	// row — the chip row REPLACES it. The mock path leaves hideSectionTabs false
-	// so the section tabs still show (no chips set, byte-for-byte unchanged).
+
 	if m.live && len(m.chips) > 0 {
-		labels := make([]string, len(m.chips))
+		// Live mode: rail + two-pane render. Determine the active view's places
+		// so NewMenu's rows (and Selected()) map 1:1 to mainPlaces().
+		cats := make([]string, len(m.chips))
 		for i, c := range m.chips {
-			labels[i] = c.Label
+			cats[i] = c.Label
 		}
-		idx := m.chipIdx
-		if idx < 0 {
-			idx = 0
+		rail := screens.NewRail(cats).WithActive(m.railActive).WithFocus(m.railFocus)
+
+		var viewPlaces []catalog.Place
+		var usuals, nearby []catalog.Place
+		isSearch := false
+
+		if m.searchMode {
+			isSearch = true
+			results := m.liveRepo().PlacesByQuery(m.addr, m.searchQuery)
+			viewPlaces = results
+		} else if catIdx, isCat := rail.IsCategory(m.railActive); isCat {
+			viewPlaces = m.liveRepo().PlacesByQuery(m.addr, m.chips[catIdx].Query)
+		} else {
+			// Home view: usuals then nearby
+			usuals = m.liveRepo().PlacesByQuery(m.addr, datasource.UsualsKey)
+			nearby = m.liveRepo().PlacesByQuery(m.addr, "")
+			viewPlaces = make([]catalog.Place, 0, len(usuals)+len(nearby))
+			viewPlaces = append(viewPlaces, usuals...)
+			viewPlaces = append(viewPlaces, nearby...)
 		}
-		if idx >= len(m.chips) {
-			idx = len(m.chips) - 1
+
+		menu := screens.NewMenu(viewPlaces, m.addr, m.section, usual, ok, m.cartChip()).
+			WithCounts(counts).
+			WithRail(rail).WithRailFocus(m.railFocus).
+			WithSectionTabsHidden(true)
+
+		if isSearch {
+			results := m.liveRepo().PlacesByQuery(m.addr, m.searchQuery)
+			menu = menu.WithSearchMode(true, m.searchQuery, results, len(results))
+		} else if catIdx, isCat := rail.IsCategory(m.railActive); isCat {
+			catPlaces := m.liveRepo().PlacesByQuery(m.addr, m.chips[catIdx].Query)
+			menu = menu.WithSections(nil, catPlaces)
+		} else {
+			menu = menu.WithSections(usuals, nearby)
 		}
-		menu = menu.WithChips(labels, idx).WithSectionTabsHidden(true)
+
+		return menu
 	}
-	return menu
+
+	// Mock path: single-pane section-tab list (unchanged).
+	return screens.NewMenu(m.browsePlaces(), m.addr, m.section, usual, ok, m.cartChip()).
+		WithCounts(counts)
+}
+
+// liveRepo casts the Repository to the swiggy snapshot repo for PlacesByQuery.
+// Returns nil when not live; callers guard with m.live.
+func (m Model) liveRepo() *swiggysnap.Repository {
+	if r, ok := m.repo.(*swiggysnap.Repository); ok {
+		return r
+	}
+	return nil
+}
+
+// railCatLabels returns the chip labels for building a Rail.
+func (m Model) railCatLabels() []string {
+	cats := make([]string, len(m.chips))
+	for i, c := range m.chips {
+		cats[i] = c.Label
+	}
+	return cats
+}
+
+// ensureQuery fires LoadPlacesQuery for query if the snapshot doesn't already
+// have results for it. Deduplicates: if the cache is non-empty, no-ops.
+func (m Model) ensureQuery(query string) tea.Cmd {
+	if r := m.liveRepo(); r != nil {
+		if places := r.PlacesByQuery(m.addr, query); len(places) > 0 {
+			return nil // already cached
+		}
+	}
+	return datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, query)
+}
+
+// ensureHomeLoaded fires LoadUsuals + LoadPlacesQuery("") if not already cached.
+// Called when the user selects Home on the rail or on initial browse entry.
+func (m *Model) ensureHomeLoaded() tea.Cmd {
+	var cmds []tea.Cmd
+	if !m.usualsLoaded {
+		m.usualsLoaded = true
+		cmds = append(cmds, datasource.LoadUsuals(m.backend, m.snap, m.addr.ID))
+	}
+	if r := m.liveRepo(); r != nil {
+		if places := r.PlacesByQuery(m.addr, ""); len(places) == 0 {
+			cmds = append(cmds, datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, ""))
+		}
+	} else {
+		cmds = append(cmds, datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, ""))
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 var menuTabs = []catalog.Section{catalog.SectionCoffee, catalog.SectionFood, catalog.SectionSnacks}
@@ -342,29 +456,373 @@ func variantGroups(gs []catalog.OptionGroup) []catalog.OptionGroup {
 	return out
 }
 
-// wizard0 builds a fresh wizard for item it from its fetched option groups,
-// seeding the variant page for the draft lifecycle.
+// wizard0 builds a fresh wizard for item it, seeding ONLY the first variant
+// group on page 0. Further variant groups (e.g. Size after Crust) are added as
+// sequential pages, each scoped to the prior selection (their valid options are
+// discovered against the live cart).
 func (m Model) wizard0(it catalog.Item, gs []catalog.OptionGroup) screens.Wizard {
-	return screens.NewWizard(it, variantGroups(gs)).WithViewport(m.h).WithLoading(true)
+	vgs := variantGroups(gs)
+	first := vgs
+	if len(vgs) > 1 {
+		first = vgs[:1]
+	}
+	return screens.NewWizard(it, first).WithViewport(m.h)
 }
 
-// wizardCartCmd sends the live cart = current committed lines + the draft item
-// carrying the wizard's cumulative selection, and returns the response (pricing
-// + valid_addons) via CartSyncedMsg. The draft is NOT yet in m.lines.
-func (m Model) wizardCartCmd() tea.Cmd {
+// onVariantPage reports whether the wizard's current page is a variant page (vs
+// an add-on page). The first wizardVarShown pages are the variant groups.
+func (m Model) onVariantPage() bool { return m.wizard.PageIndex() < m.wizardVarShown }
+
+// variantGroupHasPrices reports whether a variant group's choices carry their own
+// price (e.g. a Domino's Size where each crust×size combo is priced) — in which
+// case per-choice prices are shown and no subtotal probe is needed.
+func variantGroupHasPrices(g catalog.OptionGroup) bool {
+	for _, ch := range g.Choices {
+		if ch.Price > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// variantComboKey is the cache key for the current full variant selection (all
+// chosen variant choices, in page order).
+func (m Model) variantComboKey() string {
+	var b strings.Builder
+	for _, s := range m.variantSelections() {
+		b.WriteString(s.ChoiceID)
+		b.WriteByte('|')
+	}
+	return b.String()
+}
+
+// enterVariantPage configures the just-shown variant page: when it is the LAST
+// variant group and its choices have no per-choice price (e.g. Onesta Size), it
+// probes a subtotal; otherwise it idles (per-choice prices, or a non-final
+// variant page like Crust).
+func (m Model) enterVariantPage() (Model, tea.Cmd) {
+	cur := m.wizardVarGroups[m.wizardVarShown-1]
+	last := m.wizardVarShown >= len(m.wizardVarGroups)
+	if last && !variantGroupHasPrices(cur) {
+		m.wizardPhase = wzPricing
+		m.wizard = m.wizard.WithLoading(true).WithSubtotal(0, false)
+		return m, m.wizardSubtotalCmd()
+	}
+	m.wizardPhase = wzPickVariant
+	m.wizard = m.wizard.WithLoading(false).WithoutSubtotal()
+	return m, nil
+}
+
+// beginVariantScope discovers which options of the NEXT variant group are valid
+// for the current selection — probing each against the live cart — and shows
+// them deduped by name. Realizes the two-layer model (Crust → that crust's Sizes).
+func (m Model) beginVariantScope() (Model, tea.Cmd) {
+	g := m.wizardVarGroups[m.wizardVarShown]
+	m.wizardScopeChoices = orderScopeChoices(g.Choices)
+	m.wizardScopeIdx = 0
+	m.wizardScopeValid = nil
+	m.wizardScopeSeen = map[string]bool{}
+	m.wizardPhase = wzVarScope
+	m.wizard = m.wizard.WithLoading(true)
+	return m, m.scopeVariantCmd()
+}
+
+// orderScopeChoices groups a variant group's choices by display name (in
+// first-appearance order) and, within each name, orders them cheapest-first.
+// Probing in this order lets scoping STOP at a name's first accepted candidate —
+// for the common (cheapest/default) outer variant that resolves in one probe per
+// name instead of one per matrix row.
+func orderScopeChoices(choices []catalog.Choice) []catalog.Choice {
+	var order []string
+	byName := map[string][]catalog.Choice{}
+	for _, c := range choices {
+		if _, ok := byName[c.Name]; !ok {
+			order = append(order, c.Name)
+		}
+		byName[c.Name] = append(byName[c.Name], c)
+	}
+	var out []catalog.Choice
+	for _, n := range order {
+		cs := byName[n]
+		sort.SliceStable(cs, func(i, j int) bool { return cs[i].Price < cs[j].Price })
+		out = append(out, cs...)
+	}
+	return out
+}
+
+// scopeVariantCmd probes whether the current candidate of the next variant group
+// is valid alongside the already-chosen variant(s).
+func (m Model) scopeVariantCmd() tea.Cmd {
+	g := m.wizardVarGroups[m.wizardVarShown]
+	if m.wizardScopeIdx >= len(m.wizardScopeChoices) {
+		return nil
+	}
+	v := m.wizardScopeChoices[m.wizardScopeIdx]
+	sels := append(m.variantSelections(), catalog.Selection{
+		GroupID: g.ID, ChoiceID: v.ID, Name: v.Name, Price: v.Price, Variant: true, Absolute: g.Absolute,
+	})
+	dbgTUI("scopeVariantCmd: probe %q (%d/%d) of %q", v.Name, m.wizardScopeIdx+1, len(m.wizardScopeChoices), g.Name)
+	return m.wizardSyncCmd(sels)
+}
+
+// liveRestReady reports whether a live cart is usable for the browsed restaurant
+// (the wizard mutates the live cart, so it needs a real Swiggy restaurant id).
+func (m Model) liveRestReady() bool {
+	return m.live && m.rest.PlaceData().SwiggyID != ""
+}
+
+// Wizard discovery phases — what the next CartSyncedMsg result means.
+const (
+	wzPickVariant = iota // idle on a variant page (no probe in flight)
+	wzPricing            // probing the current variant selection's subtotal
+	wzVarScope           // probing which options of the NEXT variant group are valid for the current selection
+	wzCrust              // probing required (crust) candidates for the chosen variant
+	wzOptional           // probing optional (toppings/beverage) groups for the variant
+	wzChoosing           // on the add-on page; the sync is the confirm
+)
+
+// requiredAddonGroups returns the add-on groups that REQUIRE a choice (Min≥1) —
+// the mutually-exclusive variant-scoped groups (e.g. Crust Small / Crust Medium)
+// that trial-discovery must pair to the chosen variant.
+func requiredAddonGroups(gs []catalog.OptionGroup) []catalog.OptionGroup {
+	var out []catalog.OptionGroup
+	for _, g := range gs {
+		if !g.Variant && g.Min >= 1 {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// optionalAddonGroups returns the non-required add-on groups (Min==0) — toppings,
+// beverages — which the server accepts with any variant, so they need no pairing.
+func optionalAddonGroups(gs []catalog.OptionGroup) []catalog.OptionGroup {
+	var out []catalog.OptionGroup
+	for _, g := range gs {
+		if !g.Variant && g.Min == 0 {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// trialOrder ranks required add-on groups for a chosen variant: groups whose
+// name contains the variant name (e.g. "Crust Small." for "Small") are tried
+// first, the rest keep their order. The name is only a HINT for ordering — the
+// live cart's accept/reject is the actual authority. Groups with no in-stock
+// choice are dropped (can't be sent).
+func trialOrder(required []catalog.OptionGroup, variantName string) []catalog.OptionGroup {
+	vn := strings.ToLower(strings.TrimSpace(variantName))
+	var match, rest []catalog.OptionGroup
+	for _, g := range required {
+		if _, ok := firstInStockChoice(g); !ok {
+			continue
+		}
+		if vn != "" && strings.Contains(strings.ToLower(g.Name), vn) {
+			match = append(match, g)
+		} else {
+			rest = append(rest, g)
+		}
+	}
+	return append(match, rest...)
+}
+
+// firstInStockChoice returns the first selectable choice in a group.
+func firstInStockChoice(g catalog.OptionGroup) (catalog.Choice, bool) {
+	for _, ch := range g.Choices {
+		if ch.InStock {
+			return ch, true
+		}
+	}
+	return catalog.Choice{}, false
+}
+
+// wizardTrialCmd probes the current candidate required group: it sends the cart
+// = committed lines + the wizard item carrying the chosen variant + this
+// candidate's default choice. The server accepts only the group that pairs with
+// the variant; the CartSyncedMsg handler keeps that one or tries the next.
+func (m Model) wizardTrialCmd() tea.Cmd {
+	if m.wizardTrialPos >= len(m.wizardCandidates) {
+		return nil
+	}
+	cand := m.wizardCandidates[m.wizardTrialPos]
+	ch, ok := firstInStockChoice(cand)
+	if !ok {
+		return nil
+	}
+	sels := append(m.wizard.AllSelections(), catalog.Selection{
+		GroupID: cand.ID, ChoiceID: ch.ID, Name: ch.Name, Price: ch.Price,
+	})
+	dbgTUI("wizardTrialCmd: trial %d/%d group=%q", m.wizardTrialPos+1, len(m.wizardCandidates), cand.Name)
+	return m.wizardSyncCmd(sels)
+}
+
+// wizardOptionalCmd probes whether the current optional group is valid for the
+// chosen variant: it sends the validated base (variant + crust) plus this
+// optional group's default choice. The server accepts only same-size optional
+// groups (e.g. "Toppings (Medium)" for Medium, not "Toppings (Regular)").
+func (m Model) wizardOptionalCmd() tea.Cmd {
+	if m.wizardOptIdx >= len(m.wizardOptional) {
+		return nil
+	}
+	g := m.wizardOptional[m.wizardOptIdx]
+	ch, ok := firstInStockChoice(g)
+	if !ok {
+		return nil
+	}
+	sels := append(append([]catalog.Selection{}, m.wizardBaseSels...),
+		catalog.Selection{GroupID: g.ID, ChoiceID: ch.ID, Name: ch.Name, Price: ch.Price})
+	dbgTUI("wizardOptionalCmd: probe %d/%d group=%q", m.wizardOptIdx+1, len(m.wizardOptional), g.Name)
+	return m.wizardSyncCmd(sels)
+}
+
+// beginOptionalDiscovery starts probing the optional add-on groups against the
+// validated base (variant + crust). Groups with no in-stock choice are skipped.
+// When there are no optional groups, discovery finishes immediately.
+func (m Model) beginOptionalDiscovery() (Model, tea.Cmd) {
+	m.wizardOptValid = nil
+	m.wizardOptIdx = 0
+	for m.wizardOptIdx < len(m.wizardOptional) {
+		if _, ok := firstInStockChoice(m.wizardOptional[m.wizardOptIdx]); ok {
+			break
+		}
+		m.wizardOptIdx++
+	}
+	if m.wizardOptIdx >= len(m.wizardOptional) {
+		return m.finishDiscovery()
+	}
+	m.wizardPhase = wzOptional
+	m.wizard = m.wizard.WithLoading(true)
+	return m, m.wizardOptionalCmd()
+}
+
+// finishDiscovery builds the add-on page from the discovered required crust group
+// plus the server-accepted optional groups, caches it for the chosen variant, and
+// advances the wizard to it.
+func (m Model) finishDiscovery() (Model, tea.Cmd) {
+	var page []catalog.OptionGroup
+	if m.wizardCrust.ID != "" {
+		page = append(page, m.wizardCrust)
+	}
+	page = append(page, m.wizardOptValid...)
+	// Stamp authoritative availability from the cart's valid_addons onto each
+	// choice (search_menu marks everything in-stock; the cart knows the truth).
+	page = applyStock(page, m.wizardStock)
+	if key := m.variantComboKey(); key != "" {
+		if m.wizardCache == nil {
+			m.wizardCache = map[string][]catalog.OptionGroup{}
+		}
+		m.wizardCache[key] = page
+	}
+	m.wizardPhase = wzChoosing
+	m.wizard = m.wizard.AddPage(page) // AddPage clears loading + advances to the page
+	return m, nil
+}
+
+// mergeStock records each choice's authoritative in-stock flag from the cart's
+// valid_addons (search_menu omits availability, so unavailable add-ons would
+// otherwise look selectable and get rejected at order time).
+func mergeStock(dst map[string]bool, groups []api.OptionGroup) {
+	if dst == nil {
+		return
+	}
+	for _, g := range groups {
+		for _, ch := range g.Choices {
+			dst[ch.ID] = ch.InStock
+		}
+	}
+}
+
+// applyStock stamps harvested availability onto a page's choices: a choice the
+// cart marked out-of-stock is set !InStock (the wizard renders it "sold out" and
+// blocks selecting it). Choices absent from the map keep their original flag.
+func applyStock(groups []catalog.OptionGroup, stock map[string]bool) []catalog.OptionGroup {
+	out := make([]catalog.OptionGroup, len(groups))
+	for i, g := range groups {
+		g.Choices = append([]catalog.Choice(nil), g.Choices...)
+		for j := range g.Choices {
+			if in, ok := stock[g.Choices[j].ID]; ok {
+				g.Choices[j].InStock = in
+			}
+		}
+		out[i] = g
+	}
+	return out
+}
+
+// wizardSubtotalCmd probes the price of the CURRENT variant selection: it adds
+// the chosen variant(s) — plus a default for each required add-on group that
+// matches the chosen variant, so the add validates — and reads the item line's
+// price back. Works for one variant group (size) or several (size × crust).
+func (m Model) wizardSubtotalCmd() tea.Cmd {
+	sels := m.variantSelections()
+	sels = append(sels, m.requiredDefaultsForVariants(sels)...)
+	return m.wizardSyncCmd(sels)
+}
+
+// variantSelections returns the currently-picked variant choices (page 0).
+func (m Model) variantSelections() []catalog.Selection {
+	var out []catalog.Selection
+	for _, s := range m.wizard.AllSelections() {
+		if s.Variant {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// requiredDefaultsForVariants returns a default choice for each required add-on
+// group that applies to the chosen variant — name-matched to a selected variant
+// (so we never send two mutually-exclusive crusts), or the sole required group.
+func (m Model) requiredDefaultsForVariants(variantSels []catalog.Selection) []catalog.Selection {
+	var out []catalog.Selection
+	for _, g := range m.wizardRequired {
+		match := len(m.wizardRequired) == 1
+		for _, vs := range variantSels {
+			if vs.Name != "" && strings.Contains(strings.ToLower(g.Name), strings.ToLower(vs.Name)) {
+				match = true
+			}
+		}
+		if !match {
+			continue
+		}
+		gg := applyStock([]catalog.OptionGroup{g}, m.wizardStock)[0]
+		if ch, ok := firstInStockChoice(gg); ok {
+			out = append(out, catalog.Selection{GroupID: g.ID, ChoiceID: ch.ID, Name: ch.Name, Price: ch.Price})
+		}
+	}
+	return out
+}
+
+// itemLinePrice returns the wizard item's per-unit price from a cart response.
+func (m Model) itemLinePrice(cart api.Cart) int {
+	swID := m.wizard.Item().SwiggyID
+	for _, l := range cart.Lines {
+		if l.ItemID == swID {
+			return l.Price
+		}
+	}
+	return 0
+}
+
+// wizardCartCmd confirms the full current selection (variant + chosen add-ons)
+// against the live cart. Used on the add-on page's Enter.
+func (m Model) wizardCartCmd() tea.Cmd { return m.wizardSyncCmd(m.wizard.AllSelections()) }
+
+// wizardSyncCmd sends the live cart = committed lines + the wizard item carrying
+// sels, returning pricing via CartSyncedMsg. The draft is NOT yet in m.lines.
+func (m Model) wizardSyncCmd(sels []catalog.Selection) tea.Cmd {
 	if !m.live {
 		return nil
 	}
-	// The wizard's restaurant is the one being browsed (the cart may be empty on
-	// the first item, so cartPlaceID can't resolve it).
 	pd := m.rest.PlaceData()
 	if pd.SwiggyID == "" {
-		dbgTUI("wizardCartCmd: nil (browsed restaurant has no SwiggyID)")
+		dbgTUI("wizardSyncCmd: nil (browsed restaurant has no SwiggyID)")
 		return nil
 	}
 	items := m.cartItemsForLines() // committed lines as api.CartItem
 	draft := api.CartItem{ItemID: m.wizard.Item().SwiggyID, Quantity: 1}
-	for _, s := range m.wizard.AllSelections() {
+	for _, s := range sels {
 		switch {
 		case s.Variant && s.Absolute:
 			draft.VariantsV2 = append(draft.VariantsV2, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
@@ -375,7 +833,6 @@ func (m Model) wizardCartCmd() tea.Cmd {
 		}
 	}
 	items = append(items, draft)
-	dbgTUI("wizardCartCmd: SYNC swiggyRest=%q draftSels=%d", pd.SwiggyID, len(draft.VariantsV2)+len(draft.VariantsLegacy)+len(draft.Addons))
 	return datasource.SyncCart(m.backend, m.snap, m.addr.ID, pd.SwiggyID, pd.Name, items)
 }
 
@@ -401,33 +858,6 @@ func (m Model) cartItemsForLines() []api.CartItem {
 		items = append(items, ci)
 	}
 	return items
-}
-
-// nextWizardPage returns the groups in Swiggy's valid_addons that the wizard has
-// NOT shown yet — the next page. Empty means the customization is complete.
-func (m Model) nextWizardPage(returned []catalog.OptionGroup) []catalog.OptionGroup {
-	seen := m.wizard.SeenGroupIDs()
-	var next []catalog.OptionGroup
-	for _, g := range returned {
-		if !seen[g.ID] {
-			next = append(next, g)
-		}
-	}
-	return next
-}
-
-// apiToCatalogGroups converts broker option groups to catalog option groups
-// (mirror of datasource.toOptionGroups, which is unexported).
-func apiToCatalogGroups(in []api.OptionGroup) []catalog.OptionGroup {
-	out := make([]catalog.OptionGroup, len(in))
-	for i, g := range in {
-		choices := make([]catalog.Choice, len(g.Choices))
-		for j, ch := range g.Choices {
-			choices[j] = catalog.Choice{ID: ch.ID, Name: ch.Name, Price: ch.Price, InStock: ch.InStock}
-		}
-		out[i] = catalog.OptionGroup{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Absolute: g.Absolute, Choices: choices}
-	}
-	return out
 }
 
 // beginAdd starts adding item from rest (section). If the item is customizable it
@@ -780,19 +1210,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.menu = m.buildMenu()
 		if m.live {
-			// Re-fire the active chip query after address adoption.
-			chipQuery := ""
-			if len(m.chips) > 0 {
-				idx := m.chipIdx
-				if idx < 0 {
-					idx = 0
-				}
-				if idx >= len(m.chips) {
-					idx = len(m.chips) - 1
-				}
-				chipQuery = m.chips[idx].Query
-			}
-			return m, datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, chipQuery)
+			// Re-fire Home view loads (nearby + usuals) after address adoption.
+			m.usualsLoaded = false // allow re-loading usuals for the new address
+			return m, tea.Batch(
+				datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, ""),
+				datasource.LoadUsuals(m.backend, m.snap, m.addr.ID),
+			)
 		}
 		return m, nil
 	case datasource.PlacesLoadedMsg:
@@ -849,9 +1272,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if wizardEligible(dm.Groups) {
-			// Variant-dependent add-ons: drive the server-driven wizard. Resolve any
-			// cart-restaurant conflict first (the wizard mutates the live cart).
+		if wizardEligible(dm.Groups) && m.liveRestReady() {
+			// Variant-dependent add-ons: drive the trial-discovery wizard. Resolve
+			// any cart-restaurant conflict first (the wizard mutates the live cart).
 			if m.conflictsWithCart(m.pendingRest, m.pendingSection) {
 				m.conflict = screens.NewCartConflict(m.cartHeader(), m.pendingRest, it.Name)
 				m.conflictSel = 1
@@ -859,45 +1282,144 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.pendingItem = it // re-fetch path on "new cart" (handled in conflict resolve)
 				return m, nil
 			}
+			m.wizardRequired = requiredAddonGroups(dm.Groups)
+			m.wizardOptional = optionalAddonGroups(dm.Groups)
+			m.wizardVarGroups = variantGroups(dm.Groups)
+			m.wizardVarShown = 1
+			m.wizardCandidates = nil
+			m.wizardTrialPos = 0
+			m.wizardCache = nil
+			m.wizardStock = map[string]bool{}
+			m.wizardSubtotal = 0
 			m.wizard = m.wizard0(it, dm.Groups)
 			m.wizardOpen = true
-			if c := m.wizardCartCmd(); c != nil {
-				return m, c // send the default variant, fetch valid_addons
-			}
-			// No live cart available (mock path or restaurant has no SwiggyID) —
-			// a permanently-spinning wizard would block the user forever. Fall back
-			// to the flat customize sheet which works without a backend.
-			m.wizardOpen = false
-			m.customize = screens.NewCustomize(it)
-			m.customizeOpen = true
-			return m, nil
+			// Configure page 0 (the first variant group): per-choice prices or a
+			// probed subtotal, depending on the data.
+			nm, cmd := m.enterVariantPage()
+			return nm, cmd
 		}
 		m.customize = screens.NewCustomize(it)
 		m.customizeOpen = true
 		return m, nil
 	case datasource.CartSyncedMsg:
 		if m.wizardOpen {
-			if dm.Err != nil {
-				m.wizard = m.wizard.WithLoading(false).WithErr("cart: " + dm.Err.Error())
+			switch m.wizardPhase {
+			case wzPickVariant:
+				return m, nil // idle; ignore any stray sync result
+			case wzPricing:
+				// Result of a subtotal probe (the current variant selection). Read
+				// the item line's price + harvest availability; the page is now
+				// interactive with the live subtotal.
+				if dm.Err == nil {
+					mergeStock(m.wizardStock, dm.Cart.ValidAddons)
+					m.wizardOptional = applyStock(m.wizardOptional, m.wizardStock)
+					if p := m.itemLinePrice(dm.Cart); p > 0 {
+						m.wizardSubtotal = p
+						m.wizard = m.wizard.WithSubtotal(p, true)
+					} else {
+						m.wizard = m.wizard.WithSubtotal(0, false)
+					}
+				} else {
+					// Couldn't price this combo (e.g. needs a required add-on we
+					// didn't include) — leave the subtotal unpriced rather than wrong.
+					m.wizard = m.wizard.WithSubtotal(0, false)
+				}
+				m.wizardPhase = wzPickVariant
+				m.wizard = m.wizard.WithLoading(false)
+				return m, nil
+			case wzVarScope:
+				// Result of a next-variant-group probe: if the server accepts this
+				// candidate, it's the valid variation for the chosen outer variant —
+				// record it and SKIP the remaining same-named candidates (early exit).
+				g := m.wizardVarGroups[m.wizardVarShown]
+				if dm.Err == nil {
+					mergeStock(m.wizardStock, dm.Cart.ValidAddons)
+					v := m.wizardScopeChoices[m.wizardScopeIdx]
+					if !m.wizardScopeSeen[v.Name] {
+						m.wizardScopeSeen[v.Name] = true
+						m.wizardScopeValid = append(m.wizardScopeValid, v)
+					}
+				}
+				m.wizardScopeIdx++
+				// Skip candidates whose name we already resolved.
+				for m.wizardScopeIdx < len(m.wizardScopeChoices) && m.wizardScopeSeen[m.wizardScopeChoices[m.wizardScopeIdx].Name] {
+					m.wizardScopeIdx++
+				}
+				if m.wizardScopeIdx < len(m.wizardScopeChoices) {
+					return m, m.scopeVariantCmd()
+				}
+				// Build the scoped variant page from the accepted options.
+				scoped := g
+				scoped.Choices = m.wizardScopeValid
+				scoped = applyStock([]catalog.OptionGroup{scoped}, m.wizardStock)[0]
+				m.wizard = m.wizard.AddPage([]catalog.OptionGroup{scoped})
+				m.wizardVarShown++
+				nm, cmd := m.enterVariantPage()
+				return nm, cmd
+			case wzCrust:
+				// Result of a size+candidate-crust probe. Accepted → that candidate
+				// is the size's required group; rejected → try the next candidate.
+				if dm.Err == nil {
+					m.liveCart = dm.Cart
+					mergeStock(m.wizardStock, dm.Cart.ValidAddons)
+					if len(m.wizardCandidates) > 0 {
+						m.wizardCrust = m.wizardCandidates[m.wizardTrialPos]
+						ch, _ := firstInStockChoice(m.wizardCrust)
+						m.wizardBaseSels = append(m.wizard.AllSelections(),
+							catalog.Selection{GroupID: m.wizardCrust.ID, ChoiceID: ch.ID, Name: ch.Name, Price: ch.Price})
+					} else {
+						// Variant-only base probe (item has no required add-on group).
+						m.wizardCrust = catalog.OptionGroup{}
+						m.wizardBaseSels = m.wizard.AllSelections()
+					}
+					// Now that availability is known, stamp it onto the optional
+					// groups so their probes pick in-stock choices (and all-sold-out
+					// groups are skipped entirely).
+					m.wizardOptional = applyStock(m.wizardOptional, m.wizardStock)
+					nm, cmd := m.beginOptionalDiscovery()
+					return nm, cmd
+				}
+				m.wizardTrialPos++
+				if m.wizardTrialPos < len(m.wizardCandidates) {
+					return m, m.wizardTrialCmd() // try the next candidate
+				}
+				m.wizard = m.wizard.WithLoading(false).WithErr("no valid options for this size")
+				return m, nil
+			case wzOptional:
+				// Result of an optional-group probe: keep the group if accepted.
+				if dm.Err == nil {
+					m.liveCart = dm.Cart
+					mergeStock(m.wizardStock, dm.Cart.ValidAddons)
+					m.wizardOptValid = append(m.wizardOptValid, m.wizardOptional[m.wizardOptIdx])
+				}
+				m.wizardOptIdx++
+				for m.wizardOptIdx < len(m.wizardOptional) {
+					if _, ok := firstInStockChoice(m.wizardOptional[m.wizardOptIdx]); ok {
+						break
+					}
+					m.wizardOptIdx++
+				}
+				if m.wizardOptIdx < len(m.wizardOptional) {
+					return m, m.wizardOptionalCmd() // probe the next optional group
+				}
+				nm, cmd := m.finishDiscovery()
+				return nm, cmd
+			default: // wzChoosing — the add-on page confirm sync
+				if dm.Err != nil {
+					m.wizard = m.wizard.WithLoading(false).WithErr("cart: " + dm.Err.Error())
+					return m, nil
+				}
+				m.liveCart = dm.Cart // real pricing for the bill
+				it := m.wizard.Item()
+				it.Options = nil
+				sels := m.wizard.AllSelections()
+				addons := addonsFromSelections(sels)
+				price := priceFromSelections(it.Price, sels)
+				m.wizardOpen = false
+				m = m.commitAddNoSync(it, addons, sels, price, m.pendingRest, m.pendingSection)
+				m = m.refreshAfterAdd()
 				return m, nil
 			}
-			m.liveCart = dm.Cart // pricing for the bill
-			next := m.nextWizardPage(apiToCatalogGroups(dm.Cart.ValidAddons))
-			if len(next) > 0 {
-				m.wizard = m.wizard.AddPage(next) // advance to the next page
-				return m, nil
-			}
-			// No new groups → the configuration is complete and already in the
-			// live cart. Commit the draft to the local lines and close.
-			it := m.wizard.Item()
-			it.Options = nil
-			sels := m.wizard.AllSelections()
-			addons := addonsFromSelections(sels)
-			price := priceFromSelections(it.Price, sels)
-			m.wizardOpen = false
-			m = m.commitAddNoSync(it, addons, sels, price, m.pendingRest, m.pendingSection)
-			m = m.refreshAfterAdd()
-			return m, nil
 		}
 		if dm.Err != nil {
 			m.cartSyncErr = "cart sync: " + dm.Err.Error()
@@ -905,6 +1427,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cartSyncErr = ""
 			m.liveCart = dm.Cart // real Swiggy pricing for an accurate bill
 		}
+		return m, nil
+	case datasource.CartLoadedMsg:
+		if dm.Err != nil {
+			m.cartSyncErr = "cart: " + dm.Err.Error()
+			return m, nil
+		}
+		m.cartSyncErr = ""
+		m.liveCart = dm.Cart
+		m.cartLoaded = true
+		if m.screen == scrCart {
+			m.cart = m.buildCart()
+		}
+		return m, nil
+	case datasource.UsualsLoadedMsg:
+		if dm.Err != nil {
+			dbgTUI("usuals: %v", dm.Err)
+		}
+		m.menu = m.buildMenu()
 		return m, nil
 	case datasource.OrderPlacedMsg:
 		m.placingOrder = false
@@ -1019,6 +1559,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.wizard = m.wizard.Down()
 			case " ", "space", "left", "right", "h", "l", "x":
 				m.wizard = m.wizard.Toggle()
+				if m.onVariantPage() {
+					// Variant changed → reconfigure this page (re-price if needed).
+					nm, cmd := m.enterVariantPage()
+					return nm, cmd
+				}
 			case "enter":
 				if m.wizard.Loading() {
 					return m, nil
@@ -1026,8 +1571,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !m.wizard.PageValid() {
 					return m, nil // required options not yet picked
 				}
+				if m.onVariantPage() {
+					// More variant groups to go (e.g. Size after Crust): scope the
+					// next group's valid options for the current selection.
+					if m.wizardVarShown < len(m.wizardVarGroups) {
+						nm, cmd := m.beginVariantScope()
+						return nm, cmd
+					}
+					// Last variant group chosen → add-on discovery for the full combo.
+					if page, ok := m.wizardCache[m.variantComboKey()]; ok {
+						m.wizardPhase = wzChoosing
+						m.wizard = m.wizard.AddPage(page)
+						return m, nil
+					}
+					m.wizardCandidates = trialOrder(m.wizardRequired, m.wizard.SelectedVariantName())
+					m.wizardTrialPos = 0
+					m.wizardCrust = catalog.OptionGroup{}
+					m.wizardPhase = wzCrust
+					m.wizard = m.wizard.WithLoading(true)
+					if len(m.wizardCandidates) == 0 {
+						// No required add-on group: a variant-only probe establishes
+						// the base + harvests availability before optional discovery.
+						return m, m.wizardSyncCmd(m.variantSelections())
+					}
+					return m, m.wizardTrialCmd()
+				}
+				// Add-on page: confirm the full selection against the cart.
 				m.wizard = m.wizard.WithLoading(true)
-				return m, m.wizardCartCmd() // send selection, fetch next valid_addons
+				return m, m.wizardCartCmd()
 			}
 			return m, nil
 		}
@@ -1075,7 +1646,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// level", so the timer is cleared there — walking back up the stack with
 		// repeated Esc must never teleport home. Cart/address are preserved.
 		if k.String() == "esc" {
-			if m.screen == scrMenu && !m.menu.Searching() {
+			if m.screen == scrMenu && !m.menu.Searching() && !m.searchMode {
+				// In live rail mode, Esc when rail is focused unfocuses the rail
+				// (not a home gesture); in search mode Esc exits search.
+				if m.live && m.railFocus {
+					m.railFocus = false
+					m.menu = m.buildMenu()
+					return m, nil
+				}
 				if m.frame-m.lastEscFrame <= escDoubleWindow {
 					m = m.toSplash()
 					m.lastEscFrame = -escDoubleWindow - 1
@@ -1113,34 +1691,144 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch m.screen {
 		case scrMenu:
+			// Mock path's / filter (runs menu.Update for the single-pane search).
 			if m.menu.Searching() {
 				nm, cmd := m.menu.Update(msg)
 				m.menu = nm.(screens.Menu)
 				return m, cmd
 			}
+
+			// Live rail: search mode captures all printable keys + backspace + enter + esc.
+			if m.live && len(m.chips) > 0 && m.searchMode {
+				switch k.String() {
+				case "esc":
+					m.searchMode = false
+					m.searchQuery = ""
+					m.menu = m.buildMenu()
+					return m, nil
+				case "enter":
+					// Submit the query — never per-keystroke.
+					var cmd tea.Cmd
+					if m.searchQuery != "" {
+						cmd = m.ensureQuery(m.searchQuery)
+					}
+					m.menu = m.buildMenu()
+					return m, cmd
+				case "backspace":
+					if len(m.searchQuery) > 0 {
+						m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+					}
+					m.menu = m.buildMenu()
+					return m, nil
+				default:
+					if k.Type == tea.KeyRunes {
+						m.searchQuery += string(k.Runes)
+						m.menu = m.buildMenu()
+					}
+					return m, nil
+				}
+			}
+
+			// Live rail: rail-focused keys.
+			if m.live && len(m.chips) > 0 && m.railFocus {
+				rail := screens.NewRail(m.railCatLabels()).WithActive(m.railActive)
+				switch k.String() {
+				case "right", "l", "esc":
+					m.railFocus = false
+					m.menu = m.buildMenu()
+					return m, nil
+				case "up", "k":
+					if m.railActive > 0 {
+						m.railActive--
+					}
+					m.menu = m.buildMenu()
+					return m, nil
+				case "down", "j":
+					if m.railActive < rail.Len()-1 {
+						m.railActive++
+					}
+					m.menu = m.buildMenu()
+					return m, nil
+				case "enter":
+					m.railFocus = false
+					switch m.railActive {
+					case screens.RailSearch:
+						m.searchMode = true
+						m.searchQuery = ""
+					case screens.RailHome:
+						m.searchMode = false
+						m.menu = m.buildMenu()
+						return m, m.ensureHomeLoaded()
+					default:
+						if catIdx, isCat := rail.IsCategory(m.railActive); isCat {
+							m.searchMode = false
+							m.menu = m.buildMenu()
+							return m, m.ensureQuery(m.chips[catIdx].Query)
+						}
+					}
+					m.menu = m.buildMenu()
+					return m, nil
+				case "c":
+					m.railFocus = false
+					m.menu = m.buildMenu()
+					cmd := m.openCartCmd()
+					return m, cmd
+				}
+				return m, nil
+			}
+
+			// Live rail: main-list mode (not rail-focused, not search).
+			// ← focuses the rail.
+			if m.live && len(m.chips) > 0 {
+				switch k.String() {
+				case "left", "h":
+					m.railFocus = true
+					m.menu = m.buildMenu()
+					return m, nil
+				case "right", "l":
+					// no-op in live main list (was chip nav, replaced by rail)
+					return m, nil
+				case "up", "k":
+					if m.menu.ListCursor() > 0 {
+						m.menu = m.menu.WithListCursor(m.menu.ListCursor() - 1)
+					}
+					return m, nil
+				case "down", "j":
+					m.menu = m.menu.WithListCursor(m.menu.ListCursor() + 1)
+					return m, nil
+				case "enter":
+					if p, ok := m.menu.Selected(); ok {
+						m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
+						m.screen = scrRestaurant
+						if p.SwiggyID != "" {
+							return m, datasource.LoadMenu(m.backend, m.snap, m.addr.ID, p.SwiggyID)
+						}
+					}
+					return m, nil
+				case "c":
+					cmd := m.openCartCmd()
+					return m, cmd
+				case "a":
+					m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
+					m.screen = scrAddress
+					return m, nil
+				case "tab":
+					m.vertical = 1
+					m.screen = scrInstamart
+					return m, nil
+				}
+				return m, nil
+			}
+
+			// Mock (non-live) path: unchanged section-tab + cursor nav.
 			switch k.String() {
 			case "enter":
 				if p, ok := m.menu.Selected(); ok {
 					m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
 					m.screen = scrRestaurant
-					if m.live && p.SwiggyID != "" {
-						return m, datasource.LoadMenu(m.backend, m.snap, m.addr.ID, p.SwiggyID)
-					}
 				}
 				return m, nil
 			case "right", "l":
-				// Guard chip nav so right/l during search-input is forwarded to
-				// menu.Update (the early Searching() guard above covers this, but
-				// the explicit check here makes the intent clear at the call site).
-				if !m.menu.Searching() && m.live && len(m.chips) > 0 {
-					// Live mode: navigate cuisine chips.
-					if m.chipIdx < len(m.chips)-1 {
-						m.chipIdx++
-						m.menu = m.buildMenu()
-						return m, datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, m.chips[m.chipIdx].Query)
-					}
-					return m, nil
-				}
 				// Mock mode: non-cyclable section tabs, clamp at the last tab (snacks)
 				if i := sectionIndex(m.section); i < len(menuTabs)-1 {
 					m.section = menuTabs[i+1]
@@ -1148,18 +1836,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "left", "h":
-				// Guard chip nav so left/h during search-input is forwarded to
-				// menu.Update (the early Searching() guard above covers this, but
-				// the explicit check here makes the intent clear at the call site).
-				if !m.menu.Searching() && m.live && len(m.chips) > 0 {
-					// Live mode: navigate cuisine chips.
-					if m.chipIdx > 0 {
-						m.chipIdx--
-						m.menu = m.buildMenu()
-						return m, datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, m.chips[m.chipIdx].Query)
-					}
-					return m, nil
-				}
 				// Mock mode: non-cyclable section tabs, clamp at the first tab (coffee)
 				if i := sectionIndex(m.section); i > 0 {
 					m.section = menuTabs[i-1]
@@ -1193,20 +1869,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "c":
-				m.cart = screens.NewCart(m.cartHeader(), m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive()).WithLiveSync(m.live, m.cartSyncErr)
-				m.screen = scrCart
-				return m, nil
+				cmd := m.openCartCmd()
+				return m, cmd
 			case "a":
 				m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
 				m.screen = scrAddress
 				return m, nil
 			case "tab":
-				if m.live {
-					// Vertical toggle: switch to the Instamart placeholder.
-					m.vertical = 1
-					m.screen = scrInstamart
-					return m, nil
-				}
 				return m, nil
 			default:
 				nm, cmd := m.menu.Update(msg)
@@ -1238,9 +1907,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// − removes a unit of the focused dish (to zero it leaves the cart).
 				return m.restDecSelected()
 			case "c":
-				m.cart = screens.NewCart(m.rest.PlaceData().Name, m.lines).WithEta(m.cartEta()).WithBill(m.billFromLive()).WithLiveSync(m.live, m.cartSyncErr)
-				m.screen = scrCart
-				return m, nil
+				cmd := m.openCartCmd()
+				return m, cmd
 			case "v":
 				m.rest = m.rest.WithVegOnly(!m.rest.VegOnly())
 				return m, nil
@@ -1255,12 +1923,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = scrMenu
 				return m, nil
 			case "enter":
-				if len(m.lines) > 0 {
-					m.checkout = screens.NewCheckout(m.cartHeader(), m.addr, m.lines, m.cartEta()).WithBill(m.billFromLive())
+				if len(m.cartScreenLines()) > 0 {
+					m.checkout = screens.NewCheckout(m.cartHeader(), m.addr, m.cartScreenLines(), m.cartEta()).WithBill(m.billFromLive())
 					m.screen = scrCheckout
 					return m, nil
 				}
 			}
+			// When showing the live Swiggy cart, the lines are Swiggy's truth —
+			// qty editing would overwrite the local lines (which carry the
+			// variant/add-on selections) with the flattened display copy. So the
+			// live cart is display-only; ↑↓ still move the cursor. Edit quantities
+			// from the restaurant screen (+/−).
+			liveDisplay := m.live && m.cartLoaded
 			mutated := false
 			switch k.String() {
 			case "j", "down":
@@ -1268,11 +1942,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "k", "up":
 				m.cart = m.cart.Up()
 			case "right", "l":
-				m.cart = m.cart.Right()
-				mutated = true
+				if !liveDisplay {
+					m.cart = m.cart.Right()
+					mutated = true
+				}
 			case "left", "h":
-				m.cart = m.cart.Left()
-				mutated = true
+				if !liveDisplay {
+					m.cart = m.cart.Left()
+					mutated = true
+				}
+			}
+			if liveDisplay {
+				return m, nil // display-only; never write Swiggy's lines back
 			}
 			// keep router's authoritative lines in sync with cart edits
 			m.lines = m.cart.Lines()
@@ -1616,6 +2297,51 @@ func errIsNeedsAuth(err error) bool {
 // to keep Swiggy's cart in sync. No-op when not live, cart is empty, or the
 // restaurant has no SwiggyID (e.g. if menu hasn't loaded yet). Items without
 // a SwiggyID are skipped — they can't be referenced by Swiggy.
+// cartScreenLines are the lines to DISPLAY on the cart/checkout screens. In live
+// mode, once the Swiggy cart is fetched, they come straight from Swiggy (the
+// source of truth: real names, per-unit prices, and any pre-existing items) —
+// not the local in-memory approximation. Falls back to the local lines in mock
+// mode or before the fetch returns.
+func (m Model) cartScreenLines() []screens.CartLine {
+	if m.live && m.cartLoaded {
+		out := make([]screens.CartLine, 0, len(m.liveCart.Lines))
+		for _, l := range m.liveCart.Lines {
+			out = append(out, screens.CartLine{
+				Item:  catalog.Item{ID: l.ItemID, SwiggyID: l.ItemID, Name: l.Name, Price: l.Price},
+				Qty:   l.Quantity,
+				Price: l.Price, // Swiggy final per-unit price (incl. variant + add-ons)
+			})
+		}
+		return out
+	}
+	return m.lines
+}
+
+// buildCart constructs the cart screen from the display lines + live bill.
+func (m Model) buildCart() screens.Cart {
+	return screens.NewCart(m.cartHeader(), m.cartScreenLines()).
+		WithEta(m.cartEta()).WithBill(m.billFromLive()).WithLiveSync(m.live, m.cartSyncErr)
+}
+
+// openCartCmd opens the cart screen and, in live mode, fetches the real Swiggy
+// cart so the display reflects exactly what Place Order will charge.
+func (m *Model) openCartCmd() tea.Cmd {
+	m.cartLoaded = false
+	m.cart = m.buildCart()
+	m.screen = scrCart
+	if !m.live {
+		return nil
+	}
+	rest := m.cartRestaurant
+	if rest == "" {
+		rest = m.rest.PlaceData().Name
+	}
+	if rest == "" {
+		return nil
+	}
+	return datasource.LoadCart(m.backend, m.addr.ID, rest)
+}
+
 // billFromLive returns Swiggy's real pricing breakdown for the cart/checkout
 // bill. In mock mode (or before any sync), Live is false and screens fall back
 // to the design's delivery/coupon math.

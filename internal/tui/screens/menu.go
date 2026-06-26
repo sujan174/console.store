@@ -95,6 +95,22 @@ func (m Menu) Selected() (catalog.Place, bool) {
 // WithCartTotal returns a copy with an updated cart total, preserving the cursor.
 func (m Menu) WithCartChip(s string) Menu { m.cartChip = s; return m }
 
+// ListCursor returns the current cursor position in the list.
+func (m Menu) ListCursor() int { return m.list.Cursor }
+
+// WithListCursor sets the list cursor position (used by the root for live rail nav).
+func (m Menu) WithListCursor(i int) Menu {
+	if i < 0 {
+		i = 0
+	}
+	places := m.mainPlaces()
+	if len(places) > 0 && i >= len(places) {
+		i = len(places) - 1
+	}
+	m.list.Cursor = i
+	return m
+}
+
 // WithMaxRows sets the list viewport height (rows). 0 = show all.
 func (m Menu) WithMaxRows(n int) Menu { m.list.MaxRows = n; return m }
 

@@ -59,12 +59,10 @@ func (m Model) liveInitCmds() tea.Cmd {
 	if m.seeded || m.needsAuth {
 		return nil
 	}
-	firstQuery := ""
-	if len(m.chips) > 0 {
-		firstQuery = m.chips[0].Query
-	}
+	// Home view shows usuals + nearby (query=""); fire both on session start.
 	return tea.Batch(
 		datasource.LoadAddresses(m.backend, m.snap),
-		datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, firstQuery),
+		datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, ""),
+		datasource.LoadUsuals(m.backend, m.snap, m.addr.ID),
 	)
 }

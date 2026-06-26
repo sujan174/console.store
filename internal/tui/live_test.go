@@ -73,7 +73,8 @@ func TestLiveNeedsAuthOnAuthError(t *testing.T) {
 func TestLiveMenuEnterFiresLoadMenu(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
 	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
-	snap.SetPlaces("a1", string(catalog.SectionCoffee), []catalog.Place{
+	// Rail Home view reads from query "" (nearby); seed under that key.
+	snap.SetPlaces("a1", "", []catalog.Place{
 		{ID: "r1", SwiggyID: "swiggy-r1", Name: "Blue Tokai", Section: catalog.SectionCoffee},
 	})
 	be := &liveFake{}
@@ -86,7 +87,7 @@ func TestLiveMenuEnterFiresLoadMenu(t *testing.T) {
 	// Navigate to the menu screen (model starts at scrSplash).
 	m.screen = scrMenu
 
-	// Simulate pressing enter on the menu (restaurant is first in list).
+	// Simulate pressing enter on the menu (restaurant is first in the Home nearby list).
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	um := updated.(Model)
 	if um.screen != scrRestaurant {
@@ -216,7 +217,7 @@ func TestLivePlaceOrderTransitionsToConfirm(t *testing.T) {
 	}
 }
 
-func TestChipSwitchFiresQuery(t *testing.T) {
+func TestRailCategoryFiresQuery(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
 	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
 	be := &liveFake{}
@@ -227,10 +228,20 @@ func TestChipSwitchFiresQuery(t *testing.T) {
 	)
 	m.w, m.h = 100, 40
 	m.screen = scrMenu
-	// move to the next chip → must return a non-nil Cmd (LoadPlacesQuery)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	// ← focuses the rail
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	um2 := m2.(Model)
+	if !um2.railFocus {
+		t.Fatal("← must focus the rail")
+	}
+	// ↓ moves rail to Coffee (index 2, first category)
+	m3, _ := um2.Update(tea.KeyMsg{Type: tea.KeyDown})
+	um3 := m3.(Model)
+	// Enter commits to that category and must fire a LoadPlacesQuery cmd
+	m4, cmd := um3.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_ = m4
 	if cmd == nil {
-		t.Fatal("changing chip in live mode must fire a places query")
+		t.Fatal("selecting a category on the rail must fire a places query")
 	}
 }
 
