@@ -63,53 +63,6 @@ func NewRestaurant(p catalog.Place, qtyByItemID map[string]int, cartChip string)
 	return s
 }
 
-// quickLook renders the ╭─ quick look ─╮ card shown below the item list.
-// Returns "" when the place has no items (no popular pick to show).
-func (s Restaurant) quickLook(w int) string {
-	top, ok := s.topItem()
-	if !ok {
-		return ""
-	}
-
-	inner := w - 4
-	if inner < 1 {
-		inner = 1
-	}
-
-	var lines []string
-
-	if s.p.Description != "" {
-		desc := s.p.Description
-		if r := []rune(desc); len(r) > inner {
-			desc = string(r[:inner-1]) + "…"
-		}
-		lines = append(lines, theme.DimStyle.Render(desc))
-	}
-
-	popular := theme.GoldStyle.Render("★ popular") +
-		"   " +
-		theme.BrightStyle.Render(top.Name) +
-		theme.DimStyle.Render(fmt.Sprintf(" · ₹%d", top.Price))
-	lines = append(lines, popular)
-
-	title := theme.FaintStyle.Render("quick look")
-	return infoBox(title, lines, w)
-}
-
-// topItem returns the highest-rated item, used as the popular pick in the quick-look card.
-func (s Restaurant) topItem() (catalog.Item, bool) {
-	if len(s.p.Items) == 0 {
-		return catalog.Item{}, false
-	}
-	best := s.p.Items[0]
-	for _, it := range s.p.Items[1:] {
-		if it.Rating > best.Rating {
-			best = it
-		}
-	}
-	return best, true
-}
-
 // vegCount is the number of vegetarian items on the menu.
 func (s Restaurant) vegCount() int {
 	n := 0
@@ -390,23 +343,17 @@ func (s Restaurant) View() string {
 	b.WriteString("\n")
 	b.WriteString(s.list.View())
 	b.WriteString("\n")
-	if ql := s.quickLook(w); ql != "" {
-		b.WriteString(ql + "\n")
-	}
 	// ↑/↓ always move between dishes; ↵/+ add the focused dish and − removes a
 	// unit (− to zero drops it from the cart).
 	b.WriteString(components.Hint("↑↓", "move", "↵/+", "add", "−", "remove", "←→", "category", "c", "cart", "esc", "back"))
 	return b.String()
 }
 
-// InfoView renders the bordered detail panel for the currently selected item,
-// shown above the keyboard hints when the user presses 'i'. It returns "" when
-// the panel is closed or nothing is selected.
-//
-// The richer fields (allergens, spice, prep, serving) are dummy data derived
-// from the item name/description for now — they'll come from the live Swiggy
-// menu once the integration lands.
-func (s Restaurant) InfoView(w int) string {
+// InfoView renders the centered item-detail modal for the selected dish. It
+// returns "" when closed or nothing is selected; the root centers it over the
+// viewport (like the customise/conflict modals). Real Swiggy fields only —
+// nothing inferred or faked.
+func (s Restaurant) InfoView(int) string {
 	if !s.infoOpen {
 		return ""
 	}
@@ -414,125 +361,81 @@ func (s Restaurant) InfoView(w int) string {
 	if !ok {
 		return ""
 	}
+	const cardW = 52
+	inner := cardW - 4
 
-	dot := theme.FaintStyle.Render("  ·  ")
+	// badge row: veg/non-veg · ★rating · ₹price · kcal (rating/kcal omitted at 0)
+	veg := theme.GreenStyle.Render("🟢 veg")
+	if !it.Veg {
+		veg = theme.FavStyle.Render("🔴 non-veg")
+	}
+	badge := []string{veg}
+	if it.Rating > 0 {
+		badge = append(badge, theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", it.Rating)))
+	}
+	badge = append(badge, theme.BrightStyle.Render(fmt.Sprintf("₹%d", it.Price)))
+	if it.Kcal > 0 {
+		badge = append(badge, theme.DimStyle.Render(fmt.Sprintf("%d kcal", it.Kcal)))
+	}
+	badgeRow := strings.Join(badge, theme.FaintStyle.Render("    "))
+
+	// real description, word-wrapped to the inner width
+	descText := it.Desc
+	if strings.TrimSpace(descText) == "" {
+		descText = "no description available"
+	}
+	wrapped := lipgloss.NewStyle().Width(inner).Render(descText)
+
+	// footer meta: category · serves 1 (category omitted when unknown)
+	foot := ""
+	if it.Category != "" {
+		foot = theme.DimStyle.Render(it.Category) + theme.FaintStyle.Render(" · ")
+	}
+	foot += theme.DimStyle.Render("serves 1")
+
+	lines := []string{badgeRow, ""}
+	for _, dl := range strings.Split(wrapped, "\n") {
+		lines = append(lines, theme.ItemStyle.Render(dl))
+	}
+	lines = append(lines, "", foot)
+
+	return modalCard(it.Name, lines, "↑↓ browse  ·  i/esc close", cardW)
+}
+
+// modalCard draws a rounded, gold-bordered card of width w with the title set
+// into the top border and a centered hint set into the bottom border. It is
+// self-contained (no left margin) so the root can center it in the viewport.
+//
+//	╭─ <title> ─────────────╮
+//	│ <line>                │
+//	╰──── <footer> ─────────╯
+func modalCard(title string, lines []string, footer string, w int) string {
+	bd := theme.Fg(theme.Gold)
 	inner := w - 4
 	if inner < 1 {
 		inner = 1
 	}
 
-	desc := it.Desc
-	if desc == "" {
-		desc = "no description available"
+	if tr := []rune(title); len(tr) > w-6 {
+		title = string(tr[:w-7]) + "…"
 	}
-	if r := []rune(desc); len(r) > inner {
-		desc = string(r[:inner-1]) + "…"
-	}
-
-	veg := theme.GreenStyle.Render("veg")
-	if !it.Veg {
-		veg = theme.FavStyle.Render("non-veg")
-	}
-	kcal := theme.DimStyle.Render("— kcal")
-	if it.Kcal > 0 {
-		kcal = theme.DimStyle.Render(fmt.Sprintf("%d kcal", it.Kcal))
-	}
-	stats := theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", it.Rating)) + dot +
-		kcal + dot + veg + dot + theme.DimStyle.Render("serves 1")
-
-	label := func(k, v string) string {
-		return theme.DimStyle.Render(k+" · ") + theme.FaintStyle.Render(v)
-	}
-	row2 := label("allergens", itemAllergens(it)) + dot + label("spice", itemSpice(it))
-	row3 := label("prep", itemPrep(it)) + dot + label("portion", "regular")
-
-	lines := []string{
-		theme.ItemStyle.Render(desc),
-		"",
-		stats,
-		row2,
-		row3,
-	}
-	title := theme.FaintStyle.Render("details") + theme.DimStyle.Render(" · ") + theme.BrightStyle.Render(it.Name)
-	return infoBox(title, lines, w)
-}
-
-// infoBox renders a rounded titled card with multiple body lines spanning
-// width w. Its top and bottom borders separate the detail panel from the list
-// above and the keyboard hints below.
-//
-//	╭─ <title> ───────────────────╮
-//	│ <line 1>                    │
-//	│ <line 2>                    │
-//	╰─────────────────────────────╯
-func infoBox(title string, lines []string, w int) string {
-	bd := theme.Fg(theme.Div2)
-	topUsed := lipgloss.Width("╭─ ") + lipgloss.Width(title) + lipgloss.Width(" ") + 1
-	fill := w - topUsed
+	titleStr := theme.BrightStyle.Bold(true).Render(title)
+	fill := w - 5 - lipgloss.Width(titleStr) // "╭─ "(3)+title+" "(1)+fill+"╮"(1)=w
 	if fill < 0 {
 		fill = 0
 	}
-	inner := w - 4
-	if inner < 0 {
-		inner = 0
-	}
 
 	var b strings.Builder
-	b.WriteString("  " + bd.Render("╭─ ") + title + bd.Render(" "+strings.Repeat("─", fill)+"╮") + "\n")
+	b.WriteString(bd.Render("╭─ ") + titleStr + bd.Render(" "+strings.Repeat("─", fill)+"╮") + "\n")
 	for _, ln := range lines {
-		b.WriteString("  " + bd.Render("│ ") + components.PadTo(ln, inner) + bd.Render(" │") + "\n")
+		b.WriteString(bd.Render("│ ") + components.PadTo(ln, inner) + bd.Render(" │") + "\n")
 	}
-	b.WriteString("  " + bd.Render("╰"+strings.Repeat("─", w-2)+"╯"))
+	footStr := theme.FaintStyle.Render(footer)
+	rem := w - 4 - lipgloss.Width(footStr) // "╰"(1)+l+" "(1)+foot+" "(1)+r+"╯"(1)=w
+	if rem < 2 {
+		rem = 2
+	}
+	l := rem / 2
+	b.WriteString(bd.Render("╰"+strings.Repeat("─", l)+" ") + footStr + bd.Render(" "+strings.Repeat("─", rem-l)+"╯"))
 	return b.String()
-}
-
-// itemBlob is the lowercased name + description used to infer the dummy detail
-// fields below.
-func itemBlob(it catalog.Item) string {
-	return strings.ToLower(it.Name + " " + it.Desc)
-}
-
-// itemAllergens infers a dummy allergen list from the item's name/description.
-func itemAllergens(it catalog.Item) string {
-	s := itemBlob(it)
-	groups := []struct {
-		allergen string
-		keys     []string
-	}{
-		{"dairy", []string{"milk", "cream", "cheese", "latte", "mocha", "chai", "yogurt", "butter", "oat", "parfait", "fudge", "brownie", "cappuccino", "cortado", "flat white", "horchata", "cotija"}},
-		{"nuts", []string{"almond", "walnut", "hazelnut", "peanut", "cashew", "nut"}},
-		{"gluten", []string{"bread", "croissant", "bun", "toast", "sandwich", "muffin", "cake", "loaf", "brownie", "burrito", "taco", "nacho", "quesadilla", "churro", "cookie", "poppers", "wheat"}},
-		{"egg", []string{"egg", "mayo"}},
-		{"soy", []string{"soy", "tofu"}},
-	}
-	var out []string
-	for _, g := range groups {
-		for _, k := range g.keys {
-			if strings.Contains(s, k) {
-				out = append(out, g.allergen)
-				break
-			}
-		}
-	}
-	if len(out) == 0 {
-		return "none listed"
-	}
-	return strings.Join(out, ", ")
-}
-
-// itemSpice infers a dummy spice level from the item's name/description.
-func itemSpice(it catalog.Item) string {
-	s := itemBlob(it)
-	for _, k := range []string{"jalape", "chilli", "chili", "peri", "spicy", "masala", "pepper", "salsa"} {
-		if strings.Contains(s, k) {
-			return "medium"
-		}
-	}
-	return "mild"
-}
-
-// itemPrep returns a dummy prep-time window, stable per item name.
-func itemPrep(it catalog.Item) string {
-	lo := 8 + len(it.Name)%6
-	return fmt.Sprintf("%d-%d min", lo, lo+5)
 }

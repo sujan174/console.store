@@ -32,37 +32,13 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	}
 }
 
-func TestRestaurantShowsQuickLookCard(t *testing.T) {
+func TestRestaurantNoQuickLookCard(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
-	r := NewRestaurant(p, map[string]int{}, "")
-	out := r.View()
-
-	// Card title and key content
-	for _, want := range []string{
-		"quick look",
-		"Third-wave roastery",
-		"popular",
-		"Cold Coffee",
-		"₹149",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("quick-look card missing %q:\n%s", want, out)
-		}
-	}
-
-	// Old hero card must be gone
-	if strings.Contains(out, "most ordered") {
-		t.Error("old 'most ordered' box must not appear")
-	}
-}
-
-func TestRestaurantQuickLookAbsentWhenNoItems(t *testing.T) {
-	p := catalog.Place{Name: "Empty", ETA: "10 min", Items: nil}
-	r := NewRestaurant(p, map[string]int{}, "")
-	out := r.View()
+	out := NewRestaurant(p, map[string]int{}, "").View()
+	// The quick-look card was removed; the screen must not render it.
 	if strings.Contains(out, "quick look") {
-		t.Error("quick look card must not appear when place has no items")
+		t.Errorf("quick-look card must be gone:\n%s", out)
 	}
 }
 
@@ -117,10 +93,10 @@ func TestRestaurantInfoPanelTogglesWithI(t *testing.T) {
 	}
 
 	out := s.InfoView(80)
-	// Bordered box (top + bottom rule) around the selected item's detail.
-	for _, want := range []string{"╭", "╰", "details", "Cold Coffee", "allergens", "spice", "prep", "180 kcal", "veg"} {
+	// Bordered modal card (top + bottom rule) with the selected item's real data.
+	for _, want := range []string{"╭", "╰", "Cold Coffee", "180 kcal", "veg", "i/esc close"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("info panel missing %q:\n%s", want, out)
+			t.Errorf("info modal missing %q:\n%s", want, out)
 		}
 	}
 

@@ -2083,6 +2083,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.rest = nr.(screens.Restaurant)
 				return m, cmd
 			}
+			// The item-info modal captures keys while open: i/esc/q close it; ↑/↓
+			// browse to the prev/next dish (the modal follows). Everything else is
+			// swallowed so the list behind it can't act.
+			if m.rest.InfoOpen() {
+				switch k.String() {
+				case "i", "esc", "q":
+					m.rest = m.rest.WithInfo(false)
+				case "up", "k", "down", "j":
+					nr, _ := m.rest.Update(msg)
+					m.rest = nr.(screens.Restaurant)
+				}
+				return m, nil
+			}
 			switch k.String() {
 			case "esc":
 				m.screen = scrMenu
@@ -2398,16 +2411,20 @@ func (m Model) View() string {
 		}
 		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, dialog)
 	}
+	// Item-info modal ('i' on the restaurant screen) — a centered overlay.
+	if m.screen == scrRestaurant && m.rest.InfoOpen() {
+		if card := m.rest.InfoView(0); card != "" {
+			if m.w == 0 || m.h == 0 {
+				return card
+			}
+			return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card)
+		}
+	}
 
 	var body string
-	infoPanel := "" // restaurant detail panel ('i'); pinned above the hints below
 	switch m.screen {
 	case scrRestaurant:
 		chrome := 14 + screens.BrandHeaderLines
-		if m.rest.InfoOpen() {
-			infoPanel = m.rest.InfoView(components.ContentWidth())
-			chrome += lipgloss.Height(infoPanel) + 1
-		}
 		body = m.rest.WithMaxRows(m.listRows(chrome)).View()
 	case scrCart:
 		body = m.cart.View()
@@ -2443,9 +2460,6 @@ func (m Model) View() string {
 	content = screens.BrandBanner(components.FrameWidth()) + content
 
 	footer := ""
-	if infoPanel != "" {
-		footer += infoPanel + "\n"
-	}
 	if hint != "" {
 		footer += hint + "\n\n"
 	}
