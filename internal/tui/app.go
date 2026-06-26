@@ -2270,6 +2270,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			switch k.String() {
 			case "esc":
+				// Tiered esc: a committed dish search clears first (undo the
+				// search, stay on the menu); a second esc leaves to discovery.
+				if m.rest.Filter() != "" {
+					m.rest = m.rest.ClearSearch()
+					return m, nil
+				}
 				m.screen = scrMenu
 				return m, nil
 			case "left", "h", "[":

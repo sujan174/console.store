@@ -169,3 +169,29 @@ func TestRestaurantSearchUI(t *testing.T) {
 		t.Fatalf("search-mode hint missing done/clear:\n%s", v)
 	}
 }
+
+func TestRestaurantClearSearch(t *testing.T) {
+	repo := mem.New()
+	p, _ := repo.Menu("blue-tokai")
+	s := NewRestaurant(p, map[string]int{}, "")
+	ns, _ := s.Update(key("/"))
+	s = ns.(Restaurant)
+	for _, r := range "cold" {
+		ns, _ = s.Update(key(string(r)))
+		s = ns.(Restaurant)
+	}
+	// Enter commits the search: input mode off, filter retained.
+	ns, _ = s.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	s = ns.(Restaurant)
+	if s.Searching() {
+		t.Fatal("enter should exit search input")
+	}
+	if s.Filter() == "" {
+		t.Fatal("enter should retain the committed filter")
+	}
+	// ClearSearch undoes it.
+	s = s.ClearSearch()
+	if s.Filter() != "" {
+		t.Fatalf("ClearSearch should drop the filter, got %q", s.Filter())
+	}
+}

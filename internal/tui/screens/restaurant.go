@@ -304,6 +304,19 @@ func (s Restaurant) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // Searching reports whether the restaurant is in search-input mode.
 func (s Restaurant) Searching() bool { return s.searching }
 
+// Filter returns the active dish-search filter ("" when none). Lets the root
+// tier the esc key: clear a committed search before leaving the menu.
+func (s Restaurant) Filter() string { return s.list.Filter() }
+
+// ClearSearch drops the dish-search filter and exits search input, returning a
+// copy. This is the "undo my search" path — esc clears the filter and stays on
+// the menu instead of popping back to discovery.
+func (s Restaurant) ClearSearch() Restaurant {
+	s.searching = false
+	s.list.SetFilter("")
+	return s
+}
+
 func (s Restaurant) View() string {
 	var b strings.Builder
 	w := components.ContentWidth()
@@ -384,7 +397,7 @@ func (s Restaurant) searchLine() string {
 		return line + theme.FaintStyle.Render("   "+plural(n, "dish", "dishes"))
 	}
 	return theme.DimStyle.Render("⌕ "+f) +
-		theme.FaintStyle.Render("   "+plural(n, "dish", "dishes")+" · / edit")
+		theme.FaintStyle.Render("   "+plural(n, "dish", "dishes")+" · / edit · esc clear")
 }
 
 // InfoView renders the centered item-detail modal for the selected dish. It
