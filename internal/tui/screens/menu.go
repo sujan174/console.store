@@ -244,21 +244,25 @@ func (m Menu) placeRow(p catalog.Place, selected bool) string {
 		w = 16
 	}
 
-	// meta = ★rating + ETA, RIGHT-aligned to the row edge (dim, so it reads as
-	// secondary to the name).
-	rating := ""
-	if p.Rating > 0 {
-		rating = theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
-	}
-	eta := ""
-	if p.ETA != "" {
-		eta = theme.EtaStyle.Render(p.ETA)
-	}
-	meta := rating
-	if rating != "" && eta != "" {
-		meta += "  " + eta
-	} else {
-		meta += eta
+	// meta = ★rating + ETA, RIGHT-aligned to the row edge. Shown ONLY in search
+	// results; on Home/category the focused restaurant's stats live in the detail
+	// strip above the list, so the rows stay clean (just names).
+	meta := ""
+	if m.searchMode {
+		rating := ""
+		if p.Rating > 0 {
+			rating = theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
+		}
+		eta := ""
+		if p.ETA != "" {
+			eta = theme.EtaStyle.Render(p.ETA)
+		}
+		meta = rating
+		if rating != "" && eta != "" {
+			meta += "  " + eta
+		} else {
+			meta += eta
+		}
 	}
 	metaW := lipgloss.Width(meta)
 
@@ -345,6 +349,46 @@ func (m Menu) sectionedListView() string {
 }
 
 // twoPaneView renders the rail + main pane layout used in live mode.
+// focusedDetail renders the highlighted restaurant's stats (★rating · ETA ·
+// city · offer) as a strip above the list — the master/detail pattern that keeps
+// per-row clutter off the browse list. "" when there's nothing to show.
+func (m Menu) focusedDetail() string {
+	places := m.mainPlaces()
+	if len(places) == 0 {
+		return ""
+	}
+	c := m.list.Cursor
+	if c < 0 || c >= len(places) {
+		c = 0
+	}
+	p := places[c]
+	dot := theme.FaintStyle.Render("  ·  ")
+	out := theme.BrightStyle.Bold(true).Render(p.Name)
+	stats := ""
+	add := func(s string) {
+		if stats != "" {
+			stats += dot
+		}
+		stats += s
+	}
+	if p.Rating > 0 {
+		add(theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", p.Rating)))
+	}
+	if p.ETA != "" {
+		add(theme.DimStyle.Render(p.ETA))
+	}
+	if p.City != "" {
+		add(theme.DimStyle.Render(p.City))
+	}
+	if p.Offer != "" {
+		add(theme.GoldStyle.Render(p.Offer))
+	}
+	if stats != "" {
+		out += "   " + stats
+	}
+	return "  " + out
+}
+
 func (m Menu) twoPaneView() string {
 	railH := m.list.MaxRows + 6
 	if railH < m.rail.Len()+1 {
@@ -381,18 +425,25 @@ func (m Menu) twoPaneView() string {
 				main.WriteString(m.placeRow(p, i == m.list.Cursor) + "\n")
 			}
 		}
-	case m.hasSections:
-		main.WriteString(m.sectionedListView())
 	default:
-		// plain flat list (live mode, a category) — header matches Home's dividers.
-		if m.catHeader != "" {
-			main.WriteString(sectionRule(m.catHeader))
+		// Non-search browse: the focused restaurant's stats (rating · ETA ·
+		// location) sit in a detail strip above the list, so the rows stay clean.
+		if d := m.focusedDetail(); d != "" {
+			main.WriteString(d + "\n\n")
 		}
-		if len(m.places) == 0 && m.loading {
-			main.WriteString(theme.GoldStyle.Render("loading restaurants…") + "\n")
-		}
-		for i, p := range m.places {
-			main.WriteString(m.placeRow(p, i == m.list.Cursor) + "\n")
+		if m.hasSections {
+			main.WriteString(m.sectionedListView())
+		} else {
+			// flat category list — header matches Home's dividers.
+			if m.catHeader != "" {
+				main.WriteString(sectionRule(m.catHeader))
+			}
+			if len(m.places) == 0 && m.loading {
+				main.WriteString(theme.GoldStyle.Render("loading restaurants…") + "\n")
+			}
+			for i, p := range m.places {
+				main.WriteString(m.placeRow(p, i == m.list.Cursor) + "\n")
+			}
 		}
 	}
 

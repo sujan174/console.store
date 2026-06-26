@@ -1929,6 +1929,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			// `/` jumps straight into search from anywhere on the browse screen.
+			if m.screen == scrMenu && m.live && len(m.chips) > 0 && !m.searchMode && k.String() == "/" {
+				m.railActive = screens.RailSearch
+				m.railFocus = false
+				m.syncSearchEntry() // searchMode=true, fresh empty input
+				m.menu = m.buildMenu()
+				return m, nil
+			}
+
 			// Live rail: search mode captures all printable keys + backspace + enter + esc.
 			// Printable runes always append to the query. Named nav keys (↑↓ and the
 			// j/k aliases when NOT typed as runes) move the result cursor. Enter either
@@ -2641,7 +2650,8 @@ func (m Model) View() string {
 	case scrImCart:
 		body = m.imCart.View()
 	default: // scrMenu
-		body = m.menu.WithMaxRows(m.listRows(13 + screens.BrandHeaderLines)).View()
+		// +2 reserves the focused-restaurant detail strip (line + blank) above the list.
+		body = m.menu.WithMaxRows(m.listRows(15 + screens.BrandHeaderLines)).View()
 	}
 
 	// The footer — the screen's hint line + optional command palette + status

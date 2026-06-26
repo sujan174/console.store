@@ -199,3 +199,30 @@ func TestMenuCategoryShowsHeader(t *testing.T) {
 		t.Fatalf("category flat list missing its section header:\n%s", v)
 	}
 }
+
+func TestBrowseDetailStripShowsFocused(t *testing.T) {
+	m := liveMenu().WithSections(nil, []catalog.Place{
+		{Name: "Blue Tokai", Rating: 4.7, ETA: "30 MINS", City: "HSR"},
+	})
+	v := m.View()
+	for _, want := range []string{"Blue Tokai", "★ 4.7", "30 MINS", "HSR"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("focused-restaurant detail strip missing %q:\n%s", want, v)
+		}
+	}
+}
+
+func TestBrowseRowsHideRatingOutsideSearch(t *testing.T) {
+	// Strip uses "★ 4.7" (spaced); the per-row compact form "★4.7" must be absent.
+	m := liveMenu().WithSections(nil, []catalog.Place{{Name: "Blue Tokai", Rating: 4.7, ETA: "30 MINS"}})
+	if strings.Contains(m.View(), "★4.7") {
+		t.Fatalf("browse rows must not carry per-row rating outside search:\n%s", m.View())
+	}
+}
+
+func TestSearchRowsKeepRating(t *testing.T) {
+	m := liveMenu().WithSearchMode(true, "blue", []catalog.Place{{Name: "Blue Tokai", Rating: 4.7, ETA: "30 MINS"}}, 1, false)
+	if !strings.Contains(m.View(), "★4.7") {
+		t.Fatalf("search results should keep per-row rating:\n%s", m.View())
+	}
+}
