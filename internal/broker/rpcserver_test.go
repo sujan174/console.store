@@ -45,6 +45,43 @@ func TestRPCRoundTripAddresses(t *testing.T) {
 	}
 }
 
+func TestRPCRoundTripUsuals(t *testing.T) {
+	mcp := fakeMCP(t, map[string]func(map[string]any) any{
+		"get_food_orders": func(map[string]any) any {
+			return map[string]any{"orders": []map[string]any{
+				{"orderId": 1, "restaurantName": "Blue Tokai", "status": "DELIVERED"},
+			}}
+		},
+		"search_restaurants": func(args map[string]any) any {
+			return map[string]any{"restaurants": []map[string]any{
+				{"id": "r1", "name": "Blue Tokai", "avgRating": 4.5},
+			}}
+		},
+	})
+	store := &fakeStore{tokens: map[string]string{"acct-U": "tok"}}
+	svc := NewService(Config{Store: store, Auth: &fakeAuthz{}, FoodBaseURL: mcp.URL, HTTPClient: mcp.Client()})
+
+	sock := filepath.Join(t.TempDir(), "b.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go Serve(ctx, svc, sock)
+	waitForSocket(t, sock)
+
+	cli, err := api.Dial(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	got, err := cli.Usuals("acct-U", "addr-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "r1" || got[0].Name != "Blue Tokai" {
+		t.Fatalf("round-trip usuals = %+v", got)
+	}
+}
+
 func waitForSocket(t *testing.T, path string) {
 	t.Helper()
 	for i := 0; i < 100; i++ {

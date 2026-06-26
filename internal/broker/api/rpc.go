@@ -53,6 +53,16 @@ type UpdateCartArgs struct {
 }
 type UpdateCartReply struct{ Cart Cart }
 
+// GetCart fetches the LIVE Swiggy cart (the source of truth — includes any
+// pre-existing items and Swiggy's real pricing) so the cart/checkout screens
+// reflect exactly what Place Order will charge.
+type GetCartArgs struct {
+	AccountID      string
+	AddressID      string
+	RestaurantName string
+}
+type GetCartReply struct{ Cart Cart }
+
 type ClearCartArgs struct{ AccountID string }
 type ClearCartReply struct{}
 
@@ -64,3 +74,9 @@ type PlaceOrderReply struct{ Order Order }
 
 type LogoutArgs struct{ AccountID string }
 type LogoutReply struct{}
+
+type UsualsArgs struct {
+	AccountID string
+	AddressID string
+}
+type UsualsReply struct{ Restaurants []Restaurant }

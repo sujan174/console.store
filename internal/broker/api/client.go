@@ -74,6 +74,14 @@ func (c *Client) UpdateCart(a UpdateCartArgs) (Cart, error) {
 	return rep.Cart, err
 }
 
+func (c *Client) GetCart(accountID, addressID, restaurantName string) (Cart, error) {
+	var rep GetCartReply
+	err := c.rc.Call(ServiceName+".GetCart", GetCartArgs{
+		AccountID: accountID, AddressID: addressID, RestaurantName: restaurantName,
+	}, &rep)
+	return rep.Cart, err
+}
+
 func (c *Client) PlaceOrder(accountID, addressID string) (Order, error) {
 	var rep PlaceOrderReply
 	err := c.rc.Call(ServiceName+".PlaceOrder", PlaceOrderArgs{AccountID: accountID, AddressID: addressID}, &rep)
@@ -83,4 +91,10 @@ func (c *Client) PlaceOrder(accountID, addressID string) (Order, error) {
 func (c *Client) Logout(accountID string) error {
 	var rep LogoutReply
 	return c.rc.Call(ServiceName+".Logout", LogoutArgs{AccountID: accountID}, &rep)
+}
+
+func (c *Client) Usuals(accountID, addressID string) ([]Restaurant, error) {
+	var rep UsualsReply
+	err := c.rc.Call(ServiceName+".Usuals", UsualsArgs{AccountID: accountID, AddressID: addressID}, &rep)
+	return rep.Restaurants, err
 }

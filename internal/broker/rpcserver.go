@@ -80,6 +80,12 @@ func (a *rpcAdapter) UpdateCart(args api.UpdateCartArgs, rep *api.UpdateCartRepl
 	return err
 }
 
+func (a *rpcAdapter) GetCart(args api.GetCartArgs, rep *api.GetCartReply) error {
+	out, err := a.svc.GetCart(context.Background(), args.AccountID, args.AddressID, args.RestaurantName)
+	rep.Cart = out
+	return err
+}
+
 func (a *rpcAdapter) PlaceOrder(args api.PlaceOrderArgs, rep *api.PlaceOrderReply) error {
 	out, err := a.svc.PlaceOrder(context.Background(), args.AccountID, args.AddressID)
 	rep.Order = out
@@ -88,6 +94,12 @@ func (a *rpcAdapter) PlaceOrder(args api.PlaceOrderArgs, rep *api.PlaceOrderRepl
 
 func (a *rpcAdapter) Logout(args api.LogoutArgs, rep *api.LogoutReply) error {
 	return a.svc.Logout(context.Background(), args.AccountID)
+}
+
+func (a *rpcAdapter) Usuals(args api.UsualsArgs, rep *api.UsualsReply) error {
+	out, err := a.svc.Usuals(context.Background(), args.AccountID, args.AddressID)
+	rep.Restaurants = out
+	return err
 }
 
 // Serve registers the adapter under api.ServiceName and serves the Unix socket

@@ -117,3 +117,45 @@ func TestServiceMissingTokenSurfacesError(t *testing.T) {
 	}
 	_ = api.Address{}
 }
+
+func TestServiceUsualsMapsMostOrdered(t *testing.T) {
+	mcp := fakeMCP(t, map[string]func(map[string]any) any{
+		"get_food_orders": func(map[string]any) any {
+			return map[string]any{"orders": []map[string]any{
+				{"orderId": 1, "restaurantName": "Blue Tokai", "status": "DELIVERED"},
+				{"orderId": 2, "restaurantName": "Blue Tokai", "status": "DELIVERED"},
+				{"orderId": 3, "restaurantName": "Onesta", "status": "DELIVERED"},
+			}}
+		},
+		"search_restaurants": func(args map[string]any) any {
+			q, _ := args["query"].(string)
+			switch q {
+			case "Blue Tokai":
+				return map[string]any{"restaurants": []map[string]any{
+					{"id": "r1", "name": "Blue Tokai", "avgRating": 4.5},
+				}}
+			case "Onesta":
+				return map[string]any{"restaurants": []map[string]any{
+					{"id": "r2", "name": "Onesta", "avgRating": 4.2},
+				}}
+			}
+			return map[string]any{"restaurants": []map[string]any{}}
+		},
+	})
+	store := &fakeStore{tokens: map[string]string{"acct-U": "tok"}}
+	svc := NewService(Config{Store: store, Auth: &fakeAuthz{}, FoodBaseURL: mcp.URL, HTTPClient: mcp.Client()})
+	got, err := svc.Usuals(context.Background(), "acct-U", "addr-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 usuals, got %d: %+v", len(got), got)
+	}
+	// most-ordered first
+	if got[0].ID != "r1" || got[0].Name != "Blue Tokai" {
+		t.Errorf("first usual must be Blue Tokai (2 orders): %+v", got[0])
+	}
+	if got[1].ID != "r2" || got[1].Name != "Onesta" {
+		t.Errorf("second usual must be Onesta (1 order): %+v", got[1])
+	}
+}

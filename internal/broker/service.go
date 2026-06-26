@@ -126,6 +126,16 @@ func (s *Service) UpdateCart(ctx context.Context, a api.UpdateCartArgs) (api.Car
 	return mapCart(c), nil
 }
 
+// GetCart returns the live Swiggy cart (source of truth for the cart/checkout
+// display: real items + pricing, including anything already in the account cart).
+func (s *Service) GetCart(ctx context.Context, accountID, addressID, restaurantName string) (api.Cart, error) {
+	c, err := s.foodClient(accountID).GetFoodCart(ctx, addressID, restaurantName)
+	if err != nil {
+		return api.Cart{}, err
+	}
+	return mapCart(c), nil
+}
+
 func (s *Service) PlaceOrder(ctx context.Context, accountID, addressID string) (api.Order, error) {
 	o, err := s.foodClient(accountID).PlaceFoodOrder(ctx, swiggy.PlaceFoodOrderRequest{AddressID: addressID})
 	if err != nil {
@@ -140,4 +150,14 @@ func (s *Service) Logout(ctx context.Context, accountID string) error {
 	delete(s.food, accountID)
 	s.mu.Unlock()
 	return s.cfg.Store.PurgeToken(ctx, accountID)
+}
+
+// Usuals returns the account's most-ordered restaurants (from order history),
+// empty when there is no retrievable history.
+func (s *Service) Usuals(ctx context.Context, accountID, addressID string) ([]api.Restaurant, error) {
+	rs, err := s.foodClient(accountID).UsualRestaurants(ctx, addressID)
+	if err != nil {
+		return nil, err
+	}
+	return mapRestaurants(rs), nil
 }
