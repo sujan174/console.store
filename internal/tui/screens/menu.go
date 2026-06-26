@@ -350,7 +350,14 @@ func (m Menu) twoPaneView() string {
 	if m.address.Label != "" {
 		header += theme.DimStyle.Render(" · " + m.address.Label)
 	}
-	main.WriteString(header + "\n\n")
+	// Right-align the cart chip on the header so the live browse screen shows the
+	// cart too (the old single-pane path rendered it; twoPaneView did not).
+	cartStyle := theme.CartStyle
+	if strings.Contains(m.cartChip, "empty") {
+		cartStyle = theme.DimStyle
+	}
+	mainW := components.ContentWidth() - railWidth - 5
+	main.WriteString(justify(header, cartStyle.Render(m.cartChip), mainW) + "\n\n")
 
 	switch {
 	case m.searchMode:

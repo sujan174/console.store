@@ -201,3 +201,13 @@ func TestMenuMockPaneUnchanged(t *testing.T) {
 		t.Errorf("mock pane must be unchanged (tabs, no rail sections):\n%s", v)
 	}
 }
+
+// The live two-pane browse screen must show the cart chip (regression: it only
+// appeared on the old single-pane path, not in twoPaneView).
+func TestTwoPaneBrowseShowsCartChip(t *testing.T) {
+	m := NewMenu(nil, catalog.Address{Line: "Home"}, catalog.SectionFood, catalog.Usual{}, false, "cart · ₹338").
+		WithRail(NewRail([]string{"Coffee", "Pizza"})).WithRailFocus(false).WithMaxRows(20)
+	if v := m.View(); !strings.Contains(v, "cart · ₹338") {
+		t.Fatalf("two-pane browse missing cart chip:\n%s", v)
+	}
+}
