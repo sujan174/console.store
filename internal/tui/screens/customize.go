@@ -213,8 +213,6 @@ func (c Customize) View() string {
 }
 
 func (c Customize) groupedView() string {
-	title := theme.BrandStyle.Render("customise") + theme.DimStyle.Render(" · ") +
-		theme.BrightStyle.Render(c.item.Name)
 	sub := theme.DimStyle.Render(fmt.Sprintf("₹%d base · pick options", c.item.Price))
 
 	nameW := 0
@@ -278,21 +276,16 @@ func (c Customize) groupedView() string {
 		nameW+12,
 	)
 
-	addHint := "↵ add"
+	lines := []string{sub, ""}
+	lines = append(lines, rows...)
+	lines = append(lines, "", "  "+total)
 	if !c.Valid() {
-		addHint = theme.FavStyle.Render("pick required options to add")
+		lines = append(lines, "", theme.FavStyle.Render("  pick required options to add"))
 	}
-	hint := theme.DimStyle.Render("↑↓ move   space select   ") + addHint + theme.DimStyle.Render("   esc cancel")
-
-	parts := []string{title, sub, ""}
-	parts = append(parts, rows...)
-	parts = append(parts, "", "  "+total, "", hint)
-	return dialogBox(strings.Join(parts, "\n"))
+	return autoCard("customise · "+c.item.Name, lines, "↑↓ move   space select   ↵ add   esc cancel")
 }
 
 func (c Customize) flatView() string {
-	title := theme.BrandStyle.Render("customise") + theme.DimStyle.Render(" · ") +
-		theme.BrightStyle.Render(c.item.Name)
 	sub := theme.DimStyle.Render(fmt.Sprintf("₹%d base · pick your add-ons", c.item.Price))
 
 	nameW := 0
@@ -326,12 +319,10 @@ func (c Customize) flatView() string {
 		theme.PriceStyle.Render(fmt.Sprintf("₹%d", c.UnitPrice())),
 		nameW+10,
 	)
-	hint := theme.DimStyle.Render("↑↓ move   space toggle   ↵ add   esc cancel")
-
-	parts := []string{title, sub, ""}
-	parts = append(parts, rows...)
-	parts = append(parts, "", "  "+total, "", hint)
-	return dialogBox(strings.Join(parts, "\n"))
+	lines := []string{sub, ""}
+	lines = append(lines, rows...)
+	lines = append(lines, "", "  "+total)
+	return autoCard("customise · "+c.item.Name, lines, "↑↓ move   space toggle   ↵ add   esc cancel")
 }
 
 // windowRows scrolls a long option list to fit the viewport, keeping the cursor
@@ -380,12 +371,4 @@ func windowRows(rows []string, cursorLine, viewportH int) []string {
 		out = append(out, "")
 	}
 	return out
-}
-
-func dialogBox(inner string) string {
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.Div2)).
-		Padding(1, 3).
-		Render(inner)
 }

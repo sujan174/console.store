@@ -1,2 +1,36 @@
-2026/06/26 16:58:05 SSH server listening on 127.0.0.1:2222 — connect with: ssh localhost -p 2222
-2026/06/26 17:02:52 INFO sujan connect 127.0.0.1:53144 true [] xterm-ghostty 104 35 SSH-2.0-OpenSSH_10.3
+2026/06/26 17:03:58 SSH server listening on 127.0.0.1:2222 — connect with: ssh localhost -p 2222
+2026/06/26 17:24:48 INFO sujan connect 127.0.0.1:54239 true [] xterm-ghostty 104 35 SSH-2.0-OpenSSH_10.3
+2026/06/26 17:25:53 TUI-DEBUG add: item="Death By Cheese Medium Pizza" swiggyID="172503701" rest="Oven Story Pizza"
+2026/06/26 17:25:53 TUI-DEBUG liveSyncCart: SYNC restaurant="Oven Story Pizza" swiggyRest="18299" items=1
+2026/06/26 17:25:55 TUI-DEBUG add: item="Death By Cheese Medium Pizza" swiggyID="172503701" rest="Oven Story Pizza"
+2026/06/26 17:25:55 TUI-DEBUG liveSyncCart: SYNC restaurant="Oven Story Pizza" swiggyRest="18299" items=1
+2026/06/26 17:25:55 TUI-DEBUG add: item="Dragonfire Paneer Medium Pizza (Serves 2)" swiggyID="171396408" rest="Oven Story Pizza"
+2026/06/26 17:25:55 TUI-DEBUG liveSyncCart: SYNC restaurant="Oven Story Pizza" swiggyRest="18299" items=2
+2026/06/26 17:25:55 TUI-DEBUG add: item="Dragonfire Paneer Medium Pizza (Serves 2)" swiggyID="171396408" rest="Oven Story Pizza"
+2026/06/26 17:25:55 TUI-DEBUG liveSyncCart: SYNC restaurant="Oven Story Pizza" swiggyRest="18299" items=2
+2026/06/26 17:25:56 TUI-DEBUG add: item="Margherita Thin Crust Pizza" swiggyID="186037754" rest="Oven Story Pizza"
+2026/06/26 17:25:56 TUI-DEBUG liveSyncCart: SYNC restaurant="Oven Story Pizza" swiggyRest="18299" items=3
+2026/06/26 17:25:57 TUI-DEBUG add: item="Margherita Thin Crust Pizza" swiggyID="186037754" rest="Oven Story Pizza"
+2026/06/26 17:25:57 TUI-DEBUG liveSyncCart: SYNC restaurant="Oven Story Pizza" swiggyRest="18299" items=3
+2026/06/26 17:25:59 TUI-DEBUG add: item="Chicken Pepperoni Thin Crust Pizza" swiggyID="186037765" rest="Oven Story Pizza"
+2026/06/26 17:25:59 TUI-DEBUG liveSyncCart: SYNC restaurant="Oven Story Pizza" swiggyRest="18299" items=4
+2026/06/26 17:26:08 TUI-DEBUG add: item="Onion & Capsicum Pizza" swiggyID="171776929" rest="Oven Story Pizza"
+2026/06/26 17:26:08 TUI-DEBUG add: fetching options for "Onion & Capsicum Pizza"
+2026/06/26 17:26:08 TUI-DEBUG add: item="Margherita Pizza" swiggyID="167463777" rest="Oven Story Pizza"
+2026/06/26 17:26:08 TUI-DEBUG add: fetching options for "Margherita Pizza"
+2026/06/26 17:26:15 TUI-DEBUG scopeVariantCmd: probe "Regular" (1/5) of "Size"
+2026/06/26 17:26:16 TUI-DEBUG scopeVariantCmd: probe "Regular" (2/5) of "Size"
+2026/06/26 17:26:17 TUI-DEBUG scopeVariantCmd: probe "Medium" (3/5) of "Size"
+2026/06/26 17:26:20 TUI-DEBUG scopeVariantCmd: probe "Medium" (4/5) of "Size"
+2026/06/26 17:26:24 TUI-DEBUG wizardOptionalCmd: probe 1/6 group="Extra Cheese."
+2026/06/26 17:26:26 TUI-DEBUG wizardOptionalCmd: probe 2/6 group="Extra Cheese"
+2026/06/26 17:26:27 TUI-DEBUG wizardOptionalCmd: probe 3/6 group="Make it a Meal"
+2026/06/26 17:26:29 TUI-DEBUG wizardOptionalCmd: probe 4/6 group="Choose Your Toppings-Veg"
+2026/06/26 17:26:30 TUI-DEBUG wizardOptionalCmd: probe 5/6 group="Choose Your Topping (Veg)"
+2026/06/26 17:26:31 TUI-DEBUG wizardOptionalCmd: probe 6/6 group="Choose Your Sides"
+2026/06/26 17:26:41 TUI-DEBUG add: item="Tomato & Capsicum Pizza" swiggyID="171776931" rest="Oven Story Pizza"
+2026/06/26 17:26:41 TUI-DEBUG add: fetching options for "Tomato & Capsicum Pizza"
+2026/06/26 17:26:43 TUI-DEBUG liveSyncCart: SYNC restaurant="Oven Story Pizza" swiggyRest="18299" items=5
+2026/06/26 17:26:54 TUI-DEBUG add: item="Red Pepper Cream Pasta" swiggyID="11391505" rest="Pasta Street"
+2026/06/26 17:26:54 TUI-DEBUG add: fetching options for "Red Pepper Cream Pasta"
+2026/06/26 17:32:26 INFO 127.0.0.1:54239 disconnect 7m38.489621334s

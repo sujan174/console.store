@@ -1,10 +1,6 @@
 package screens
 
 import (
-	"strings"
-
-	"github.com/charmbracelet/lipgloss"
-
 	"console.store/internal/tui/theme"
 )
 
@@ -36,8 +32,6 @@ func (c CartConflict) WithFocus(i int) CartConflict {
 
 // View renders the bordered dialog. The caller centers it in the viewport.
 func (c CartConflict) View() string {
-	title := theme.BrandStyle.Render("start a new cart?")
-
 	body := theme.TextStyle.Render("your cart has items from ") +
 		theme.GoldStyle.Render(c.current) + theme.TextStyle.Render(".")
 	body2 := theme.TextStyle.Render("adding ") + theme.BrightStyle.Render(c.item) +
@@ -47,15 +41,8 @@ func (c CartConflict) View() string {
 	actions := conflictBtn("start new", c.focus == 0) + "   " +
 		conflictBtn("keep current", c.focus == 1)
 
-	hint := theme.DimStyle.Render("← → move   ↵ select   esc cancel")
-
-	inner := strings.Join([]string{title, "", body, body2, body3, "", actions, "", hint}, "\n")
-
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.Div2)).
-		Padding(1, 3).
-		Render(inner)
+	lines := []string{body, body2, body3, "", actions}
+	return autoCard("start a new cart?", lines, "← → move   ↵ select   esc cancel")
 }
 
 // conflictBtn renders one action button. The focused button gets the green

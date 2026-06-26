@@ -243,8 +243,6 @@ func (w Wizard) selectedVariant() (id, name string) {
 // centers it in the viewport.
 func (w Wizard) View() string {
 	p := w.cur()
-	title := theme.BrandStyle.Render("customise") + theme.DimStyle.Render(" · ") +
-		theme.BrightStyle.Render(w.item.Name)
 	step := theme.DimStyle.Render(fmt.Sprintf("step %d of %d+ · pick options", w.pageIdx+1, len(w.pages)))
 
 	nameW := 0
@@ -328,29 +326,25 @@ func (w Wizard) View() string {
 		status = theme.FavStyle.Render("  " + w.errMsg)
 	}
 
-	// Intermediate pages advance (next); the page is "last" only after the root
-	// has confirmed via the cart that no more groups follow — until then every
-	// page offers next, because we don't know if it's last.
-	advance := "↵ next"
-	if !w.PageValid() {
-		advance = theme.FavStyle.Render("pick required options")
-	}
-	hint := theme.DimStyle.Render("↑↓ move   space select   ") + advance + theme.DimStyle.Render("   esc cancel")
-
-	parts := []string{title, step, ""}
-	parts = append(parts, rows...)
+	lines := []string{step, ""}
+	lines = append(lines, rows...)
 	// Subtotal — the live price of the current variant selection (probed), shown
 	// only when per-choice prices aren't available for this page.
 	if w.subShown {
 		if w.subPriced {
-			parts = append(parts, "", theme.DimStyle.Render("  subtotal  ")+theme.PriceStyle.Render(fmt.Sprintf("₹%d", w.subtotal)))
+			lines = append(lines, "", theme.DimStyle.Render("  subtotal  ")+theme.PriceStyle.Render(fmt.Sprintf("₹%d", w.subtotal)))
 		} else {
-			parts = append(parts, "", theme.DimStyle.Render("  subtotal  pricing…"))
+			lines = append(lines, "", theme.DimStyle.Render("  subtotal  pricing…"))
 		}
 	}
 	if status != "" {
-		parts = append(parts, "", status)
+		lines = append(lines, "", status)
 	}
-	parts = append(parts, "", hint)
-	return dialogBox(strings.Join(parts, "\n"))
+	// Intermediate pages advance (next); the page is "last" only after the root
+	// has confirmed via the cart that no more groups follow. When the required
+	// group is empty, a red note calls it out (the footer keeps the key hints).
+	if !w.PageValid() {
+		lines = append(lines, "", theme.FavStyle.Render("  pick required options"))
+	}
+	return autoCard("customise · "+w.item.Name, lines, "↑↓ move   space select   ↵ next   esc cancel")
 }

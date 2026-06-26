@@ -447,6 +447,25 @@ func RestaurantInfoCard(p catalog.Place) string {
 	return modalCard(p.Name, lines, "↑↓ browse  ·  i/esc close", cardW)
 }
 
+// autoCard is modalCard with the width sized to the content (the widest of the
+// title, body lines, or footer). Used by the taller modals (customise, wizard,
+// cart conflict) whose width varies with the data.
+func autoCard(title string, lines []string, footer string) string {
+	w := lipgloss.Width(title) + 6
+	for _, l := range lines {
+		if x := lipgloss.Width(l) + 4; x > w {
+			w = x
+		}
+	}
+	if x := lipgloss.Width(footer) + 6; x > w {
+		w = x
+	}
+	if w < 36 {
+		w = 36
+	}
+	return modalCard(title, lines, footer, w)
+}
+
 // ╭─ <title> ─────────────╮
 // │ <line>                │
 // ╰──── <footer> ─────────╯
