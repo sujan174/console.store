@@ -108,3 +108,13 @@ type AuthStart struct {
 	FlowID       string
 	AuthorizeURL string
 }
+
+// UpdateCartArgs is the argument bundle for a cart sync. It outlived the RPC
+// transport: broker.Service.UpdateCart and the datasource both take it.
+type UpdateCartArgs struct {
+	AccountID      string
+	AddressID      string
+	RestaurantID   string
+	RestaurantName string
+	Items          []CartItem
+}

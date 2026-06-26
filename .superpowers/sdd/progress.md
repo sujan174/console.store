@@ -122,3 +122,15 @@ Final fix (a3ec814, one consolidated fixer): C1 wizardOpen render branch + regre
 Re-review (ffe7286..a3ec814, Sonnet): all four RESOLVED, no regressions. FIXES APPROVED.
 DEFERRED (need live Task 9): I2 cancel-flush sub-cases (load-bearing, add comment), M2 group-id stability across round-trips, M3 step "of N+"/next wording on final page. Plus Task 0 fixture is SYNTHETIC — reconcile valid_addons field names against a real capture.
 Slice 10 (variant/add-on wizard) COMPLETE & code-clean. PENDING: user live verification (plan Task 9) + synthetic-fixture field-name reconciliation before merge. NO order placed; CONSOLE_LIVE_ORDERS untouched.
+
+Slice 11: Native CLI pivot (store binary; SSH/broker/Postgres -> in-process + keyring)
+Plan: docs/superpowers/plans/2026-06-26-native-cli-store.md
+BASE: fd2612b
+Builders: Sonnet · Task reviewers: Sonnet · Final: Opus
+Constraints: mock path green every commit; screens !import tui; dev builds DISARMED; token only in keyring; NEVER place real order.
+- [ ] T1 localstore (keyring + client.json)  - [ ] T2 orders arming  - [ ] T3 InProc  - [ ] T4 native auth gate  - [ ] T5 cmd/store  - [ ] T6 deletions+prune  - [ ] T7 live verify
+T1 localstore: complete (commits fd2612b..435e6a6, review clean). Minor deferred: go-keyring tagged // indirect in go.mod -> Task 6 `go mod tidy` corrects it.
+T2 orders arming: complete (commits 435e6a6..7e06388, review clean).
+T3 InProc: complete (commits 7e06388..4246807, review clean; all 10 forwarders + organic mapping verified).
+T4 native auth gate: complete (commits 4246807..2eb31a5, review clean). Minors deferred: pkg/browser // indirect -> Task 6 tidy; poll test doesn't assert tick() preserved (code verified correct).
+T5 cmd/store: complete (commits 2eb31a5..e6a5a8d, review clean; tea.WithContext kept). Minors deferred: config.Load err swallowed (spec non-fatal, a log would help); ChipCategories outside nil-guard (safe); no callback graceful-shutdown drain. End-to-end-only ⚠️ (keyring avail, DCR accept, callback-ready race) -> belong to T7 live verify.
