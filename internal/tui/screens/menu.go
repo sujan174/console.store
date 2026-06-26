@@ -321,7 +321,11 @@ func (m Menu) sectionedListView() string {
 	}
 
 	if len(places) == 0 {
-		b.WriteString("  " + theme.DimStyle.Render("no restaurants nearby") + "\n")
+		if m.loading {
+			b.WriteString("  " + theme.GoldStyle.Render("loading restaurants…") + "\n")
+		} else {
+			b.WriteString("  " + theme.DimStyle.Render("no restaurants nearby") + "\n")
+		}
 	}
 	return b.String()
 }

@@ -200,6 +200,7 @@ type Model struct {
 	catPending       bool   // a category load is in flight (shows "loading…")
 	catPendingQuery  string // the category query catPending is waiting on
 	restInfoOpen     bool   // restaurant-info modal ('i' on the browse list) is open
+	homePending      bool   // Home's "popular near you" load is in flight (shows "loading…")
 	usualsLoaded     bool   // true once LoadUsuals has been fired for the current addr
 }
 
@@ -223,6 +224,11 @@ func New(caps render.Caps, opts ...Option) Model {
 	}
 	m.splash = screens.NewSplash().WithCaps(caps)
 	m.splashPhrase = screens.RandomPhrase("")
+	// Live+seeded fires the Home load at Init() — mark it pending so the first
+	// Home paint shows the "loading…" cue (matching the category pages).
+	if m.live && m.seeded && m.addr.ID != "" {
+		m.homePending = true
+	}
 	m.menu = m.buildMenu()
 	return m
 }
@@ -307,7 +313,7 @@ func (m Model) buildMenu() screens.Menu {
 			// while the (auto-fired, on-hover) category load is still in flight.
 			menu = menu.WithLoading(m.catPending)
 		} else {
-			menu = menu.WithSections(usuals, nearby)
+			menu = menu.WithSections(usuals, nearby).WithLoading(m.homePending)
 		}
 
 		return menu
@@ -422,6 +428,7 @@ func (m *Model) ensureHomeLoaded() tea.Cmd {
 		cmds = append(cmds, datasource.LoadUsuals(m.backend, m.snap, m.addr.ID))
 	}
 	if c := m.ensureQuery(m.homeNearbyQuery()); c != nil {
+		m.homePending = true // "popular near you" is fetching
 		cmds = append(cmds, c)
 	}
 	if len(cmds) == 0 {
@@ -1305,6 +1312,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.catPending && dm.Query == m.catPendingQuery {
 			m.catPending = false // category results landed
 		}
+		if m.homePending && dm.Query == m.homeNearbyQuery() {
+			m.homePending = false // Home's "popular near you" landed
+		}
 		m.menu = m.buildMenu()
 		return m, nil
 	case datasource.MenuLoadedMsg:
@@ -1729,6 +1739,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// level", so the timer is cleared there — walking back up the stack with
 		// repeated Esc must never teleport home. Cart/address are preserved.
 		if k.String() == "esc" {
+			// Esc closes the restaurant-info modal first (before the rail/home gestures).
+			if m.screen == scrMenu && m.restInfoOpen {
+				m.restInfoOpen = false
+				return m, nil
+			}
 			if m.screen == scrMenu && !m.menu.Searching() && !m.searchMode {
 				// In live rail mode, Esc when rail is focused unfocuses the rail
 				// (not a home gesture); in search mode Esc exits search.
