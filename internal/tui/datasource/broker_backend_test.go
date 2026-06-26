@@ -28,6 +28,10 @@ func (f *fakeRPC) Restaurants(accountID, addressID, query string) ([]api.Restaur
 	}
 	return []api.Restaurant{{ID: "r1"}}, nil
 }
+func (f *fakeRPC) Usuals(accountID, addressID string) ([]api.Restaurant, error) {
+	f.lastAccount = accountID
+	return nil, f.err
+}
 func (f *fakeRPC) Menu(accountID, addressID, restaurantID string) (api.Menu, error) {
 	f.lastAccount = accountID
 	if f.err != nil {
@@ -41,6 +45,13 @@ func (f *fakeRPC) ItemOptions(accountID, addressID, restaurantID, itemName, menu
 }
 func (f *fakeRPC) UpdateCart(a api.UpdateCartArgs) (api.Cart, error) {
 	f.lastAccount = a.AccountID
+	if f.err != nil {
+		return api.Cart{}, f.err
+	}
+	return api.Cart{}, nil
+}
+func (f *fakeRPC) GetCart(accountID, addressID, restaurantName string) (api.Cart, error) {
+	f.lastAccount = accountID
 	if f.err != nil {
 		return api.Cart{}, f.err
 	}

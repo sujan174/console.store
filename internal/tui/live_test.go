@@ -25,6 +25,7 @@ func (f *liveFake) Places(string, catalog.Section) ([]api.Restaurant, error) {
 	return nil, f.err
 }
 func (f *liveFake) PlacesQuery(string, string) ([]api.Restaurant, error) { return nil, f.err }
+func (f *liveFake) Usuals(string) ([]api.Restaurant, error)              { return nil, f.err }
 func (f *liveFake) Menu(string, string) (api.Menu, error)                { return api.Menu{}, f.err }
 func (f *liveFake) ItemOptions(string, string, string, string) ([]api.OptionGroup, error) {
 	return nil, f.err
@@ -32,8 +33,9 @@ func (f *liveFake) ItemOptions(string, string, string, string) ([]api.OptionGrou
 func (f *liveFake) UpdateCart(string, string, string, []api.CartItem) (api.Cart, error) {
 	return api.Cart{}, f.err
 }
-func (f *liveFake) ClearCart() error                     { return f.err }
-func (f *liveFake) PlaceOrder(string) (api.Order, error) { return api.Order{}, f.err }
+func (f *liveFake) GetCart(string, string) (api.Cart, error) { return api.Cart{}, f.err }
+func (f *liveFake) ClearCart() error                         { return f.err }
+func (f *liveFake) PlaceOrder(string) (api.Order, error)     { return api.Order{}, f.err }
 
 func TestMockPathUnaffected(t *testing.T) {
 	m := New(render.Caps{})

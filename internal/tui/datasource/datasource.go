@@ -25,9 +25,11 @@ type Backend interface {
 	Addresses() ([]api.Address, error)
 	Places(addressID string, section catalog.Section) ([]api.Restaurant, error)
 	PlacesQuery(addressID, query string) ([]api.Restaurant, error)
+	Usuals(addressID string) ([]api.Restaurant, error)
 	Menu(addressID, restaurantID string) (api.Menu, error)
 	ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error)
+	GetCart(addressID, restaurantName string) (api.Cart, error)
 	ClearCart() error
 	PlaceOrder(addressID string) (api.Order, error)
 }
@@ -52,10 +54,20 @@ type (
 		Cart api.Cart
 		Err  error
 	}
+	// CartLoadedMsg carries the live Swiggy cart fetched on cart-screen entry —
+	// the source of truth for the displayed lines + bill.
+	CartLoadedMsg struct {
+		Cart api.Cart
+		Err  error
+	}
 	OrderPlacedMsg struct {
 		Order api.Order
 		Err   error
 	}
+	// UsualsLoadedMsg signals the account's most-ordered restaurants were
+	// fetched into the snapshot (under UsualsKey). Err non-nil on failure;
+	// empty history is NOT an error (the section just renders nothing).
+	UsualsLoadedMsg struct{ Err error }
 )
 
 func LoadAddresses(b Backend, snap *swiggysnap.Snapshot) tea.Cmd {
@@ -93,6 +105,23 @@ func LoadPlacesQuery(b Backend, snap *swiggysnap.Snapshot, addressID, query stri
 	}
 }
 
+// UsualsKey is the reserved snapshot query key under which the account's
+// most-ordered restaurants are cached (so the Repository reads them via
+// PlacesByQuery without a new snapshot field).
+const UsualsKey = "__usuals__"
+
+// LoadUsuals fetches the account's most-ordered restaurants and caches them
+// under UsualsKey. Errors are non-fatal (the Home view drops the section).
+func LoadUsuals(b Backend, snap *swiggysnap.Snapshot, addressID string) tea.Cmd {
+	return func() tea.Msg {
+		got, err := b.Usuals(addressID)
+		if err == nil {
+			snap.SetPlaces(addressID, UsualsKey, toPlaces(got, catalog.SectionFood))
+		}
+		return UsualsLoadedMsg{Err: err}
+	}
+}
+
 func LoadMenu(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID string) tea.Cmd {
 	return func() tea.Msg {
 		got, err := b.Menu(addressID, restaurantID)
@@ -124,6 +153,16 @@ func SyncCart(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID, res
 	return func() tea.Msg {
 		cart, err := b.UpdateCart(addressID, restaurantID, restaurantName, items)
 		return CartSyncedMsg{Cart: cart, Err: err}
+	}
+}
+
+// LoadCart fetches the live Swiggy cart (get_food_cart) so the cart/checkout
+// screens render Swiggy's real items + pricing rather than the local in-memory
+// approximation. restaurantName scopes the fetch to the current restaurant.
+func LoadCart(b Backend, addressID, restaurantName string) tea.Cmd {
+	return func() tea.Msg {
+		cart, err := b.GetCart(addressID, restaurantName)
+		return CartLoadedMsg{Cart: cart, Err: err}
 	}
 }
 

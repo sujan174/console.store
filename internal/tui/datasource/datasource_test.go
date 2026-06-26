@@ -12,6 +12,7 @@ import (
 type fakeBackend struct {
 	addrs       []api.Address
 	rests       []api.Restaurant
+	restaurants []api.Restaurant
 	menu        api.Menu
 	cart        api.Cart
 	order       api.Order
@@ -27,7 +28,8 @@ func (f *fakeBackend) Places(string, catalog.Section) ([]api.Restaurant, error) 
 func (f *fakeBackend) PlacesQuery(string, string) ([]api.Restaurant, error) {
 	return f.rests, f.err
 }
-func (f *fakeBackend) Menu(string, string) (api.Menu, error) { return f.menu, f.err }
+func (f *fakeBackend) Usuals(string) ([]api.Restaurant, error) { return f.restaurants, f.err }
+func (f *fakeBackend) Menu(string, string) (api.Menu, error)   { return f.menu, f.err }
 func (f *fakeBackend) ItemOptions(string, string, string, string) ([]api.OptionGroup, error) {
 	return nil, f.err
 }
@@ -35,7 +37,8 @@ func (f *fakeBackend) UpdateCart(string, string, string, []api.CartItem) (api.Ca
 	f.updateCalls++
 	return f.cart, f.err
 }
-func (f *fakeBackend) ClearCart() error { return f.err }
+func (f *fakeBackend) GetCart(string, string) (api.Cart, error) { return f.cart, f.err }
+func (f *fakeBackend) ClearCart() error                         { return f.err }
 func (f *fakeBackend) PlaceOrder(string) (api.Order, error) {
 	f.placeCalls++
 	return f.order, f.err
@@ -125,5 +128,19 @@ func TestPlaceOrderCmdPropagatesError(t *testing.T) {
 	m, ok := msg.(OrderPlacedMsg)
 	if !ok || m.Err == nil {
 		t.Fatalf("expected OrderPlacedMsg with error; got %#v", msg)
+	}
+}
+
+func TestLoadUsualsCachesUnderUsualsKey(t *testing.T) {
+	b := &fakeBackend{restaurants: []api.Restaurant{{ID: "r1", Name: "Blue Tokai"}}}
+	snap := swiggysnap.NewSnapshot()
+	msg := LoadUsuals(b, snap, "a1")()
+	if m, ok := msg.(UsualsLoadedMsg); !ok || m.Err != nil {
+		t.Fatalf("expected clean UsualsLoadedMsg, got %#v", msg)
+	}
+	repo := swiggysnap.NewRepository(snap)
+	got := repo.PlacesByQuery(catalog.Address{ID: "a1"}, UsualsKey)
+	if len(got) != 1 || got[0].Name != "Blue Tokai" {
+		t.Fatalf("usuals not cached under UsualsKey: %+v", got)
 	}
 }

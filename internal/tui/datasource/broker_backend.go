@@ -11,9 +11,11 @@ import (
 type brokerRPC interface {
 	Addresses(accountID string) ([]api.Address, error)
 	Restaurants(accountID, addressID, query string) ([]api.Restaurant, error)
+	Usuals(accountID, addressID string) ([]api.Restaurant, error)
 	Menu(accountID, addressID, restaurantID string) (api.Menu, error)
 	ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(a api.UpdateCartArgs) (api.Cart, error)
+	GetCart(accountID, addressID, restaurantName string) (api.Cart, error)
 	ClearCart(accountID string) error
 	PlaceOrder(accountID, addressID string) (api.Order, error)
 }
@@ -62,6 +64,11 @@ func (b *BrokerBackend) PlacesQuery(addressID, query string) ([]api.Restaurant, 
 	return r, wrapAuthErr(err)
 }
 
+func (b *BrokerBackend) Usuals(addressID string) ([]api.Restaurant, error) {
+	r, err := b.rpc.Usuals(b.accountID, addressID)
+	return r, wrapAuthErr(err)
+}
+
 func (b *BrokerBackend) Menu(addressID, restaurantID string) (api.Menu, error) {
 	r, err := b.rpc.Menu(b.accountID, addressID, restaurantID)
 	return r, wrapAuthErr(err)
@@ -80,6 +87,11 @@ func (b *BrokerBackend) UpdateCart(addressID, restaurantID, restaurantName strin
 		RestaurantName: restaurantName,
 		Items:          items,
 	})
+	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) GetCart(addressID, restaurantName string) (api.Cart, error) {
+	r, err := b.rpc.GetCart(b.accountID, addressID, restaurantName)
 	return r, wrapAuthErr(err)
 }
 
