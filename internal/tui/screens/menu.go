@@ -37,16 +37,17 @@ type Menu struct {
 	chipActive      int
 	hideSectionTabs bool
 	// two-pane live fields (only active when hasRail is true)
-	rail        Rail
-	hasRail     bool
-	railFocus   bool
-	usuals      []catalog.Place
-	nearby      []catalog.Place
-	hasSections bool
-	searchMode  bool
-	searchQuery string
-	results     []catalog.Place
-	resultCount int
+	rail          Rail
+	hasRail       bool
+	railFocus     bool
+	usuals        []catalog.Place
+	nearby        []catalog.Place
+	hasSections   bool
+	searchMode    bool
+	searchPending bool
+	searchQuery   string
+	results       []catalog.Place
+	resultCount   int
 }
 
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartChip string) Menu {
@@ -152,11 +153,12 @@ func (m Menu) WithSections(usuals, nearby []catalog.Place) Menu {
 
 // WithSearchMode sets the live search state. When active is true the main pane
 // shows the search input, result count, and result list. Clears sections view.
-func (m Menu) WithSearchMode(active bool, query string, results []catalog.Place, count int) Menu {
+func (m Menu) WithSearchMode(active bool, query string, results []catalog.Place, count int, pending bool) Menu {
 	m.searchMode = active
 	m.searchQuery = query
 	m.results = results
 	m.resultCount = count
+	m.searchPending = pending
 	if active {
 		m.hasSections = false
 	}
@@ -255,12 +257,18 @@ func (m Menu) twoPaneView() string {
 	switch {
 	case m.searchMode:
 		main.WriteString(theme.CursorStyle.Render("🔍 "+m.searchQuery+"▏") + "\n")
-		if m.searchQuery != "" {
+		switch {
+		case m.searchPending:
+			// A query is in flight (search paginates, so it can take a moment).
+			main.WriteString(theme.GoldStyle.Render("searching…") + "\n")
+		case m.searchQuery == "":
+			main.WriteString(theme.DimStyle.Render("type to search restaurants, ↵ to search") + "\n")
+		case len(m.results) == 0:
+			main.WriteString(theme.DimStyle.Render(fmt.Sprintf(`no restaurants for "%s"`, m.searchQuery)) + "\n")
+		default:
 			main.WriteString(theme.DimStyle.Render(plural(m.resultCount, "result", "results")) + "\n\n")
 		}
-		if m.searchQuery != "" && len(m.results) == 0 {
-			main.WriteString(theme.DimStyle.Render(fmt.Sprintf(`no restaurants for "%s"`, m.searchQuery)) + "\n")
-		} else {
+		if !m.searchPending && len(m.results) > 0 {
 			// Render results list
 			for i, p := range m.results {
 				name := theme.ItemStyle.Render(p.Name)

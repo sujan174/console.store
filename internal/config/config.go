@@ -43,12 +43,11 @@ type Config struct {
 // DefaultCategories is the built-in chip set used when config has none.
 func DefaultCategories() []Category {
 	return []Category{
-		{Label: "Coffee & Refreshments", Query: "coffee"},
-		{Label: "Rice Bowls", Query: "rice bowls"},
+		{Label: "Coffee", Query: "coffee"},
 		{Label: "Pizza", Query: "pizza"},
-		{Label: "Sandwich", Query: "sandwich"},
-		{Label: "Burgers", Query: "burger"},
 		{Label: "Biryani", Query: "biryani"},
+		{Label: "Burgers", Query: "burger"},
+		{Label: "Sandwich", Query: "sandwich"},
 		{Label: "Rolls", Query: "rolls"},
 		{Label: "Desserts", Query: "dessert"},
 	}

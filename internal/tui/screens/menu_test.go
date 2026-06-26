@@ -167,15 +167,26 @@ func TestMenuUsualsOmittedWhenEmpty(t *testing.T) {
 }
 
 func TestMenuSearchModeResults(t *testing.T) {
-	m := liveMenu().WithSearchMode(true, "pizza", []catalog.Place{{Name: "Pizza Hut"}}, 1)
+	m := liveMenu().WithSearchMode(true, "pizza", []catalog.Place{{Name: "Pizza Hut"}}, 1, false)
 	v := m.View()
 	if !strings.Contains(v, "pizza") || !strings.Contains(v, "Pizza Hut") || !strings.Contains(v, "1 result") {
 		t.Errorf("search view missing query/results/count:\n%s", v)
 	}
 }
 
+func TestMenuSearchPendingShowsSearching(t *testing.T) {
+	m := liveMenu().WithSearchMode(true, "blue", nil, 0, true)
+	v := m.View()
+	if !strings.Contains(v, "searching…") {
+		t.Errorf("pending search must show a searching cue:\n%s", v)
+	}
+	if strings.Contains(v, `no restaurants for`) {
+		t.Errorf("must NOT show no-results while a search is pending:\n%s", v)
+	}
+}
+
 func TestMenuSearchNoResults(t *testing.T) {
-	m := liveMenu().WithSearchMode(true, "xyz", nil, 0)
+	m := liveMenu().WithSearchMode(true, "xyz", nil, 0, false)
 	if !strings.Contains(m.View(), `no restaurants for "xyz"`) {
 		t.Errorf("empty-results copy missing:\n%s", m.View())
 	}

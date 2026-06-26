@@ -194,6 +194,7 @@ type Model struct {
 	searchMode      bool
 	searchQuery     string
 	searchSubmitted string // last query submitted to ensureQuery; "" = none
+	searchPending   bool   // a search query is in flight (shows "searching…")
 	usualsLoaded    bool   // true once LoadUsuals has been fired for the current addr
 }
 
@@ -291,7 +292,7 @@ func (m Model) buildMenu() screens.Menu {
 
 		if isSearch {
 			results := m.liveRepo().PlacesByQuery(m.addr, m.searchQuery)
-			menu = menu.WithSearchMode(true, m.searchQuery, results, len(results))
+			menu = menu.WithSearchMode(true, m.searchQuery, results, len(results), m.searchPending)
 		} else if _, isCat := rail.IsCategory(m.railActive); isCat {
 			// Category view: use the flat places path (no sections header).
 			// viewPlaces already holds catPlaces; WithSections is intentionally NOT
@@ -1228,6 +1229,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.needsAuth = true
 			return m, nil
 		}
+		if m.searchPending && dm.Query == m.searchSubmitted {
+			m.searchPending = false // results for the submitted query landed
+		}
 		m.menu = m.buildMenu()
 		return m, nil
 	case datasource.MenuLoadedMsg:
@@ -1715,6 +1719,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.menu = m.buildMenu()
 					return m, nil
 				}
+				// Space arrives as its own key type, not a rune — append it so
+				// multi-word searches ("blue tokai") work.
+				if k.Type == tea.KeySpace || k.String() == " " {
+					m.searchQuery += " "
+					m.menu = m.buildMenu()
+					return m, nil
+				}
 				switch k.String() {
 				case "esc":
 					m.searchMode = false
@@ -1757,6 +1768,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.searchQuery != "" {
 						m.searchSubmitted = m.searchQuery
 						cmd = m.ensureQuery(m.searchQuery)
+						m.searchPending = cmd != nil // show "searching…" until results land
 					}
 					m.menu = m.buildMenu()
 					return m, cmd

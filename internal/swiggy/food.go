@@ -22,11 +22,49 @@ func (c *Client) GetAddresses(ctx context.Context) ([]Address, error) {
 	return env.Addresses, err
 }
 
-func (c *Client) SearchRestaurants(ctx context.Context, addressID, query string, offset int) ([]Restaurant, error) {
+// searchRestaurantsPage fetches one raw page (restaurants + dishes mixed).
+func (c *Client) searchRestaurantsPage(ctx context.Context, addressID, query string, offset int) ([]Restaurant, error) {
 	env, err := decodeResult[restaurantsEnvelope](c.CallTool(ctx, "search_restaurants", map[string]any{
 		"addressId": addressID, "query": query, "offset": offset,
 	}))
-	return onlyRestaurants(env.Restaurants), err
+	return env.Restaurants, err
+}
+
+// SearchRestaurants returns REAL restaurants for a query. Because search_restaurants
+// interleaves dishes (which we drop), a single page can yield few/zero
+// restaurants for a dish-heavy term (e.g. "blue"). So it paginates — fetching
+// successive pages and accumulating filtered, de-duplicated restaurants — until
+// it has enough (searchWant) or results run out (bounded by searchMaxPages).
+func (c *Client) SearchRestaurants(ctx context.Context, addressID, query string, offset int) ([]Restaurant, error) {
+	const (
+		searchWant     = 10
+		searchMaxPages = 6
+	)
+	var out []Restaurant
+	seen := map[string]bool{}
+	for p := 0; p < searchMaxPages; p++ {
+		page, err := c.searchRestaurantsPage(ctx, addressID, query, offset)
+		if err != nil {
+			if p == 0 {
+				return nil, err
+			}
+			break // a later page failed — return what we have
+		}
+		if len(page) == 0 {
+			break // no more results
+		}
+		for _, r := range onlyRestaurants(page) {
+			if r.ID != "" && !seen[r.ID] {
+				seen[r.ID] = true
+				out = append(out, r)
+			}
+		}
+		offset += len(page)
+		if len(out) >= searchWant {
+			break
+		}
+	}
+	return out, nil
 }
 
 // onlyRestaurants drops the DISH entries search_restaurants mixes into its
