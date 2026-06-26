@@ -169,8 +169,10 @@ type Model struct {
 	snap         *swiggysnap.Snapshot
 	accountID    string
 	authorizeURL string
-	needsAuth    bool // set when a load returns datasource.ErrNeedsAuth
-	seeded       bool // true when catalog/swiggy.Snapshot was pre-seeded from config; skips live init loads
+	needsAuth    bool       // set when a load returns datasource.ErrNeedsAuth
+	authFlowID   string     // authorize flow id (native gate poll)
+	authPoller   AuthPoller // polls callback completion; nil on the mock path
+	seeded       bool       // true when catalog/swiggy.Snapshot was pre-seeded from config; skips live init loads
 
 	placingOrder bool     // true while PlaceOrderCmd is in-flight; blocks double-fire
 	cartSyncErr  string   // last cart-sync error; shown in status bar (non-fatal)
@@ -1116,10 +1118,14 @@ func orderID(lines []screens.CartLine) string {
 }
 
 func (m Model) Init() tea.Cmd {
+	cmds := []tea.Cmd{tick()}
 	if c := m.liveInitCmds(); c != nil {
-		return tea.Batch(tick(), c)
+		cmds = append(cmds, c)
 	}
-	return tick()
+	if m.needsAuth && m.authorizeURL != "" {
+		cmds = append(cmds, openBrowserCmd(m.authorizeURL))
+	}
+	return tea.Batch(cmds...)
 }
 
 // onTick advances time-based screen state; extended by later tasks.
@@ -1279,6 +1285,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(tickMsg); ok {
 		m.frame++
 		m = m.onTick()
+		// Native auth gate: poll the loopback callback. When the browser
+		// authorize completes, clear the gate and fire the live loads.
+		if m.needsAuth && m.authPoller != nil && m.authFlowID != "" && m.authPoller.Authorized(m.authFlowID) {
+			m.needsAuth = false
+			return m, tea.Batch(tick(), m.liveInitCmds())
+		}
 		return m, tick()
 	}
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
@@ -1287,6 +1299,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch dm := msg.(type) {
+	case browserOpenedMsg:
+		// Advisory: on failure the copyable URL stays on screen.
+		return m, nil
 	case datasource.AddressesLoadedMsg:
 		if errIsNeedsAuth(dm.Err) {
 			m.needsAuth = true
@@ -1593,6 +1608,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Authorize gate captures all keys until the user retries or quits.
 		if m.needsAuth {
 			switch k.String() {
+			case "enter":
+				return m, openBrowserCmd(m.authorizeURL)
 			case "r":
 				m.needsAuth = false
 				return m, m.liveInitCmds()
@@ -2426,10 +2443,10 @@ func (m Model) listRows(chrome int) int {
 func (m Model) View() string {
 	if m.needsAuth {
 		gate := "  console.store needs to connect to your Swiggy account.\n\n" +
-			"  1. Open this link in a browser and log in to Swiggy:\n\n" +
+			"  Opening your browser to log in to Swiggy…\n\n" +
+			"  If it didn't open, copy this link:\n\n" +
 			"     " + m.authorizeURL + "\n\n" +
-			"  2. Approve access. You'll see \"console.store authorized.\"\n\n" +
-			"  3. Reconnect to load your account:  Ctrl+C, then  ssh localhost -p 2222\n"
+			"  [ Enter ] open in browser       waiting for authorization…\n"
 		if m.w == 0 || m.h == 0 {
 			return gate
 		}

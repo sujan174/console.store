@@ -42,6 +42,20 @@ func WithPendingAuth() Option {
 	return func(m *Model) { m.needsAuth = true }
 }
 
+// AuthPoller reports whether the loopback callback for a given flow has
+// completed. *auth.Manager satisfies it (Authorized(flowID) bool).
+type AuthPoller interface{ Authorized(flowID string) bool }
+
+// WithAuthFlow supplies the authorize flow id and a poller. While the auth gate
+// is showing, each tick polls the poller; when it reports authorized the gate
+// clears and the live loads fire. Set alongside WithPendingAuth + WithLiveBackend.
+func WithAuthFlow(flowID string, p AuthPoller) Option {
+	return func(m *Model) {
+		m.authFlowID = flowID
+		m.authPoller = p
+	}
+}
+
 // WithChips sets the cuisine chip categories for the live Restaurants browse.
 // When not set (or empty), New defaults to config.DefaultCategories().
 func WithChips(cats []config.Category) Option {
