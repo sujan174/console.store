@@ -249,3 +249,109 @@ func TestLiveBrowseSearchEscExitsSearch(t *testing.T) {
 		t.Fatalf("esc must clear searchQuery, got %q", um.searchQuery)
 	}
 }
+
+// TestSearchResultsNavigableAndOpenable is the F1 flow test:
+//  1. Enter search mode, type a query, Enter → submits (results loaded from snapshot).
+//  2. ↓ moves the result cursor onto the first (and only) result.
+//  3. Enter again → opens the restaurant screen (scrRestaurant).
+func TestSearchResultsNavigableAndOpenable(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
+	// Pre-seed results for "tokai" so ensureQuery returns nil and results are
+	// immediately visible after the submit Enter.
+	snap.SetPlaces("a1", "tokai", []catalog.Place{
+		{ID: "r1", SwiggyID: "sr1", Name: "Blue Tokai", ETA: "25 min"},
+	})
+	snap.SetPlaces("a1", "", []catalog.Place{})
+	be := &railFake{
+		queryResult: []api.Restaurant{{ID: "r1", Name: "Blue Tokai"}},
+	}
+	m := New(render.Caps{},
+		WithLiveBackend(be, snap, "acct-1", ""),
+		WithSeededSnapshot(),
+		WithChips([]config.Category{{Label: "Coffee", Query: "coffee"}}),
+	)
+	m.w, m.h = 100, 40
+	m.screen = scrMenu
+
+	// ← focuses rail; ↑ moves to Search (index 0); enter enters search mode.
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	um := m2.(Model)
+	m3, _ := um.Update(tea.KeyMsg{Type: tea.KeyUp})
+	um3 := m3.(Model)
+	if um3.railActive != screens.RailSearch {
+		t.Fatalf("↑ from Home must reach RailSearch=0, got %d", um3.railActive)
+	}
+	m4, _ := um3.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um4 := m4.(Model)
+	if !um4.searchMode {
+		t.Fatal("entering RailSearch must set searchMode=true")
+	}
+
+	// Type "tokai" — each rune appends to searchQuery.
+	for _, r := range "tokai" {
+		m4b, _ := um4.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		um4 = m4b.(Model)
+	}
+	if um4.searchQuery != "tokai" {
+		t.Fatalf("searchQuery = %q; want %q", um4.searchQuery, "tokai")
+	}
+
+	// Enter submits the query. Results are already in the snapshot so ensureQuery
+	// returns nil (no async load). searchSubmitted is set to "tokai".
+	m5, _ := um4.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um5 := m5.(Model)
+	if um5.searchSubmitted != "tokai" {
+		t.Fatalf("after submit, searchSubmitted = %q; want %q", um5.searchSubmitted, "tokai")
+	}
+
+	// ↓ should move the result cursor (query == searchSubmitted, results loaded).
+	m6, _ := um5.Update(tea.KeyMsg{Type: tea.KeyDown})
+	um6 := m6.(Model)
+	if um6.menu.ListCursor() != 1 {
+		// cursor starts at 0; one ↓ should put it at 1 (clamped to last result if only 1)
+		// With exactly 1 result, cursor clamps at 0 (WithListCursor clamps to len-1).
+		// So expect cursor 0 (clamped).
+		if um6.menu.ListCursor() != 0 {
+			t.Fatalf("↓ with 1 result: cursor = %d; want 0 (clamped)", um6.menu.ListCursor())
+		}
+	}
+
+	// Verify the view shows the search result.
+	v := um5.menu.View()
+	if !strings.Contains(v, "Blue Tokai") {
+		t.Errorf("search results view must contain Blue Tokai\n%s", v)
+	}
+
+	// Enter again (query == searchSubmitted) → opens restaurant screen.
+	m7, _ := um5.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um7 := m7.(Model)
+	if um7.screen != scrRestaurant {
+		t.Fatalf("Enter on selected search result must open scrRestaurant, got screen=%d", um7.screen)
+	}
+}
+
+// TestCategoryViewNoNearbyHeader is the F2 test: selecting a category from the
+// rail must render a plain flat list — no "nearby" section header.
+func TestCategoryViewNoNearbyHeader(t *testing.T) {
+	m := buildRailModel(t)
+
+	// ← focuses rail; ↓ moves to Coffee (index 2); enter commits.
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	um := m2.(Model)
+	m3, _ := um.Update(tea.KeyMsg{Type: tea.KeyDown})
+	um3 := m3.(Model)
+	if um3.railActive != 2 {
+		t.Fatalf("↓ from Home must move railActive to 2 (Coffee), got %d", um3.railActive)
+	}
+	m4, _ := um3.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um4 := m4.(Model)
+
+	v := um4.menu.View()
+	if strings.Contains(v, "nearby") {
+		t.Errorf("category view must not render a 'nearby' section header\n%s", v)
+	}
+	if !strings.Contains(v, "Blue Tokai") {
+		t.Errorf("category view must show category results\n%s", v)
+	}
+}

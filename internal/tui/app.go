@@ -187,11 +187,14 @@ type Model struct {
 	// index (RailSearch=0, RailHome=1, categories from index 2). railFocus is
 	// true when the left rail column has keyboard focus. searchMode/searchQuery
 	// hold the global search state (submit-only — never per-keystroke).
-	railActive   int
-	railFocus    bool
-	searchMode   bool
-	searchQuery  string
-	usualsLoaded bool // true once LoadUsuals has been fired for the current addr
+	// searchSubmitted tracks the last query that was actually submitted (via
+	// Enter), so we can distinguish "navigate results" from "re-submit" on Enter.
+	railActive      int
+	railFocus       bool
+	searchMode      bool
+	searchQuery     string
+	searchSubmitted string // last query submitted to ensureQuery; "" = none
+	usualsLoaded    bool   // true once LoadUsuals has been fired for the current addr
 }
 
 func New(caps render.Caps, opts ...Option) Model {
@@ -288,9 +291,11 @@ func (m Model) buildMenu() screens.Menu {
 		if isSearch {
 			results := m.liveRepo().PlacesByQuery(m.addr, m.searchQuery)
 			menu = menu.WithSearchMode(true, m.searchQuery, results, len(results))
-		} else if catIdx, isCat := rail.IsCategory(m.railActive); isCat {
-			catPlaces := m.liveRepo().PlacesByQuery(m.addr, m.chips[catIdx].Query)
-			menu = menu.WithSections(nil, catPlaces)
+		} else if _, isCat := rail.IsCategory(m.railActive); isCat {
+			// Category view: use the flat places path (no sections header).
+			// viewPlaces already holds catPlaces; WithSections is intentionally NOT
+			// called so mainPlaces() falls through to the default flat-list branch
+			// and no "nearby" section header is printed.
 		} else {
 			menu = menu.WithSections(usuals, nearby)
 		}
@@ -310,15 +315,6 @@ func (m Model) liveRepo() *swiggysnap.Repository {
 		return r
 	}
 	return nil
-}
-
-// railCatLabels returns the chip labels for building a Rail.
-func (m Model) railCatLabels() []string {
-	cats := make([]string, len(m.chips))
-	for i, c := range m.chips {
-		cats[i] = c.Label
-	}
-	return cats
 }
 
 // ensureQuery fires LoadPlacesQuery for query if the snapshot doesn't already
@@ -1211,7 +1207,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.menu = m.buildMenu()
 		if m.live {
 			// Re-fire Home view loads (nearby + usuals) after address adoption.
-			m.usualsLoaded = false // allow re-loading usuals for the new address
+			// Set usualsLoaded=true immediately so liveInitCmds / ensureHomeLoaded
+			// cannot double-fire it; the dispatch here IS the load for the new addr.
+			m.usualsLoaded = true
 			return m, tea.Batch(
 				datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, ""),
 				datasource.LoadUsuals(m.backend, m.snap, m.addr.ID),
@@ -1699,17 +1697,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Live rail: search mode captures all printable keys + backspace + enter + esc.
+			// Printable runes always append to the query. Named nav keys (↑↓ and the
+			// j/k aliases when NOT typed as runes) move the result cursor. Enter either
+			// submits the query (if it changed since last submit) or opens the selection.
 			if m.live && len(m.chips) > 0 && m.searchMode {
+				// Printable rune: always append to query (j/k are letters here, not nav).
+				if k.Type == tea.KeyRunes {
+					m.searchQuery += string(k.Runes)
+					m.menu = m.buildMenu()
+					return m, nil
+				}
 				switch k.String() {
 				case "esc":
 					m.searchMode = false
 					m.searchQuery = ""
+					m.searchSubmitted = ""
 					m.menu = m.buildMenu()
 					return m, nil
+				case "up", "k":
+					// Move the result cursor up (only when results are already loaded).
+					if m.searchQuery == m.searchSubmitted {
+						if m.menu.ListCursor() > 0 {
+							m.menu = m.menu.WithListCursor(m.menu.ListCursor() - 1)
+						}
+					}
+					return m, nil
+				case "down", "j":
+					// Move the result cursor down (only when results are already loaded).
+					if m.searchQuery == m.searchSubmitted {
+						m.menu = m.menu.WithListCursor(m.menu.ListCursor() + 1)
+					}
+					return m, nil
 				case "enter":
+					// If results are already loaded for the current query, Enter opens
+					// the selected result — same downstream path as the Home/category list.
+					// If the query has changed since the last submit (or nothing submitted
+					// yet), Enter submits the query.
+					if m.searchQuery != "" && m.searchQuery == m.searchSubmitted {
+						// Results loaded — open the selected place.
+						if p, ok := m.menu.Selected(); ok {
+							m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
+							m.screen = scrRestaurant
+							if p.SwiggyID != "" {
+								return m, datasource.LoadMenu(m.backend, m.snap, m.addr.ID, p.SwiggyID)
+							}
+						}
+						return m, nil
+					}
 					// Submit the query — never per-keystroke.
 					var cmd tea.Cmd
 					if m.searchQuery != "" {
+						m.searchSubmitted = m.searchQuery
 						cmd = m.ensureQuery(m.searchQuery)
 					}
 					m.menu = m.buildMenu()
@@ -1720,18 +1758,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.menu = m.buildMenu()
 					return m, nil
-				default:
-					if k.Type == tea.KeyRunes {
-						m.searchQuery += string(k.Runes)
-						m.menu = m.buildMenu()
-					}
-					return m, nil
 				}
+				return m, nil
 			}
 
 			// Live rail: rail-focused keys.
 			if m.live && len(m.chips) > 0 && m.railFocus {
-				rail := screens.NewRail(m.railCatLabels()).WithActive(m.railActive)
+				cats := make([]string, len(m.chips))
+				for i, c := range m.chips {
+					cats[i] = c.Label
+				}
+				rail := screens.NewRail(cats).WithActive(m.railActive)
 				switch k.String() {
 				case "right", "l", "esc":
 					m.railFocus = false
@@ -1773,6 +1810,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.menu = m.buildMenu()
 					cmd := m.openCartCmd()
 					return m, cmd
+				case "a":
+					m.railFocus = false
+					m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
+					m.screen = scrAddress
+					return m, nil
+				case "tab":
+					m.railFocus = false
+					m.vertical = 1
+					m.screen = scrInstamart
+					return m, nil
 				}
 				return m, nil
 			}
