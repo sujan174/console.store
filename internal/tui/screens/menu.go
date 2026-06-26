@@ -397,7 +397,9 @@ func (m Menu) twoPaneView() string {
 	}
 
 	mainStr := main.String()
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, "  "+strings.ReplaceAll(mainStr, "\n", "\n  "))
+	// No extra indent before the main pane — each row already leads with a
+	// 4-cell cursor column, which is enough gap from the rail divider.
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, mainStr)
 }
 
 func (m Menu) Init() tea.Cmd { return nil }
