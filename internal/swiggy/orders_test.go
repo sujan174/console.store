@@ -22,7 +22,7 @@ func TestPlaceFoodOrderDisabledByDefault(t *testing.T) {
 func TestPlaceFoodOrderHappyPath(t *testing.T) {
 	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
 	srv := newFakeMCP(t, map[string]toolFn{
-		"get_food_orders":  func(map[string]any) (any, error) { return []map[string]any{}, nil },
+		"get_food_orders":  func(map[string]any) (any, error) { return map[string]any{"orders": []map[string]any{}}, nil },
 		"place_food_order": func(map[string]any) (any, error) { return map[string]any{"orderId": 1, "status": "PLACED"}, nil },
 	})
 	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
@@ -62,7 +62,7 @@ func TestPlaceFoodOrderSuppressesDuplicateAfter5xx(t *testing.T) {
 		case msg.Method == "notifications/initialized":
 			w.WriteHeader(202)
 		case msg.Params.Name == "get_food_orders":
-			encodeResult(w, msg.ID, map[string]any{"structuredContent": orders.Load()})
+			encodeResult(w, msg.ID, map[string]any{"structuredContent": map[string]any{"orders": orders.Load()}})
 		case msg.Params.Name == "place_food_order":
 			atomic.AddInt32(&placeCalls, 1)
 			// the order "lands" server-side, then the response 503s
@@ -153,7 +153,7 @@ func TestPlaceFoodOrderPicksNewOrderNotPreExisting(t *testing.T) {
 		case msg.Method == "notifications/initialized":
 			w.WriteHeader(202)
 		case msg.Params.Name == "get_food_orders":
-			encodeResult(w, msg.ID, map[string]any{"structuredContent": orders.Load()})
+			encodeResult(w, msg.ID, map[string]any{"structuredContent": map[string]any{"orders": orders.Load()}})
 		case msg.Params.Name == "place_food_order":
 			atomic.AddInt32(&placeCalls, 1)
 			// Order lands server-side; response 503s.
@@ -202,7 +202,7 @@ func TestPlaceFoodOrderGenuineFailureSurfacesError(t *testing.T) {
 			w.WriteHeader(202)
 		case msg.Params.Name == "get_food_orders":
 			// Always return empty — order never lands.
-			encodeResult(w, msg.ID, map[string]any{"structuredContent": []map[string]any{}})
+			encodeResult(w, msg.ID, map[string]any{"structuredContent": map[string]any{"orders": []map[string]any{}}})
 		case msg.Params.Name == "place_food_order":
 			w.WriteHeader(503)
 			w.Write([]byte("upstream unavailable"))
@@ -219,4 +219,48 @@ func TestPlaceFoodOrderGenuineFailureSurfacesError(t *testing.T) {
 func decodeJSON(r *http.Request, v any) { json.NewDecoder(r.Body).Decode(v) }
 func encodeResult(w http.ResponseWriter, id any, result any) {
 	json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
+}
+
+func TestOrdersEnvelopeEmptyObject(t *testing.T) {
+	// The live test account returns {} — must parse to zero orders, not error.
+	var e ordersEnvelope
+	if err := json.Unmarshal([]byte(`{}`), &e); err != nil {
+		t.Fatalf("{} must unmarshal cleanly: %v", err)
+	}
+	if got := e.orders(); len(got) != 0 {
+		t.Fatalf("empty history must yield no orders, got %d", len(got))
+	}
+}
+
+func TestOrdersEnvelopeWrapped(t *testing.T) {
+	raw := `{"orders":[
+		{"orderId":1,"restaurantName":"Blue Tokai","status":"DELIVERED"},
+		{"orderId":2,"restaurantName":"Onesta","status":"DELIVERED"},
+		{"orderId":3,"restaurantName":"Blue Tokai","status":"DELIVERED"}
+	]}`
+	var e ordersEnvelope
+	if err := json.Unmarshal([]byte(raw), &e); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := e.orders(); len(got) != 3 {
+		t.Fatalf("expected 3 orders, got %d", len(got))
+	}
+}
+
+func TestRankUsualsByFrequency(t *testing.T) {
+	orders := []Order{
+		{Restaurant: "Blue Tokai"}, {Restaurant: "Onesta"},
+		{Restaurant: "Blue Tokai"}, {Restaurant: "Pizza Hut"},
+		{Restaurant: "Blue Tokai"}, {Restaurant: "Onesta"},
+	}
+	ranked := rankUsuals(orders, 5)
+	if len(ranked) != 3 {
+		t.Fatalf("3 distinct restaurants, got %d", len(ranked))
+	}
+	if ranked[0].name != "Blue Tokai" || ranked[0].count != 3 {
+		t.Fatalf("most-ordered first: got %+v", ranked[0])
+	}
+	if ranked[1].name != "Onesta" || ranked[1].count != 2 {
+		t.Fatalf("second: got %+v", ranked[1])
+	}
 }

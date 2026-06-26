@@ -6,7 +6,70 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 )
+
+// ordersEnvelope decodes get_food_orders. The live response wraps orders in an
+// object ({"orders":[...]}) and returns a bare {} when there is no retrievable
+// history — both must parse cleanly to a (possibly empty) slice.
+type ordersEnvelope struct {
+	Orders []Order `json:"orders"`
+}
+
+func (e ordersEnvelope) orders() []Order { return e.Orders }
+
+// usualRank is one restaurant's order-frequency tally.
+type usualRank struct {
+	name  string
+	count int
+}
+
+// rankUsuals counts orders per restaurant name and returns the most-ordered
+// first, capped at limit. Stable for equal counts (first-seen order).
+func rankUsuals(orders []Order, limit int) []usualRank {
+	idx := map[string]int{}
+	var ranks []usualRank
+	for _, o := range orders {
+		if o.Restaurant == "" {
+			continue
+		}
+		if i, ok := idx[o.Restaurant]; ok {
+			ranks[i].count++
+			continue
+		}
+		idx[o.Restaurant] = len(ranks)
+		ranks = append(ranks, usualRank{name: o.Restaurant, count: 1})
+	}
+	sort.SliceStable(ranks, func(i, j int) bool { return ranks[i].count > ranks[j].count })
+	if limit > 0 && len(ranks) > limit {
+		ranks = ranks[:limit]
+	}
+	return ranks
+}
+
+// UsualRestaurants derives the account's most-ordered restaurants from order
+// history. Empty (NOT an error) when history is unavailable. Because the order
+// payload may carry only the restaurant NAME, each usual is resolved to a full
+// Restaurant via search_restaurants(name) (first match); usuals that don't
+// resolve are dropped (never a dead row).
+func (c *Client) UsualRestaurants(ctx context.Context, addressID string) ([]Restaurant, error) {
+	env, err := decodeResult[ordersEnvelope](c.CallTool(ctx, "get_food_orders", map[string]any{
+		"addressId": addressID, "activeOnly": false,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	ranks := rankUsuals(env.orders(), 5)
+	var out []Restaurant
+	for _, r := range ranks {
+		matches, err := c.SearchRestaurants(ctx, addressID, r.name, 0)
+		if err != nil || len(matches) == 0 {
+			continue // unresolvable → drop
+		}
+		out = append(out, matches[0])
+	}
+	return out, nil
+}
 
 func liveOrdersEnabled() bool { return os.Getenv("CONSOLE_LIVE_ORDERS") == "1" }
 

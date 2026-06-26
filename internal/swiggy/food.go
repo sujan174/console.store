@@ -55,7 +55,9 @@ func (c *Client) GetFoodCart(ctx context.Context, addressID, restaurantName stri
 	if cerr := env.cartError(); cerr != nil {
 		return Cart{}, cerr
 	}
-	return env.toCart(), nil
+	cart := env.toCart()
+	cart.ValidAddons = env.validAddons()
+	return cart, nil
 }
 
 func (c *Client) UpdateFoodCart(ctx context.Context, addressID, restaurantID, restaurantName string, items []CartItem) (Cart, error) {
@@ -96,9 +98,10 @@ func (c *Client) ApplyFoodCoupon(ctx context.Context, addressID, couponCode stri
 }
 
 func (c *Client) GetFoodOrders(ctx context.Context, addressID string, activeOnly bool) ([]Order, error) {
-	return decodeResult[[]Order](c.CallTool(ctx, "get_food_orders", map[string]any{
+	env, err := decodeResult[ordersEnvelope](c.CallTool(ctx, "get_food_orders", map[string]any{
 		"addressId": addressID, "activeOnly": activeOnly,
 	}))
+	return env.orders(), err
 }
 
 func (c *Client) GetFoodOrderDetails(ctx context.Context, orderID string) (Order, error) {
