@@ -200,6 +200,7 @@ type Model struct {
 	catPending       bool   // a category load is in flight (shows "loading…")
 	catPendingQuery  string // the category query catPending is waiting on
 	restInfoOpen     bool   // restaurant-info modal ('i' on the browse list) is open
+	addrOpen         bool   // address switcher modal ('a') is open
 	homePending      bool   // Home's "popular near you" load is in flight (shows "loading…")
 	usualsLoaded     bool   // true once LoadUsuals has been fired for the current addr
 }
@@ -1603,6 +1604,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// button. esc cancels (cart intact); ctrl+c quits; any other key is a
 		// no-op so a stray press can neither dismiss the modal nor wipe the cart.
 		// Default focus is "keep current", so a reflexive Enter is always safe.
+		if m.addrOpen {
+			switch k.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc", "a":
+				m.addrOpen = false
+				return m, nil
+			case "enter":
+				m.addrOpen = false
+				prev := m.addr.ID
+				m.addr = m.addrScreen.Selected()
+				if !m.cartRestaurantServes(m.addr) {
+					m.lines = nil
+					m.cartRestaurant = ""
+					m.cartSection = ""
+				}
+				var cmd tea.Cmd
+				if m.live && m.addr.ID != prev {
+					// New address → its catalog is keyed separately; reload Home.
+					m.usualsLoaded = false
+					m.homePending = false
+					m.screen = scrMenu
+					m.railActive = screens.RailHome
+					m.railFocus = true
+					m.searchMode = false
+					cmd = m.ensureHomeLoaded()
+				}
+				m.menu = m.buildMenu()
+				return m, cmd
+			default:
+				na, _ := m.addrScreen.Update(msg)
+				m.addrScreen = na.(screens.Address)
+				return m, nil
+			}
+		}
+
 		if m.conflictOpen {
 			switch k.String() {
 			case "ctrl+c":
@@ -1994,7 +2031,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "a":
 					m.railFocus = false
 					m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
-					m.screen = scrAddress
+					m.addrOpen = true
 					return m, nil
 				case "tab":
 					m.railFocus = false
@@ -2044,7 +2081,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, cmd
 				case "a":
 					m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
-					m.screen = scrAddress
+					m.addrOpen = true
 					return m, nil
 				case "tab":
 					m.vertical = 1
@@ -2107,7 +2144,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			case "a":
 				m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
-				m.screen = scrAddress
+				m.addrOpen = true
 				return m, nil
 			case "tab":
 				return m, nil
@@ -2218,26 +2255,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.liveCartCmd()
 			}
 			return m, nil
-		case scrAddress:
-			switch k.String() {
-			case "esc":
-				m.screen = scrMenu
-				return m, nil
-			case "enter":
-				m.addr = m.addrScreen.Selected()
-				if !m.cartRestaurantServes(m.addr) {
-					m.lines = nil
-					m.cartRestaurant = ""
-					m.cartSection = ""
-				}
-				m.menu = m.buildMenu()
-				m.screen = scrMenu
-				return m, nil
-			default:
-				na, cmd := m.addrScreen.Update(msg)
-				m.addrScreen = na.(screens.Address)
-				return m, cmd
-			}
 		case scrCheckout:
 			switch k.String() {
 			case "esc":
@@ -2469,6 +2486,14 @@ func (m Model) View() string {
 			return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card)
 		}
 	}
+	// Address switcher modal ('a') — a centered overlay over the current screen.
+	if m.addrOpen {
+		card := m.addrScreen.ModalView()
+		if m.w == 0 || m.h == 0 {
+			return card
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card)
+	}
 
 	var body string
 	switch m.screen {
@@ -2477,8 +2502,6 @@ func (m Model) View() string {
 		body = m.rest.WithMaxRows(m.listRows(chrome)).View()
 	case scrCart:
 		body = m.cart.View()
-	case scrAddress:
-		body = m.addrScreen.View()
 	case scrCheckout, scrConfirm:
 		body = m.checkout.WithPlacing(m.placingOrder).View(m.frame)
 	case scrTracking:

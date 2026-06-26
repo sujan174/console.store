@@ -32,9 +32,9 @@ func TestAddressScreenTitleAndEntries(t *testing.T) {
 		{ID: "a2", Label: "work", Line: "Koramangala"},
 	}
 	v := screens.NewAddress(addrs, "a1").View()
-	for _, want := range []string{"deliver to —", "HSR Layout", "Koramangala", "select & reload"} {
+	for _, want := range []string{"╭", "╰", "deliver to", "HSR Layout", "Koramangala", "↵ choose", "esc cancel"} {
 		if !strings.Contains(v, want) {
-			t.Errorf("address screen missing %q:\n%s", want, v)
+			t.Errorf("address modal missing %q:\n%s", want, v)
 		}
 	}
 }

@@ -1,4 +1,2 @@
-2026/06/26 16:43:18 SSH server listening on 127.0.0.1:2222 — connect with: ssh localhost -p 2222
-2026/06/26 16:43:49 INFO sujan connect 127.0.0.1:52114 true [] xterm-ghostty 104 35 SSH-2.0-OpenSSH_10.3
-2026/06/26 16:44:36 INFO 127.0.0.1:52114 disconnect 47.077688583s
-2026/06/26 16:44:36 INFO sujan connect 127.0.0.1:52158 true [] xterm-ghostty 104 35 SSH-2.0-OpenSSH_10.3
+2026/06/26 16:48:02 SSH server listening on 127.0.0.1:2222 — connect with: ssh localhost -p 2222
+2026/06/26 16:48:10 INFO sujan connect 127.0.0.1:52404 true [] xterm-ghostty 104 35 SSH-2.0-OpenSSH_10.3
