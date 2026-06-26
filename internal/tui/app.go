@@ -1821,6 +1821,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// so ↑/↓ navigate the sidebar.
 					if m.searchCaret > 0 {
 						m.searchCaret--
+						m.menu = m.buildMenu()
 						return m, nil
 					}
 					if wasAtEdge {
@@ -1835,6 +1836,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if r := []rune(m.searchQuery); m.searchCaret < len(r) {
 						m.searchCaret++
 					}
+					m.menu = m.buildMenu()
 					return m, nil
 				case "up", "k":
 					// Move the result cursor up (only when results are already loaded).

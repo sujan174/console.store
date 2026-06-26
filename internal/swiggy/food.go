@@ -65,8 +65,11 @@ func (c *Client) searchFill(ctx context.Context, addressID, query string, offset
 			break // no more results
 		}
 		for _, r := range onlyRestaurants(page) {
-			if dropAds && isAd(r.Name) {
-				continue // sponsored "(Ad)" listing — search only
+			if isAd(r.Name) {
+				if dropAds {
+					continue // search: drop sponsored listings entirely
+				}
+				r.Name = stripAd(r.Name) // categories: keep it, but hide the "(Ad)" tag
 			}
 			if r.ID != "" && !seen[r.ID] {
 				seen[r.ID] = true
@@ -85,6 +88,12 @@ func (c *Client) searchFill(ctx context.Context, addressID, query string, offset
 // appends " (Ad)" to promoted results; we drop them so search stays organic.
 func isAd(name string) bool {
 	return strings.HasSuffix(strings.TrimSpace(name), "(Ad)")
+}
+
+// stripAd removes a trailing " (Ad)" tag so the name reads clean in the
+// categories (where we keep the listing but hide that it's sponsored).
+func stripAd(name string) string {
+	return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(name), "(Ad)"))
 }
 
 // onlyRestaurants drops the DISH entries search_restaurants mixes into its

@@ -348,12 +348,14 @@ func (s Restaurant) View() string {
 	right := theme.DimStyle.Render("deliver to ") + theme.CursorStyle.Render("⊕ ") + theme.BrightStyle.Render(s.addr.Line)
 	b.WriteString("  " + justify(left, right, w) + "\n")
 
-	// row 2 meta: ★ 4.6 · 35-45 min · coffee · 10 items
+	// row 2 meta: the real live ★ rating · delivery time. (No cuisine/section — it
+	// was the browse enum, not the real cuisine — and no item count, which reads 0
+	// until the menu streams in.)
 	dot := theme.FaintStyle.Render("  ·  ")
-	meta := theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", s.p.Rating)) + dot +
-		theme.DimStyle.Render(s.p.ETA) + dot +
-		theme.DimStyle.Render(string(s.p.Section)) + dot +
-		theme.DimStyle.Render(fmt.Sprintf("%d items", len(s.p.Items)))
+	meta := theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", s.p.Rating))
+	if s.p.ETA != "" {
+		meta += dot + theme.DimStyle.Render(s.p.ETA)
+	}
 	b.WriteString("  " + meta + "\n")
 
 	b.WriteString("\n")

@@ -34,6 +34,19 @@ func TestIsAd(t *testing.T) {
 	}
 }
 
+func TestStripAd(t *testing.T) {
+	cases := map[string]string{
+		"Meghana Foods (Ad)": "Meghana Foods",
+		"Bakingo (Ad) ":      "Bakingo",
+		"Starbucks Coffee":   "Starbucks Coffee", // unchanged when not an ad
+	}
+	for in, want := range cases {
+		if got := stripAd(in); got != want {
+			t.Errorf("stripAd(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestOnlyRestaurantsEmptyAndAllDishes(t *testing.T) {
 	if got := onlyRestaurants(nil); len(got) != 0 {
 		t.Fatalf("nil → empty, got %d", len(got))
