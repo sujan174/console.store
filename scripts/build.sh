@@ -19,6 +19,14 @@ ARM_FLAG='-X console.store/internal/swiggy.liveOrdersDefault=1'
 mkdir -p "$BIN"
 cd "$ROOT"
 
+# Pre-build gate: a broken tree must NOT silently install an armed binary.
+echo "gate: go vet ./..."
+go vet ./...
+echo "gate: go test ./..."
+go test ./...
+echo "gate passed — vet + tests green"
+echo
+
 echo "building from $ROOT  ->  $BIN"
 
 # safestore: plain build, liveOrdersDefault stays "0" (disarmed).
