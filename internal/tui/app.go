@@ -1976,6 +1976,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.menu = m.buildMenu()
 					return m, nil
+				case "delete":
+					// Forward-delete: remove the rune AT the caret; caret stays put.
+					if r := []rune(m.searchQuery); m.searchCaret < len(r) {
+						m.searchQuery = string(r[:m.searchCaret]) + string(r[m.searchCaret+1:])
+					}
+					m.menu = m.buildMenu()
+					return m, nil
 				}
 				return m, nil
 			}
