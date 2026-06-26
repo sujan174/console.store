@@ -71,7 +71,14 @@ func (c *Client) UsualRestaurants(ctx context.Context, addressID string) ([]Rest
 	return out, nil
 }
 
-func liveOrdersEnabled() bool { return os.Getenv("CONSOLE_LIVE_ORDERS") == "1" }
+// liveOrdersDefault is the build-time arming default, stamped to "1" in release
+// builds via -ldflags "-X console.store/internal/swiggy.liveOrdersDefault=1".
+// Dev builds leave it "0", so no real order can fire without CONSOLE_LIVE_ORDERS=1.
+var liveOrdersDefault = "0"
+
+func liveOrdersEnabled() bool {
+	return os.Getenv("CONSOLE_LIVE_ORDERS") == "1" || liveOrdersDefault == "1"
+}
 
 // isAuthSentinel reports whether err is one of the auth-failure sentinels that
 // indicate the current session cannot be trusted for money-critical operations.
