@@ -393,6 +393,28 @@ func TestCheckoutEnterBlockedWhileMutating(t *testing.T) {
 	}
 }
 
+func TestCheckoutCursorClampsAfterRemove(t *testing.T) {
+	m := checkoutModel(t)
+	// Two lines; cursor on the second (last).
+	m.lines = append(m.lines, screens.CartLine{Item: catalog.Item{ID: "i2", Name: "Mocha", Price: 300}, Qty: 1})
+	m.checkout = m.buildCheckout().WithCursor(1)
+	// Delete the last line -> list shrinks to 1, cursor 1 now out of range.
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyDelete})
+	m = nm.(Model)
+	// Confirm the reduce sync so the freeze clears and checkout rebuilds.
+	nm, _ = m.Update(datasource.CartSyncedMsg{})
+	m = nm.(Model)
+	if c := m.checkout.Cursor(); c != 0 {
+		t.Fatalf("cursor must clamp to 0 after removing the last line, got %d", c)
+	}
+	// A subsequent + must act on the remaining line (not be swallowed by the bounds guard).
+	nm, _ = m.Update(keyRunes("+"))
+	m = nm.(Model)
+	if m.lines[0].Qty != 3 {
+		t.Fatalf("+ after remove must increment the remaining line; qty=%d", m.lines[0].Qty)
+	}
+}
+
 // delivery + taxes, not the local item subtotal.
 func TestCartChipShowsLiveGrandTotal(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()

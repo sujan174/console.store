@@ -2817,6 +2817,20 @@ func (m Model) afterCheckoutReduce() (tea.Model, tea.Cmd) {
 	return m, m.liveCartCmd()
 }
 
+// clampIdx clamps a cursor index into [0, n-1], or 0 when n==0.
+func clampIdx(i, n int) int {
+	if n == 0 {
+		return 0
+	}
+	if i >= n {
+		return n - 1
+	}
+	if i < 0 {
+		return 0
+	}
+	return i
+}
+
 // buildCheckout assembles the merged checkout screen. The live item list is
 // driven by the authoritative m.lines (carries add-on/variant selections);
 // liveCart feeds only the bill via billFromLive().
@@ -2825,7 +2839,7 @@ func (m Model) buildCheckout() screens.Checkout {
 		WithBill(m.billFromLive()).
 		WithLiveSync(m.live, m.cartSyncErr).
 		WithMutating(m.cartMutating).
-		WithCursor(m.checkout.Cursor())
+		WithCursor(clampIdx(m.checkout.Cursor(), len(m.cartScreenLines())))
 }
 
 // openCartCmd opens the merged checkout screen and, in live mode, fetches the
