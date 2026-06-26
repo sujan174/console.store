@@ -39,7 +39,7 @@ func WithSeededSnapshot() Option {
 // scope live loads to, so we show the authorize URL immediately instead of
 // firing loads that would hit the store with an empty account id.
 func WithPendingAuth() Option {
-	return func(m *Model) { m.needsAuth = true }
+	return func(m *Model) { m.needsAuth = true; m.authAutoOpen = true }
 }
 
 // AuthClient drives the loopback authorize flow from inside the TUI: it reports

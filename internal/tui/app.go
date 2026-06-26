@@ -172,6 +172,7 @@ type Model struct {
 	needsAuth    bool       // set when a load returns datasource.ErrNeedsAuth
 	authFlowID   string     // authorize flow id (native gate poll)
 	authClient   AuthClient // polls callback completion + starts re-auth; nil on the mock path
+	authAutoOpen bool       // first-run gate auto-opens the browser; logout gate waits for Enter
 	seeded       bool       // true when catalog/swiggy.Snapshot was pre-seeded from config; skips live init loads
 
 	placingOrder bool     // true while PlaceOrderCmd is in-flight; blocks double-fire
@@ -1124,7 +1125,7 @@ func (m Model) Init() tea.Cmd {
 	if c := m.liveInitCmds(); c != nil {
 		cmds = append(cmds, c)
 	}
-	if m.needsAuth && m.authorizeURL != "" {
+	if m.needsAuth && m.authAutoOpen && m.authorizeURL != "" {
 		cmds = append(cmds, openBrowserCmd(m.authorizeURL))
 	}
 	return tea.Batch(cmds...)
@@ -1573,13 +1574,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.liveCart = api.Cart{}
 		m.cartLoaded = false
 		m.screen = scrSplash
+		// Do NOT auto-open the browser here: if the user is still logged into
+		// Swiggy, an auto-open silently re-consents instantly and the disconnect
+		// is pointless. Require an explicit Enter to reconnect.
+		m.authAutoOpen = false
 		if m.authClient != nil {
 			fid, url, err := m.authClient.StartAuth(m.accountID)
 			if err == nil {
 				m.authFlowID = fid
 				m.authorizeURL = url
 				m.needsAuth = true
-				return m, openBrowserCmd(url)
+				return m, nil
 			}
 			dbgTUI("logout: re-auth start failed: %v", err)
 		}
@@ -2523,9 +2528,14 @@ func (m Model) listRows(chrome int) int {
 
 func (m Model) View() string {
 	if m.needsAuth {
+		lead := "  Press [ Enter ] to open your browser and reconnect.\n\n" +
+			"  Or copy this link:\n\n"
+		if m.authAutoOpen {
+			lead = "  Opening your browser to log in to Swiggy…\n\n" +
+				"  If it didn't open, copy this link:\n\n"
+		}
 		gate := "  console.store needs to connect to your Swiggy account.\n\n" +
-			"  Opening your browser to log in to Swiggy…\n\n" +
-			"  If it didn't open, copy this link:\n\n" +
+			lead +
 			"     " + m.authorizeURL + "\n\n" +
 			"  [ Enter ] open in browser       waiting for authorization…\n"
 		if m.w == 0 || m.h == 0 {

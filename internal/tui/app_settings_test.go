@@ -43,4 +43,7 @@ func TestSplashSettingsDisconnectReauths(t *testing.T) {
 	if m.authorizeURL != "https://authz/y" {
 		t.Fatalf("re-auth authorize URL = %q, want https://authz/y", m.authorizeURL)
 	}
+	if m.authAutoOpen {
+		t.Fatal("logout re-auth must NOT auto-open the browser (force Enter)")
+	}
 }
