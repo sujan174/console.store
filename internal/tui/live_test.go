@@ -87,6 +87,8 @@ func TestLiveMenuEnterFiresLoadMenu(t *testing.T) {
 	m.w, m.h = 100, 40
 	// Navigate to the menu screen (model starts at scrSplash).
 	m.screen = scrMenu
+	// Focus the main list (the browse now lands on the rail; → moves to the list).
+	m.railFocus = false
 
 	// Simulate pressing enter on the menu (restaurant is first in the Home list).
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})

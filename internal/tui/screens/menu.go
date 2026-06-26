@@ -182,6 +182,27 @@ func (m Menu) mainPlaces() []catalog.Place {
 	}
 }
 
+// placeRow renders one restaurant row. The selected row gets a BRIGHT gold ▸
+// arrow when the main pane has focus, and a FAINT · marker when focus is on the
+// rail — so there is only ever one bright "you are here" arrow on screen and you
+// always know which pane you're navigating.
+func (m Menu) placeRow(p catalog.Place, selected bool) string {
+	eta := theme.EtaStyle.Render(p.ETA)
+	rating := ""
+	if p.Rating > 0 {
+		rating = " " + theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
+	}
+	switch {
+	case selected && !m.railFocus:
+		name := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(p.Name)
+		return "  " + theme.Fg(theme.Gold).Bold(true).Render("▸ ") + name + rating + "   " + eta
+	case selected:
+		return "  " + theme.FaintStyle.Render("· ") + theme.TextStyle.Render(p.Name) + rating + "   " + eta
+	default:
+		return "    " + theme.ItemStyle.Render(p.Name) + rating + "   " + eta
+	}
+}
+
 // sectionedListView renders the Home main pane: optional usuals block (omitted
 // when empty) + always-present nearby block. Section header labels are dim
 // hairlines drawn between the restaurant rows; the cursor list spans both.
@@ -193,20 +214,7 @@ func (m Menu) sectionedListView() string {
 	cursor := m.list.Cursor
 
 	renderRow := func(p catalog.Place, idx int) {
-		name := theme.ItemStyle.Render(p.Name)
-		eta := theme.EtaStyle.Render(p.ETA)
-		rating := ""
-		if p.Rating > 0 {
-			rating = " " + theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
-		}
-		body := name + rating + "   " + eta
-		if idx == cursor {
-			brightName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(p.Name)
-			selBody := brightName + rating + "   " + eta
-			b.WriteString("  > " + selBody + "\n")
-		} else {
-			b.WriteString("    " + body + "\n")
-		}
+		b.WriteString(m.placeRow(p, idx == cursor) + "\n")
 	}
 
 	renderHeader := func(label string) {
@@ -269,20 +277,8 @@ func (m Menu) twoPaneView() string {
 			main.WriteString(theme.DimStyle.Render(plural(m.resultCount, "result", "results")) + "\n\n")
 		}
 		if !m.searchPending && len(m.results) > 0 {
-			// Render results list
 			for i, p := range m.results {
-				name := theme.ItemStyle.Render(p.Name)
-				eta := theme.EtaStyle.Render(p.ETA)
-				rating := ""
-				if p.Rating > 0 {
-					rating = " " + theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
-				}
-				if i == m.list.Cursor {
-					brightName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(p.Name)
-					main.WriteString("> " + brightName + rating + "   " + eta + "\n")
-				} else {
-					main.WriteString("  " + name + rating + "   " + eta + "\n")
-				}
+				main.WriteString(m.placeRow(p, i == m.list.Cursor) + "\n")
 			}
 		}
 	case m.hasSections:
@@ -290,18 +286,7 @@ func (m Menu) twoPaneView() string {
 	default:
 		// plain flat list (live mode, non-Home category, no sections set)
 		for i, p := range m.places {
-			name := theme.ItemStyle.Render(p.Name)
-			eta := theme.EtaStyle.Render(p.ETA)
-			rating := ""
-			if p.Rating > 0 {
-				rating = " " + theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
-			}
-			if i == m.list.Cursor {
-				brightName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(p.Name)
-				main.WriteString("> " + brightName + rating + "   " + eta + "\n")
-			} else {
-				main.WriteString("  " + name + rating + "   " + eta + "\n")
-			}
+			main.WriteString(m.placeRow(p, i == m.list.Cursor) + "\n")
 		}
 	}
 

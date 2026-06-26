@@ -85,9 +85,11 @@ func (r Rail) View() string {
 		var row string
 		switch {
 		case i == r.active && r.focus:
-			row = theme.Fg(theme.Gold).Bold(true).Render("▌ " + railTrunc(e))
+			// Focused + active: bright gold arrow — THIS is what you're navigating.
+			row = theme.Fg(theme.Gold).Bold(true).Render("▸ " + railTrunc(e))
 		case i == r.active:
-			row = theme.Fg(theme.Gold).Render("▌ " + railTrunc(e))
+			// The current view, but focus is on the main pane (no arrow here).
+			row = theme.Fg(theme.Gold).Render("  " + railTrunc(e))
 		default:
 			row = theme.CatOffStyle.Render("  " + railTrunc(e))
 		}

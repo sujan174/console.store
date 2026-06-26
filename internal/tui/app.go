@@ -201,7 +201,7 @@ type Model struct {
 func New(caps render.Caps, opts ...Option) Model {
 	repo := mem.New()
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome}
+	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome, railFocus: true}
 	for _, o := range opts {
 		o(&m)
 	}
@@ -332,6 +332,22 @@ func (m Model) ensureQuery(query string) tea.Cmd {
 
 // ensureHomeLoaded fires LoadUsuals + LoadPlacesQuery("") if not already cached.
 // Called when the user selects Home on the rail or on initial browse entry.
+// loadForRail fires the (deduped) load for the currently-active rail entry, so
+// the main pane populates as the user arrows through the rail.
+func (m *Model) loadForRail(rail screens.Rail) tea.Cmd {
+	switch m.railActive {
+	case screens.RailSearch:
+		return nil
+	case screens.RailHome:
+		return m.ensureHomeLoaded()
+	default:
+		if catIdx, isCat := rail.IsCategory(m.railActive); isCat && catIdx < len(m.chips) {
+			return m.ensureQuery(m.chips[catIdx].Query)
+		}
+	}
+	return nil
+}
+
 // homeNearbyQuery is the keyword used to populate Home's "popular near you"
 // list. Swiggy's search_restaurants REQUIRES a query (there is no list-all), so
 // Home borrows the first configured cuisine — a real, populated default.
@@ -1798,14 +1814,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.railActive > 0 {
 						m.railActive--
 					}
+					m.searchMode = false
+					cmd := m.loadForRail(rail)
 					m.menu = m.buildMenu()
-					return m, nil
+					return m, cmd
 				case "down", "j":
 					if m.railActive < rail.Len()-1 {
 						m.railActive++
 					}
+					m.searchMode = false
+					cmd := m.loadForRail(rail)
 					m.menu = m.buildMenu()
-					return m, nil
+					return m, cmd
 				case "enter":
 					m.railFocus = false
 					switch m.railActive {
