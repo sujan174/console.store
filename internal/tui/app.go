@@ -189,15 +189,17 @@ type Model struct {
 	// hold the global search state (submit-only — never per-keystroke).
 	// searchSubmitted tracks the last query that was actually submitted (via
 	// Enter), so we can distinguish "navigate results" from "re-submit" on Enter.
-	railActive      int
-	railFocus       bool
-	searchMode      bool
-	searchQuery     string
-	searchSubmitted string // last query submitted to ensureQuery; "" = none
-	searchPending   bool   // a search query is in flight (shows "searching…")
-	catPending      bool   // a category load is in flight (shows "loading…")
-	catPendingQuery string // the category query catPending is waiting on
-	usualsLoaded    bool   // true once LoadUsuals has been fired for the current addr
+	railActive       int
+	railFocus        bool
+	searchMode       bool
+	searchQuery      string
+	searchSubmitted  string // last query submitted to ensureQuery; "" = none
+	searchPending    bool   // a search query is in flight (shows "searching…")
+	searchCaret      int    // caret position in searchQuery, in runes
+	searchAtLeftEdge bool   // last key was ← at caret 0 (a second ← exits to the rail)
+	catPending       bool   // a category load is in flight (shows "loading…")
+	catPendingQuery  string // the category query catPending is waiting on
+	usualsLoaded     bool   // true once LoadUsuals has been fired for the current addr
 }
 
 func New(caps render.Caps, opts ...Option) Model {
@@ -294,7 +296,8 @@ func (m Model) buildMenu() screens.Menu {
 
 		if isSearch {
 			results := m.liveRepo().PlacesByQuery(m.addr, datasource.SearchKey(m.searchQuery))
-			menu = menu.WithSearchMode(true, m.searchQuery, results, len(results), m.searchPending)
+			menu = menu.WithSearchMode(true, m.searchQuery, results, len(results), m.searchPending).
+				WithSearchCaret(m.searchCaret)
 		} else if _, isCat := rail.IsCategory(m.railActive); isCat {
 			// Category view: use the flat places path (no sections header).
 			// viewPlaces already holds catPlaces; WithSections is intentionally NOT
@@ -355,9 +358,25 @@ func (m *Model) syncSearchEntry() {
 		m.searchMode = true
 		m.searchQuery = ""
 		m.searchSubmitted = ""
+		m.searchCaret = 0
+		m.searchAtLeftEdge = false
 	} else {
 		m.searchMode = false
 	}
+}
+
+// searchInsert inserts s into searchQuery at the caret and advances the caret.
+func (m *Model) searchInsert(s string) {
+	r := []rune(m.searchQuery)
+	c := m.searchCaret
+	if c < 0 {
+		c = 0
+	}
+	if c > len(r) {
+		c = len(r)
+	}
+	m.searchQuery = string(r[:c]) + s + string(r[c:])
+	m.searchCaret = c + len([]rune(s))
 }
 
 // loadForRail fires the (deduped) load for the currently-active rail entry, so
@@ -1766,16 +1785,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// j/k aliases when NOT typed as runes) move the result cursor. Enter either
 			// submits the query (if it changed since last submit) or opens the selection.
 			if m.live && len(m.chips) > 0 && m.searchMode && !m.railFocus {
-				// Printable rune: always append to query (j/k are letters here, not nav).
+				// Every key but a second ← clears the "at left edge" latch.
+				wasAtEdge := m.searchAtLeftEdge
+				m.searchAtLeftEdge = false
+
+				// Printable rune: insert at the caret (j/k are letters here, not nav).
 				if k.Type == tea.KeyRunes {
-					m.searchQuery += string(k.Runes)
+					m.searchInsert(string(k.Runes))
 					m.menu = m.buildMenu()
 					return m, nil
 				}
-				// Space arrives as its own key type, not a rune — append it so
-				// multi-word searches ("blue tokai") work.
+				// Space arrives as its own key type — insert it for multi-word search.
 				if k.Type == tea.KeySpace || k.String() == " " {
-					m.searchQuery += " "
+					m.searchInsert(" ")
 					m.menu = m.buildMenu()
 					return m, nil
 				}
@@ -1787,21 +1809,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.searchMode = false
 					m.searchQuery = ""
 					m.searchSubmitted = ""
+					m.searchCaret = 0
 					m.railActive = screens.RailHome
 					m.railFocus = true
 					cmd := m.ensureHomeLoaded()
 					m.menu = m.buildMenu()
 					return m, cmd
-				case "left", "h":
-					// Left at the leftmost of an EMPTY field hands control back to the
-					// rail (Search stays selected, input still shown) so the next ↓
-					// navigates the sidebar.
-					if m.searchQuery == "" {
+				case "left":
+					// ← moves the caret left. A SECOND ← already at the leftmost
+					// (caret 0) hands control back to the rail (Search stays selected)
+					// so ↑/↓ navigate the sidebar.
+					if m.searchCaret > 0 {
+						m.searchCaret--
+						return m, nil
+					}
+					if wasAtEdge {
 						m.railActive = screens.RailSearch
 						m.railFocus = true
-						m.syncSearchEntry()
 						m.menu = m.buildMenu()
 						return m, nil
+					}
+					m.searchAtLeftEdge = true
+					return m, nil
+				case "right":
+					if r := []rune(m.searchQuery); m.searchCaret < len(r) {
+						m.searchCaret++
 					}
 					return m, nil
 				case "up", "k":
@@ -1844,8 +1876,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.menu = m.buildMenu()
 					return m, cmd
 				case "backspace":
-					if len(m.searchQuery) > 0 {
-						m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+					// Delete the rune BEFORE the caret.
+					if r := []rune(m.searchQuery); m.searchCaret > 0 && m.searchCaret <= len(r) {
+						m.searchQuery = string(r[:m.searchCaret-1]) + string(r[m.searchCaret:])
+						m.searchCaret--
 					}
 					m.menu = m.buildMenu()
 					return m, nil
@@ -1867,9 +1901,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.searchMode = true
 						m.railFocus = false
 						if k.Type == tea.KeySpace {
-							m.searchQuery += " "
+							m.searchInsert(" ")
 						} else {
-							m.searchQuery += string(k.Runes)
+							m.searchInsert(string(k.Runes))
 						}
 						m.menu = m.buildMenu()
 						return m, nil
@@ -1902,6 +1936,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case screens.RailSearch:
 						m.searchMode = true
 						m.searchQuery = ""
+						m.searchCaret = 0
 					case screens.RailHome:
 						m.searchMode = false
 						m.menu = m.buildMenu()

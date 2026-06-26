@@ -47,6 +47,7 @@ type Menu struct {
 	searchMode    bool
 	searchPending bool
 	searchQuery   string
+	searchCaret   int // caret position in searchQuery, in runes
 	results       []catalog.Place
 	resultCount   int
 }
@@ -169,6 +170,34 @@ func (m Menu) WithSearchMode(active bool, query string, results []catalog.Place,
 // WithLoading marks the flat (category) list as still loading, so an empty list
 // shows a "loading…" cue instead of "no restaurants" while results stream in.
 func (m Menu) WithLoading(loading bool) Menu { m.loading = loading; return m }
+
+// WithSearchCaret sets the caret position (in runes) for the search input.
+func (m Menu) WithSearchCaret(caret int) Menu { m.searchCaret = caret; return m }
+
+// searchInputLine renders the 🔍 search field with a block caret drawn at the
+// caret position, so ←/→ editing is visible mid-string.
+func (m Menu) searchInputLine() string {
+	r := []rune(m.searchQuery)
+	c := m.searchCaret
+	if c < 0 {
+		c = 0
+	}
+	if c > len(r) {
+		c = len(r)
+	}
+	before := string(r[:c])
+	at := " "
+	after := ""
+	if c < len(r) {
+		at = string(r[c]) // caret sits ON this char (reverse video)
+		after = string(r[c+1:])
+	}
+	caret := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.Bg)).
+		Background(lipgloss.Color(theme.Cursor)).
+		Render(at)
+	return theme.CursorStyle.Render("🔍 "+before) + caret + theme.CursorStyle.Render(after)
+}
 
 // mainPlaces is the flat, cursor-addressable slice for the active view:
 // search → results; Home (hasSections) → usuals then nearby; else → places.
@@ -316,7 +345,7 @@ func (m Menu) twoPaneView() string {
 
 	switch {
 	case m.searchMode:
-		main.WriteString(theme.CursorStyle.Render("🔍 "+m.searchQuery+"▏") + "\n")
+		main.WriteString(m.searchInputLine() + "\n")
 		switch {
 		case m.searchPending:
 			// A query is in flight (search paginates, so it can take a moment).
