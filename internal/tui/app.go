@@ -1768,10 +1768,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				switch k.String() {
 				case "esc":
+					// Esc leaves search for Home — move the rail selection to Home too
+					// (otherwise the sidebar keeps Search highlighted) and re-attach
+					// focus to the rail.
 					m.searchMode = false
 					m.searchQuery = ""
 					m.searchSubmitted = ""
+					m.railActive = screens.RailHome
+					m.railFocus = true
+					cmd := m.ensureHomeLoaded()
 					m.menu = m.buildMenu()
+					return m, cmd
+				case "left", "h":
+					// Left at the leftmost of an EMPTY field hands control back to the
+					// rail (Search stays selected) so the next ↓ navigates the sidebar.
+					if m.searchQuery == "" {
+						m.searchMode = false
+						m.railActive = screens.RailSearch
+						m.railFocus = true
+						m.menu = m.buildMenu()
+						return m, nil
+					}
 					return m, nil
 				case "up", "k":
 					// Move the result cursor up (only when results are already loaded).
