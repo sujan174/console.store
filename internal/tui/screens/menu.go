@@ -182,24 +182,33 @@ func (m Menu) mainPlaces() []catalog.Place {
 	}
 }
 
-// placeRow renders one restaurant row. The selected row gets a BRIGHT gold ▸
-// arrow when the main pane has focus, and a FAINT · marker when focus is on the
-// rail — so there is only ever one bright "you are here" arrow on screen and you
-// always know which pane you're navigating.
+// placeRow renders one restaurant row, matching the in-restaurant dish list as
+// the standard: the selected row (when the main pane has focus) gets a blue ▌
+// border + "> " cursor + bright white name on the highlighted selected-row
+// background. When focus is on the rail the cursor row is shown only faintly (a
+// dim · marker, no highlight) so there is exactly one active cursor on screen.
 func (m Menu) placeRow(p catalog.Place, selected bool) string {
-	eta := theme.EtaStyle.Render(p.ETA)
 	rating := ""
 	if p.Rating > 0 {
-		rating = " " + theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
+		rating = "  " + theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
+	}
+	eta := ""
+	if p.ETA != "" {
+		eta = "   " + theme.EtaStyle.Render(p.ETA)
 	}
 	switch {
 	case selected && !m.railFocus:
 		name := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(p.Name)
-		return "  " + theme.Fg(theme.Gold).Bold(true).Render("▸ ") + name + rating + "   " + eta
+		content := theme.CursorStyle.Render("▌ > ") + name + rating + eta
+		w := components.ContentWidth() - railWidth - 5
+		if w < 12 {
+			w = 12
+		}
+		return lipgloss.NewStyle().Background(lipgloss.Color(theme.SelRowBg)).Width(w).Render(content)
 	case selected:
-		return "  " + theme.FaintStyle.Render("· ") + theme.TextStyle.Render(p.Name) + rating + "   " + eta
+		return "  " + theme.FaintStyle.Render("· ") + theme.TextStyle.Render(p.Name) + rating + eta
 	default:
-		return "    " + theme.ItemStyle.Render(p.Name) + rating + "   " + eta
+		return "    " + theme.ItemStyle.Render(p.Name) + rating + eta
 	}
 }
 
