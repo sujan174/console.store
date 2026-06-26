@@ -2650,8 +2650,8 @@ func (m Model) View() string {
 	case scrImCart:
 		body = m.imCart.View()
 	default: // scrMenu
-		// +2 reserves the focused-restaurant detail strip (line + blank) above the list.
-		body = m.menu.WithMaxRows(m.listRows(15 + screens.BrandHeaderLines)).View()
+		// +4 reserves the store switcher (2) + the focused-restaurant detail strip (2).
+		body = m.menu.WithMaxRows(m.listRows(17 + screens.BrandHeaderLines)).View()
 	}
 
 	// The footer — the screen's hint line + optional command palette + status

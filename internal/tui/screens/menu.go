@@ -389,6 +389,25 @@ func (m Menu) focusedDetail() string {
 	return "  " + out
 }
 
+// verticalSwitcher is the top-level store switcher (Food ⟷ Instamart) — a full
+// width row above the rail/main split. Food is a solid gold pill (active);
+// Instamart is dim with a "soon" tag. Deliberately unlike the rail or chips.
+func (m Menu) verticalSwitcher() string {
+	w := components.ContentWidth()
+	active := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.Bg)).
+		Background(lipgloss.Color(theme.Gold)).
+		Bold(true).Render(" FOOD ")
+	inactive := theme.CatOffStyle.Render("Instamart") + theme.FaintStyle.Render("  ·  soon")
+	hint := theme.FaintStyle.Render("tab to switch")
+	left := "  " + active + "    " + inactive
+	gap := w - lipgloss.Width(left) - lipgloss.Width(hint) - 2
+	if gap < 2 {
+		gap = 2
+	}
+	return left + strings.Repeat(" ", gap) + hint + "\n\n"
+}
+
 func (m Menu) twoPaneView() string {
 	railH := m.list.MaxRows + 6
 	if railH < m.rail.Len()+1 {
@@ -450,7 +469,9 @@ func (m Menu) twoPaneView() string {
 	mainStr := main.String()
 	// No extra indent before the main pane — each row already leads with a
 	// 4-cell cursor column, which is enough gap from the rail divider.
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, mainStr)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, left, mainStr)
+	// The store switcher (Food ⟷ Instamart) sits above the rail/main split.
+	return m.verticalSwitcher() + body
 }
 
 func (m Menu) Init() tea.Cmd { return nil }
