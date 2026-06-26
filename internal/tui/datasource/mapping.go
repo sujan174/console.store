@@ -1,6 +1,8 @@
 package datasource
 
 import (
+	"sort"
+
 	"console.store/internal/broker/api"
 	"console.store/internal/catalog"
 )
@@ -32,6 +34,12 @@ func toOptionGroups(in []api.OptionGroup) []catalog.OptionGroup {
 		for j, ch := range g.Choices {
 			choices[j] = catalog.Choice{ID: ch.ID, Name: ch.Name, Price: ch.Price, InStock: ch.InStock}
 		}
+		// Sort choices cheapest-first WITHIN the group (stable, so equal-price
+		// choices keep Swiggy's order). Group order is untouched. Selection +
+		// cart-send key off choice ID, so re-ordering is display-only safe; the
+		// required single-choice default (Choices[0] / first in-stock) becomes
+		// the cheapest, which is the sensible default.
+		sort.SliceStable(choices, func(a, b int) bool { return choices[a].Price < choices[b].Price })
 		out[i] = catalog.OptionGroup{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Absolute: g.Absolute, Choices: choices}
 	}
 	return out
