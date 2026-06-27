@@ -37,20 +37,20 @@ func ShimmerWordmark(caps Caps, frame int) string {
 	return shimmerLines(asciiLogo, shimmerTopHex, shimmerBotHex, shimmerHighlight, frame)
 }
 
-// Gold shimmer palette for the STORE wordmark beneath CONSOLE.
+// Gold gradient for the STORE wordmark beneath CONSOLE.
 const (
-	storeTopHex    = "#e0af68" // gold
-	storeBotHex    = "#f7c873" // warm amber
-	storeHighlight = "#fff3d6" // warm near-white sheen
+	storeTopHex = "#e0af68" // gold
+	storeBotHex = "#f7c873" // warm amber
 )
 
-// ShimmerStore renders the compact "STORE" wordmark (half CONSOLE's height) with
-// the same sweeping sheen, in gold. Non-truecolor falls back to flat block-art.
-func ShimmerStore(caps Caps, frame int) string {
+// StoreWordmark renders the compact "STORE" wordmark (half CONSOLE's height) in a
+// static gold gradient — no sweeping shimmer. Non-truecolor falls back to flat
+// block-art.
+func StoreWordmark(caps Caps) string {
 	if !caps.Truecolor {
 		return strings.Join(storeLogo, "\n") + "\n"
 	}
-	return shimmerLines(storeLogo, storeTopHex, storeBotHex, storeHighlight, frame)
+	return GradientText(storeLogo, storeTopHex, storeBotHex)
 }
 
 // shimmerLines tints block-art with a top→bottom gradient and a highlight band

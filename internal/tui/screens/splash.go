@@ -154,10 +154,10 @@ func phraseBox(phrase string, frame, wmW int) []string {
 	return []string{lead + top.String(), lead + mid, lead + bot.String()}
 }
 
-// storeBlock renders the gold "STORE" block-art (with sweeping shimmer),
+// storeBlock renders the gold "STORE" block-art (static, no shimmer),
 // right-aligned to consoleW so it sits flush under CONSOLE's right edge.
-func storeBlock(caps render.Caps, frame, consoleW int) []string {
-	rows := strings.Split(strings.TrimRight(render.ShimmerStore(caps, frame), "\n"), "\n")
+func storeBlock(caps render.Caps, consoleW int) []string {
+	rows := strings.Split(strings.TrimRight(render.StoreWordmark(caps), "\n"), "\n")
 	sw := 0
 	for _, r := range rows {
 		if w := lipgloss.Width(r); w > sw {
@@ -173,16 +173,6 @@ func storeBlock(caps render.Caps, frame, consoleW int) []string {
 		rows[i] = lead + r
 	}
 	return rows
-}
-
-// letterspace inserts a single space between runes, giving short labels a
-// larger, more deliberate feel in the fixed terminal grid.
-func letterspace(s string) string {
-	parts := make([]string, 0, len(s))
-	for _, r := range s {
-		parts = append(parts, string(r))
-	}
-	return strings.Join(parts, " ")
 }
 
 // sshLine is the top prompt — the command the user just "ran" to arrive here.
@@ -256,7 +246,7 @@ func (s Splash) view() string {
 		}
 		// STORE rides along under CONSOLE so the banner height is stable through
 		// the reveal (no jump when it settles).
-		for _, l := range storeBlock(s.caps, s.frame, blockWidth(artLines)) {
+		for _, l := range storeBlock(s.caps, blockWidth(artLines)) {
 			lines = append(lines, ind+l)
 		}
 		lines = append(lines, "", tagline())
@@ -286,7 +276,7 @@ func (s Splash) view() string {
 	logoLines := strings.Split(strings.TrimRight(logo, "\n"), "\n")
 	// Gold "STORE" block-art sits under CONSOLE (right-aligned), with the same
 	// sweeping shimmer — the full brand reads CONSOLESTORE.
-	logoLines = append(logoLines, storeBlock(s.caps, sweep, blockWidth(logoLines))...)
+	logoLines = append(logoLines, storeBlock(s.caps, blockWidth(logoLines))...)
 
 	// The bordered splash phrase hugs the top-right of the wordmark
 	// (Minecraft-style), appearing once the logo has settled. A blank line below
