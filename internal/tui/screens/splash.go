@@ -191,21 +191,23 @@ func tagline() string {
 // block cursor. Enter goes to the shop; q quits.
 // When orderLabel is non-empty a gold "track order · {label}" row is inserted
 // between start and settings (sel 0 = start, sel 1 = track, sel 2 = settings).
-func (s Splash) prompt() string {
-	cur := " "
-	if (s.frame/9)%2 == 0 { // ~1s blink, matched to the rest of the app
-		cur = "▉"
+// splashBtn renders a home-menu item as a blue "button" that matches the
+// menu/restaurant selected-row look: a blue ▌ bar + selected-row background +
+// bright text when focused; a dim, aligned label otherwise.
+func splashBtn(label string, focused bool) string {
+	if focused {
+		return theme.CursorStyle.Render("▌") + theme.SelRowStyle.Render(" "+label+" ")
 	}
+	// Two-cell lead keeps idle labels aligned under the focused button's label.
+	return "  " + theme.DimStyle.Render(label)
+}
+
+func (s Splash) prompt() string {
 	ind := strings.Repeat(" ", promptIndent)
 
-	// line 1 — start the shop (the default selection).
-	startTick := theme.FaintStyle.Render("  ")
-	if s.sel == 0 {
-		startTick = theme.CursorStyle.Render("▸ ")
-	}
-	start := ind + theme.BrandStyle.Render("consolestore.in") + " " + startTick +
-		theme.DimStyle.Render("press ↵ to enter") +
-		theme.CursorStyle.Render(cur) +
+	// line 1 — start the shop: the brand prompt + a blue "enter" button.
+	start := ind + theme.BrandStyle.Render("consolestore.in") + " " +
+		splashBtn("press ↵ to enter", s.sel == 0) +
 		theme.FaintStyle.Render("    ·  q quit")
 
 	// Alignment pad: subsequent rows indent to sit under the prompt options.
@@ -217,28 +219,15 @@ func (s Splash) prompt() string {
 		settingsSel = 2
 	}
 
-	var lines []string
-	lines = append(lines, start)
+	lines := []string{start}
 
-	// line 2 (optional) — track order, gold-highlighted when selected.
+	// line 2 (optional) — track order (same blue button family).
 	if s.orderLabel != "" {
-		trackTick := theme.FaintStyle.Render("  ")
-		trackLabel := theme.GoldStyle.Render("track order · " + s.orderLabel)
-		if s.sel == 1 {
-			trackTick = theme.CursorStyle.Render("▸ ")
-			trackLabel = theme.GoldStyle.Bold(true).Render("track order · " + s.orderLabel)
-		}
-		lines = append(lines, ind+pad+trackTick+trackLabel)
+		lines = append(lines, ind+pad+splashBtn("track order · "+s.orderLabel, s.sel == 1))
 	}
 
-	// Final line — settings.
-	setTick := theme.FaintStyle.Render("  ")
-	setLabel := theme.DimStyle.Render("settings")
-	if s.sel == settingsSel {
-		setTick = theme.CursorStyle.Render("▸ ")
-		setLabel = theme.BrightStyle.Render("settings")
-	}
-	lines = append(lines, ind+pad+setTick+setLabel)
+	// final line — settings.
+	lines = append(lines, ind+pad+splashBtn("settings", s.sel == settingsSel))
 
 	return strings.Join(lines, "\n")
 }
