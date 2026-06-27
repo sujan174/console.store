@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -11,6 +12,7 @@ import (
 	"console.store/internal/catalog"
 	swiggysnap "console.store/internal/catalog/swiggy"
 	"console.store/internal/config"
+	"console.store/internal/localstore"
 	"console.store/internal/tui/datasource"
 	"console.store/internal/tui/render"
 	"console.store/internal/tui/screens"
@@ -459,5 +461,61 @@ func TestCartChipShowsLiveGrandTotal(t *testing.T) {
 	}
 	if !strings.Contains(chip, "2") {
 		t.Fatalf("chip should show live line count 2, got %q", chip)
+	}
+}
+
+// TestPlaceSavesActiveOrderAndConfirms verifies that OrderPlacedMsg persists the
+// active order to disk and transitions the model to scrConfirm.
+func TestPlaceSavesActiveOrderAndConfirms(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	m := checkoutModel(t)
+
+	nm, _ := m.Update(datasource.OrderPlacedMsg{
+		Order: api.Order{ID: "X1", Restaurant: "Blue Tokai", ETA: "55-65 mins", Total: 386},
+	})
+	m = nm.(Model)
+	if m.screen != scrConfirm {
+		t.Fatalf("screen=%v, want scrConfirm", m.screen)
+	}
+	if !m.hasActiveOrder {
+		t.Fatal("hasActiveOrder must be true after OrderPlacedMsg")
+	}
+	if m.activeOrder.OrderID != "X1" {
+		t.Fatalf("activeOrder.OrderID=%q, want X1", m.activeOrder.OrderID)
+	}
+	if _, ok, _ := localstore.LoadActiveOrder(); !ok {
+		t.Fatal("active order not saved to disk")
+	}
+}
+
+// TestConfirmAutoAdvancesToTracking verifies that enough ticks on scrConfirm
+// automatically advance the model to scrTracking.
+func TestConfirmAutoAdvancesToTracking(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	snap := swiggysnap.NewSnapshot()
+	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
+	be := &liveFake{}
+	m := New(render.Caps{},
+		WithLiveBackend(be, snap, "acct-1", ""),
+		WithSeededSnapshot(),
+	)
+	m.screen = scrConfirm
+	m.hasActiveOrder = true
+	m.activeOrder = localstore.ActiveOrder{
+		OrderID:    "ord-99",
+		Restaurant: "Blue Tokai",
+		AddrLine:   "HSR",
+		ETALoMin:   35,
+		ETAHiMin:   45,
+		PlacedAt:   time.Now().Unix(),
+	}
+	m.confirmTick = 0
+
+	for i := 0; i < 60; i++ {
+		nm, _ := m.Update(tickMsg(time.Now()))
+		m = nm.(Model)
+	}
+	if m.screen != scrTracking {
+		t.Fatalf("auto-advance failed, screen=%v (want scrTracking)", m.screen)
 	}
 }

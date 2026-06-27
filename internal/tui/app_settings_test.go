@@ -13,12 +13,14 @@ import (
 // Enter on Disconnect fires logout, which purges + re-enters the auth gate with
 // a fresh authorize URL (re-auth in place).
 func TestSplashSettingsDisconnectReauths(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // isolate from real active-order state
 	snap := swiggysnap.NewSnapshot()
 	m := New(render.Caps{},
 		WithLiveBackend(&liveFake{}, snap, "local", ""),
 		WithAuthFlow("", fakePoller{}),
 	)
-	m.homeSel = 1 // "settings"
+	// homeSel 1 = "settings" in the standard 2-item layout (no active order).
+	m.homeSel = 1
 
 	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = out.(Model)

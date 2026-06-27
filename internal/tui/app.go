@@ -17,6 +17,7 @@ import (
 	"console.store/internal/catalog/mem"
 	swiggysnap "console.store/internal/catalog/swiggy"
 	"console.store/internal/config"
+	"console.store/internal/localstore"
 	"console.store/internal/tui/components"
 	"console.store/internal/tui/datasource"
 	"console.store/internal/tui/render"
@@ -150,9 +151,13 @@ type Model struct {
 	homeSel      int    // selected home-menu item on the splash
 	lastEscFrame int    // frame of the previous Esc (for double-Esc home detection)
 
-	track     screens.Tracking
-	trackStep int
-	trackTick int
+	track          screens.Tracking
+	trackStep      int // legacy dummy step counter (kept so old View calls compile during migration)
+	trackTick      int
+	confirmTick    int                    // ticks since scrConfirm was entered; auto-advances to scrTracking
+	nowUnix        int64                  // updated each tick — passed to tracking View for live elapsed
+	activeOrder    localstore.ActiveOrder // last placed order (persisted)
+	hasActiveOrder bool                   // true when activeOrder is set and not yet delivered/cleared
 
 	cmdOpen bool
 	cmd     screens.CmdBar
@@ -237,6 +242,20 @@ func New(caps render.Caps, opts ...Option) Model {
 		m.homePending = true
 	}
 	m.menu = m.buildMenu()
+	m.nowUnix = time.Now().Unix()
+	// Load any persisted active order (crash-resume + splash liveness).
+	if ao, ok, err := localstore.LoadActiveOrder(); err == nil && ok {
+		now := m.nowUnix
+		expiry := ao.PlacedAt + int64(ao.ETAHiMin)*60 + 1800
+		if now < expiry {
+			m.activeOrder = ao
+			m.hasActiveOrder = true
+			m.splash = m.splash.WithOrder(fmt.Sprintf("%s · ~%d min", ao.Restaurant, ao.ETAHiMin))
+		} else {
+			// Expired — quietly clear it.
+			_ = localstore.ClearActiveOrder()
+		}
+	}
 	return m
 }
 
@@ -1128,11 +1147,16 @@ func (m Model) Init() tea.Cmd {
 	if m.needsAuth && m.authAutoOpen && m.authorizeURL != "" {
 		cmds = append(cmds, openBrowserCmd(m.authorizeURL))
 	}
+	// In live mode with a valid address, check active orders to refresh liveness.
+	if m.live && m.hasActiveOrder && m.backend != nil && m.addr.ID != "" {
+		cmds = append(cmds, datasource.LoadActiveOrdersCmd(m.backend, m.addr.ID))
+	}
 	return tea.Batch(cmds...)
 }
 
 // onTick advances time-based screen state; extended by later tasks.
-func (m Model) onTick() Model {
+func (m Model) onTick() (Model, tea.Cmd) {
+	m.nowUnix = time.Now().Unix()
 	if m.screen == scrSplash {
 		// Resolve the decode, then keep ticking so the idle shimmer animates.
 		if m.decodeStep < render.DecodeSteps {
@@ -1140,15 +1164,21 @@ func (m Model) onTick() Model {
 		}
 		m.splashTick++
 	}
-	if m.screen == scrTracking {
-		m.trackTick++
-		// Advance through all four timeline steps; the final step (== 4) marks the
-		// order delivered and reveals the thank-you note.
-		if m.trackTick%70 == 0 && m.trackStep < 4 {
-			m.trackStep++
+	if m.screen == scrConfirm {
+		m.confirmTick++
+		if m.confirmTick >= 42 && m.hasActiveOrder {
+			m.screen = scrTracking
+			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
 		}
 	}
-	return m
+	if m.screen == scrTracking {
+		m.trackTick++
+		// Re-poll every ~500 ticks (~30s at 60ms).
+		if m.trackTick%500 == 0 && m.hasActiveOrder {
+			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
+		}
+	}
+	return m, nil
 }
 
 // toSplash returns to the splash and replays the decode from the start. It is a
@@ -1300,14 +1330,15 @@ func (m Model) cartEta() string {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(tickMsg); ok {
 		m.frame++
-		m = m.onTick()
+		var tickCmd tea.Cmd
+		m, tickCmd = m.onTick()
 		// Native auth gate: poll the loopback callback. When the browser
 		// authorize completes, clear the gate and fire the live loads.
 		if m.needsAuth && m.authClient != nil && m.authFlowID != "" && m.authClient.Authorized(m.authFlowID) {
 			m.needsAuth = false
 			return m, tea.Batch(tick(), m.liveInitCmds())
 		}
-		return m, tick()
+		return m, tea.Batch(tick(), tickCmd)
 	}
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
 		m.w, m.h = ws.Width, ws.Height
@@ -1630,6 +1661,67 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lines = nil
 		m.cartRestaurant = ""
 		m.cartSection = ""
+		// Persist the active order for crash-resume + splash liveness.
+		etaLo, etaHi := localstore.ParseETAMinutes(eta)
+		placedAt := time.Now().Unix()
+		restaurant := dm.Order.Restaurant
+		if restaurant == "" {
+			restaurant = m.checkout.Place()
+		}
+		ao := localstore.ActiveOrder{
+			OrderID:    dm.Order.ID,
+			Restaurant: restaurant,
+			AddrLine:   m.addr.Line,
+			ETALoMin:   etaLo,
+			ETAHiMin:   etaHi,
+			Total:      dm.Order.Total,
+			PlacedAt:   placedAt,
+		}
+		_ = localstore.SaveActiveOrder(ao)
+		m.activeOrder = ao
+		m.hasActiveOrder = true
+		m.confirmTick = 0
+		m.track = screens.NewTracking(restaurant, m.addr.Line, dm.Order.ID, placedAt, etaLo, etaHi)
+		m.splash = m.splash.WithOrder(fmt.Sprintf("%s · ~%d min", restaurant, etaHi))
+		return m, nil
+	case datasource.TrackingPolledMsg:
+		if dm.Err != nil {
+			// Non-fatal: keep the current tracking view as-is.
+			return m, nil
+		}
+		m.track = m.track.WithLive(dm.Tracking.Status, dm.Tracking.ETA)
+		// Check for delivery: active==false AND (elapsed >5min OR status == delivered).
+		if !dm.Tracking.Active && m.hasActiveOrder {
+			elapsedSec := m.nowUnix - m.activeOrder.PlacedAt
+			_, delivered, _ := screens.StageFromStatus(dm.Tracking.Status)
+			if delivered || elapsedSec > 5*60 {
+				_ = localstore.ClearActiveOrder()
+				m.hasActiveOrder = false
+				m.splash = m.splash.WithOrder("")
+			}
+		}
+		return m, nil
+	case datasource.ActiveOrdersLoadedMsg:
+		if dm.Err != nil || !m.hasActiveOrder {
+			return m, nil
+		}
+		// Check whether our saved order is still in the active list.
+		found := false
+		for _, o := range dm.Orders {
+			if o.ID == m.activeOrder.OrderID {
+				found = true
+				break
+			}
+		}
+		elapsedSec := m.nowUnix - m.activeOrder.PlacedAt
+		if !found && elapsedSec > 5*60 {
+			_ = localstore.ClearActiveOrder()
+			m.hasActiveOrder = false
+			m.splash = m.splash.WithOrder("")
+		} else if found {
+			// Refresh the splash label (ETA text unchanged unless we have a live ETA).
+			m.splash = m.splash.WithOrder(fmt.Sprintf("%s · ~%d min", m.activeOrder.Restaurant, m.activeOrder.ETAHiMin))
+		}
 		return m, nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
@@ -1908,13 +2000,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.homeSel--
 				}
 			case "down", "j":
-				if m.homeSel < screens.ItemCount()-1 {
+				if m.homeSel < len(screens.HomeItems(m.hasActiveOrder))-1 {
 					m.homeSel++
 				}
 			default:
-				if screens.IsSettings(m.homeSel) {
+				if screens.IsSettings(m.homeSel, m.hasActiveOrder) {
 					m.settingsOpen = true
 					m.settingsSel = 0
+				} else if screens.IsTrack(m.homeSel, m.hasActiveOrder) {
+					// Restore tracking screen from persisted active order.
+					m.track = screens.NewTracking(
+						m.activeOrder.Restaurant,
+						m.activeOrder.AddrLine,
+						m.activeOrder.OrderID,
+						m.activeOrder.PlacedAt,
+						m.activeOrder.ETALoMin,
+						m.activeOrder.ETAHiMin,
+					)
+					m.screen = scrTracking
+					var pollCmd tea.Cmd
+					if m.backend != nil {
+						pollCmd = datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
+					}
+					return m, pollCmd
 				} else {
 					m.screen = scrMenu
 				}
@@ -2390,24 +2498,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case scrConfirm:
+			// Any key advances immediately to tracking (esc included — there's
+			// no going back to "unplace" an order).
+			m.screen = scrTracking
+			m.trackTick = 0
+			m.lines = nil
+			m.imLines = nil
+			m.cartRestaurant = ""
+			m.cartSection = ""
+			var pollCmd tea.Cmd
+			if m.hasActiveOrder && m.backend != nil {
+				pollCmd = datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
+			}
+			return m, pollCmd
+		case scrTracking:
 			switch k.String() {
-			case "enter", "t":
-				m.track = screens.NewTracking(m.checkout.Place(), m.addr.Line, m.checkout.OrderID())
-				m.screen = scrTracking
-				m.trackStep = 1
-				m.trackTick = 0
-				return m, nil
 			case "esc":
 				m.lines = nil
 				m.imLines = nil
 				m.cartRestaurant = ""
 				m.cartSection = ""
-				m.menu = m.buildMenu()
 				m.screen = scrMenu
+				m.menu = m.buildMenu()
 				return m, nil
-			}
-		case scrTracking:
-			if k.String() == "esc" {
+			case "d":
+				// Dismiss delivered order: clear persistence + go to menu.
+				_ = localstore.ClearActiveOrder()
+				m.hasActiveOrder = false
+				m.splash = m.splash.WithOrder("")
 				m.lines = nil
 				m.imLines = nil
 				m.cartRestaurant = ""
@@ -2653,7 +2771,7 @@ func (m Model) View() string {
 	case scrCheckout, scrConfirm:
 		body = m.checkout.WithPlacing(m.placingOrder).View(m.frame)
 	case scrTracking:
-		body = m.track.View(m.trackStep, m.frame, m.spin())
+		body = m.track.View(m.nowUnix, m.frame, m.spin())
 	case scrInstamart:
 		if m.live {
 			// Live vertical: show "coming soon" placeholder until Instamart is built.

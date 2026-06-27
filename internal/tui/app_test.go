@@ -493,17 +493,16 @@ func TestTrackingFlowAdvancesAndEscResets(t *testing.T) {
 		t.Fatalf("expected tracking screen:\n%s", m.View())
 	}
 
-	// drive ticks: trackStep should advance and cap at 4 (delivered).
-	// trackTick%70==0 triggers step advance; from step 1 to 4 needs 3*70=210 ticks.
-	for i := 0; i < 215; i++ {
+	// The tracking screen now uses nowUnix + placedAt for time-based progress.
+	// The mock path has placedAt=0 (epoch), so elapsed is enormous and the
+	// time engine immediately resolves to "est. delivered". Drive a tick to
+	// update nowUnix.
+	for i := 0; i < 5; i++ {
 		updated, _ := m.Update(tickMsg(time.Now()))
 		m = updated.(Model)
 	}
-	if m.trackStep != 4 {
-		t.Errorf("trackStep should cap at 4 (delivered), got %d", m.trackStep)
-	}
-	if !strings.Contains(m.View(), "enjoy your order") {
-		t.Errorf("delivered tracking should show the thank-you note:\n%s", m.View())
+	if !strings.Contains(m.View(), "delivered") {
+		t.Errorf("tracking should show delivered state:\n%s", m.View())
 	}
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
