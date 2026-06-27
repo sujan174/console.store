@@ -3,8 +3,10 @@ package swiggy
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -62,11 +64,11 @@ func TestPlaceFoodOrderSuppressesDuplicateAfter5xx(t *testing.T) {
 		case msg.Method == "notifications/initialized":
 			w.WriteHeader(202)
 		case msg.Params.Name == "get_food_orders":
-			encodeResult(w, msg.ID, map[string]any{"structuredContent": map[string]any{"orders": orders.Load()}})
+			encodeTextResult(w, msg.ID, ordersToText(orders.Load().([]map[string]any)))
 		case msg.Params.Name == "place_food_order":
 			atomic.AddInt32(&placeCalls, 1)
 			// the order "lands" server-side, then the response 503s
-			orders.Store([]map[string]any{{"orderId": 9, "status": "PLACED"}})
+			orders.Store([]map[string]any{{"orderId": "9", "status": "PLACED"}})
 			w.WriteHeader(503)
 			w.Write([]byte("gateway timeout"))
 		}
@@ -135,7 +137,7 @@ func TestPlaceFoodOrderPicksNewOrderNotPreExisting(t *testing.T) {
 	var placeCalls int32
 	var orders atomic.Value
 	// Pre-snapshot: one pre-existing order.
-	orders.Store([]map[string]any{{"orderId": 101, "status": "PLACED"}})
+	orders.Store([]map[string]any{{"orderId": "101", "status": "PLACED"}})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var msg struct {
 			ID     any    `json:"id"`
@@ -153,13 +155,13 @@ func TestPlaceFoodOrderPicksNewOrderNotPreExisting(t *testing.T) {
 		case msg.Method == "notifications/initialized":
 			w.WriteHeader(202)
 		case msg.Params.Name == "get_food_orders":
-			encodeResult(w, msg.ID, map[string]any{"structuredContent": map[string]any{"orders": orders.Load()}})
+			encodeTextResult(w, msg.ID, ordersToText(orders.Load().([]map[string]any)))
 		case msg.Params.Name == "place_food_order":
 			atomic.AddInt32(&placeCalls, 1)
 			// Order lands server-side; response 503s.
 			orders.Store([]map[string]any{
-				{"orderId": 101, "status": "PLACED"},
-				{"orderId": 202, "status": "PLACED"},
+				{"orderId": "101", "status": "PLACED"},
+				{"orderId": "202", "status": "PLACED"},
 			})
 			w.WriteHeader(503)
 			w.Write([]byte("gateway timeout"))
@@ -202,7 +204,7 @@ func TestPlaceFoodOrderGenuineFailureSurfacesError(t *testing.T) {
 			w.WriteHeader(202)
 		case msg.Params.Name == "get_food_orders":
 			// Always return empty — order never lands.
-			encodeResult(w, msg.ID, map[string]any{"structuredContent": map[string]any{"orders": []map[string]any{}}})
+			encodeTextResult(w, msg.ID, ordersToText([]map[string]any{}))
 		case msg.Params.Name == "place_food_order":
 			w.WriteHeader(503)
 			w.Write([]byte("upstream unavailable"))
@@ -219,6 +221,41 @@ func TestPlaceFoodOrderGenuineFailureSurfacesError(t *testing.T) {
 func decodeJSON(r *http.Request, v any) { json.NewDecoder(r.Body).Decode(v) }
 func encodeResult(w http.ResponseWriter, id any, result any) {
 	json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
+}
+
+// ordersToText converts a slice of order maps into the text format that
+// parseOrdersText expects, matching real Swiggy output.
+func ordersToText(orders []map[string]any) string {
+	if len(orders) == 0 {
+		return "No active orders found."
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Found %d active order:\n", len(orders))
+	for i, o := range orders {
+		id := fmt.Sprintf("%v", o["orderId"])
+		status := fmt.Sprintf("%v", o["status"])
+		restaurant := "Unknown"
+		if r, ok := o["restaurantName"]; ok {
+			restaurant = fmt.Sprintf("%v", r)
+		}
+		total := 0
+		if t, ok := o["totalAmount"]; ok {
+			total, _ = t.(int)
+		}
+		fmt.Fprintf(&sb, "%d. Order %s — %s | %s | ₹₹%d [ACTIVE]\n", i+1, id, restaurant, status, total)
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+// encodeTextResult wraps text in a MCP content block (no structuredContent).
+func encodeTextResult(w http.ResponseWriter, id any, text string) {
+	json.NewEncoder(w).Encode(map[string]any{
+		"jsonrpc": "2.0", "id": id,
+		"result": map[string]any{
+			"structuredContent": map[string]any{},
+			"content":           []map[string]any{{"type": "text", "text": text}},
+		},
+	})
 }
 
 func TestOrdersEnvelopeEmptyObject(t *testing.T) {

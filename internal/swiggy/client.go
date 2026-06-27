@@ -189,8 +189,9 @@ func parseToolResult(body []byte) (json.RawMessage, error) {
 		}
 		return nil, &MCPError{Code: -1, Message: msg}
 	}
-	if len(env.Result.StructuredContent) > 0 {
-		return env.Result.StructuredContent, nil
+	st := env.Result.StructuredContent
+	if len(st) > 0 && string(st) != "{}" && string(st) != "null" {
+		return st, nil
 	}
 	if len(env.Result.Content) > 0 {
 		return json.RawMessage(env.Result.Content[0].Text), nil

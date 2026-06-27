@@ -3,6 +3,8 @@ package swiggy
 import (
 	"context"
 	"encoding/json"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -179,19 +181,67 @@ func (c *Client) ApplyFoodCoupon(ctx context.Context, addressID, couponCode stri
 	}))
 }
 
+var reTrack = regexp.MustCompile(`^Order (\S+): (.+?) \((.+)\)(?: - ETA: (.+))?$`)
+var reOrderLine = regexp.MustCompile(`Order (\S+) — (.+?) \| (.+?) \| ₹+(\d+) \[ACTIVE\]`)
+
+func toolText(raw json.RawMessage, err error) (string, error) {
+	if err != nil {
+		return "", err
+	}
+	s := string(raw)
+	if s == "null" {
+		return "", nil
+	}
+	return strings.TrimSpace(s), nil
+}
+
+func parseTrackText(s string) Tracking {
+	s = strings.TrimSpace(s)
+	if strings.Contains(strings.ToLower(s), "no tracking information") {
+		return Tracking{Active: false}
+	}
+	m := reTrack.FindStringSubmatch(s)
+	if m == nil {
+		return Tracking{Active: false}
+	}
+	return Tracking{OrderID: m[1], Status: m[2], ETA: m[4], Active: true}
+}
+
+func parseOrdersText(s string) []Order {
+	var out []Order
+	for _, m := range reOrderLine.FindAllStringSubmatch(s, -1) {
+		total, _ := strconv.Atoi(m[4])
+		out = append(out, Order{ID: json.Number(m[1]), Restaurant: m[2], Status: m[3], Total: total})
+	}
+	return out
+}
+
 func (c *Client) GetFoodOrders(ctx context.Context, addressID string, activeOnly bool) ([]Order, error) {
-	env, err := decodeResult[ordersEnvelope](c.CallTool(ctx, "get_food_orders", map[string]any{
-		"addressId": addressID, "activeOnly": activeOnly,
-	}))
-	return env.orders(), err
+	txt, err := toolText(c.CallTool(ctx, "get_food_orders", map[string]any{"addressId": addressID, "activeOnly": activeOnly}))
+	if err != nil {
+		return nil, err
+	}
+	return parseOrdersText(txt), nil
 }
 
 func (c *Client) GetFoodOrderDetails(ctx context.Context, orderID string) (Order, error) {
-	return decodeResult[Order](c.CallTool(ctx, "get_food_order_details", map[string]any{"orderId": orderID}))
+	txt, err := toolText(c.CallTool(ctx, "get_food_order_details", map[string]any{"orderId": orderID}))
+	if err != nil {
+		return Order{}, err
+	}
+	os := parseOrdersText(txt)
+	if len(os) > 0 {
+		return os[0], nil
+	}
+	return Order{ID: json.Number(orderID)}, nil
 }
 
 func (c *Client) TrackFoodOrder(ctx context.Context, orderID string) (Tracking, error) {
-	return decodeResult[Tracking](c.CallTool(ctx, "track_food_order", map[string]any{"orderId": orderID}))
+	txt, err := toolText(c.CallTool(ctx, "track_food_order", map[string]any{"orderId": orderID}))
+	if err != nil {
+		return Tracking{}, err
+	}
+	return parseTrackText(txt), nil
 }
 
 // GetFoodDeliveryStatus calls Swiggy's order-success live-ETA widget tool. The

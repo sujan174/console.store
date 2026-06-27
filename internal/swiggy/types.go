@@ -293,9 +293,10 @@ type Order struct {
 }
 
 type Tracking struct {
-	OrderID string `json:"orderId"`
-	Status  string `json:"status"`
-	ETA     string `json:"eta"`
+	OrderID string
+	Status  string
+	ETA     string
+	Active  bool
 }
 
 type Product struct {

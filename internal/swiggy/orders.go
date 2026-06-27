@@ -53,13 +53,11 @@ func rankUsuals(orders []Order, limit int) []usualRank {
 // Restaurant via search_restaurants(name) (first match); usuals that don't
 // resolve are dropped (never a dead row).
 func (c *Client) UsualRestaurants(ctx context.Context, addressID string) ([]Restaurant, error) {
-	env, err := decodeResult[ordersEnvelope](c.CallTool(ctx, "get_food_orders", map[string]any{
-		"addressId": addressID, "activeOnly": false,
-	}))
+	orders, err := c.GetFoodOrders(ctx, addressID, false)
 	if err != nil {
 		return nil, err
 	}
-	ranks := rankUsuals(env.orders(), 5)
+	ranks := rankUsuals(orders, 5)
 	var out []Restaurant
 	for _, r := range ranks {
 		matches, err := c.SearchRestaurants(ctx, addressID, r.name, 0)
