@@ -170,7 +170,13 @@ func (s *Service) PlaceOrder(ctx context.Context, accountID, addressID string) (
 
 // ActiveFoodOrders returns the account's currently-active food orders.
 func (s *Service) ActiveFoodOrders(ctx context.Context, accountID, addressID string) ([]api.Order, error) {
-	os, err := s.foodClient(accountID).GetFoodOrders(ctx, addressID, true)
+	return s.FoodOrders(ctx, accountID, addressID, true)
+}
+
+// FoodOrders returns the account's food orders (all history when activeOnly is
+// false). Newest-first per Swiggy.
+func (s *Service) FoodOrders(ctx context.Context, accountID, addressID string, activeOnly bool) ([]api.Order, error) {
+	os, err := s.foodClient(accountID).GetFoodOrders(ctx, addressID, activeOnly)
 	if err != nil {
 		return nil, err
 	}

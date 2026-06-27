@@ -96,10 +96,26 @@ func run() error {
 	log.Printf("CAPTURE start — %d address(es), every %s. Ctrl-C to stop.", len(addrs), interval)
 	fmt.Fprintf(os.Stderr, "capturing live order tracking every %s — Ctrl-C to stop\n", interval)
 
+	// CONSOLE_CAPTURE_ORDER_ID forces direct probing of a known order id (the
+	// activeOnly=true filter can return {} even with a live order).
+	forceID := os.Getenv("CONSOLE_CAPTURE_ORDER_ID")
+
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	for {
 		for _, a := range addrs {
+			if os.Getenv("CONSOLE_CAPTURE_HISTORY") == "1" {
+				hist, err := svc.FoodOrders(ctx, acct, a.ID, false)
+				log.Printf("CAPTURE history addr=%s n=%d err=%v", a.ID, len(hist), err)
+				for _, o := range hist {
+					log.Printf("CAPTURE histOrder id=%s status=%q restaurant=%q eta=%q total=%d", o.ID, o.Status, o.Restaurant, o.ETA, o.Total)
+				}
+			}
+			if forceID != "" {
+				log.Printf("CAPTURE forced order id=%s addr=%s", forceID, a.ID)
+				svc.CaptureTracking(ctx, acct, a.ID, forceID)
+				continue
+			}
 			orders, err := svc.ActiveFoodOrders(ctx, acct, a.ID)
 			if err != nil {
 				log.Printf("CAPTURE active-orders err addr=%s: %v", a.ID, err)
