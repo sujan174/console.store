@@ -46,3 +46,6 @@ Thumbs.db
 
 # SDD orchestration scratch
 .superpowers/
+
+# Dev-process docs (specs/plans) — keep local, out of the repo
+docs/superpowers/
