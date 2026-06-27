@@ -24,6 +24,19 @@ func debugSwiggyReq(tool string, args map[string]any) {
 	log.Printf("SWIGGY-DEBUG → tool=%s args=%s", tool, string(b))
 }
 
+// debugSwiggyBody logs the FULL raw HTTP response envelope (before parsing) so
+// we can see content/text blocks + the initialize `instructions` field.
+func debugSwiggyBody(label string, body []byte) {
+	if !swiggyDebugOn() {
+		return
+	}
+	s := string(body)
+	if len(s) > 200000 {
+		s = s[:200000] + "…(trunc)"
+	}
+	log.Printf("SWIGGY-DEBUG ⇊ %s body=%s", label, s)
+}
+
 // debugSwiggy, when CONSOLE_DEBUG_SWIGGY=1, logs the raw parsed result of every
 // tool call. Used to harvest real Swiggy response schemas against a live account
 // (e.g. the order/tracking shapes that only appear after a real order).
@@ -96,6 +109,7 @@ func (c *Client) ensureSession(ctx context.Context, bearer string) (string, erro
 	if e := mapStatus(res.Status, res.Body); e != nil {
 		return "", e
 	}
+	debugSwiggyBody("initialize", res.Body)
 	// best-effort initialized notification
 	_, _ = rpc(ctx, c.http, c.base, bearer, res.SessionID, map[string]any{
 		"jsonrpc": "2.0", "method": "notifications/initialized",
@@ -138,6 +152,7 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 		}
 		return nil, e
 	}
+	debugSwiggyBody(name, res.Body)
 	raw, perr := parseToolResult(res.Body)
 	debugSwiggy(name, raw, perr)
 	return raw, perr

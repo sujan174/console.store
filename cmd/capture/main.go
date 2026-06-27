@@ -86,6 +86,14 @@ func run() error {
 	if len(addrs) == 0 {
 		return fmt.Errorf("no addresses on the account")
 	}
+	log.Printf("CAPTURE token OK — get_addresses returned %d address(es)", len(addrs))
+
+	// Liveness probe: confirm search_restaurants works (token valid + food MCP live).
+	if rs, q, e := svc.Restaurants(ctx, acct, addrs[0].ID, "coffee", true); e != nil {
+		log.Printf("CAPTURE search_restaurants ERR: %v", e)
+	} else {
+		log.Printf("CAPTURE search_restaurants OK — %d results (effective query %q)", len(rs), q)
+	}
 
 	interval := 20 * time.Second
 	if v := os.Getenv("CONSOLE_CAPTURE_INTERVAL"); v != "" {
