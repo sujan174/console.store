@@ -205,25 +205,23 @@ func (s Splash) prompt() string {
 	ind := strings.Repeat(" ", promptIndent)
 
 	// All home items are left-aligned blue buttons at the same column.
-	// line 1 — start the shop (+ a faint quit hint).
-	start := ind + splashBtn("enter store", s.sel == 0) +
-		theme.FaintStyle.Render("    ·  q quit")
-
 	// Settings index depends on whether the track row is present.
 	settingsSel := 1
 	if s.orderLabel != "" {
 		settingsSel = 2
 	}
 
-	lines := []string{start}
+	lines := []string{ind + splashBtn("enter store", s.sel == 0)}
 
-	// line 2 (optional) — track order (same blue button family).
+	// track order (optional) — same blue button family.
 	if s.orderLabel != "" {
 		lines = append(lines, ind+splashBtn("track order · "+s.orderLabel, s.sel == 1))
 	}
 
-	// final line — settings.
 	lines = append(lines, ind+splashBtn("settings", s.sel == settingsSel))
+
+	// A faint quit hint sits one blank line below all the buttons.
+	lines = append(lines, "", strings.Repeat(" ", promptIndent+2)+theme.FaintStyle.Render("q quit"))
 
 	return strings.Join(lines, "\n")
 }
