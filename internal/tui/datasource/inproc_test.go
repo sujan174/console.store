@@ -85,4 +85,12 @@ func TestInProcRestaurantsVsSearchOrganic(t *testing.T) {
 	}
 }
 
+func (f *fakeService) TrackOrder(_ context.Context, a, _ string) (api.Tracking, error) {
+	f.gotAccount = a
+	return api.Tracking{}, nil
+}
+func (f *fakeService) ActiveFoodOrders(_ context.Context, a, _ string) ([]api.Order, error) {
+	f.gotAccount = a
+	return nil, nil
+}
 func (f *fakeService) Logout(_ context.Context, a string) error { f.gotAccount = a; return nil }

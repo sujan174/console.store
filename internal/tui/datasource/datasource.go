@@ -33,6 +33,8 @@ type Backend interface {
 	GetCart(addressID, restaurantName string) (api.Cart, error)
 	ClearCart() error
 	PlaceOrder(addressID string) (api.Order, error)
+	TrackOrder(orderID string) (api.Tracking, error)
+	ActiveOrders(addressID string) ([]api.Order, error)
 	Logout() error
 }
 
@@ -74,6 +76,18 @@ type (
 	// LoggedOutMsg reports the result of disconnecting the Swiggy account
 	// (purging the stored token). Err is non-nil if the purge failed.
 	LoggedOutMsg struct{ Err error }
+	// TrackingPolledMsg carries the live status + ETA for an order, or an error
+	// if the poll failed.
+	TrackingPolledMsg struct {
+		Tracking api.Tracking
+		Err      error
+	}
+	// ActiveOrdersLoadedMsg carries the account's currently-active orders, or an
+	// error if the fetch failed.
+	ActiveOrdersLoadedMsg struct {
+		Orders []api.Order
+		Err    error
+	}
 )
 
 // Logout purges the stored Swiggy token (disconnects the account).
@@ -216,5 +230,22 @@ func PlaceOrderCmd(b Backend, snap *swiggysnap.Snapshot, addressID string) tea.C
 	return func() tea.Msg {
 		order, err := b.PlaceOrder(addressID)
 		return OrderPlacedMsg{Order: order, Err: err}
+	}
+}
+
+// PollTrackingCmd fetches the live status + ETA for an order.
+func PollTrackingCmd(b Backend, orderID string) tea.Cmd {
+	return func() tea.Msg {
+		t, err := b.TrackOrder(orderID)
+		return TrackingPolledMsg{Tracking: t, Err: err}
+	}
+}
+
+// LoadActiveOrdersCmd fetches the account's currently-active orders (the real
+// "is an order live?" signal for the splash).
+func LoadActiveOrdersCmd(b Backend, addressID string) tea.Cmd {
+	return func() tea.Msg {
+		os, err := b.ActiveOrders(addressID)
+		return ActiveOrdersLoadedMsg{Orders: os, Err: err}
 	}
 }

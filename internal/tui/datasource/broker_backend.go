@@ -19,6 +19,8 @@ type brokerRPC interface {
 	GetCart(accountID, addressID, restaurantName string) (api.Cart, error)
 	ClearCart(accountID string) error
 	PlaceOrder(accountID, addressID string) (api.Order, error)
+	TrackOrder(accountID, orderID string) (api.Tracking, error)
+	ActiveFoodOrders(accountID, addressID string) ([]api.Order, error)
 	Logout(accountID string) error
 }
 
@@ -109,6 +111,16 @@ func (b *BrokerBackend) ClearCart() error {
 func (b *BrokerBackend) PlaceOrder(addressID string) (api.Order, error) {
 	r, err := b.rpc.PlaceOrder(b.accountID, addressID)
 	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) TrackOrder(orderID string) (api.Tracking, error) {
+	t, err := b.rpc.TrackOrder(b.accountID, orderID)
+	return t, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) ActiveOrders(addressID string) ([]api.Order, error) {
+	o, err := b.rpc.ActiveFoodOrders(b.accountID, addressID)
+	return o, wrapAuthErr(err)
 }
 
 func (b *BrokerBackend) Logout() error { return b.rpc.Logout(b.accountID) }

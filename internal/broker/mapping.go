@@ -87,6 +87,10 @@ func mapCartItems(in []api.CartItem) []swiggy.CartItem {
 	return out
 }
 
+func mapTracking(t swiggy.Tracking) api.Tracking {
+	return api.Tracking{OrderID: t.OrderID, Status: t.Status, ETA: t.ETA, Active: t.Active}
+}
+
 func mapOptions(in []swiggy.OptionGroup) []api.OptionGroup {
 	out := make([]api.OptionGroup, len(in))
 	for i, g := range in {

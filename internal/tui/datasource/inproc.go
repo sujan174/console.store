@@ -20,6 +20,8 @@ type inprocService interface {
 	GetCart(ctx context.Context, accountID, addressID, restaurantName string) (api.Cart, error)
 	ClearCart(ctx context.Context, accountID string) error
 	PlaceOrder(ctx context.Context, accountID, addressID string) (api.Order, error)
+	TrackOrder(ctx context.Context, accountID, orderID string) (api.Tracking, error)
+	ActiveFoodOrders(ctx context.Context, accountID, addressID string) ([]api.Order, error)
 	Logout(ctx context.Context, accountID string) error
 }
 
@@ -74,4 +76,12 @@ func (p InProc) ClearCart(accountID string) error {
 
 func (p InProc) PlaceOrder(accountID, addressID string) (api.Order, error) {
 	return p.svc.PlaceOrder(context.Background(), accountID, addressID)
+}
+
+func (p InProc) TrackOrder(accountID, orderID string) (api.Tracking, error) {
+	return p.svc.TrackOrder(context.Background(), accountID, orderID)
+}
+
+func (p InProc) ActiveFoodOrders(accountID, addressID string) ([]api.Order, error) {
+	return p.svc.ActiveFoodOrders(context.Background(), accountID, addressID)
 }

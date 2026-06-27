@@ -16,6 +16,8 @@ type fakeBackend struct {
 	menu        api.Menu
 	cart        api.Cart
 	order       api.Order
+	tracking    api.Tracking
+	orders      []api.Order
 	err         error
 	updateCalls int
 	placeCalls  int
@@ -148,4 +150,24 @@ func TestLoadUsualsCachesUnderUsualsKey(t *testing.T) {
 	}
 }
 
-func (f *fakeBackend) Logout() error { return f.err }
+func (f *fakeBackend) TrackOrder(string) (api.Tracking, error)  { return f.tracking, f.err }
+func (f *fakeBackend) ActiveOrders(string) ([]api.Order, error) { return f.orders, f.err }
+func (f *fakeBackend) Logout() error                            { return f.err }
+
+func TestPollTrackingCmd(t *testing.T) {
+	be := &fakeBackend{tracking: api.Tracking{OrderID: "X1", Status: "Out for delivery", ETA: "11 mins", Active: true}}
+	msg := PollTrackingCmd(be, "X1")()
+	tp, ok := msg.(TrackingPolledMsg)
+	if !ok || tp.Tracking.Status != "Out for delivery" || tp.Tracking.ETA != "11 mins" {
+		t.Fatalf("got %#v", msg)
+	}
+}
+
+func TestLoadActiveOrdersCmd(t *testing.T) {
+	be := &fakeBackend{orders: []api.Order{{ID: "O1", Status: "active"}}}
+	msg := LoadActiveOrdersCmd(be, "addr1")()
+	m, ok := msg.(ActiveOrdersLoadedMsg)
+	if !ok || m.Err != nil || len(m.Orders) != 1 || m.Orders[0].ID != "O1" {
+		t.Fatalf("got %#v", msg)
+	}
+}

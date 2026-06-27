@@ -53,6 +53,8 @@ func (f *railFake) UpdateCart(string, string, string, []api.CartItem) (api.Cart,
 func (f *railFake) GetCart(string, string) (api.Cart, error) { return api.Cart{}, f.err }
 func (f *railFake) ClearCart() error                         { return f.err }
 func (f *railFake) PlaceOrder(string) (api.Order, error)     { return api.Order{}, f.err }
+func (f *railFake) TrackOrder(string) (api.Tracking, error)  { return api.Tracking{}, f.err }
+func (f *railFake) ActiveOrders(string) ([]api.Order, error) { return nil, f.err }
 
 // buildRailModel constructs a seeded live Model with chips and canned snapshot data.
 func buildRailModel(t *testing.T) Model {

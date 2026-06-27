@@ -151,6 +151,14 @@ func TestBrokerBackendNonAuthErrPassedThrough(t *testing.T) {
 	}
 }
 
+func (f *fakeRPC) TrackOrder(accountID, orderID string) (api.Tracking, error) {
+	f.lastAccount = accountID
+	return api.Tracking{}, f.err
+}
+func (f *fakeRPC) ActiveFoodOrders(accountID, addressID string) ([]api.Order, error) {
+	f.lastAccount = accountID
+	return nil, f.err
+}
 func (f *fakeRPC) Logout(accountID string) error { f.lastAccount = accountID; return nil }
 
 func TestBrokerBackendLogoutForwardsAccount(t *testing.T) {

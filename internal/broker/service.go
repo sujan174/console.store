@@ -168,6 +168,16 @@ func (s *Service) PlaceOrder(ctx context.Context, accountID, addressID string) (
 	return mapOrder(o), nil
 }
 
+// TrackOrder returns the live status + ETA for an order (read-only; not gated
+// by live-orders arming).
+func (s *Service) TrackOrder(ctx context.Context, accountID, orderID string) (api.Tracking, error) {
+	t, err := s.foodClient(accountID).TrackFoodOrder(ctx, orderID)
+	if err != nil {
+		return api.Tracking{}, err
+	}
+	return mapTracking(t), nil
+}
+
 // ActiveFoodOrders returns the account's currently-active food orders.
 func (s *Service) ActiveFoodOrders(ctx context.Context, accountID, addressID string) ([]api.Order, error) {
 	return s.FoodOrders(ctx, accountID, addressID, true)

@@ -40,6 +40,8 @@ func (f *liveFake) UpdateCart(string, string, string, []api.CartItem) (api.Cart,
 func (f *liveFake) GetCart(string, string) (api.Cart, error) { return api.Cart{}, f.err }
 func (f *liveFake) ClearCart() error                         { return f.err }
 func (f *liveFake) PlaceOrder(string) (api.Order, error)     { return api.Order{}, f.err }
+func (f *liveFake) TrackOrder(string) (api.Tracking, error)  { return api.Tracking{}, f.err }
+func (f *liveFake) ActiveOrders(string) ([]api.Order, error) { return nil, f.err }
 
 func TestMockPathUnaffected(t *testing.T) {
 	m := New(render.Caps{})
