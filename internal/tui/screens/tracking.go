@@ -8,23 +8,47 @@ import (
 )
 
 // Tracking is the live order-tracking screen: an animated route map, a step
-// timeline, ETA, and the rider line (design reference lines 388-423).
+// timeline, ETA (live or time-estimated), and a rider contact note.
 type Tracking struct {
-	place    string
-	addrLine string
-	orderID  string
+	place, addrLine, orderID string
+	placedAt                 int64
+	etaLo, etaHi             int
+	liveStatus, liveETA      string
 }
 
-func NewTracking(place, addrLine, orderID string) Tracking {
-	return Tracking{place: place, addrLine: addrLine, orderID: orderID}
+// NewTracking constructs a Tracking screen with order metadata and ETA bounds.
+func NewTracking(place, addrLine, orderID string, placedAt int64, etaLo, etaHi int) Tracking {
+	return Tracking{
+		place:    place,
+		addrLine: addrLine,
+		orderID:  orderID,
+		placedAt: placedAt,
+		etaLo:    etaLo,
+		etaHi:    etaHi,
+	}
 }
 
-// trackSteps are the timeline rows. The order is "delivered" once trackStep
-// reaches len(trackSteps) (all four marked done).
-var trackSteps = []string{"order confirmed", "preparing …", "out for delivery", "delivered"}
+// WithLive returns a copy of t with the live status and ETA override applied.
+func (t Tracking) WithLive(status, eta string) Tracking {
+	t.liveStatus = status
+	t.liveETA = eta
+	return t
+}
 
-// trackQuips are the rider status quips indexed by min(trackStep,3).
-var trackQuips = []string{"picking up your order", "weaving through traffic", "almost at your gate", "knock knock"}
+// Resolve picks the live status when available, else the time fallback.
+func (t Tracking) Resolve(nowUnix int64) TrackState {
+	if st, delivered, ok := StageFromStatus(t.liveStatus); ok {
+		eta := t.liveETA
+		if eta == "" {
+			eta = "arriving"
+		}
+		if delivered {
+			eta = "delivered"
+		}
+		return TrackState{Stage: st, Delivered: delivered, ETAText: eta, Estimated: false}
+	}
+	return TrackProgressByTime(t.placedAt, t.etaLo, t.etaHi, nowUnix)
+}
 
 // wheelSpin are the rotating wheel glyphs (quarter-turns) cycled per frame so
 // the courier's wheels appear to spin.
@@ -39,7 +63,7 @@ func routeScene(step, frame, w int) []string {
 		w = 16
 	}
 	const spriteW = 5
-	delivered := step >= len(trackSteps)
+	delivered := step >= len(TrackStages)
 
 	pct := step
 	if pct > 3 {
@@ -80,12 +104,14 @@ func routeScene(step, frame, w int) []string {
 	return []string{head, body, road}
 }
 
-func (t Tracking) View(trackStep, frame int, spin string) string {
+// View renders the full tracking screen. nowUnix is the current Unix timestamp
+// (clock as parameter for testability). frame and spin drive the animation.
+func (t Tracking) View(nowUnix int64, frame int, spin string) string {
+	ts := t.Resolve(nowUnix)
 	var b strings.Builder
 	w := components.ContentWidth()
-	delivered := trackStep >= len(trackSteps)
 
-	// header: ← tracking · {orderId}  …  {place}
+	// header: ← tracking · {orderID}  …  {place}
 	b.WriteString("  " + justify(
 		theme.PriceStyle.Render("← tracking · "+t.orderID),
 		theme.DimStyle.Render(t.place), w) + "\n")
@@ -98,21 +124,26 @@ func (t Tracking) View(trackStep, frame int, spin string) string {
 		theme.PriceStyle.Render(t.addrLine), w) + "\n")
 
 	// animated courier scene (3 rows)
-	for _, line := range routeScene(trackStep, frame, w) {
+	for _, line := range routeScene(ts.Stage, frame, w) {
 		b.WriteString("  " + line + "\n")
 	}
 	b.WriteString("\n")
 
-	// step rows
-	for i, label := range trackSteps {
+	// step rows from TrackStages: i<Stage ● done, i==Stage spinner, else ○;
+	// append " (est.)" to the active row label when ts.Estimated.
+	for i, label := range TrackStages {
 		var mark, text string
+		activeLabel := label
+		if i == ts.Stage && ts.Estimated {
+			activeLabel = label + " (est.)"
+		}
 		switch {
-		case i < trackStep:
+		case i < ts.Stage:
 			mark = theme.GreenStyle.Render("●")
 			text = theme.TextStyle.Render(label)
-		case i == trackStep:
+		case i == ts.Stage:
 			mark = theme.GoldStyle.Render(spin)
-			text = theme.BrightStyle.Render(label)
+			text = theme.BrightStyle.Render(activeLabel)
 		default:
 			mark = theme.FaintStyle.Render("○")
 			text = theme.DimStyle.Render(label)
@@ -121,18 +152,28 @@ func (t Tracking) View(trackStep, frame int, spin string) string {
 	}
 	b.WriteString("\n")
 
-	if delivered {
-		// status + the delivered note.
-		b.WriteString("  " + theme.DimStyle.Render(padTo("status", 7)) + theme.GreenStyle.Render("delivered ✓") + "\n")
-		b.WriteString("  " + theme.DimStyle.Render("rider · Imran · KA 05 1234 · ") + theme.GreenStyle.Render("handed over") + "\n\n")
-		b.WriteString("  " + theme.GreenStyle.Bold(true).Render("enjoy your order!") + "\n")
-		b.WriteString("  " + theme.DimStyle.Render("rate the delivery & rider later in the app when possible — thank you!") + "\n\n")
+	if ts.Delivered {
+		if ts.Estimated {
+			// Time-based delivered estimate — can't confirm yet.
+			b.WriteString("  " + theme.DimStyle.Render(padTo("status", 7)) + theme.GoldStyle.Render("est. delivered") + "\n")
+			b.WriteString("  " + theme.DimStyle.Render("confirm delivery & contact rider → open the Swiggy app") + "\n\n")
+		} else {
+			// Live confirmed delivery.
+			b.WriteString("  " + theme.DimStyle.Render(padTo("status", 7)) + theme.GreenStyle.Render("delivered ✓") + "\n")
+			b.WriteString("  " + theme.DimStyle.Render("rider contact & live map → open the Swiggy app") + "\n\n")
+			b.WriteString("  " + theme.GreenStyle.Bold(true).Render("enjoy your order!") + "\n")
+			b.WriteString("  " + theme.DimStyle.Render("rate the delivery in the Swiggy app — thank you!") + "\n\n")
+		}
 	} else {
-		b.WriteString("  " + theme.DimStyle.Render(padTo("ETA", 7)) + theme.GreenStyle.Render("~32 min") + "\n")
-		quip := trackQuips[min(trackStep, len(trackQuips)-1)]
-		b.WriteString("  " + theme.DimStyle.Render("rider · Imran · KA 05 1234 · ") + theme.GreenStyle.Render(quip) + "\n\n")
+		// ETA line: ts.ETAText; when !Estimated also show verbatim liveStatus.
+		etaLine := ts.ETAText
+		if !ts.Estimated && t.liveStatus != "" {
+			etaLine = t.liveStatus + " · " + ts.ETAText
+		}
+		b.WriteString("  " + theme.DimStyle.Render(padTo("ETA", 7)) + theme.GreenStyle.Render(etaLine) + "\n")
+		b.WriteString("  " + theme.DimStyle.Render("rider contact & live map → open the Swiggy app") + "\n\n")
 	}
 
-	b.WriteString(components.Hint("esc", "back to menu"))
+	b.WriteString(components.Hint("d", "done", "esc", "back to menu"))
 	return b.String()
 }
