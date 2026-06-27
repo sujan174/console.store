@@ -154,16 +154,25 @@ func phraseBox(phrase string, frame, wmW int) []string {
 	return []string{lead + top.String(), lead + mid, lead + bot.String()}
 }
 
-// brandUnderE renders the gold "store.in" mark right-aligned to the wordmark's
-// width so it sits beneath the trailing "E" of CONSOLE, on its own line. It is
-// bold and letter-spaced to read a little larger than the surrounding copy.
-func brandUnderE(logoLines []string) string {
-	brand := theme.GoldStyle.Bold(true).Render(letterspace("store.in"))
-	pad := blockWidth(logoLines) - lipgloss.Width(brand)
+// storeBlock renders the gold "STORE" block-art (with sweeping shimmer),
+// right-aligned to consoleW so it sits flush under CONSOLE's right edge.
+func storeBlock(caps render.Caps, frame, consoleW int) []string {
+	rows := strings.Split(strings.TrimRight(render.ShimmerStore(caps, frame), "\n"), "\n")
+	sw := 0
+	for _, r := range rows {
+		if w := lipgloss.Width(r); w > sw {
+			sw = w
+		}
+	}
+	pad := consoleW - sw
 	if pad < 0 {
 		pad = 0
 	}
-	return strings.Repeat(" ", pad) + brand
+	lead := strings.Repeat(" ", pad)
+	for i, r := range rows {
+		rows[i] = lead + r
+	}
+	return rows
 }
 
 // letterspace inserts a single space between runes, giving short labels a
@@ -245,6 +254,11 @@ func (s Splash) view() string {
 		for _, l := range artLines {
 			lines = append(lines, ind+l)
 		}
+		// STORE rides along under CONSOLE so the banner height is stable through
+		// the reveal (no jump when it settles).
+		for _, l := range storeBlock(s.caps, s.frame, blockWidth(artLines)) {
+			lines = append(lines, ind+l)
+		}
 		lines = append(lines, "", tagline())
 		padRight(lines, blockWidth(lines))
 		return strings.Join(lines, "\n")
@@ -253,6 +267,13 @@ func (s Splash) view() string {
 	// The wordmark carries the signature light-sweep shimmer, recomputed each
 	// frame. The Kitty PNG path can't be per-column re-tinted (and re-encoding a
 	// bitmap every tick would be wasteful), so it uses the cached static bloom.
+	// Phase the sweep so its first pass starts at the left right as the reveal
+	// finishes (splashTick == DecodeSteps -> shimmer frame 0). Shared by CONSOLE
+	// and the STORE block below so their sheens travel in sync.
+	sweep := s.splashTick - render.DecodeSteps
+	if sweep < 0 {
+		sweep = 0
+	}
 	var logo string
 	if s.caps.KittyGraphics && render.KittyFlag {
 		logo = s.logoCache
@@ -260,19 +281,12 @@ func (s Splash) view() string {
 			logo = render.Logo(s.caps, 64)
 		}
 	} else {
-		// Phase the sweep so its first pass starts at the left right as the
-		// reveal finishes (splashTick == DecodeSteps -> shimmer frame 0).
-		sweep := s.splashTick - render.DecodeSteps
-		if sweep < 0 {
-			sweep = 0
-		}
 		logo = render.ShimmerWordmark(s.caps, sweep)
 	}
 	logoLines := strings.Split(strings.TrimRight(logo, "\n"), "\n")
-	// Gold "store.in" tucks onto its own line under the trailing "E" of the
-	// wordmark — bold + letter-spaced so it reads a touch larger than the
-	// tagline below it.
-	logoLines = append(logoLines, brandUnderE(logoLines))
+	// Gold "STORE" block-art sits under CONSOLE (right-aligned), with the same
+	// sweeping shimmer — the full brand reads CONSOLESTORE.
+	logoLines = append(logoLines, storeBlock(s.caps, sweep, blockWidth(logoLines))...)
 
 	// The bordered splash phrase hugs the top-right of the wordmark
 	// (Minecraft-style), appearing once the logo has settled. A blank line below

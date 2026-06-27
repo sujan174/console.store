@@ -34,23 +34,44 @@ func ShimmerWordmark(caps Caps, frame int) string {
 	if !caps.Truecolor {
 		return strings.Join(asciiLogo, "\n") + "\n"
 	}
+	return shimmerLines(asciiLogo, shimmerTopHex, shimmerBotHex, shimmerHighlight, frame)
+}
 
+// Gold shimmer palette for the STORE wordmark beneath CONSOLE.
+const (
+	storeTopHex    = "#e0af68" // gold
+	storeBotHex    = "#f7c873" // warm amber
+	storeHighlight = "#fff3d6" // warm near-white sheen
+)
+
+// ShimmerStore renders the "STORE" block wordmark with the same sweeping sheen
+// as CONSOLE, in a gold gradient. Non-truecolor falls back to flat block-art.
+func ShimmerStore(caps Caps, frame int) string {
+	if !caps.Truecolor {
+		return strings.Join(storeLogo, "\n") + "\n"
+	}
+	return shimmerLines(storeLogo, storeTopHex, storeBotHex, storeHighlight, frame)
+}
+
+// shimmerLines tints block-art with a top→bottom gradient and a highlight band
+// that sweeps left→right across the glyphs (purely a function of frame).
+func shimmerLines(lines []string, topHex, botHex, hiHex string, frame int) string {
 	w := 0
-	for _, ln := range asciiLogo {
+	for _, ln := range lines {
 		if r := len([]rune(ln)); r > w {
 			w = r
 		}
 	}
-	top, _ := colorful.Hex(shimmerTopHex)
-	bot, _ := colorful.Hex(shimmerBotHex)
-	hi, _ := colorful.Hex(shimmerHighlight)
-	n := len(asciiLogo)
+	top, _ := colorful.Hex(topHex)
+	bot, _ := colorful.Hex(botHex)
+	hi, _ := colorful.Hex(hiHex)
+	n := len(lines)
 
 	cycle := w + shimmerGap
 	pos := frame % cycle // sweep centre column; > w means resting off the wordmark
 
 	var out strings.Builder
-	for y, ln := range asciiLogo {
+	for y, ln := range lines {
 		runes := []rune(ln)
 		frac := 0.0
 		if n > 1 {
