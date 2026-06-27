@@ -291,7 +291,11 @@ func (s Splash) view() string {
 	for _, l := range logoLines {
 		lines = append(lines, ind+l)
 	}
-	lines = append(lines, "", tagline(), "", "", s.prompt())
+	lines = append(lines, "", tagline(), "", "")
+	// Append each prompt line as its own element so padRight equalizes their
+	// widths — otherwise the root's per-line centering drifts the short button
+	// rows rightward, out of line with the wordmark/tagline.
+	lines = append(lines, strings.Split(s.prompt(), "\n")...)
 	padRight(lines, blockWidth(lines))
 	return strings.Join(lines, "\n")
 }
