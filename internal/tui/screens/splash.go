@@ -205,13 +205,10 @@ func splashBtn(label string, focused bool) string {
 func (s Splash) prompt() string {
 	ind := strings.Repeat(" ", promptIndent)
 
-	// line 1 — start the shop: the brand prompt + a blue "enter" button.
-	start := ind + theme.BrandStyle.Render("consolestore.in") + " " +
-		splashBtn("press ↵ to enter", s.sel == 0) +
+	// All home items are left-aligned blue buttons at the same column.
+	// line 1 — start the shop (+ a faint quit hint).
+	start := ind + splashBtn("press ↵ to enter", s.sel == 0) +
 		theme.FaintStyle.Render("    ·  q quit")
-
-	// Alignment pad: subsequent rows indent to sit under the prompt options.
-	pad := strings.Repeat(" ", lipgloss.Width("consolestore.in")+1)
 
 	// Settings index depends on whether the track row is present.
 	settingsSel := 1
@@ -223,11 +220,11 @@ func (s Splash) prompt() string {
 
 	// line 2 (optional) — track order (same blue button family).
 	if s.orderLabel != "" {
-		lines = append(lines, ind+pad+splashBtn("track order · "+s.orderLabel, s.sel == 1))
+		lines = append(lines, ind+splashBtn("track order · "+s.orderLabel, s.sel == 1))
 	}
 
 	// final line — settings.
-	lines = append(lines, ind+pad+splashBtn("settings", s.sel == settingsSel))
+	lines = append(lines, ind+splashBtn("settings", s.sel == settingsSel))
 
 	return strings.Join(lines, "\n")
 }
