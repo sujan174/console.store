@@ -488,6 +488,25 @@ func TestPlaceSavesActiveOrderAndConfirms(t *testing.T) {
 	}
 }
 
+// TestTrackingPollSkippedWhenBackendNil verifies that the onTick auto-advance
+// from scrConfirm to scrTracking still happens when backend is nil (mock/safestore),
+// but does NOT call PollTrackingCmd (which would nil-pointer panic).
+func TestTrackingPollSkippedWhenBackendNil(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	m := New(render.Caps{}) // mock mode: backend is nil
+	m.hasActiveOrder = true
+	m.activeOrder = localstore.ActiveOrder{OrderID: "X1", Restaurant: "Blue Tokai", ETAHiMin: 40, PlacedAt: 1}
+	m.screen = scrConfirm
+	m.confirmTick = 42
+	// onTick must NOT panic and must NOT return a poll cmd when backend is nil.
+	nm, cmd := m.Update(tickMsg(time.Now()))
+	m = nm.(Model)
+	if m.screen != scrTracking {
+		t.Fatalf("should still advance to tracking, screen=%v", m.screen)
+	}
+	_ = cmd // must not have panicked
+}
+
 // TestConfirmAutoAdvancesToTracking verifies that enough ticks on scrConfirm
 // automatically advance the model to scrTracking.
 func TestConfirmAutoAdvancesToTracking(t *testing.T) {

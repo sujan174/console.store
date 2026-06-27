@@ -152,7 +152,6 @@ type Model struct {
 	lastEscFrame int    // frame of the previous Esc (for double-Esc home detection)
 
 	track          screens.Tracking
-	trackStep      int // legacy dummy step counter (kept so old View calls compile during migration)
 	trackTick      int
 	confirmTick    int                    // ticks since scrConfirm was entered; auto-advances to scrTracking
 	nowUnix        int64                  // updated each tick — passed to tracking View for live elapsed
@@ -1168,13 +1167,16 @@ func (m Model) onTick() (Model, tea.Cmd) {
 		m.confirmTick++
 		if m.confirmTick >= 42 && m.hasActiveOrder {
 			m.screen = scrTracking
-			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
+			m.trackTick = 0
+			if m.backend != nil {
+				return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
+			}
 		}
 	}
 	if m.screen == scrTracking {
 		m.trackTick++
 		// Re-poll every ~500 ticks (~30s at 60ms).
-		if m.trackTick%500 == 0 && m.hasActiveOrder {
+		if m.trackTick%500 == 0 && m.hasActiveOrder && m.backend != nil {
 			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
 		}
 	}
@@ -1698,6 +1700,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_ = localstore.ClearActiveOrder()
 				m.hasActiveOrder = false
 				m.splash = m.splash.WithOrder("")
+				m.homeSel = clampIdx(m.homeSel, len(screens.HomeItems(false)))
 			}
 		}
 		return m, nil
@@ -1718,6 +1721,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = localstore.ClearActiveOrder()
 			m.hasActiveOrder = false
 			m.splash = m.splash.WithOrder("")
+			m.homeSel = clampIdx(m.homeSel, len(screens.HomeItems(false)))
 		} else if found {
 			// Refresh the splash label (ETA text unchanged unless we have a live ETA).
 			m.splash = m.splash.WithOrder(fmt.Sprintf("%s · ~%d min", m.activeOrder.Restaurant, m.activeOrder.ETAHiMin))
@@ -2492,8 +2496,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Sequence(m.liveSyncCart(), datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID))
 				}
 				if !m.live {
-					m.checkout = m.checkout.Placed(orderID(m.checkout.Lines()), "~40 min")
+					oid := orderID(m.checkout.Lines())
+					m.checkout = m.checkout.Placed(oid, "~40 min")
 					m.screen = scrConfirm
+					m.track = screens.NewTracking(m.checkout.Place(), m.addr.Line, oid, 0, 0, 0)
 				}
 				return m, nil
 			}
