@@ -68,8 +68,17 @@ func fakeMCP(t *testing.T, handlers map[string]func(map[string]any) any) *httpte
 			w.WriteHeader(202)
 		case "tools/call":
 			h := handlers[msg.Params.Name]
-			json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": msg.ID,
-				"result": map[string]any{"structuredContent": h(msg.Params.Arguments)}})
+			val := h(msg.Params.Arguments)
+			var result map[string]any
+			if s, ok := val.(string); ok {
+				result = map[string]any{
+					"content":           []map[string]any{{"type": "text", "text": s}},
+					"structuredContent": map[string]any{},
+				}
+			} else {
+				result = map[string]any{"structuredContent": val}
+			}
+			json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": result})
 		}
 	}))
 	t.Cleanup(srv.Close)
@@ -121,11 +130,7 @@ func TestServiceMissingTokenSurfacesError(t *testing.T) {
 func TestServiceUsualsMapsMostOrdered(t *testing.T) {
 	mcp := fakeMCP(t, map[string]func(map[string]any) any{
 		"get_food_orders": func(map[string]any) any {
-			return map[string]any{"orders": []map[string]any{
-				{"orderId": 1, "restaurantName": "Blue Tokai", "status": "DELIVERED"},
-				{"orderId": 2, "restaurantName": "Blue Tokai", "status": "DELIVERED"},
-				{"orderId": 3, "restaurantName": "Onesta", "status": "DELIVERED"},
-			}}
+			return "Found 3 orders:\n1. Order 1 — Blue Tokai | delivered | ₹250\n2. Order 2 — Blue Tokai | delivered | ₹250\n3. Order 3 — Onesta | delivered | ₹300"
 		},
 		"search_restaurants": func(args map[string]any) any {
 			q, _ := args["query"].(string)

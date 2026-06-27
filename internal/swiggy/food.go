@@ -182,7 +182,7 @@ func (c *Client) ApplyFoodCoupon(ctx context.Context, addressID, couponCode stri
 }
 
 var reTrack = regexp.MustCompile(`^Order (\S+): (.+?) \((.+)\)(?: - ETA: (.+))?$`)
-var reOrderLine = regexp.MustCompile(`Order (\S+) — (.+?) \| (.+?) \| ₹+(\d+) \[ACTIVE\]`)
+var reOrderLine = regexp.MustCompile(`Order (\S+) — (.+?) \| (.+?) \| ₹+(\d+)(?:\s*\[[^\]]+\])?`)
 
 func toolText(raw json.RawMessage, err error) (string, error) {
 	if err != nil {
