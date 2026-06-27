@@ -21,7 +21,7 @@ func TestSplashDecodePhase(t *testing.T) {
 func TestSplashLogoPhase(t *testing.T) {
 	s := screens.NewSplash().WithDecode(99) // past DecodeSteps -> settled
 	v := s.View()
-	if !strings.Contains(v, "press ↵ to enter") {
+	if !strings.Contains(v, "enter store") {
 		t.Errorf("settled splash should show the enter prompt:\n%s", v)
 	}
 	if !strings.Contains(v, "ssh ") || !strings.Contains(v, "consolestore.in") {

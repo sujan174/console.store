@@ -216,7 +216,7 @@ func (s Splash) prompt() string {
 
 	// All home items are left-aligned blue buttons at the same column.
 	// line 1 — start the shop (+ a faint quit hint).
-	start := ind + splashBtn("press ↵ to enter", s.sel == 0) +
+	start := ind + splashBtn("enter store", s.sel == 0) +
 		theme.FaintStyle.Render("    ·  q quit")
 
 	// Settings index depends on whether the track row is present.
