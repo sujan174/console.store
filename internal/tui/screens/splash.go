@@ -9,11 +9,36 @@ import (
 	"console.store/internal/tui/theme"
 )
 
-// homeItems are the splash menu choices: start the shop, or open settings.
+// homeItems are the default splash menu choices (no live order).
 var homeItems = []string{"go to shop", "settings"}
 
-// IsSettings reports whether home item i is the settings entry.
-func IsSettings(i int) bool { return i >= 0 && i < len(homeItems) && homeItems[i] == "settings" }
+// HomeItems returns the ordered list of home menu items depending on whether an
+// order is currently live. When hasOrder is true, a "track order" entry is
+// inserted between "go to shop" (index 0) and "settings" (index 2).
+func HomeItems(hasOrder bool) []string {
+	if hasOrder {
+		return []string{"go to shop", "track order", "settings"}
+	}
+	return []string{"go to shop", "settings"}
+}
+
+// IsSettings reports whether home item i is the settings entry, given the
+// current layout: 2-item (no active order, settings = 1) or 3-item (active
+// order, settings = 2).
+func IsSettings(i int, hasOrder bool) bool {
+	items := HomeItems(hasOrder)
+	return i >= 0 && i < len(items) && items[i] == "settings"
+}
+
+// IsTrack reports whether home item i is the "track order" entry (index 1 in the
+// 3-item layout). Always false when hasOrder is false.
+func IsTrack(i int, hasOrder bool) bool {
+	if !hasOrder {
+		return false
+	}
+	items := HomeItems(true)
+	return i >= 0 && i < len(items) && items[i] == "track order"
+}
 
 // Indentation: the splash reads as a real terminal session. Prompt lines sit at
 // the left gutter; the banner (wordmark + tagline) is inset one step further so
@@ -30,6 +55,7 @@ type Splash struct {
 	splashTick int    // ticks since the splash was (re)entered; phases the shimmer
 	sel        int    // selected home item (seam for future multi-item home)
 	phrase     string // Minecraft-style splash line shown by the wordmark
+	orderLabel string // non-empty when an order is live (e.g. "Blue Tokai · ~12 min")
 	caps       render.Caps
 	logoCache  string // render.Logo is constant per session; computed once here
 }
@@ -62,7 +88,12 @@ func (s Splash) WithSelection(i int) Splash { s.sel = i; return s }
 // WithPhrase sets the Minecraft-style splash line shown by the wordmark.
 func (s Splash) WithPhrase(p string) Splash { s.phrase = p; return s }
 
+// WithOrder sets a live-order label (e.g. "Blue Tokai · ~12 min"). An empty
+// label means no active order — the splash renders the standard 2-item layout.
+func (s Splash) WithOrder(label string) Splash { s.orderLabel = label; return s }
+
 // ItemCount is the number of home items (for cursor bounds in the router).
+// Deprecated: prefer len(HomeItems(hasOrder)) for layout-aware callers.
 func ItemCount() int { return len(homeItems) }
 
 // blockWidth is the widest display width across lines.
@@ -165,6 +196,8 @@ func tagline() string {
 
 // prompt is the settled call-to-action: a live shell prompt with a blinking
 // block cursor. Enter goes to the shop; q quits.
+// When orderLabel is non-empty a gold "track order · {label}" row is inserted
+// between start and settings (sel 0 = start, sel 1 = track, sel 2 = settings).
 func (s Splash) prompt() string {
 	cur := " "
 	if (s.frame/9)%2 == 0 { // ~1s blink, matched to the rest of the app
@@ -182,17 +215,39 @@ func (s Splash) prompt() string {
 		theme.CursorStyle.Render(cur) +
 		theme.FaintStyle.Render("    ·  q quit")
 
-	// line 2 — settings, a navigable button below, aligned under the prompt.
+	// Alignment pad: subsequent rows indent to sit under the prompt options.
 	pad := strings.Repeat(" ", lipgloss.Width("consolestore.in")+1)
+
+	// Settings index depends on whether the track row is present.
+	settingsSel := 1
+	if s.orderLabel != "" {
+		settingsSel = 2
+	}
+
+	var lines []string
+	lines = append(lines, start)
+
+	// line 2 (optional) — track order, gold-highlighted when selected.
+	if s.orderLabel != "" {
+		trackTick := theme.FaintStyle.Render("  ")
+		trackLabel := theme.GoldStyle.Render("track order · " + s.orderLabel)
+		if s.sel == 1 {
+			trackTick = theme.CursorStyle.Render("▸ ")
+			trackLabel = theme.GoldStyle.Bold(true).Render("track order · " + s.orderLabel)
+		}
+		lines = append(lines, ind+pad+trackTick+trackLabel)
+	}
+
+	// Final line — settings.
 	setTick := theme.FaintStyle.Render("  ")
 	setLabel := theme.DimStyle.Render("settings")
-	if s.sel == 1 {
+	if s.sel == settingsSel {
 		setTick = theme.CursorStyle.Render("▸ ")
 		setLabel = theme.BrightStyle.Render("settings")
 	}
-	settings := ind + pad + setTick + setLabel
+	lines = append(lines, ind+pad+setTick+setLabel)
 
-	return start + "\n" + settings
+	return strings.Join(lines, "\n")
 }
 
 func (s Splash) View() string { return s.view() }
