@@ -9,15 +9,6 @@ import (
 	"sort"
 )
 
-// ordersEnvelope decodes get_food_orders. The live response wraps orders in an
-// object ({"orders":[...]}) and returns a bare {} when there is no retrievable
-// history — both must parse cleanly to a (possibly empty) slice.
-type ordersEnvelope struct {
-	Orders []Order `json:"orders"`
-}
-
-func (e ordersEnvelope) orders() []Order { return e.Orders }
-
 // usualRank is one restaurant's order-frequency tally.
 type usualRank struct {
 	name  string

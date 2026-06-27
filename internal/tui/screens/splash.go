@@ -9,9 +9,6 @@ import (
 	"console.store/internal/tui/theme"
 )
 
-// homeItems are the default splash menu choices (no live order).
-var homeItems = []string{"go to shop", "settings"}
-
 // HomeItems returns the ordered list of home menu items depending on whether an
 // order is currently live. When hasOrder is true, a "track order" entry is
 // inserted between "go to shop" (index 0) and "settings" (index 2).
@@ -91,10 +88,6 @@ func (s Splash) WithPhrase(p string) Splash { s.phrase = p; return s }
 // WithOrder sets a live-order label (e.g. "Blue Tokai · ~12 min"). An empty
 // label means no active order — the splash renders the standard 2-item layout.
 func (s Splash) WithOrder(label string) Splash { s.orderLabel = label; return s }
-
-// ItemCount is the number of home items (for cursor bounds in the router).
-// Deprecated: prefer len(HomeItems(hasOrder)) for layout-aware callers.
-func ItemCount() int { return len(homeItems) }
 
 // blockWidth is the widest display width across lines.
 func blockWidth(lines []string) int {

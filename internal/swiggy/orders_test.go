@@ -258,32 +258,6 @@ func encodeTextResult(w http.ResponseWriter, id any, text string) {
 	})
 }
 
-func TestOrdersEnvelopeEmptyObject(t *testing.T) {
-	// The live test account returns {} — must parse to zero orders, not error.
-	var e ordersEnvelope
-	if err := json.Unmarshal([]byte(`{}`), &e); err != nil {
-		t.Fatalf("{} must unmarshal cleanly: %v", err)
-	}
-	if got := e.orders(); len(got) != 0 {
-		t.Fatalf("empty history must yield no orders, got %d", len(got))
-	}
-}
-
-func TestOrdersEnvelopeWrapped(t *testing.T) {
-	raw := `{"orders":[
-		{"orderId":1,"restaurantName":"Blue Tokai","status":"DELIVERED"},
-		{"orderId":2,"restaurantName":"Onesta","status":"DELIVERED"},
-		{"orderId":3,"restaurantName":"Blue Tokai","status":"DELIVERED"}
-	]}`
-	var e ordersEnvelope
-	if err := json.Unmarshal([]byte(raw), &e); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if got := e.orders(); len(got) != 3 {
-		t.Fatalf("expected 3 orders, got %d", len(got))
-	}
-}
-
 func TestRankUsualsByFrequency(t *testing.T) {
 	orders := []Order{
 		{Restaurant: "Blue Tokai"}, {Restaurant: "Onesta"},
