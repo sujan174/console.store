@@ -30,10 +30,10 @@ func TestSplashLogoPhase(t *testing.T) {
 	if !strings.Contains(v, "coffee · food · quick snacks") {
 		t.Errorf("settled splash should show the section subtitle:\n%s", v)
 	}
-	// The gold "STORE" block-art under CONSOLE — `████████╗` (the T's top) is
-	// unique to the STORE wordmark (CONSOLE has no such 8-block run).
-	if !strings.Contains(v, "████████╗") {
-		t.Errorf("settled splash should show the STORE block wordmark:\n%s", v)
+	// The gold compact "STORE" wordmark under CONSOLE — half-block glyphs (▀▄)
+	// are unique to it (CONSOLE's block-art uses only box-drawing chars).
+	if !strings.Contains(v, "█▀█") {
+		t.Errorf("settled splash should show the STORE wordmark:\n%s", v)
 	}
 }
 

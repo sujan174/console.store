@@ -44,8 +44,8 @@ const (
 	storeHighlight = "#fff3d6" // warm near-white sheen
 )
 
-// ShimmerStore renders the "STORE" block wordmark with the same sweeping sheen
-// as CONSOLE, in a gold gradient. Non-truecolor falls back to flat block-art.
+// ShimmerStore renders the compact "STORE" wordmark (half CONSOLE's height) with
+// the same sweeping sheen, in gold. Non-truecolor falls back to flat block-art.
 func ShimmerStore(caps Caps, frame int) string {
 	if !caps.Truecolor {
 		return strings.Join(storeLogo, "\n") + "\n"

@@ -21,15 +21,13 @@ var asciiLogo = []string{
 	` ╚═════╝ ╚═════╝ ╚═╝  ╚══╝╚══════╝ ╚═════╝ ╚══════╝╚══════╝`,
 }
 
-// storeLogo is "STORE" in the same ANSI-shadow block font as asciiLogo, rendered
-// gold beneath CONSOLE so the full brand reads CONSOLESTORE.
+// storeLogo is "STORE" in a compact 3-row half-block font — half the height of
+// CONSOLE's 6-row wordmark — rendered gold beneath it so the brand reads
+// CONSOLESTORE.
 var storeLogo = []string{
-	`███████╗████████╗ ██████╗ ██████╗ ███████╗`,
-	`██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗██╔════╝`,
-	`███████╗   ██║   ██║   ██║██████╔╝█████╗  `,
-	`╚════██║   ██║   ██║   ██║██╔══██╗██╔══╝  `,
-	`███████║   ██║   ╚██████╔╝██║  ██║███████╗`,
-	`╚══════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝`,
+	`█▀▀ ▀█▀ █▀█ █▀█ █▀▀`,
+	`▀▀█  █  █ █ █▀▄ █▀ `,
+	`▀▀▀  ▀  ▀▀▀ ▀ ▀ ▀▀▀`,
 }
 
 // Logo returns the best wordmark for the terminal's capabilities. w is the
