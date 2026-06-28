@@ -69,6 +69,11 @@ func liveOrdersEnabled() bool {
 	return os.Getenv("CONSOLE_LIVE_ORDERS") == "1" || liveOrdersDefault == "1"
 }
 
+// LiveOrdersEnabled reports whether real order placement is armed, either via
+// the CONSOLE_LIVE_ORDERS=1 env var or the release build flag. Used by the
+// headless CLI to surface the armed/disarmed state without exposing internals.
+func LiveOrdersEnabled() bool { return liveOrdersEnabled() }
+
 // isAuthSentinel reports whether err is one of the auth-failure sentinels that
 // indicate the current session cannot be trusted for money-critical operations.
 func isAuthSentinel(err error) bool {

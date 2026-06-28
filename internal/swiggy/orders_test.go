@@ -258,6 +258,17 @@ func encodeTextResult(w http.ResponseWriter, id any, text string) {
 	})
 }
 
+func TestLiveOrdersEnabledDefaultsOff(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "")
+	if LiveOrdersEnabled() {
+		t.Fatal("LiveOrdersEnabled() = true with no env var and default build; want false")
+	}
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	if !LiveOrdersEnabled() {
+		t.Fatal("LiveOrdersEnabled() = false with CONSOLE_LIVE_ORDERS=1; want true")
+	}
+}
+
 func TestRankUsualsByFrequency(t *testing.T) {
 	orders := []Order{
 		{Restaurant: "Blue Tokai"}, {Restaurant: "Onesta"},
