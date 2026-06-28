@@ -24,6 +24,7 @@ type Checkout struct {
 	cursor     int
 	liveMode   bool
 	syncErr    string
+	orderErr   string // last place-order failure / blocked-order reason
 	mutating   bool
 }
 
@@ -64,6 +65,20 @@ func (c Checkout) WithLiveSync(live bool, syncErr string) Checkout {
 
 // WithMutating marks a reduce/delete sync as in flight (freezes the CTA + line).
 func (c Checkout) WithMutating(m bool) Checkout { c.mutating = m; return c }
+
+// WithOrderErr carries the last place-order failure (or the blocked-order
+// reason, e.g. a sold-out item), shown prominently above the place-order bar.
+func (c Checkout) WithOrderErr(s string) Checkout { c.orderErr = s; return c }
+
+// hasUnavailable reports whether any line is flagged out of stock.
+func (c Checkout) hasUnavailable() bool {
+	for _, l := range c.lines {
+		if l.Unavailable {
+			return true
+		}
+	}
+	return false
+}
 
 func (c Checkout) clampCursor() int {
 	i := c.cursor
@@ -168,6 +183,27 @@ func (c Checkout) summaryView() string {
 	priceW := lipgloss.Width("₹9999")
 	list := components.List{Cursor: cur}
 	for i, l := range c.lines {
+		// Sold-out line: dim it, tag it, and keep the stepper so the user can
+		// remove it (the only way to unblock checkout).
+		if l.Unavailable {
+			name := theme.FaintStyle.Render(l.Item.Name) +
+				theme.FavStyle.Render("  · sold out")
+			var qty string
+			if i == cur {
+				qty = theme.FavStyle.Render("−") + "  " +
+					theme.FaintStyle.Render(fmt.Sprintf("×%d", l.Qty)) + "  " +
+					theme.FaintStyle.Render("+")
+			} else {
+				qty = theme.FaintStyle.Render(fmt.Sprintf("×%d", l.Qty))
+			}
+			qtyCell := lipgloss.PlaceHorizontal(stepW, lipgloss.Right, qty)
+			priceCell := lipgloss.PlaceHorizontal(priceW, lipgloss.Right,
+				theme.FaintStyle.Render(fmt.Sprintf("₹%d", l.UnitPrice()*l.Qty)))
+			list.Rows = append(list.Rows, components.Row{
+				Left: name, Right: qtyCell + "    " + priceCell, BarGreen: i == cur,
+			})
+			continue
+		}
 		name := theme.BrightStyle.Render(l.Item.Name)
 		if s := AddOnSummary(l.AddOns); s != "" {
 			name += theme.FaintStyle.Render("  + " + s)
@@ -218,19 +254,35 @@ func (c Checkout) summaryView() string {
 	}
 	b.WriteString("\n")
 
-	// Full-bleed place-order bar: green left bar + selected-row background.
+	// A place-order error (failed order, or a blocked order because a line is
+	// sold out) shows in red right above the CTA so it can't be missed.
+	blocked := c.hasUnavailable()
+	if c.orderErr != "" {
+		b.WriteString("  " + theme.FavStyle.Render("⚠ "+c.orderErr) + "\n")
+	} else if blocked {
+		b.WriteString("  " + theme.FavStyle.Render("⚠ a sold-out item is in your cart — remove it to order") + "\n")
+	}
+
+	// Full-bleed place-order bar: green left bar + selected-row background. When
+	// the order is blocked (sold-out item) the bar reads dim/disabled.
 	barLabel := " ❯ place order "
 	switch {
 	case c.placing:
 		barLabel = " placing order… "
 	case c.mutating:
 		barLabel = " syncing… "
+	case blocked:
+		barLabel = " place order — remove sold-out item "
 	}
-	bar := theme.GreenStyle.Render("▌") +
-		lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.Bright)).
-			Background(lipgloss.Color(theme.SelRowBg)).
-			Render(padTo(barLabel, components.FrameWidth()-1))
+	barBar := theme.GreenStyle.Render("▌")
+	barBg := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.Bright)).
+		Background(lipgloss.Color(theme.SelRowBg))
+	if blocked {
+		barBar = theme.FaintStyle.Render("▌")
+		barBg = theme.DimStyle
+	}
+	bar := barBar + barBg.Render(padTo(barLabel, components.FrameWidth()-1))
 	b.WriteString(bar + "\n\n")
 
 	// One tidy COD line instead of two stacked notices.

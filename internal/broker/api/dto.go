@@ -85,10 +85,11 @@ type OptionChoice struct {
 }
 
 type CartLine struct {
-	ItemID   string
-	Name     string
-	Quantity int
-	Price    int
+	ItemID    string
+	Name      string
+	Quantity  int
+	Price     int
+	Available bool // false when Swiggy reports the cart item as out of stock
 }
 
 type Cart struct {

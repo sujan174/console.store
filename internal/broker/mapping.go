@@ -73,7 +73,7 @@ func mapMenu(in swiggy.Menu) api.Menu {
 func mapCart(in swiggy.Cart) api.Cart {
 	lines := make([]api.CartLine, len(in.Items))
 	for i, l := range in.Items {
-		lines[i] = api.CartLine{ItemID: l.ItemID, Name: l.Name, Quantity: l.Quantity, Price: l.Price}
+		lines[i] = api.CartLine{ItemID: l.ItemID, Name: l.Name, Quantity: l.Quantity, Price: l.Price, Available: l.Available}
 	}
 	return api.Cart{
 		CartID: in.CartID, Restaurant: in.Restaurant, ItemTotal: in.ItemTotal, Delivery: in.Delivery,

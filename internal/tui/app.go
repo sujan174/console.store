@@ -113,6 +113,12 @@ type Model struct {
 	confirmedForeign    bool
 	cartConfirmed       bool // true once a baseline has been captured (vs zero-value)
 
+	// unavailableItems holds the Swiggy menu-item ids the live cart reports as out
+	// of stock. An item can look in-stock on the menu yet be unavailable once
+	// added; Swiggy still prices it in the bill but the order can't be placed. We
+	// flag the line and block checkout. Keyed by SwiggyID (== cart menu_item_id).
+	unavailableItems map[string]bool
+
 	// customize modal: shown when adding an item that has add-ons (Swiggy's
 	// "customise" sheet). Owns its own cursor + selection state.
 	customizeOpen bool
@@ -577,6 +583,34 @@ func (m Model) seedCartFromLive(c api.Cart) Model {
 	m.menu = m.menu.WithCartChip(m.cartChip())
 	// The pulled cart IS what Swiggy holds → it is the confirmed baseline.
 	return m.commitCartConfirmed()
+}
+
+// applyCartAvailability records which cart items Swiggy reports as out of stock
+// (from the authoritative cart response), so the checkout can flag those lines
+// and block the order. An empty/all-available cart clears the set.
+func (m Model) applyCartAvailability(c api.Cart) Model {
+	var bad map[string]bool
+	for _, l := range c.Lines {
+		if !l.Available {
+			if bad == nil {
+				bad = map[string]bool{}
+			}
+			bad[l.ItemID] = true
+		}
+	}
+	m.unavailableItems = bad
+	return m
+}
+
+// hasUnavailableLine reports whether any cart line is an item Swiggy flagged out
+// of stock — checkout is blocked while true.
+func (m Model) hasUnavailableLine() bool {
+	for _, l := range m.lines {
+		if m.unavailableItems[l.Item.SwiggyID] {
+			return true
+		}
+	}
+	return false
 }
 
 // cloneCartLines returns a copy with its own backing array so a confirmed
@@ -1711,6 +1745,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cartSyncErr = ""
 		m.liveCart = dm.Cart // real Swiggy pricing for an accurate bill
+		m = m.applyCartAvailability(dm.Cart)
 		m = m.commitCartConfirmed()
 		m.cartMutating = false // confirmed — unfreeze
 		if m.screen == scrCheckout {
@@ -1725,6 +1760,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cartSyncErr = ""
 		m.liveCart = dm.Cart
 		m.cartLoaded = true
+		m = m.applyCartAvailability(dm.Cart)
 		// A successful load confirms the current lines as the Swiggy baseline.
 		m = m.commitCartConfirmed()
 		if m.screen == scrCheckout {
@@ -1741,6 +1777,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.liveCart = dm.Cart
 		m.cartLoaded = true
+		m = m.applyCartAvailability(dm.Cart)
 		if len(m.lines) == 0 && m.cartRestaurant == "" && len(dm.Cart.Lines) > 0 {
 			m = m.seedCartFromLive(dm.Cart)
 		}
@@ -1784,7 +1821,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case datasource.OrderPlacedMsg:
 		m.placingOrder = false
 		if dm.Err != nil {
+			// Surface the real Swiggy rejection on the checkout page, not just the
+			// status bar — the order did NOT go through.
 			m.orderErr = "order failed: " + dm.Err.Error()
+			if m.screen == scrCheckout {
+				m.checkout = m.buildCheckout()
+			}
 			return m, nil
 		}
 		m.orderErr = ""
@@ -2612,6 +2654,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Optimistic increment of the focused line — no freeze.
 				i := m.checkout.Cursor()
 				if i >= 0 && i < len(m.lines) {
+					m.orderErr = "" // editing clears a stale "can't order" message
 					m.lines[i].Qty++
 					m.menu = m.menu.WithCartChip(m.cartChip())
 					m.checkout = m.buildCheckout()
@@ -2641,6 +2684,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				if len(m.lines) == 0 {
 					return m, nil // nothing to order — empty cart
+				}
+				if m.live && m.hasUnavailableLine() {
+					// Swiggy would reject the order — say which and don't fire it.
+					m.orderErr = "can't place order — remove the sold-out item(s) first"
+					m.checkout = m.buildCheckout()
+					return m, nil
 				}
 				if m.live && !m.placingOrder {
 					m.placingOrder = true
@@ -3032,12 +3081,26 @@ func errIsNeedsAuth(err error) bool {
 // add-on/variant selections — so the bill (from liveCart via billFromLive) and
 // the item list are always in sync without the flattened Swiggy copy overwriting
 // local selections.
-func (m Model) cartScreenLines() []screens.CartLine { return m.lines }
+func (m Model) cartScreenLines() []screens.CartLine {
+	if len(m.unavailableItems) == 0 {
+		return m.lines
+	}
+	// Stamp the display-only Unavailable flag without mutating the canonical lines.
+	out := make([]screens.CartLine, len(m.lines))
+	copy(out, m.lines)
+	for i := range out {
+		if m.unavailableItems[out[i].Item.SwiggyID] {
+			out[i].Unavailable = true
+		}
+	}
+	return out
+}
 
 // afterCheckoutReduce finalizes a reduce/delete on the checkout: releases the
 // restaurant binding if the cart is now empty, sets the freeze, rebuilds the
 // page, and fires the cart sync (UpdateCart, or flush when empty).
 func (m Model) afterCheckoutReduce() (tea.Model, tea.Cmd) {
+	m.orderErr = "" // editing the cart clears a stale "can't order" message
 	if len(m.lines) == 0 {
 		m.cartRestaurant = ""
 		m.cartSection = ""
@@ -3073,6 +3136,7 @@ func (m Model) buildCheckout() screens.Checkout {
 	return screens.NewCheckout(m.cartHeader(), m.addr, m.cartScreenLines(), m.cartEta()).
 		WithBill(m.billFromLive()).
 		WithLiveSync(m.live, m.cartSyncErr).
+		WithOrderErr(m.orderErr).
 		WithMutating(m.cartMutating).
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.cartScreenLines())))
 }

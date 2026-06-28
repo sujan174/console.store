@@ -22,11 +22,12 @@ const (
 )
 
 type CartLine struct {
-	Item       catalog.Item
-	Qty        int
-	AddOns     []catalog.AddOn     // selected customizations for this line
-	Selections []catalog.Selection // live variant/addon selections (cart-send + key)
-	Price      int                 // resolved per-unit price (0 = compute from Item+AddOns)
+	Item        catalog.Item
+	Qty         int
+	AddOns      []catalog.AddOn     // selected customizations for this line
+	Selections  []catalog.Selection // live variant/addon selections (cart-send + key)
+	Price       int                 // resolved per-unit price (0 = compute from Item+AddOns)
+	Unavailable bool                // Swiggy reports this cart item out of stock (display-only)
 }
 
 // UnitPrice is the per-unit price including any selected add-ons. A resolved

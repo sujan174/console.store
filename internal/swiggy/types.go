@@ -125,10 +125,11 @@ type CartAddon struct {
 
 // CartLine is the typed, TUI-facing shape for one cart item (post-conversion).
 type CartLine struct {
-	ItemID   string
-	Name     string
-	Quantity int
-	Price    int // whole rupees
+	ItemID    string
+	Name      string
+	Quantity  int
+	Price     int  // whole rupees
+	Available bool // false when Swiggy reports the cart item as out of stock
 }
 
 // Cart is the typed, TUI-facing cart (converted from cartEnvelope). The pricing
@@ -167,6 +168,13 @@ type cartData struct {
 		Quantity   int         `json:"quantity"`
 		FinalPrice float64     `json:"final_price"`
 		Total      float64     `json:"total"`
+		// InStock is the cart's authoritative per-item availability (the menu's
+		// inStock can be stale — an item may show in stock on the menu yet be
+		// unavailable once added). A POINTER so an absent field reads as unknown
+		// (treated available) rather than a false "out of stock". Pairs with the
+		// camelCase form some payloads use.
+		InStock     *int `json:"in_stock"`
+		InStockCaml *int `json:"inStock"`
 		// valid_addons is nested PER ITEM (not at the data root). It carries the
 		// authoritative per-choice availability (inStock) that search_menu omits.
 		ValidAddons []validAddonGroup `json:"valid_addons"`
@@ -267,11 +275,16 @@ func (e cartEnvelope) toCart() Cart {
 		Total:      int(math.Round(d.Pricing.ToPay)),
 	}
 	for _, it := range d.Items {
+		stock := it.InStock
+		if stock == nil {
+			stock = it.InStockCaml
+		}
 		c.Items = append(c.Items, CartLine{
-			ItemID:   it.MenuItemID.String(),
-			Name:     it.Name,
-			Quantity: it.Quantity,
-			Price:    int(math.Round(it.FinalPrice)),
+			ItemID:    it.MenuItemID.String(),
+			Name:      it.Name,
+			Quantity:  it.Quantity,
+			Price:     int(math.Round(it.FinalPrice)),
+			Available: stock == nil || *stock != 0, // absent = unknown = available
 		})
 	}
 	return c
