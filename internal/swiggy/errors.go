@@ -49,8 +49,9 @@ func mapStatus(status int, body []byte) error {
 	}
 }
 
-// isTransient reports whether err is a retryable upstream failure (5xx).
+// isTransient reports whether err is a retryable upstream failure: a 429 (rate
+// limit) or any 5xx. CallTool retries these with backoff.
 func isTransient(err error) bool {
 	var he *httpError
-	return errors.As(err, &he) && he.Status >= 500
+	return errors.As(err, &he) && (he.Status == 429 || he.Status >= 500)
 }

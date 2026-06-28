@@ -9,13 +9,39 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type rpcResult struct {
 	Body      []byte
 	SessionID string
 	Status    int
+	// RetryAfter is the server's requested wait before a retry, parsed from the
+	// Retry-After header (0 when absent). Honored by CallTool's backoff on 429.
+	RetryAfter time.Duration
+}
+
+// parseRetryAfter decodes a Retry-After header: either a delay in seconds
+// ("120") or an HTTP-date. Returns 0 when absent or unparseable.
+func parseRetryAfter(v string) time.Duration {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(v); err == nil {
+		if secs < 0 {
+			return 0
+		}
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 // rpc posts one JSON-RPC message. An HTTP status (incl. 4xx/5xx) is returned in
@@ -54,7 +80,10 @@ func rpc(ctx context.Context, c *http.Client, base, bearer, sessionID string, pa
 	if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
 		out = lastSSEData(raw)
 	}
-	return rpcResult{Body: out, SessionID: sid, Status: resp.StatusCode}, nil
+	return rpcResult{
+		Body: out, SessionID: sid, Status: resp.StatusCode,
+		RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
+	}, nil
 }
 
 // lastSSEData returns the JSON from the last non-empty `data:` line of an SSE body.
