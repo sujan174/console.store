@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"console.store/internal/broker/api"
 	"console.store/internal/localstore"
@@ -73,8 +74,14 @@ func placePreset(d Deps, p localstore.Preset) int {
 	order, err := d.Backend.PlaceOrder(p.AddrID) // never retried
 	if err != nil {
 		fmt.Fprintf(d.Out, "store: order failed: %v\n", err)
+		fmt.Fprintln(d.Out, "if you may have been charged, run `store status` before retrying.")
 		return 1
 	}
+	etaLo, etaHi := localstore.ParseETAMinutes(order.ETA)
+	_ = localstore.SaveActiveOrder(localstore.ActiveOrder{
+		OrderID: order.ID, Restaurant: p.RestaurantName, AddrLine: p.AddrLine,
+		ETALoMin: etaLo, ETAHiMin: etaHi, Total: order.Total, PlacedAt: time.Now().Unix(),
+	})
 	fmt.Fprintf(d.Out, "\n✓ order placed — %s", order.ID)
 	if order.ETA != "" {
 		fmt.Fprintf(d.Out, " · eta %s", order.ETA)

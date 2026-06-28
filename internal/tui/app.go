@@ -3261,7 +3261,7 @@ func (m *Model) runAliasCommand(rest string) []screens.CmdLine {
 		if len(fields) < 2 {
 			return []screens.CmdLine{{Text: "usage: alias rm <name> [n]", Color: theme.Fav}}
 		}
-		idx := 0
+		idx := -1 // -1 means no explicit index given
 		if len(fields) >= 3 {
 			if n, err := strconv.Atoi(fields[2]); err == nil && n >= 1 {
 				idx = n - 1
@@ -3349,6 +3349,25 @@ func aliasRmLines(name string, idx int) []screens.CmdLine {
 	ps, err := localstore.LoadPresets()
 	if err != nil {
 		return []screens.CmdLine{{Text: "alias: " + err.Error(), Color: theme.Fav}}
+	}
+	matches := ps.ByName(name)
+	if len(matches) == 0 {
+		return []screens.CmdLine{{Text: fmt.Sprintf("alias: no preset named %q", name), Color: theme.Fav}}
+	}
+	if idx < 0 {
+		// No explicit index given.
+		if len(matches) == 1 {
+			idx = 0
+		} else {
+			// Ambiguous: refuse and list them.
+			out := []screens.CmdLine{
+				{Text: fmt.Sprintf("%d presets named %q — use: alias rm %s <n>", len(matches), name, name), Color: theme.Fav},
+			}
+			for i, p := range matches {
+				out = append(out, screens.CmdLine{Text: fmt.Sprintf("  %d) %s", i+1, p.RestaurantName), Color: theme.Dim})
+			}
+			return out
+		}
 	}
 	ok, _ := ps.Remove(name, idx)
 	if !ok {

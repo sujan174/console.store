@@ -120,3 +120,28 @@ func TestOrderMultiPresetPicks(t *testing.T) {
 		t.Fatalf("pick=2 should select the Truffles preset:\n%s", out.String())
 	}
 }
+
+// TestOrderArmedWritesActiveOrder verifies that a successful armed place writes
+// the active-order.json so the TUI shows the track button next launch.
+func TestOrderArmedWritesActiveOrder(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, basePreset("breakfast"))
+	var out bytes.Buffer
+	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "777", ETA: "35-45 mins", Total: 300}}
+	code := Dispatch([]string{"order", "breakfast"}, Deps{
+		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+	})
+	if code != 0 {
+		t.Fatalf("order exit = %d:\n%s", code, out.String())
+	}
+	ao, ok, err := localstore.LoadActiveOrder()
+	if err != nil {
+		t.Fatalf("load active order: %v", err)
+	}
+	if !ok {
+		t.Fatal("active-order.json should exist after a successful armed place")
+	}
+	if ao.OrderID != "777" {
+		t.Fatalf("active order OrderID = %q, want %q", ao.OrderID, "777")
+	}
+}

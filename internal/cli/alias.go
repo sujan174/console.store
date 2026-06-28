@@ -23,7 +23,7 @@ func runAlias(d Deps, args []string) int {
 			fmt.Fprintln(d.Out, "usage: store alias rm <name> [n]")
 			return 2
 		}
-		idx := 0
+		idx := -1 // -1 means no explicit index given
 		if len(args) >= 3 {
 			n, err := strconv.Atoi(args[2])
 			if err != nil || n < 1 {
@@ -80,7 +80,22 @@ func aliasRemove(d Deps, name string, idx int) int {
 		fmt.Fprintf(d.Out, "store: no preset named %q\n", name)
 		return 1
 	}
-	// idx defaults to 0 (first match); an explicit index targets a specific duplicate.
+	if idx < 0 {
+		// No explicit index given.
+		if len(matches) == 1 {
+			// Unambiguous: remove the only match.
+			idx = 0
+		} else {
+			// Ambiguous: refuse and list them.
+			fmt.Fprintf(d.Out, "%d presets named %q — specify which to remove:\n", len(matches), name)
+			for i, p := range matches {
+				fmt.Fprintf(d.Out, "  %d) %s · %s · %s\n", i+1, p.RestaurantName, p.AddrLine, summarize(p))
+			}
+			fmt.Fprintf(d.Out, "run: store alias rm %s <n>\n", name)
+			return 1
+		}
+	}
+	// idx >= 0: explicit (or resolved single-match) index.
 	ok, err := ps.Remove(name, idx)
 	if err != nil {
 		fmt.Fprintf(d.Out, "store: %v\n", err)
