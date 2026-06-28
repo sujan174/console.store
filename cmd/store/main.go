@@ -1,6 +1,13 @@
 // Command store is console.store's native CLI. It runs the TUI in-process
 // against broker.Service, stores the Swiggy token in the OS keyring, and
 // completes a one-time loopback browser authorize on first run.
+//
+// Subcommands (headless, no TUI):
+//
+//	store help              print usage
+//	store status            live order status
+//	store order <name>      reorder a saved preset
+//	store alias list/rm     manage presets
 package main
 
 import (
@@ -20,6 +27,7 @@ import (
 	"console.store/internal/broker"
 	"console.store/internal/catalog"
 	swiggysnap "console.store/internal/catalog/swiggy"
+	"console.store/internal/cli"
 	"console.store/internal/config"
 	"console.store/internal/localstore"
 	"console.store/internal/swiggy"
@@ -30,12 +38,18 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	args := os.Args[1:]
+	// help/--help/-h need no auth and no network at all — short-circuit early.
+	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
+		os.Exit(cli.Dispatch(args, cli.Deps{Out: os.Stdout}))
+	}
+	if err := run(args); err != nil {
 		log.Fatalf("store: %v", err)
 	}
 }
 
-func run() error {
+// run dispatches to either the TUI (no args) or a headless subcommand.
+func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -54,6 +68,36 @@ func run() error {
 		log.Printf("=== console.store debug log opened ===")
 	}
 
+	be, signedIn, launchTUI, err := bootstrap(ctx)
+	if err != nil {
+		return err
+	}
+
+	if len(args) == 0 {
+		// No subcommand → open the TUI (unchanged behavior).
+		return launchTUI()
+	}
+
+	// Headless subcommand: plain text output, no TUI, no OSC escapes.
+	code := cli.Dispatch(args, cli.Deps{
+		Backend:  be,
+		Armed:    swiggy.LiveOrdersEnabled(),
+		SignedIn: signedIn,
+		In:       os.Stdin,
+		Out:      os.Stdout,
+	})
+	os.Exit(code)
+	return nil
+}
+
+// bootstrap builds the shared auth + broker + backend stack. It returns the
+// ready backend, whether a token is already present (signedIn), and a launchTUI
+// closure that runs the full bubbletea program (including the OSC canvas
+// escapes and the loopback callback server — TUI-only concerns).
+//
+// Both the TUI path and the headless path call bootstrap; only the TUI path
+// calls the returned launchTUI closure.
+func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool, launchTUI func() error, err error) {
 	metaURL := envOr("CONSOLE_SWIGGY_METADATA", "https://mcp.swiggy.com/.well-known/oauth-authorization-server")
 	redirect := envOr("CONSOLE_REDIRECT_URI", "http://127.0.0.1:8765/cb")
 	httpc := &http.Client{Timeout: 30 * time.Second}
@@ -62,7 +106,7 @@ func run() error {
 
 	reg, err := resolveRegistration(ctx, httpc, metaURL, redirect)
 	if err != nil {
-		return fmt.Errorf("oauth registration: %w", err)
+		return nil, false, nil, fmt.Errorf("oauth registration: %w", err)
 	}
 	meta := auth.Metadata{
 		AuthorizationEndpoint: reg.AuthorizationEndpoint,
@@ -73,9 +117,6 @@ func run() error {
 		RedirectURI: redirect, Scope: oauthScope, Store: ls,
 	})
 
-	// Loopback callback server (browser redirects here after authorize).
-	go serveCallback(ctx, authMgr, redirect)
-
 	svc := broker.NewService(broker.Config{
 		Store:       ls,
 		Auth:        authMgr,
@@ -84,52 +125,65 @@ func run() error {
 		ImBaseURL:   swiggy.InstamartBaseURL,
 		HTTPClient:  httpc,
 	})
-	be := datasource.NewBrokerBackend(datasource.NewInProc(svc), localstore.LocalAccountID)
-
-	caps := render.DetectCaps(os.Getenv("TERM"), os.Environ(), truecolor())
-	snap := swiggysnap.NewSnapshot()
-
-	// authClient lets the TUI poll the loopback callback and start a fresh flow
-	// (Settings → Disconnect re-authorizes in place). Always supplied, even on
-	// the token-present path, so logout can re-auth without a restart.
-	ac := authClient{m: authMgr}
-
-	opts := []consoletui.Option{
-		consoletui.WithLiveBackend(be, snap, localstore.LocalAccountID, ""),
-		consoletui.WithAuthFlow("", ac),
-	}
+	be = datasource.NewBrokerBackend(datasource.NewInProc(svc), localstore.LocalAccountID)
 
 	// Token check: present → straight in; absent → auth gate.
-	if _, _, _, ok, err := ls.GetTokenFull(ctx, localstore.LocalAccountID); err != nil {
-		return fmt.Errorf("read keyring: %w", err)
-	} else if !ok {
-		start, serr := authMgr.Start(localstore.LocalAccountID)
-		if serr != nil {
-			return fmt.Errorf("start authorize: %w", serr)
+	_, _, _, ok, kerr := ls.GetTokenFull(ctx, localstore.LocalAccountID)
+	if kerr != nil {
+		return nil, false, nil, fmt.Errorf("read keyring: %w", kerr)
+	}
+	signedIn = ok
+
+	launchTUI = func() error {
+		// Loopback callback server (browser redirects here after authorize).
+		// Only needed for the TUI auth gate; not started for headless paths.
+		go serveCallback(ctx, authMgr, redirect)
+
+		caps := render.DetectCaps(os.Getenv("TERM"), os.Environ(), truecolor())
+		snap := swiggysnap.NewSnapshot()
+
+		// authClient lets the TUI poll the loopback callback and start a fresh flow
+		// (Settings → Disconnect re-authorizes in place). Always supplied, even on
+		// the token-present path, so logout can re-auth without a restart.
+		ac := authClient{m: authMgr}
+
+		opts := []consoletui.Option{
+			consoletui.WithLiveBackend(be, snap, localstore.LocalAccountID, ""),
+			consoletui.WithAuthFlow("", ac),
 		}
-		opts = []consoletui.Option{
-			consoletui.WithLiveBackend(be, snap, localstore.LocalAccountID, start.AuthorizeURL),
-			consoletui.WithAuthFlow(start.FlowID, ac),
-			consoletui.WithPendingAuth(),
+
+		if !signedIn {
+			start, serr := authMgr.Start(localstore.LocalAccountID)
+			if serr != nil {
+				return fmt.Errorf("start authorize: %w", serr)
+			}
+			opts = []consoletui.Option{
+				consoletui.WithLiveBackend(be, snap, localstore.LocalAccountID, start.AuthorizeURL),
+				consoletui.WithAuthFlow(start.FlowID, ac),
+				consoletui.WithPendingAuth(),
+			}
 		}
+
+		// Optional seed config for instant first paint (mirrors the old sshd path).
+		// config.Load returns (nil, nil) when absent; ChipCategories is nil-safe.
+		cfg, _ := config.Load(config.DefaultPath())
+		if cfg != nil && cfg.Seed.RestaurantID != "" {
+			seedSnapshot(snap, cfg)
+			opts = append(opts, consoletui.WithSeededSnapshot())
+		}
+		opts = append(opts, consoletui.WithChips(cfg.ChipCategories()))
+
+		// Canvas background (OSC 11) on start; reset (OSC 111) on exit.
+		// These are TUI-only: headless subcommands must output clean plain text.
+		fmt.Fprintf(os.Stdout, "\x1b]11;%s\x07", theme.Bg)
+		defer fmt.Fprint(os.Stdout, "\x1b]111\x07")
+
+		p := tea.NewProgram(consoletui.New(caps, opts...), tea.WithAltScreen(), tea.WithContext(ctx))
+		_, err := p.Run()
+		return err
 	}
 
-	// Optional seed config for instant first paint (mirrors the old sshd path).
-	// config.Load returns (nil, nil) when absent; ChipCategories is nil-safe.
-	cfg, _ := config.Load(config.DefaultPath())
-	if cfg != nil && cfg.Seed.RestaurantID != "" {
-		seedSnapshot(snap, cfg)
-		opts = append(opts, consoletui.WithSeededSnapshot())
-	}
-	opts = append(opts, consoletui.WithChips(cfg.ChipCategories()))
-
-	// Canvas background (OSC 11) on start; reset (OSC 111) on exit.
-	fmt.Fprintf(os.Stdout, "\x1b]11;%s\x07", theme.Bg)
-	defer fmt.Fprint(os.Stdout, "\x1b]111\x07")
-
-	p := tea.NewProgram(consoletui.New(caps, opts...), tea.WithAltScreen(), tea.WithContext(ctx))
-	_, err = p.Run()
-	return err
+	return be, signedIn, launchTUI, nil
 }
 
 // truecolor reports whether the terminal advertises 24-bit color via COLORTERM.
