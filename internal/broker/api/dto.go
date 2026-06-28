@@ -22,6 +22,10 @@ type Restaurant struct {
 	Description string
 	Rating      float64
 	Offer       string
+	// Unavailable is true when Swiggy reports the restaurant as closed or
+	// unserviceable to the address (availabilityStatus). Zero value = deliverable,
+	// so mock/test restaurants are kept by default.
+	Unavailable bool
 }
 
 type MenuItem struct {
@@ -33,6 +37,9 @@ type MenuItem struct {
 	Rating       float64
 	Customizable bool
 	Category     string
+	// InStock reflects Swiggy's inStock flag (true = orderable). Mapped from the
+	// menu's inStock>0; defaults true for mock items via the catalog mapping.
+	InStock bool
 }
 
 type Menu struct {
@@ -85,12 +92,16 @@ type CartLine struct {
 }
 
 type Cart struct {
-	CartID    string
-	ItemTotal int // Swiggy bill: item subtotal
-	Delivery  int // Swiggy bill: delivery charge
-	Taxes     int // Swiggy bill: taxes & charges
-	Total     int // Swiggy bill: to-pay
-	Lines     []CartLine
+	CartID string
+	// Restaurant is the name of the restaurant the cart belongs to (from Swiggy's
+	// cart.restaurant.name). Used to seed cartRestaurant when an existing cart is
+	// pulled at launch, so the conflict modal fires on a cross-restaurant add.
+	Restaurant string
+	ItemTotal  int // Swiggy bill: item subtotal
+	Delivery   int // Swiggy bill: delivery charge
+	Taxes      int // Swiggy bill: taxes & charges
+	Total      int // Swiggy bill: to-pay
+	Lines      []CartLine
 	// ValidAddons are the add-on groups Swiggy reports valid for the current
 	// variant selection — drives the customize wizard's next page.
 	ValidAddons []OptionGroup

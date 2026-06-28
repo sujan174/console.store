@@ -32,6 +32,15 @@ func buildRows(items []catalog.Item, qtyByItemID map[string]int) []components.Ro
 	for _, it := range items {
 		qty := qtyByItemID[it.ID]
 
+		// Sold-out items render dimmed with a "sold out" tag and no stepper — the
+		// add is blocked, so showing rating/price/qty would imply orderable.
+		if it.OutOfStock {
+			left := theme.FaintStyle.Render(it.Name)
+			right := theme.FaintStyle.Render("sold out")
+			rows = append(rows, components.Row{Left: left, Right: right})
+			continue
+		}
+
 		// in-cart items read brighter; the green left-bar + stepper already
 		// signal "in cart", so no extra ✓ column (keeps the cursor→name gap
 		// identical to the menu).

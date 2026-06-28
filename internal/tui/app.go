@@ -530,6 +530,24 @@ func (m Model) startNewCart(item catalog.Item, addons []catalog.AddOn, sels []ca
 	return m
 }
 
+// seedCartFromLive populates the local cart from a Swiggy cart pulled at launch
+// (one built earlier on the Swiggy app/website). The lines are display+identity
+// stubs (real menu_item_id + name + price); cartRestaurant is set to the cart's
+// owning restaurant so a later add from a different restaurant raises the
+// keep/override conflict modal. Pricing shown comes from m.liveCart.
+func (m Model) seedCartFromLive(c api.Cart) Model {
+	var lines []screens.CartLine
+	for _, l := range c.Lines {
+		it := catalog.Item{ID: l.ItemID, SwiggyID: l.ItemID, Name: l.Name, Price: l.Price, Section: catalog.SectionFood}
+		lines = append(lines, screens.CartLine{Item: it, Qty: l.Quantity, Price: l.Price})
+	}
+	m.lines = lines
+	m.cartRestaurant = c.Restaurant
+	m.cartSection = catalog.SectionFood
+	m.menu = m.menu.WithCartChip(m.cartChip())
+	return m
+}
+
 // hasVariantGroup / hasAddonGroup classify an item's fetched option groups.
 func hasVariantGroup(gs []catalog.OptionGroup) bool {
 	for _, g := range gs {
@@ -1078,6 +1096,11 @@ func (m Model) restIncSelected() (tea.Model, tea.Cmd) {
 		dbgTUI("add: Selected() returned !ok (no item under cursor)")
 		return m, nil
 	}
+	if it.OutOfStock {
+		// Swiggy would reject the add — say so instead of failing silently.
+		m.cartSyncErr = "“" + it.Name + "” is sold out"
+		return m, nil
+	}
 	dbgTUI("add: item=%q swiggyID=%q rest=%q", it.Name, it.SwiggyID, m.rest.PlaceData().Name)
 	if m.live && it.Customizable && len(it.Options) == 0 {
 		m.pendingItem = it
@@ -1363,11 +1386,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.menu = m.buildMenu()
 		if m.live {
-			// Address just adopted → load Home (usuals + the popular list) for it.
+			// Address just adopted → load Home (usuals + the popular list) for it,
+			// and pull the account cart once to detect a pre-existing foreign cart.
 			// Reset usualsLoaded so the new address's usuals are fetched.
 			m.usualsLoaded = false
-			cmd := m.ensureHomeLoaded()
-			return m, cmd
+			return m, tea.Batch(m.ensureHomeLoaded(), datasource.PullCart(m.backend, m.addr.ID))
 		}
 		return m, nil
 	case datasource.PlacesLoadedMsg:
@@ -1591,7 +1614,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if dm.Err != nil {
-			m.cartSyncErr = "cart sync: " + dm.Err.Error()
+			m.cartSyncErr = "⚠ cart not updated on Swiggy: " + dm.Err.Error()
 		} else {
 			m.cartSyncErr = ""
 			m.liveCart = dm.Cart // real Swiggy pricing for an accurate bill
@@ -1611,6 +1634,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cartLoaded = true
 		if m.screen == scrCheckout {
 			m.checkout = m.buildCheckout()
+		}
+		return m, nil
+	case datasource.CartPulledMsg:
+		// Launch-time account cart. Swallow errors quietly (don't nag at startup),
+		// and only seed when the local cart is empty so we never clobber a cart the
+		// user is already building in this session.
+		if dm.Err != nil {
+			dbgTUI("cart pull: %v", dm.Err)
+			return m, nil
+		}
+		m.liveCart = dm.Cart
+		m.cartLoaded = true
+		if len(m.lines) == 0 && m.cartRestaurant == "" && len(dm.Cart.Lines) > 0 {
+			m = m.seedCartFromLive(dm.Cart)
 		}
 		return m, nil
 	case datasource.UsualsLoadedMsg:

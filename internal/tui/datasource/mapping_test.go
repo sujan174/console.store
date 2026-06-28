@@ -7,6 +7,40 @@ import (
 	"console.store/internal/catalog"
 )
 
+// toPlaces drops restaurants Swiggy flags as unavailable (closed/unserviceable)
+// so they never appear in discovery, and keeps the deliverable ones.
+func TestToPlacesFiltersUnavailable(t *testing.T) {
+	in := []api.Restaurant{
+		{ID: "1", Name: "Open"},
+		{ID: "2", Name: "Closed", Unavailable: true},
+		{ID: "3", Name: "AlsoOpen"},
+	}
+	out := toPlaces(in, catalog.SectionFood)
+	if len(out) != 2 {
+		t.Fatalf("want 2 deliverable places, got %d: %+v", len(out), out)
+	}
+	for _, p := range out {
+		if p.Name == "Closed" {
+			t.Fatal("unavailable restaurant must be filtered out")
+		}
+	}
+}
+
+// toMenuPlace marks an item OutOfStock when the api flag says it isn't in stock.
+func TestToMenuPlaceMarksOutOfStock(t *testing.T) {
+	m := api.Menu{RestaurantID: "r1", Items: []api.MenuItem{
+		{ID: "a", Name: "In", InStock: true},
+		{ID: "b", Name: "Out", InStock: false},
+	}}
+	out := toMenuPlace(m)
+	if out.Items[0].OutOfStock {
+		t.Error("in-stock item should not be OutOfStock")
+	}
+	if !out.Items[1].OutOfStock {
+		t.Error("not-in-stock item should be OutOfStock")
+	}
+}
+
 // toOptionGroups must sort choices cheapest-first WITHIN each group (stable),
 // leave group order untouched, and preserve every field.
 func TestToOptionGroupsSortsChoicesByPriceWithinGroup(t *testing.T) {

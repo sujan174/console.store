@@ -30,13 +30,18 @@ func toAddresses(in []api.Address) []catalog.Address {
 }
 
 func toPlaces(in []api.Restaurant, section catalog.Section) []catalog.Place {
-	out := make([]catalog.Place, len(in))
-	for i, r := range in {
-		out[i] = catalog.Place{
+	out := make([]catalog.Place, 0, len(in))
+	for _, r := range in {
+		// Hide restaurants Swiggy reports as closed / unserviceable — they can't
+		// take an order, so opening them only leads to a failed add.
+		if r.Unavailable {
+			continue
+		}
+		out = append(out, catalog.Place{
 			ID: r.ID, SwiggyID: r.ID, Name: r.Name, City: r.City,
 			Section: section, ETA: r.ETA, Rating: r.Rating, Description: r.Description,
 			Offer: r.Offer,
-		}
+		})
 	}
 	return out
 }
@@ -66,6 +71,7 @@ func toMenuPlace(m api.Menu) catalog.Place {
 			ID: it.ID, SwiggyID: it.ID, Name: it.Name, Price: it.Price,
 			Veg: it.Veg, Desc: it.Description, Rating: it.Rating,
 			Customizable: it.Customizable, Category: it.Category,
+			OutOfStock: !it.InStock,
 		}
 	}
 	return catalog.Place{ID: m.RestaurantID, SwiggyID: m.RestaurantID, Items: items}

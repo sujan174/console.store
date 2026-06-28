@@ -84,6 +84,7 @@ func (m Model) liveInitCmds() tea.Cmd {
 		return tea.Batch(
 			datasource.LoadUsuals(m.backend, m.snap, m.addr.ID),
 			datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, m.homeNearbyQuery()),
+			datasource.PullCart(m.backend, m.addr.ID),
 		)
 	}
 	// Not seeded: resolve addresses first — AddressesLoadedMsg then fires Home

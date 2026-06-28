@@ -90,6 +90,11 @@ type Item struct {
 	Customizable bool
 	Options      []OptionGroup
 	Category     string // menu (sub)category title; live only, "" in mock
+
+	// OutOfStock marks an item Swiggy reports as not orderable (inStock==0). Zero
+	// value = available, so mock items (which never set it) stay addable. Sold-out
+	// items render dimmed and the add is blocked rather than silently failing.
+	OutOfStock bool
 }
 
 // Place is a restaurant/store. SwiggyID maps to a live restaurant id.

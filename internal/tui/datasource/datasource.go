@@ -66,6 +66,13 @@ type (
 		Cart api.Cart
 		Err  error
 	}
+	// CartPulledMsg carries the account cart fetched once at launch (to detect a
+	// pre-existing foreign cart). Distinct from CartLoadedMsg so launch-time
+	// errors stay silent and only this path seeds the local cart.
+	CartPulledMsg struct {
+		Cart api.Cart
+		Err  error
+	}
 	OrderPlacedMsg struct {
 		Order api.Order
 		Err   error
@@ -219,6 +226,16 @@ func LoadCart(b Backend, addressID, restaurantName string) tea.Cmd {
 	return func() tea.Msg {
 		cart, err := b.GetCart(addressID, restaurantName)
 		return CartLoadedMsg{Cart: cart, Err: err}
+	}
+}
+
+// PullCart fetches the account cart once at launch (no restaurant scope) so the
+// TUI can detect a cart already built on the Swiggy app/website and seed it
+// locally — making a later cross-restaurant add raise the keep/override modal.
+func PullCart(b Backend, addressID string) tea.Cmd {
+	return func() tea.Msg {
+		cart, err := b.GetCart(addressID, "")
+		return CartPulledMsg{Cart: cart, Err: err}
 	}
 }
 

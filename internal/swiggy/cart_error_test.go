@@ -38,6 +38,15 @@ func TestCartErrorSuccessWithDataIsNil(t *testing.T) {
 	}
 }
 
+func TestToCartCarriesRestaurantName(t *testing.T) {
+	d := &cartData{}
+	d.Restaurant.Name = "Blue Tokai"
+	env := cartEnvelope{StatusCode: 0, Data: d}
+	if got := env.toCart().Restaurant; got != "Blue Tokai" {
+		t.Fatalf("cart restaurant name = %q, want Blue Tokai", got)
+	}
+}
+
 func TestCartErrorSuccessfulFalse(t *testing.T) {
 	no := false
 	env := cartEnvelope{Successful: &no, StatusMessage: "item unavailable"}

@@ -135,12 +135,13 @@ type CartLine struct {
 // fields carry Swiggy's real bill breakdown (whole rupees) for an accurate
 // checkout split instead of mock delivery/coupon math.
 type Cart struct {
-	CartID    string
-	ItemTotal int // pricing.item_total
-	Delivery  int // pricing.delivery_charge
-	Taxes     int // pricing.taxes_and_charges
-	Total     int // pricing.to_pay
-	Items     []CartLine
+	CartID     string
+	Restaurant string // cart.restaurant.name (the cart's owning restaurant)
+	ItemTotal  int    // pricing.item_total
+	Delivery   int    // pricing.delivery_charge
+	Taxes      int    // pricing.taxes_and_charges
+	Total      int    // pricing.to_pay
+	Items      []CartLine
 	// ValidAddons are the add-on groups Swiggy reports as valid for the current
 	// variant/add-on selection (the server-driven customization mechanism). Used
 	// by the customize wizard to render the next page. Empty for simple carts.
@@ -258,11 +259,12 @@ func (e cartEnvelope) toCart() Cart {
 	}
 	d := e.Data
 	c := Cart{
-		CartID:    d.CartID.String(),
-		ItemTotal: int(math.Round(d.Pricing.ItemTotal)),
-		Delivery:  int(math.Round(d.Pricing.DeliveryCharge)),
-		Taxes:     int(math.Round(d.Pricing.TaxesAndCharges)),
-		Total:     int(math.Round(d.Pricing.ToPay)),
+		CartID:     d.CartID.String(),
+		Restaurant: d.Restaurant.Name,
+		ItemTotal:  int(math.Round(d.Pricing.ItemTotal)),
+		Delivery:   int(math.Round(d.Pricing.DeliveryCharge)),
+		Taxes:      int(math.Round(d.Pricing.TaxesAndCharges)),
+		Total:      int(math.Round(d.Pricing.ToPay)),
 	}
 	for _, it := range d.Items {
 		c.Items = append(c.Items, CartLine{

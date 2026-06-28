@@ -36,17 +36,36 @@ func mapRestaurants(in []swiggy.Restaurant) []api.Restaurant {
 		out[i] = api.Restaurant{
 			ID: r.ID, Name: r.Name, City: r.AreaName,
 			ETA: r.DeliveryTimeRange, Description: desc, Rating: r.AvgRating,
-			Offer: r.Offer,
+			Offer: r.Offer, Unavailable: unavailableStatus(r.Availability),
 		}
 	}
 	return out
+}
+
+// unavailableStatus reports whether Swiggy's availabilityStatus marks the
+// restaurant as not currently deliverable (closed / unserviceable). The exact
+// string set is not fully harvested, so this matches defensively on known
+// negative markers and treats an empty/unknown status as deliverable — better to
+// keep a good restaurant than hide one. Raw values are visible in the
+// search_restaurants response logged under CONSOLE_DEBUG_SWIGGY for refinement.
+func unavailableStatus(status string) bool {
+	s := strings.ToLower(strings.TrimSpace(status))
+	if s == "" {
+		return false
+	}
+	for _, bad := range []string{"close", "unserv", "unavail", "not_deliver", "not deliver", "notdeliver", "out of", "temporarily"} {
+		if strings.Contains(s, bad) {
+			return true
+		}
+	}
+	return false
 }
 
 func mapMenu(in swiggy.Menu) api.Menu {
 	items := make([]api.MenuItem, len(in.Items))
 	for i, m := range in.Items {
 		rating, _ := strconv.ParseFloat(m.Rating, 64) // "4.6" -> 4.6; "" -> 0
-		items[i] = api.MenuItem{ID: m.ID, Name: m.Name, Price: int(math.Round(m.Price)), Veg: m.Veg, Description: m.Desc, Rating: rating, Customizable: m.HasVariants || m.HasAddons, Category: m.Category}
+		items[i] = api.MenuItem{ID: m.ID, Name: m.Name, Price: int(math.Round(m.Price)), Veg: m.Veg, Description: m.Desc, Rating: rating, Customizable: m.HasVariants || m.HasAddons, Category: m.Category, InStock: m.InStock > 0}
 	}
 	return api.Menu{RestaurantID: in.RestaurantID, Items: items}
 }
@@ -57,7 +76,7 @@ func mapCart(in swiggy.Cart) api.Cart {
 		lines[i] = api.CartLine{ItemID: l.ItemID, Name: l.Name, Quantity: l.Quantity, Price: l.Price}
 	}
 	return api.Cart{
-		CartID: in.CartID, ItemTotal: in.ItemTotal, Delivery: in.Delivery,
+		CartID: in.CartID, Restaurant: in.Restaurant, ItemTotal: in.ItemTotal, Delivery: in.Delivery,
 		Taxes: in.Taxes, Total: in.Total, Lines: lines,
 		ValidAddons: mapOptions(in.ValidAddons),
 	}

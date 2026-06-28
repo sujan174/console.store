@@ -32,6 +32,24 @@ func TestRestaurantRendersItemsWithPrices(t *testing.T) {
 	}
 }
 
+func TestRestaurantSoldOutItemMarkedNotStepper(t *testing.T) {
+	p := catalog.Place{Name: "Blue Tokai", ETA: "35-45 min", Items: []catalog.Item{
+		{ID: "a", Name: "Available Latte", Price: 200},
+		{ID: "b", Name: "Gone Mocha", Price: 250, OutOfStock: true},
+	}}
+	out := NewRestaurant(p, map[string]int{}, "").View()
+	if !strings.Contains(despace(out), "soldout") {
+		t.Fatalf("out-of-stock item should render a 'sold out' tag:\n%s", out)
+	}
+	// A sold-out row shows no price (it's not orderable); the available one does.
+	if !strings.Contains(despace(out), "₹200") {
+		t.Fatalf("available item should still show its price:\n%s", out)
+	}
+	if strings.Contains(despace(out), "₹250") {
+		t.Fatalf("sold-out item must not show a price/stepper:\n%s", out)
+	}
+}
+
 func TestRestaurantNoQuickLookCard(t *testing.T) {
 	repo := mem.New()
 	p, _ := repo.Menu("blue-tokai")
