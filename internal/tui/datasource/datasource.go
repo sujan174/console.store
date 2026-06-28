@@ -35,6 +35,7 @@ type Backend interface {
 	PlaceOrder(addressID string) (api.Order, error)
 	TrackOrder(orderID string) (api.Tracking, error)
 	ActiveOrders(addressID string) ([]api.Order, error)
+	OrderHistory(addressID string) ([]api.Order, error)
 	Logout() error
 }
 
@@ -85,6 +86,12 @@ type (
 	// ActiveOrdersLoadedMsg carries the account's currently-active orders, or an
 	// error if the fetch failed.
 	ActiveOrdersLoadedMsg struct {
+		Orders []api.Order
+		Err    error
+	}
+	// OrdersLoadedMsg carries the account's full order history (newest-first),
+	// or an error if the fetch failed.
+	OrdersLoadedMsg struct {
 		Orders []api.Order
 		Err    error
 	}
@@ -247,5 +254,14 @@ func LoadActiveOrdersCmd(b Backend, addressID string) tea.Cmd {
 	return func() tea.Msg {
 		os, err := b.ActiveOrders(addressID)
 		return ActiveOrdersLoadedMsg{Orders: os, Err: err}
+	}
+}
+
+// LoadOrdersCmd fetches the account's full order history (live + delivered,
+// newest-first) for the orders list screen.
+func LoadOrdersCmd(b Backend, addressID string) tea.Cmd {
+	return func() tea.Msg {
+		os, err := b.OrderHistory(addressID)
+		return OrdersLoadedMsg{Orders: os, Err: err}
 	}
 }

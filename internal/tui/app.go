@@ -78,6 +78,7 @@ const (
 	scrCheckout
 	scrConfirm
 	scrTracking
+	scrOrders
 	scrInstamart
 	scrImCart
 )
@@ -152,6 +153,7 @@ type Model struct {
 	lastEscFrame int    // frame of the previous Esc (for double-Esc home detection)
 
 	track          screens.Tracking
+	orders         screens.Orders
 	trackTick      int
 	confirmTick    int                    // ticks since scrConfirm was entered; auto-advances to scrTracking
 	nowUnix        int64                  // updated each tick — passed to tracking View for live elapsed
@@ -1696,7 +1698,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !dm.Tracking.Active && m.hasActiveOrder {
 			elapsedSec := m.nowUnix - m.activeOrder.PlacedAt
 			_, delivered, _ := screens.StageFromStatus(dm.Tracking.Status)
-			if delivered || elapsedSec > 5*60 {
+			if delivered || elapsedSec > 90 {
 				_ = localstore.ClearActiveOrder()
 				m.hasActiveOrder = false
 				m.splash = m.splash.WithOrder("")
@@ -1717,7 +1719,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		elapsedSec := m.nowUnix - m.activeOrder.PlacedAt
-		if !found && elapsedSec > 5*60 {
+		if !found && elapsedSec > 90 {
 			_ = localstore.ClearActiveOrder()
 			m.hasActiveOrder = false
 			m.splash = m.splash.WithOrder("")
@@ -1726,6 +1728,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Refresh the splash label (ETA text unchanged unless we have a live ETA).
 			m.splash = m.splash.WithOrder(fmt.Sprintf("%s · ~%d min", m.activeOrder.Restaurant, m.activeOrder.ETAHiMin))
 		}
+		return m, nil
+	case datasource.OrdersLoadedMsg:
+		rows := make([]screens.OrderRow, 0, len(dm.Orders))
+		if dm.Err == nil {
+			for _, o := range dm.Orders {
+				rows = append(rows, screens.OrderRow{ID: o.ID, Restaurant: o.Restaurant, Status: o.Status, Total: o.Total})
+			}
+		}
+		m.orders = screens.NewOrders(rows)
 		return m, nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
@@ -2011,6 +2022,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if screens.IsSettings(m.homeSel, m.hasActiveOrder) {
 					m.settingsOpen = true
 					m.settingsSel = 0
+				} else if screens.IsOrders(m.homeSel, m.hasActiveOrder) {
+					// Open the order-history list and fetch it.
+					m.orders = screens.NewOrders(nil).WithLoading(true)
+					m.screen = scrOrders
+					if m.backend != nil && m.addr.ID != "" {
+						return m, datasource.LoadOrdersCmd(m.backend, m.addr.ID)
+					}
+					return m, nil
 				} else if screens.IsTrack(m.homeSel, m.hasActiveOrder) {
 					// Restore tracking screen from persisted active order.
 					m.track = screens.NewTracking(
@@ -2517,6 +2536,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				pollCmd = datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
 			}
 			return m, pollCmd
+		case scrOrders:
+			switch k.String() {
+			case "esc", "q":
+				m.screen = scrSplash
+				return m, nil
+			case "up", "k":
+				m.orders = m.orders.Up()
+				return m, nil
+			case "down", "j":
+				m.orders = m.orders.Down()
+				return m, nil
+			}
+			return m, nil
 		case scrTracking:
 			switch k.String() {
 			case "esc":
@@ -2621,6 +2653,8 @@ func (m Model) screenLabel() string {
 		return "order placed"
 	case scrTracking:
 		return "tracking"
+	case scrOrders:
+		return "orders"
 	case scrAddress:
 		return "menu"
 	case scrInstamart:
@@ -2778,6 +2812,8 @@ func (m Model) View() string {
 		body = m.checkout.WithPlacing(m.placingOrder).View(m.frame)
 	case scrTracking:
 		body = m.track.View(m.nowUnix, m.frame, m.spin())
+	case scrOrders:
+		body = m.orders.View()
 	case scrInstamart:
 		if m.live {
 			// Live vertical: show "coming soon" placeholder until Instamart is built.

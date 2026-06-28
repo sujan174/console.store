@@ -159,6 +159,10 @@ func (f *fakeRPC) ActiveFoodOrders(accountID, addressID string) ([]api.Order, er
 	f.lastAccount = accountID
 	return nil, f.err
 }
+func (f *fakeRPC) FoodOrders(accountID, addressID string, activeOnly bool) ([]api.Order, error) {
+	f.lastAccount = accountID
+	return nil, f.err
+}
 func (f *fakeRPC) Logout(accountID string) error { f.lastAccount = accountID; return nil }
 
 func TestBrokerBackendLogoutForwardsAccount(t *testing.T) {

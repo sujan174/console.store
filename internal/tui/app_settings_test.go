@@ -20,7 +20,8 @@ func TestSplashSettingsDisconnectReauths(t *testing.T) {
 		WithAuthFlow("", fakePoller{}),
 	)
 	// homeSel 1 = "settings" in the standard 2-item layout (no active order).
-	m.homeSel = 1
+	// settings is the last item; no active order → [go to shop, orders, settings].
+	m.homeSel = 2
 
 	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = out.(Model)

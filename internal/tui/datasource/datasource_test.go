@@ -152,6 +152,7 @@ func TestLoadUsualsCachesUnderUsualsKey(t *testing.T) {
 
 func (f *fakeBackend) TrackOrder(string) (api.Tracking, error)  { return f.tracking, f.err }
 func (f *fakeBackend) ActiveOrders(string) ([]api.Order, error) { return f.orders, f.err }
+func (f *fakeBackend) OrderHistory(string) ([]api.Order, error) { return f.orders, f.err }
 func (f *fakeBackend) Logout() error                            { return f.err }
 
 func TestPollTrackingCmd(t *testing.T) {

@@ -14,9 +14,15 @@ import (
 // inserted between "go to shop" (index 0) and "settings" (index 2).
 func HomeItems(hasOrder bool) []string {
 	if hasOrder {
-		return []string{"go to shop", "track order", "settings"}
+		return []string{"go to shop", "track order", "orders", "settings"}
 	}
-	return []string{"go to shop", "settings"}
+	return []string{"go to shop", "orders", "settings"}
+}
+
+// IsOrders reports whether home item i is the "orders" (order history) entry.
+func IsOrders(i int, hasOrder bool) bool {
+	items := HomeItems(hasOrder)
+	return i >= 0 && i < len(items) && items[i] == "orders"
 }
 
 // IsSettings reports whether home item i is the settings entry, given the
@@ -204,21 +210,19 @@ func splashBtn(label string, focused bool) string {
 func (s Splash) prompt() string {
 	ind := strings.Repeat(" ", promptIndent)
 
-	// All home items are left-aligned blue buttons at the same column.
-	// Settings index depends on whether the track row is present.
-	settingsSel := 1
-	if s.orderLabel != "" {
-		settingsSel = 2
+	// Render each home item (from HomeItems) as a left-aligned blue button, so
+	// the selection indices always match the item list.
+	var lines []string
+	for i, it := range HomeItems(s.orderLabel != "") {
+		label := it
+		switch it {
+		case "go to shop":
+			label = "enter store"
+		case "track order":
+			label = "track order · " + s.orderLabel
+		}
+		lines = append(lines, ind+splashBtn(label, s.sel == i))
 	}
-
-	lines := []string{ind + splashBtn("enter store", s.sel == 0)}
-
-	// track order (optional) — same blue button family.
-	if s.orderLabel != "" {
-		lines = append(lines, ind+splashBtn("track order · "+s.orderLabel, s.sel == 1))
-	}
-
-	lines = append(lines, ind+splashBtn("settings", s.sel == settingsSel))
 
 	// A faint quit hint sits one blank line below all the buttons.
 	lines = append(lines, "", strings.Repeat(" ", promptIndent+2)+theme.FaintStyle.Render("q quit"))
