@@ -96,6 +96,12 @@ type Model struct {
 	lines          []screens.CartLine
 	cartRestaurant string
 	cartSection    catalog.Section // "" for non-snacks; SectionSnacks when snacks cart
+	// cartForeign marks a cart seeded at launch from a pre-existing Swiggy cart
+	// whose owning restaurant we could not identify (Swiggy returned items but no
+	// restaurant name). While true, ANY add conflicts — we can't prove the new
+	// item belongs to the same place, so we must prompt to replace rather than
+	// silently mix restaurants. Cleared the moment a real in-app cart is started.
+	cartForeign bool
 
 	// customize modal: shown when adding an item that has add-ons (Swiggy's
 	// "customise" sheet). Owns its own cursor + selection state.
@@ -511,7 +517,17 @@ func decLastByItem(lines []screens.CartLine, id string) []screens.CartLine {
 // mix incompatible carts. All SectionSnacks places share one cart; everything else
 // is scoped to a single named restaurant.
 func (m Model) conflictsWithCart(rest string, section catalog.Section) bool {
-	if len(m.lines) == 0 || m.cartRestaurant == "" {
+	if len(m.lines) == 0 {
+		return false
+	}
+	// Seeded foreign cart with no identifiable restaurant: we can't verify the
+	// add belongs to the same place, so always prompt to replace. (Without this,
+	// an empty cartRestaurant fell through to "no conflict" and the local cart
+	// silently mixed two restaurants while nothing reached Swiggy.)
+	if m.cartForeign && m.cartRestaurant == "" {
+		return true
+	}
+	if m.cartRestaurant == "" {
 		return false
 	}
 	if m.cartSection == catalog.SectionSnacks && section == catalog.SectionSnacks {
@@ -527,6 +543,7 @@ func (m Model) startNewCart(item catalog.Item, addons []catalog.AddOn, sels []ca
 	m.lines = []screens.CartLine{{Item: item, Qty: 1, AddOns: addons, Selections: sels, Price: price}}
 	m.cartRestaurant = rest
 	m.cartSection = section
+	m.cartForeign = false // a real in-app cart now owns the lines
 	return m
 }
 
@@ -544,6 +561,9 @@ func (m Model) seedCartFromLive(c api.Cart) Model {
 	m.lines = lines
 	m.cartRestaurant = c.Restaurant
 	m.cartSection = catalog.SectionFood
+	// Mark as foreign only when we couldn't name the restaurant; a named cart
+	// conflicts normally on a different-name add.
+	m.cartForeign = c.Restaurant == ""
 	m.menu = m.menu.WithCartChip(m.cartChip())
 	return m
 }
@@ -1314,6 +1334,9 @@ func (m Model) cartHeader() string {
 		}
 		return m.cartRestaurant
 	}
+	if m.cartForeign {
+		return "your existing Swiggy cart"
+	}
 	return "your order"
 }
 
@@ -1877,6 +1900,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.lines = nil
 						m.cartRestaurant = ""
 						m.cartSection = ""
+						m.cartForeign = false
 						pd := m.rest.PlaceData()
 						m.conflictOpen = false
 						return m, datasource.LoadItemOptions(m.backend, m.addr.ID, pd.SwiggyID, m.pendingItem.Name, m.pendingItem.SwiggyID)
@@ -3034,10 +3058,9 @@ func (m Model) liveSyncCart() tea.Cmd {
 		dbgTUI("liveSyncCart: nil (live=%v lines=%d)", m.live, len(m.lines))
 		return nil
 	}
-	pid := m.cartPlaceID()
-	p, ok := m.repo.Menu(pid)
-	if !ok || p.SwiggyID == "" {
-		dbgTUI("liveSyncCart: nil (cartRestaurant=%q cartPlaceID=%q menuFound=%v swiggyID=%q)", m.cartRestaurant, pid, ok, p.SwiggyID)
+	swiggyID := m.cartRestaurantSwiggyID()
+	if swiggyID == "" {
+		dbgTUI("liveSyncCart: nil (cartRestaurant=%q — no SwiggyID resolved)", m.cartRestaurant)
 		return nil
 	}
 	items := m.cartItemsForLines()
@@ -3045,6 +3068,22 @@ func (m Model) liveSyncCart() tea.Cmd {
 		dbgTUI("liveSyncCart: nil (no items with SwiggyID; lines=%d)", len(m.lines))
 		return nil
 	}
-	dbgTUI("liveSyncCart: SYNC restaurant=%q swiggyRest=%q items=%d", m.cartRestaurant, p.SwiggyID, len(items))
-	return datasource.SyncCart(m.backend, m.snap, m.addr.ID, p.SwiggyID, m.cartRestaurant, items)
+	dbgTUI("liveSyncCart: SYNC restaurant=%q swiggyRest=%q items=%d", m.cartRestaurant, swiggyID, len(items))
+	return datasource.SyncCart(m.backend, m.snap, m.addr.ID, swiggyID, m.cartRestaurant, items)
+}
+
+// cartRestaurantSwiggyID resolves the live restaurant id the cart syncs against.
+// It prefers the currently-open restaurant (which always has a SwiggyID after a
+// fresh add/override, and is reachable even when the place came from a search and
+// isn't in any cuisine-chip list), then falls back to the place-list lookup.
+// Without the open-restaurant fallback, a cart whose restaurant wasn't in a chip
+// query resolved to "" and the sync silently no-oped.
+func (m Model) cartRestaurantSwiggyID() string {
+	if p := m.rest.PlaceData(); p.Name != "" && p.Name == m.cartRestaurant && p.SwiggyID != "" {
+		return p.SwiggyID
+	}
+	if p, ok := m.repo.Menu(m.cartPlaceID()); ok && p.SwiggyID != "" {
+		return p.SwiggyID
+	}
+	return ""
 }

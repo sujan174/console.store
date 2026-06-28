@@ -44,6 +44,37 @@ func TestCartPullSeedsLocalCartAndConflicts(t *testing.T) {
 	}
 }
 
+// When Swiggy returns cart items but no restaurant name, the cart is flagged
+// foreign and EVERY add conflicts — we can't prove the new item belongs to the
+// same place, so we must prompt to replace rather than silently mix restaurants.
+// (Regression: an empty cartRestaurant used to fall through to "no conflict",
+// letting two restaurants land in one local cart while nothing reached Swiggy.)
+func TestCartPullUnnamedCartAlwaysConflicts(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	m := New(render.Caps{}, WithLiveBackend(&liveFake{}, snap, "acct-1", ""))
+
+	out, _ := m.Update(datasource.CartPulledMsg{Cart: api.Cart{
+		Restaurant: "", // Swiggy gave items but no restaurant name
+		Lines:      []api.CartLine{{ItemID: "111", Name: "Mystery Item", Quantity: 1, Price: 200}},
+	}})
+	m = out.(Model)
+
+	if !m.cartForeign {
+		t.Fatal("an unnamed seeded cart must be flagged foreign")
+	}
+	if len(m.lines) != 1 {
+		t.Fatalf("items should still seed for display: %+v", m.lines)
+	}
+	if !m.conflictsWithCart("Any Restaurant", catalog.SectionFood) {
+		t.Fatal("any add to an unidentified foreign cart must conflict (prompt replace)")
+	}
+	// Starting a fresh cart clears the foreign flag.
+	m = m.startNewCart(catalog.Item{ID: "x", Name: "New"}, nil, nil, 100, "Real Place", catalog.SectionFood)
+	if m.cartForeign {
+		t.Fatal("startNewCart must clear the foreign flag")
+	}
+}
+
 // The pull never clobbers a cart the user is already building this session.
 func TestCartPullDoesNotClobberLocalCart(t *testing.T) {
 	snap := swiggysnap.NewSnapshot()
