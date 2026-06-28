@@ -1,0 +1,20 @@
+{
+  "name": "consolestore-landing",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Next.js landing page for consolestore.in",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^16.0.10",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=20"
+  }
+}
