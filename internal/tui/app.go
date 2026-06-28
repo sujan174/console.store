@@ -103,6 +103,16 @@ type Model struct {
 	// silently mix restaurants. Cleared the moment a real in-app cart is started.
 	cartForeign bool
 
+	// confirmed* is the last Swiggy-CONFIRMED cart state (after a successful
+	// pull/load/sync). Cart mutations are optimistic; if the resulting sync FAILS
+	// the cart rolls back to this snapshot and surfaces an error, so the local cart
+	// is always a faithful replica of the real Swiggy cart (no silent divergence).
+	confirmedLines      []screens.CartLine
+	confirmedRestaurant string
+	confirmedSection    catalog.Section
+	confirmedForeign    bool
+	cartConfirmed       bool // true once a baseline has been captured (vs zero-value)
+
 	// customize modal: shown when adding an item that has add-ons (Swiggy's
 	// "customise" sheet). Owns its own cursor + selection state.
 	customizeOpen bool
@@ -565,6 +575,57 @@ func (m Model) seedCartFromLive(c api.Cart) Model {
 	// conflicts normally on a different-name add.
 	m.cartForeign = c.Restaurant == ""
 	m.menu = m.menu.WithCartChip(m.cartChip())
+	// The pulled cart IS what Swiggy holds → it is the confirmed baseline.
+	return m.commitCartConfirmed()
+}
+
+// cloneCartLines returns a copy with its own backing array so a confirmed
+// snapshot is not mutated when later cart edits change qty in place
+// (appendOrInc/decLastByItem mutate lines[i].Qty). The per-line AddOns/Selections
+// slices are never mutated in place, so sharing their headers is safe.
+func cloneCartLines(in []screens.CartLine) []screens.CartLine {
+	if len(in) == 0 {
+		return nil
+	}
+	return append([]screens.CartLine(nil), in...)
+}
+
+// commitCartConfirmed records the current cart as the last Swiggy-confirmed
+// state — the rollback target for a future failed sync. Called after every
+// successful pull/load/sync.
+func (m Model) commitCartConfirmed() Model {
+	m.confirmedLines = cloneCartLines(m.lines)
+	m.confirmedRestaurant = m.cartRestaurant
+	m.confirmedSection = m.cartSection
+	m.confirmedForeign = m.cartForeign
+	m.cartConfirmed = true
+	return m
+}
+
+// rollbackCart restores the cart to the last confirmed state after a failed
+// sync, then rebuilds the affected views so the screen reflects the revert. The
+// local cart never shows an item Swiggy rejected.
+func (m Model) rollbackCart() Model {
+	if !m.cartConfirmed {
+		// No baseline yet (first mutation from empty): the safe revert is an empty
+		// cart, since nothing was ever confirmed.
+		m.lines = nil
+		m.cartRestaurant = ""
+		m.cartSection = ""
+		m.cartForeign = false
+	} else {
+		m.lines = cloneCartLines(m.confirmedLines)
+		m.cartRestaurant = m.confirmedRestaurant
+		m.cartSection = m.confirmedSection
+		m.cartForeign = m.confirmedForeign
+	}
+	m.menu = m.menu.WithCartChip(m.cartChip())
+	if m.screen == scrRestaurant {
+		m = m.refreshAfterAdd()
+	}
+	if m.screen == scrCheckout {
+		m.checkout = m.buildCheckout()
+	}
 	return m
 }
 
@@ -1633,16 +1694,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.wizardOpen = false
 				m = m.commitAddNoSync(it, addons, sels, price, m.pendingRest, m.pendingSection)
 				m = m.refreshAfterAdd()
+				// The wizard synced this item to the live cart page by page and the
+				// final confirm succeeded → record the new baseline.
+				m = m.commitCartConfirmed()
 				return m, nil
 			}
 		}
 		if dm.Err != nil {
-			m.cartSyncErr = "⚠ cart not updated on Swiggy: " + dm.Err.Error()
-		} else {
-			m.cartSyncErr = ""
-			m.liveCart = dm.Cart // real Swiggy pricing for an accurate bill
+			// The optimistic change did NOT reach Swiggy. Roll the local cart back
+			// to the last confirmed state and tell the user — never leave a phantom
+			// item that isn't really in their Swiggy cart.
+			m.cartMutating = false
+			m = m.rollbackCart()
+			m.cartSyncErr = "⚠ cart change didn't go through — reverted. try again"
+			return m, nil
 		}
-		m.cartMutating = false // confirmed — unfreeze (success or error)
+		m.cartSyncErr = ""
+		m.liveCart = dm.Cart // real Swiggy pricing for an accurate bill
+		m = m.commitCartConfirmed()
+		m.cartMutating = false // confirmed — unfreeze
 		if m.screen == scrCheckout {
 			m.checkout = m.buildCheckout()
 		}
@@ -1655,6 +1725,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cartSyncErr = ""
 		m.liveCart = dm.Cart
 		m.cartLoaded = true
+		// A successful load confirms the current lines as the Swiggy baseline.
+		m = m.commitCartConfirmed()
 		if m.screen == scrCheckout {
 			m.checkout = m.buildCheckout()
 		}
