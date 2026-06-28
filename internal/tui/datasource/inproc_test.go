@@ -93,8 +93,4 @@ func (f *fakeService) ActiveFoodOrders(_ context.Context, a, _ string) ([]api.Or
 	f.gotAccount = a
 	return nil, nil
 }
-func (f *fakeService) FoodOrders(_ context.Context, a, _ string, _ bool) ([]api.Order, error) {
-	f.gotAccount = a
-	return nil, nil
-}
 func (f *fakeService) Logout(_ context.Context, a string) error { f.gotAccount = a; return nil }

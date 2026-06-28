@@ -21,7 +21,6 @@ type brokerRPC interface {
 	PlaceOrder(accountID, addressID string) (api.Order, error)
 	TrackOrder(accountID, orderID string) (api.Tracking, error)
 	ActiveFoodOrders(accountID, addressID string) ([]api.Order, error)
-	FoodOrders(accountID, addressID string, activeOnly bool) ([]api.Order, error)
 	Logout(accountID string) error
 }
 
@@ -121,11 +120,6 @@ func (b *BrokerBackend) TrackOrder(orderID string) (api.Tracking, error) {
 
 func (b *BrokerBackend) ActiveOrders(addressID string) ([]api.Order, error) {
 	o, err := b.rpc.ActiveFoodOrders(b.accountID, addressID)
-	return o, wrapAuthErr(err)
-}
-
-func (b *BrokerBackend) OrderHistory(addressID string) ([]api.Order, error) {
-	o, err := b.rpc.FoodOrders(b.accountID, addressID, false)
 	return o, wrapAuthErr(err)
 }
 

@@ -11,18 +11,12 @@ import (
 
 // HomeItems returns the ordered list of home menu items depending on whether an
 // order is currently live. When hasOrder is true, a "track order" entry is
-// inserted between "go to shop" (index 0) and "settings" (index 2).
+// inserted between "go to shop" (index 0) and "settings".
 func HomeItems(hasOrder bool) []string {
 	if hasOrder {
-		return []string{"go to shop", "track order", "orders", "settings"}
+		return []string{"go to shop", "track order", "settings"}
 	}
-	return []string{"go to shop", "orders", "settings"}
-}
-
-// IsOrders reports whether home item i is the "orders" (order history) entry.
-func IsOrders(i int, hasOrder bool) bool {
-	items := HomeItems(hasOrder)
-	return i >= 0 && i < len(items) && items[i] == "orders"
+	return []string{"go to shop", "settings"}
 }
 
 // IsSettings reports whether home item i is the settings entry, given the
