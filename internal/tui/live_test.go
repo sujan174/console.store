@@ -19,8 +19,9 @@ import (
 )
 
 type liveFake struct {
-	addrs []api.Address
-	err   error
+	addrs  []api.Address
+	orders []api.Order // returned by ActiveOrders (active-order discovery tests)
+	err    error
 }
 
 func (f *liveFake) Addresses() ([]api.Address, error) { return f.addrs, f.err }
@@ -43,7 +44,7 @@ func (f *liveFake) GetCart(string, string) (api.Cart, error) { return api.Cart{}
 func (f *liveFake) ClearCart() error                         { return f.err }
 func (f *liveFake) PlaceOrder(string) (api.Order, error)     { return api.Order{}, f.err }
 func (f *liveFake) TrackOrder(string) (api.Tracking, error)  { return api.Tracking{}, f.err }
-func (f *liveFake) ActiveOrders(string) ([]api.Order, error) { return nil, f.err }
+func (f *liveFake) ActiveOrders(string) ([]api.Order, error) { return f.orders, f.err }
 
 func TestMockPathUnaffected(t *testing.T) {
 	m := New(render.Caps{})

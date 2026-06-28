@@ -1334,6 +1334,19 @@ func (m Model) toSplash() Model {
 	return m
 }
 
+// activeOrderCheckCmd re-checks the account for a currently-live order so the
+// Start Screen's delivery-status (track order) button reflects reality. Fired
+// on every Start Screen entry (launch + double-Esc home). Returns nil when the
+// call can't be made yet (mock mode, no backend, or no resolved address); the
+// ActiveOrdersLoadedMsg handler both DISCOVERS a new live order and refreshes a
+// known one.
+func (m Model) activeOrderCheckCmd() tea.Cmd {
+	if !m.live || m.backend == nil || m.addr.ID == "" {
+		return nil
+	}
+	return datasource.LoadActiveOrdersCmd(m.backend, m.addr.ID)
+}
+
 func (m Model) spin() string { return spinFrames[m.frame%len(spinFrames)] }
 
 // blinkOn reports the on-phase of a ~1s cursor blink.
@@ -1506,7 +1519,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// and pull the account cart once to detect a pre-existing foreign cart.
 			// Reset usualsLoaded so the new address's usuals are fetched.
 			m.usualsLoaded = false
-			return m, tea.Batch(m.ensureHomeLoaded(), datasource.PullCart(m.backend, m.addr.ID))
+			// Also check for a live order now that we have an address — this is the
+			// "first time we enter the app" Start Screen check (the splash is the
+			// initial screen), surfacing the delivery-status button on launch.
+			return m, tea.Batch(m.ensureHomeLoaded(), datasource.PullCart(m.backend, m.addr.ID), m.activeOrderCheckCmd())
 		}
 		return m, nil
 	case datasource.PlacesLoadedMsg:
@@ -1885,7 +1901,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case datasource.ActiveOrdersLoadedMsg:
-		if dm.Err != nil || !m.hasActiveOrder {
+		if dm.Err != nil {
+			return m, nil
+		}
+		if !m.hasActiveOrder {
+			// Discovery: the Start Screen check found a live order we didn't know
+			// about (placed on the Swiggy app, or after a fresh launch). Surface
+			// the delivery-status button. Swiggy's order list carries no items,
+			// but id/restaurant/total/ETA are enough to track.
+			for _, o := range dm.Orders {
+				if _, delivered, _ := screens.StageFromStatus(o.Status); delivered {
+					continue // ignore already-delivered orders
+				}
+				etaLo, etaHi := localstore.ParseETAMinutes(o.ETA)
+				ao := localstore.ActiveOrder{
+					OrderID:    o.ID,
+					Restaurant: o.Restaurant,
+					AddrLine:   m.addr.Line,
+					ETALoMin:   etaLo,
+					ETAHiMin:   etaHi,
+					Total:      o.Total,
+					PlacedAt:   time.Now().Unix(),
+				}
+				_ = localstore.SaveActiveOrder(ao)
+				m.activeOrder = ao
+				m.hasActiveOrder = true
+				m.splash = m.splash.WithOrder(fmt.Sprintf("%s · ~%d min", o.Restaurant, etaHi))
+				break
+			}
 			return m, nil
 		}
 		// Check whether our saved order is still in the active list.
@@ -2145,7 +2188,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.frame-m.lastEscFrame <= escDoubleWindow {
 					m = m.toSplash()
 					m.lastEscFrame = -escDoubleWindow - 1
-					return m, nil
+					return m, m.activeOrderCheckCmd()
 				}
 				m.lastEscFrame = m.frame
 				return m, nil
