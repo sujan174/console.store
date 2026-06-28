@@ -1574,7 +1574,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		it := m.pendingItem
 		it.Options = dm.Groups
 		if len(dm.Groups) == 0 {
-			// Item flagged customizable but has no real options — add directly.
+			// Item flagged customizable but has no real options — add directly
+			// (commitAdd raises the conflict modal itself when needed).
 			m = m.commitAdd(it, nil, nil, 0, m.pendingRest, m.pendingSection)
 			if !m.conflictOpen {
 				m = m.refreshAfterAdd()
@@ -1582,16 +1583,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// A customizable item is about to show a picker (wizard or customize sheet)
+		// that mutates the live cart. Resolve a cart-restaurant conflict BEFORE the
+		// picker — otherwise the user picks a variant, THEN gets asked to replace
+		// the cart, and "start fresh" re-fetches and re-opens the picker (a
+		// confusing double-customize). On "start fresh" the cart is cleared and the
+		// options re-fetched, so this check passes and the picker opens once.
+		if m.conflictsWithCart(m.pendingRest, m.pendingSection) {
+			m.conflict = screens.NewCartConflict(m.cartHeader(), m.pendingRest, it.Name)
+			m.conflictSel = 1
+			m.conflictOpen = true
+			m.pendingItem = it // re-fetch path on "start fresh" (handled in conflict resolve)
+			return m, nil
+		}
 		if wizardEligible(dm.Groups) && m.liveRestReady() {
-			// Variant-dependent add-ons: drive the trial-discovery wizard. Resolve
-			// any cart-restaurant conflict first (the wizard mutates the live cart).
-			if m.conflictsWithCart(m.pendingRest, m.pendingSection) {
-				m.conflict = screens.NewCartConflict(m.cartHeader(), m.pendingRest, it.Name)
-				m.conflictSel = 1
-				m.conflictOpen = true
-				m.pendingItem = it // re-fetch path on "new cart" (handled in conflict resolve)
-				return m, nil
-			}
+			// Variant-dependent add-ons: drive the trial-discovery wizard.
 			m.wizardRequired = requiredAddonGroups(dm.Groups)
 			m.wizardOptional = optionalAddonGroups(dm.Groups)
 			m.wizardVarGroups = variantGroups(dm.Groups)
