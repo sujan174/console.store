@@ -25,7 +25,6 @@ func TestCmdNeofetch(t *testing.T) {
 	}
 }
 
-
 func TestCmdUnknown(t *testing.T) {
 	c, _ := screens.NewCmdBar().WithText("zzz").Run()
 	if !strings.Contains(c.View(false), "command not found") {
@@ -51,5 +50,18 @@ func TestCmdExitCloses(t *testing.T) {
 	}
 	if !strings.Contains(c.View(false), "connection to consolestore.in closed") {
 		t.Errorf("exit message missing")
+	}
+}
+
+func TestCmdBarAliasReturnsAction(t *testing.T) {
+	bar, action := screens.NewCmdBar().WithText("alias set breakfast").Run()
+	if action != "alias set breakfast" {
+		t.Fatalf("alias action = %q, want 'alias set breakfast'", action)
+	}
+	// The bar echoes the command but emits no body lines of its own (the root fills them).
+	// AppendOut should append the given lines and make them visible in View.
+	got := bar.AppendOut([]screens.CmdLine{{Text: "preset-saved-ok", Color: ""}})
+	if !strings.Contains(got.View(false), "preset-saved-ok") {
+		t.Fatal("AppendOut should append output lines visible in View")
 	}
 }

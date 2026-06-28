@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1964,11 +1965,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				bar, action := m.cmd.Run()
 				m.cmd = bar
-				switch action {
-				case "clear":
+				switch {
+				case action == "clear":
 					// out already cleared in Run; stay open
-				case "close":
+				case action == "close":
 					m.cmdOpen = false
+				case strings.HasPrefix(action, "alias"):
+					rest := strings.TrimSpace(strings.TrimPrefix(action, "alias"))
+					m.cmd = m.cmd.AppendOut(m.runAliasCommand(rest))
 				}
 			case "backspace":
 				m.cmd = m.cmd.Backspace()
@@ -3235,4 +3239,123 @@ func (m Model) cartRestaurantSwiggyID() string {
 		return p.SwiggyID
 	}
 	return ""
+}
+
+// runAliasCommand executes `:alias set|list|rm …` and returns palette output
+// lines. Preset CREATION captures the current food cart; list/rm manage the
+// store. Presets are bound to the cart's restaurant + the current address.
+func (m *Model) runAliasCommand(rest string) []screens.CmdLine {
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return []screens.CmdLine{{Text: "alias: set <name> | list | rm <name> [n]", Color: theme.Dim}}
+	}
+	switch fields[0] {
+	case "set":
+		if len(fields) < 2 {
+			return []screens.CmdLine{{Text: "usage: alias set <name>", Color: theme.Fav}}
+		}
+		return m.aliasSet(fields[1])
+	case "list", "ls":
+		return aliasListLines()
+	case "rm", "remove":
+		if len(fields) < 2 {
+			return []screens.CmdLine{{Text: "usage: alias rm <name> [n]", Color: theme.Fav}}
+		}
+		idx := 0
+		if len(fields) >= 3 {
+			if n, err := strconv.Atoi(fields[2]); err == nil && n >= 1 {
+				idx = n - 1
+			}
+		}
+		return aliasRmLines(fields[1], idx)
+	default:
+		return []screens.CmdLine{{Text: "alias: set <name> | list | rm <name> [n]", Color: theme.Dim}}
+	}
+}
+
+func (m *Model) aliasSet(name string) []screens.CmdLine {
+	if localstore.ReservedPresetName(name) {
+		return []screens.CmdLine{{Text: fmt.Sprintf("alias: %q is reserved", name), Color: theme.Fav}}
+	}
+	if len(m.lines) == 0 {
+		return []screens.CmdLine{{Text: "alias: cart is empty — add items first", Color: theme.Fav}}
+	}
+	if m.cartForeign || m.cartRestaurant == "" {
+		return []screens.CmdLine{{Text: "alias: open a restaurant and build a cart first", Color: theme.Fav}}
+	}
+	restID := m.cartRestaurantSwiggyID()
+	var plines []localstore.PresetLine
+	for _, l := range m.lines {
+		if l.Item.SwiggyID == "" {
+			continue
+		}
+		pl := localstore.PresetLine{ItemID: l.Item.SwiggyID, Name: l.Item.Name, Qty: l.Qty}
+		for _, s := range l.Selections {
+			pl.Sels = append(pl.Sels, localstore.PresetSel{
+				GroupID: s.GroupID, ChoiceID: s.ChoiceID, Variant: s.Variant, Absolute: s.Absolute, Name: s.Name,
+			})
+		}
+		plines = append(plines, pl)
+	}
+	if len(plines) == 0 {
+		return []screens.CmdLine{{Text: "alias: no live items to save (mock cart?)", Color: theme.Fav}}
+	}
+	ps, err := localstore.LoadPresets()
+	if err != nil {
+		return []screens.CmdLine{{Text: "alias: " + err.Error(), Color: theme.Fav}}
+	}
+	if err := ps.Add(localstore.Preset{
+		Name: name, AddrID: m.addr.ID, AddrLine: m.addr.Line,
+		RestaurantID: restID, RestaurantName: m.cartRestaurant,
+		Lines: plines, CreatedAt: time.Now().Unix(),
+	}); err != nil {
+		return []screens.CmdLine{{Text: "alias: " + err.Error(), Color: theme.Fav}}
+	}
+	if err := localstore.SavePresets(ps); err != nil {
+		return []screens.CmdLine{{Text: "alias: " + err.Error(), Color: theme.Fav}}
+	}
+	return []screens.CmdLine{
+		{Text: fmt.Sprintf("saved preset %q — %d item(s) from %s", name, len(plines), m.cartRestaurant), Color: theme.Green},
+		{Text: fmt.Sprintf("run it from your shell: store order %s", name), Color: theme.Dim},
+	}
+}
+
+func aliasListLines() []screens.CmdLine {
+	ps, err := localstore.LoadPresets()
+	if err != nil {
+		return []screens.CmdLine{{Text: "alias: " + err.Error(), Color: theme.Fav}}
+	}
+	if len(ps.Items) == 0 {
+		return []screens.CmdLine{{Text: "no presets yet", Color: theme.Dim}}
+	}
+	var out []screens.CmdLine
+	seen := map[string]bool{}
+	for _, p := range ps.Items {
+		key := strings.ToLower(p.Name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		group := ps.ByName(p.Name)
+		out = append(out, screens.CmdLine{Text: fmt.Sprintf("%s (%d)", p.Name, len(group)), Color: theme.Gold})
+		for i, g := range group {
+			out = append(out, screens.CmdLine{Text: fmt.Sprintf("  %d) %s", i+1, g.RestaurantName), Color: theme.Dim})
+		}
+	}
+	return out
+}
+
+func aliasRmLines(name string, idx int) []screens.CmdLine {
+	ps, err := localstore.LoadPresets()
+	if err != nil {
+		return []screens.CmdLine{{Text: "alias: " + err.Error(), Color: theme.Fav}}
+	}
+	ok, _ := ps.Remove(name, idx)
+	if !ok {
+		return []screens.CmdLine{{Text: fmt.Sprintf("alias: no preset %q #%d", name, idx+1), Color: theme.Fav}}
+	}
+	if err := localstore.SavePresets(ps); err != nil {
+		return []screens.CmdLine{{Text: "alias: " + err.Error(), Color: theme.Fav}}
+	}
+	return []screens.CmdLine{{Text: fmt.Sprintf("removed preset %q", name), Color: theme.Green}}
 }

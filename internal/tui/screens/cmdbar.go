@@ -82,7 +82,7 @@ func (c CmdBar) Run() (CmdBar, string) {
 			{"  whoami     who you are", D},
 			{"  streak     your morning run", D},
 			{"  uptime     server uptime", D},
-				{"  sl         choo choo", D},
+			{"  sl         choo choo", D},
 			{"  sudo …     go on, try it", D},
 			{"  vim        enter (you can leave)", D},
 			{"  42         the answer", D},
@@ -145,6 +145,18 @@ func (c CmdBar) Run() (CmdBar, string) {
 		out = []CmdLine{
 			{"tip: press : anywhere for the command palette.", D},
 		}
+	case "alias":
+		// Side-effecting command: the root performs capture/list/rm and appends
+		// the result lines via AppendOut. Echo the command, emit no body here.
+		echo := CmdLine{": " + raw, theme.Faint}
+		c.out = append(c.out, echo)
+		if len(c.out) > 13 {
+			c.out = c.out[len(c.out)-13:]
+		}
+		c.text = ""
+		// Return the args after "alias" (preserve original case for names).
+		rest := strings.TrimSpace(raw[len("alias"):])
+		return c, "alias " + rest
 	case "exit", "quit", ":q":
 		out = []CmdLine{
 			{"connection to consolestore.in closed.", D},
@@ -167,6 +179,16 @@ func (c CmdBar) Run() (CmdBar, string) {
 	}
 	c.text = ""
 	return c, action
+}
+
+// AppendOut appends output lines (used by the root for side-effecting commands
+// like `alias`, whose result is computed outside the bar) and keeps the window.
+func (c CmdBar) AppendOut(lines []CmdLine) CmdBar {
+	c.out = append(c.out, lines...)
+	if len(c.out) > 13 {
+		c.out = c.out[len(c.out)-13:]
+	}
+	return c
 }
 
 // View renders the palette body (output lines, prompt with blinking cursor, hint)
