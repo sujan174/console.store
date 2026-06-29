@@ -48,7 +48,7 @@ export const MARKUP = String.raw`
     <div style="display:flex;flex-direction:column;align-items:center;text-align:center">
       <div style="font-size:12.5px;letter-spacing:2px;color:var(--accent);margin:18px 0 6px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .15s">// terminal-native ordering</div>
       <!-- logo lockup: neon mark + particle wordmark, centered as a group -->
-      <div class="hero-lockup" style="display:flex;align-items:center;justify-content:center;gap:clamp(8px,1.8vw,24px);width:100%;height:clamp(150px,26vh,300px);margin:4px 0 2px;animation:introPop 1.3s cubic-bezier(.22,1,.36,1) both .05s">
+      <div class="hero-lockup" style="display:flex;align-items:center;justify-content:center;gap:clamp(6px,1.3vw,16px);width:100%;height:clamp(150px,26vh,300px);margin:4px 0 2px;animation:introPop 1.3s cubic-bezier(.22,1,.36,1) both .05s">
         <svg viewBox="0 0 64 64" fill="none" style="width:clamp(44px,7vw,98px);height:clamp(44px,7vw,98px);flex:none;overflow:visible">
           <g style="filter:drop-shadow(0 0 5px #7aa2f7) drop-shadow(0 0 12px #4f7fd6)">
             <path d="M15 25 L26 34 L15 43" stroke="#a9c4ff" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -58,7 +58,7 @@ export const MARKUP = String.raw`
           <path d="M38 28 Q40 25 38 22" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"></path>
           <path d="M43 28 Q45 25 43 22" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"></path>
         </svg>
-        <div style="position:relative;flex:none;width:clamp(260px,62vw,720px);height:100%">
+        <div style="position:relative;flex:none;width:clamp(250px,56vw,640px);height:100%">
           <canvas data-ref="canvas" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
         </div>
       </div>
