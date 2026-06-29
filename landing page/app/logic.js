@@ -44,28 +44,125 @@ export function mount(root) {
   const installEls = Array.from(root.querySelectorAll('[data-action="install"]'));
   installEls.forEach((el) => el.addEventListener("click", pingInstall));
 
-  // ---- TUI / CLI toggle ----
-  const toggleBtns = Array.from(root.querySelectorAll("[data-toggle]"));
-  const panels = {
-    tui: root.querySelector('[data-panel="tui"]'),
-    cli: root.querySelector('[data-panel="cli"]'),
-  };
-  const setPanel = (which) => {
-    Object.keys(panels).forEach((k) => {
-      if (panels[k]) panels[k].style.display = k === which ? "block" : "none";
+  // ---- TUI / CLI showcase: scroll-driven (pinned) on desktop, tap on mobile ----
+  let cleanupKeys = () => {};
+  (() => {
+    const section = root.querySelector("#keys");
+    const wrap = root.querySelector("[data-panel-wrap]");
+    const ind = root.querySelector("[data-toggle-ind]");
+    const hint = root.querySelector("[data-keys-hint]");
+    const btn = {
+      tui: root.querySelector('[data-toggle="tui"]'),
+      cli: root.querySelector('[data-toggle="cli"]'),
+    };
+    const panel = {
+      tui: root.querySelector('[data-panel="tui"]'),
+      cli: root.querySelector('[data-panel="cli"]'),
+    };
+    if (!section || !wrap || !panel.tui || !panel.cli) return;
+
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const smooth = (x, a, b) => {
+      const u = clamp((x - a) / (b - a), 0, 1);
+      return u * u * (3 - 2 * u);
+    };
+    const placeInd = (t) => {
+      if (!ind || !btn.tui || !btn.cli) return;
+      ind.style.width = btn.tui.offsetWidth + "px";
+      ind.style.transform = `translateX(${(btn.cli.offsetLeft - btn.tui.offsetLeft) * t}px)`;
+    };
+    const colorBtns = (which) => {
+      if (btn.tui) btn.tui.style.color = which === "tui" ? "#c0caf5" : "#565f89";
+      if (btn.cli) btn.cli.style.color = which === "cli" ? "#c0caf5" : "#565f89";
+    };
+
+    const desktop =
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      window.matchMedia("(min-width: 821px)").matches;
+
+    if (!desktop) {
+      // mobile/tablet: simple tap toggle (no pin)
+      const show = (which) => {
+        panel.tui.style.display = which === "tui" ? "block" : "none";
+        panel.cli.style.display = which === "cli" ? "block" : "none";
+        placeInd(which === "cli" ? 1 : 0);
+        colorBtns(which);
+      };
+      const handlers = [];
+      Object.keys(btn).forEach((k) => {
+        if (!btn[k]) return;
+        const h = () => show(k);
+        btn[k].addEventListener("click", h);
+        handlers.push([btn[k], h]);
+      });
+      show("tui");
+      requestAnimationFrame(() => placeInd(0));
+      if (hint) hint.textContent = "tap to switch — the full interactive app, or two commands from your shell.";
+      cleanupKeys = () => handlers.forEach(([b, h]) => b.removeEventListener("click", h));
+      return;
+    }
+
+    // desktop/tablet: overlay both panels, scroll drives the crossfade + indicator
+    wrap.style.position = "relative";
+    [panel.tui, panel.cli].forEach((p) => {
+      p.style.position = "absolute";
+      p.style.top = "0";
+      p.style.left = "0";
+      p.style.right = "0";
+      p.style.display = "block";
+      p.style.transition = "opacity .25s ease, transform .25s ease";
+      p.style.willChange = "opacity, transform";
     });
-    toggleBtns.forEach((b) => {
-      const on = b.getAttribute("data-toggle") === which;
-      b.style.background = on ? "rgba(122,162,247,0.18)" : "transparent";
-      b.style.color = on ? "#c0caf5" : "#565f89";
+    const sizeWrap = () => {
+      wrap.style.height =
+        Math.max(panel.tui.offsetHeight, panel.cli.offsetHeight) + "px";
+    };
+
+    const apply = () => {
+      const total = section.offsetHeight - window.innerHeight;
+      const passed = -section.getBoundingClientRect().top;
+      const p = total > 0 ? clamp(passed / total, 0, 1) : 0;
+      const t = smooth(p, 0.35, 0.65);
+      panel.tui.style.opacity = String(1 - t);
+      panel.tui.style.transform = `translateY(${-16 * t}px)`;
+      panel.tui.style.pointerEvents = t < 0.5 ? "auto" : "none";
+      panel.cli.style.opacity = String(t);
+      panel.cli.style.transform = `translateY(${16 * (1 - t)}px)`;
+      panel.cli.style.pointerEvents = t >= 0.5 ? "auto" : "none";
+      placeInd(t);
+      colorBtns(t < 0.5 ? "tui" : "cli");
+    };
+    const onScroll = () => apply();
+    const onResize = () => {
+      sizeWrap();
+      apply();
+    };
+    sizeWrap();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+
+    // clicking a label scrolls to that phase
+    const clickHandlers = [];
+    const scrollToPhase = (which) => {
+      const total = section.offsetHeight - window.innerHeight;
+      const top = section.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo({ top: top + total * (which === "cli" ? 0.82 : 0.16), behavior: "smooth" });
+    };
+    Object.keys(btn).forEach((k) => {
+      if (!btn[k]) return;
+      const h = () => scrollToPhase(k);
+      btn[k].addEventListener("click", h);
+      clickHandlers.push([btn[k], h]);
     });
-  };
-  const toggleHandlers = [];
-  toggleBtns.forEach((b) => {
-    const h = () => setPanel(b.getAttribute("data-toggle"));
-    b.addEventListener("click", h);
-    toggleHandlers.push([b, h]);
-  });
+
+    apply();
+    cleanupKeys = () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      clickHandlers.forEach(([b, h]) => b.removeEventListener("click", h));
+    };
+  })();
 
   // ---- scroll reveal: CSS scroll-driven (view timeline) ----
   const initReveal = () => {
@@ -764,7 +861,6 @@ export function mount(root) {
 
   // ---- boot ----
   if (refs.toast) refs.toast.style.display = "none";
-  setPanel("tui");
   initReveal();
   initFaq();
   if (!reduce) {
@@ -788,6 +884,6 @@ export function mount(root) {
     if (S.ambResize) window.removeEventListener("resize", S.ambResize);
     installEls.forEach((el) => el.removeEventListener("click", pingInstall));
     faqHandlers.forEach(([q, h]) => q.removeEventListener("click", h));
-    toggleHandlers.forEach(([b, h]) => b.removeEventListener("click", h));
+    cleanupKeys();
   };
 }

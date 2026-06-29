@@ -49,6 +49,25 @@ a {
 
 /* ---- responsive overrides (markup uses inline styles, so !important) ---- */
 
+/* keyboard/CLI showcase: normal flow on mobile (tap toggle); a pinned,
+   scroll-driven beat from 821px up (the scroll switches TUI -> CLI). */
+.keys-sticky {
+  padding: 60px 0 40px;
+}
+@media (min-width: 821px) {
+  .keys-scrolly {
+    height: 180vh;
+  }
+  .keys-sticky {
+    position: sticky;
+    top: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    padding: 0;
+  }
+}
+
 /* Tablet and below: two-column blocks stack to one, and the top nav is hidden
    (the page is a single scroll; the nav is desktop-only). */
 @media (max-width: 820px) {

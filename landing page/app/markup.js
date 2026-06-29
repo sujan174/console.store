@@ -105,15 +105,20 @@ export const MARKUP = String.raw`
   </section>
 
   <!-- TUI / CLI showcase (toggle) -->
-  <section id="keys" style="position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:60px 28px 20px" data-reveal>
-    <div style="text-align:center;margin-bottom:38px">
-      <div style="font-size:12.5px;letter-spacing:2px;color:var(--accent);margin-bottom:16px">// two ways to drive it</div>
-      <div style="display:inline-flex;gap:5px;border:1px solid rgba(122,162,247,0.2);border-radius:999px;padding:5px;background:#0b0b13">
-        <button data-toggle="tui" style="border:0;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;padding:8px 24px;border-radius:999px;background:rgba(122,162,247,0.18);color:#c0caf5;transition:background .2s,color .2s">TUI</button>
-        <button data-toggle="cli" style="border:0;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;padding:8px 24px;border-radius:999px;background:transparent;color:#565f89;transition:background .2s,color .2s">CLI</button>
-      </div>
-      <div style="font-size:12px;color:#565f89;margin-top:14px">the full interactive app — or two commands from your shell.</div>
-    </div>
+  <!-- TUI / CLI showcase — scroll pins the section and the scroll drives the toggle -->
+  <section id="keys" class="keys-scrolly" style="position:relative;z-index:2;padding:0 28px">
+    <div class="keys-sticky">
+      <div style="max-width:1180px;margin:0 auto;width:100%;display:flex;flex-direction:column;align-items:center;gap:30px">
+        <div style="text-align:center">
+          <div style="font-size:12.5px;letter-spacing:2px;color:var(--accent);margin-bottom:16px">// two ways to drive it</div>
+          <div data-toggle-track style="position:relative;display:inline-flex;gap:5px;border:1px solid rgba(122,162,247,0.2);border-radius:999px;padding:5px;background:#0b0b13">
+            <div data-toggle-ind style="position:absolute;top:5px;left:5px;width:74px;height:calc(100% - 10px);border-radius:999px;background:rgba(122,162,247,0.18);transition:transform .15s linear,width .2s"></div>
+            <button data-toggle="tui" style="position:relative;z-index:1;border:0;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;padding:8px 24px;border-radius:999px;background:transparent;color:#c0caf5;transition:color .25s">TUI</button>
+            <button data-toggle="cli" style="position:relative;z-index:1;border:0;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;padding:8px 24px;border-radius:999px;background:transparent;color:#565f89;transition:color .25s">CLI</button>
+          </div>
+          <div data-keys-hint style="font-size:12px;color:#565f89;margin-top:14px">scroll to switch — the full interactive app, or two commands from your shell.</div>
+        </div>
+        <div data-panel-wrap style="position:relative;width:100%">
 
     <!-- TUI panel -->
     <div data-panel="tui">
@@ -176,6 +181,9 @@ export const MARKUP = String.raw`
             <span style="margin-left:6px;font-size:11.5px;color:#565f89">zsh — no TUI, just the shell</span>
           </div>
           <div data-ref="cli" style="padding:18px 18px 20px;font-size:13px;line-height:1.95;min-height:268px"></div>
+        </div>
+      </div>
+    </div>
         </div>
       </div>
     </div>
