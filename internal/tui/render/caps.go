@@ -5,8 +5,8 @@ package render
 
 import "strings"
 
-// Caps describes what the connected terminal can do. Detected once per
-// session from the SSH PTY's TERM and environment.
+// Caps describes what the terminal can do. Detected once per session from the
+// terminal's TERM value and environment.
 type Caps struct {
 	Truecolor     bool // 24-bit colour available (half-block gradients/glow)
 	KittyGraphics bool // terminal advertises the Kitty graphics protocol
@@ -21,7 +21,7 @@ var kittyTerms = []string{"xterm-ghostty", "ghostty", "xterm-kitty", "kitty"}
 var kittyTermPrograms = []string{"WezTerm", "ghostty", "kitty"}
 
 // DetectCaps classifies a terminal from its TERM, environment slice
-// ("KEY=VALUE" entries, as from ssh.Session.Environ), and whether the colour
+// ("KEY=VALUE" entries, as from os.Environ), and whether the colour
 // profile negotiated truecolor. Kitty graphics is heuristic (no round-trip
 // query): enabled only for known-good terminals, so unknown terminals safely
 // fall back to the portable half-block path.

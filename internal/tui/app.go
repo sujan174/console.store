@@ -26,8 +26,8 @@ import (
 	"console.store/internal/tui/theme"
 )
 
-// dbgTUI logs to the server stderr when CONSOLE_DEBUG_TUI=1 (temporary, for
-// diagnosing the live cart-sync path). Never logs to the SSH channel.
+// dbgTUI logs to stderr (redirect with CONSOLE_DEBUG_LOG) when CONSOLE_DEBUG_TUI=1,
+// for diagnosing the live cart-sync path. The TUI alt-screen otherwise hides stderr.
 func dbgTUI(format string, args ...any) {
 	if os.Getenv("CONSOLE_DEBUG_TUI") == "1" {
 		log.Printf("TUI-DEBUG "+format, args...)
@@ -53,7 +53,7 @@ func toPay(itemTotal int) int {
 type tickMsg time.Time
 
 // tickInterval drives all animation. 60ms (~16fps) keeps the braille spinner
-// liquid without flooding the SSH pipe; frame-derived cadences below are scaled
+// liquid without flooding the terminal; frame-derived cadences below are scaled
 // to hold their real-time speed.
 const tickInterval = 60 * time.Millisecond
 

@@ -1,7 +1,7 @@
-// Package api defines the broker's wire types and a typed RPC client. It is
-// shared by the broker (server) and the TUI (client) and imports only stdlib —
-// it must never pull in swiggy/store/auth, so the Swiggy capability and tokens
-// stay out of the SSH-facing TUI binary.
+// Package api defines the broker's wire types, shared by the broker, the TUI
+// datasource, and the headless CLI. It imports only stdlib — it must never pull
+// in swiggy/auth, so these stay plain data types with no Swiggy capability or
+// tokens attached.
 package api
 
 type Address struct {

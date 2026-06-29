@@ -34,10 +34,10 @@ func WithSeededSnapshot() Option {
 	return func(m *Model) { m.seeded = true }
 }
 
-// WithPendingAuth starts the session on the authorize gate. sshd sets this when
-// the SSH pubkey is not yet linked to a Swiggy account: there is no account to
-// scope live loads to, so we show the authorize URL immediately instead of
-// firing loads that would hit the store with an empty account id.
+// WithPendingAuth starts the session on the authorize gate. main.go sets this on
+// first run when no token is present yet: there is no account to scope live loads
+// to, so we show the authorize URL immediately instead of firing loads against an
+// empty account id.
 func WithPendingAuth() Option {
 	return func(m *Model) { m.needsAuth = true; m.authAutoOpen = true }
 }

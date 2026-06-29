@@ -164,7 +164,7 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 			}
 		}
 
-		// Optional seed config for instant first paint (mirrors the old sshd path).
+		// Optional seed config for instant first paint.
 		// config.Load returns (nil, nil) when absent; ChipCategories is nil-safe.
 		cfg, _ := config.Load(config.DefaultPath())
 		if cfg != nil && cfg.Seed.RestaurantID != "" {
