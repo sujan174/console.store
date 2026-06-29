@@ -43,7 +43,7 @@ func printOrderStatus(d Deps, st style, o api.Order, status, eta string) {
 	fmt.Fprintf(d.Out, "%s %s  %s\n", st.dim("order"), st.num(o.ID), st.head(o.Restaurant))
 	fmt.Fprintf(d.Out, "  %s  %s\n", st.dim("status"), st.ok(status))
 	if eta != "" && !strings.EqualFold(strings.TrimSpace(eta), "N/A") {
-		fmt.Fprintf(d.Out, "  %s     %s\n", st.dim("eta"), st.money(eta))
+		fmt.Fprintf(d.Out, "  %s     %s\n", st.dim("eta"), st.link(eta))
 	}
 	if o.Total > 0 {
 		fmt.Fprintf(d.Out, "  %s   %s\n", st.dim("total"), st.money(fmt.Sprintf("₹%d", o.Total)))

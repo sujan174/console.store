@@ -68,9 +68,9 @@ func rawPick(in *os.File, out io.Writer, name string, matches []localstore.Prese
 			// number + restaurant + items (no address — it's in the bill after).
 			text := truncate(fmt.Sprintf("%d) %s  ·  %s", i+1, p.RestaurantName, summarize(p)), maxRow-2)
 			if i == cur {
-				fmt.Fprintf(out, "\r\x1b[K%s%s\r\n", st.num("❯ "), st.ok(text))
+				fmt.Fprintf(out, "\r\x1b[K%s%s\r\n", st.num("❯ "), st.bright(text))
 			} else {
-				fmt.Fprintf(out, "\r\x1b[K  %s\r\n", st.head(text))
+				fmt.Fprintf(out, "\r\x1b[K  %s\r\n", st.text(text))
 			}
 		}
 	}

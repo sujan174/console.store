@@ -37,7 +37,7 @@ func truncate(s string, n int) string {
 // of the checkout page (restaurant → short address, lines, then the bill).
 func renderCart(out io.Writer, addrLine, restaurant string, c api.Cart, st style) {
 	if a := shortAddr(addrLine); a != "" {
-		fmt.Fprintf(out, "  %s  %s  %s\n\n", st.head(restaurant), st.dim("→"), st.dim(a))
+		fmt.Fprintf(out, "  %s  %s  %s\n\n", st.head(restaurant), st.link("→"), st.dim(a))
 	} else {
 		fmt.Fprintf(out, "  %s\n\n", st.head(restaurant))
 	}
@@ -48,21 +48,21 @@ func renderCart(out io.Writer, addrLine, restaurant string, c api.Cart, st style
 			if pad < 1 {
 				pad = 1
 			}
-			fmt.Fprintf(out, "  %s%s%s\n", left, strings.Repeat(" ", pad), st.warn("sold out"))
+			fmt.Fprintf(out, "  %s%s%s\n", st.text(left), strings.Repeat(" ", pad), st.warn("sold out"))
 			continue
 		}
-		st.row(out, left, fmt.Sprintf("₹%d", l.Price*max1(l.Quantity)), false)
+		st.row(out, left, fmt.Sprintf("₹%d", l.Price*max1(l.Quantity)), rowItem)
 	}
 	st.rule(out)
-	st.row(out, "item total", fmt.Sprintf("₹%d", c.ItemTotal), false)
+	st.row(out, "item total", fmt.Sprintf("₹%d", c.ItemTotal), rowLabel)
 	if c.Delivery != 0 {
-		st.row(out, "delivery", fmt.Sprintf("₹%d", c.Delivery), false)
+		st.row(out, "delivery", fmt.Sprintf("₹%d", c.Delivery), rowLabel)
 	}
 	if c.Taxes != 0 {
-		st.row(out, "taxes & charges", fmt.Sprintf("₹%d", c.Taxes), false)
+		st.row(out, "taxes & charges", fmt.Sprintf("₹%d", c.Taxes), rowLabel)
 	}
 	st.rule(out)
-	st.row(out, "to pay", fmt.Sprintf("₹%d", c.Total), true)
+	st.row(out, "to pay", fmt.Sprintf("₹%d", c.Total), rowTotal)
 }
 
 func max1(n int) int {
