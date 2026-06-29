@@ -55,13 +55,10 @@ export function mount(root) {
   root.querySelectorAll("[data-install-prompt]").forEach((e) => (e.textContent = INSTALL.prompt));
   root.querySelectorAll("[data-install-hint]").forEach((e) => (e.textContent = INSTALL.hint));
 
-  // ---- copy on click + toast ----
+  // ---- coming soon: no copy yet, just a heads-up toast ----
   const pingInstall = () => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(INSTALL.cmd).catch(() => {});
-    }
     const msg = root.querySelector("[data-toast-msg]");
-    if (msg) msg.textContent = INSTALL.toast;
+    if (msg) msg.textContent = "coming soon — the install isn't live yet.";
     if (!refs.toast) return;
     refs.toast.style.display = "flex";
     S.timers.push(
