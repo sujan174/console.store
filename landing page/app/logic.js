@@ -330,13 +330,10 @@ export function mount(root) {
       o.height = H;
       const octx = o.getContext("2d");
       octx.font = `700 ${fs}px 'JetBrains Mono', monospace`;
-      // Beside the mark (wide screens) → left-align so the word hugs the logo.
-      // Stacked under the mark (narrow) → center it.
-      const beside = typeof window !== "undefined" && window.innerWidth > 640;
-      octx.textAlign = beside ? "left" : "center";
+      octx.textAlign = "center";
       octx.textBaseline = "middle";
       octx.fillStyle = "#fff";
-      octx.fillText(word, beside ? Math.max(2, W * 0.01) : W / 2, H / 2 + 2);
+      octx.fillText(word, W / 2, H / 2 + 2);
       const data = octx.getImageData(0, 0, W, H).data;
       const gap = fs > 96 ? 6 : 5;
       const targets = [];

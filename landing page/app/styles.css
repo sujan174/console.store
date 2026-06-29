@@ -49,24 +49,6 @@ a {
 
 /* ---- responsive overrides (markup uses inline styles, so !important) ---- */
 
-/* Hero logo lockup: mark sits beside the wordmark on wider screens; on phones
-   it stacks above so the particle wordmark keeps full width (legibility). */
-@media (max-width: 640px) {
-  .hero-lockup {
-    flex-direction: column !important;
-    gap: 4px !important;
-    height: auto !important;
-  }
-  .hero-lockup > svg {
-    width: 40px !important;
-    height: 40px !important;
-  }
-  .hero-lockup > div {
-    width: 100% !important;
-    height: clamp(108px, 20vh, 180px) !important;
-  }
-}
-
 /* keyboard/CLI showcase: normal flow on mobile (tap toggle); a pinned,
    scroll-driven beat from 821px up (the scroll switches TUI -> CLI). */
 .keys-sticky {
