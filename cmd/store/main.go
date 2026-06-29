@@ -4,10 +4,10 @@
 //
 // Subcommands (headless, no TUI):
 //
-//	store help              print usage
-//	store status            live order status
-//	store order <name>      reorder a saved preset
-//	store alias list/rm     manage presets
+//	console help              print usage
+//	console status            live order status
+//	console order <name>      reorder a saved preset
+//	console alias list/rm     manage presets
 package main
 
 import (

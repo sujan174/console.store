@@ -5,7 +5,7 @@
 // interval — the raw JSON is dumped via the swiggy debug logger. Leave it
 // running while a real delivery progresses to capture status transitions.
 //
-// It NEVER places an order. Run it in a second terminal alongside `store`:
+// It NEVER places an order. Run it in a second terminal alongside `console`:
 //
 //	CONSOLE_DEBUG_LOG=/tmp/capture.log go run ./cmd/capture
 //
@@ -65,7 +65,7 @@ func run() error {
 	ls := localstore.New()
 	reg, ok, err := localstore.LoadRegistration()
 	if err != nil || !ok {
-		return fmt.Errorf("no cached OAuth registration (run `store` and authorize first): ok=%v err=%v", ok, err)
+		return fmt.Errorf("no cached OAuth registration (run `console` and authorize first): ok=%v err=%v", ok, err)
 	}
 	authMgr := auth.NewManager(auth.Config{
 		HTTPClient: httpc,

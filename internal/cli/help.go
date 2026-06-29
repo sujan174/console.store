@@ -10,17 +10,17 @@ func printUsage(out io.Writer) {
 
 usage:
   store                       open the interactive app (TUI)
-  store status                show your live order status (or none)
-  store order <name>          order a saved preset (lists them if several share the name)
-  store order <name> <n>      order the nth same-named preset directly
-  store alias list            list your saved presets
-  store alias rm <name> [n]   remove preset <name> (the nth, if several share it)
+  console status                show your live order status (or none)
+  console order <name>          order a saved preset (lists them if several share the name)
+  console order <name> <n>      order the nth same-named preset directly
+  console alias list            list your saved presets
+  console alias rm <name> [n]   remove preset <name> (the nth, if several share it)
   store whoami                show connection + saved addresses
   store logout                disconnect your Swiggy account
-  store version               print version + channel
-  store update [--channel stable|beta|alpha [--code X]]
+  console version               print version + channel
+  console update [--channel stable|beta|alpha [--code X]]
                               switch channel, or check for updates now
-  store help                  show this help
+  console help                  show this help
 
 presets are created inside the app: build a cart, press : and run
   alias set <name>

@@ -19,7 +19,7 @@ var (
 // IsDev reports an unstamped local build — the updater skips on these.
 func IsDev() bool { return Version == "dev" }
 
-// String renders a one-line build identity for `store version`.
+// String renders a one-line build identity for `console version`.
 func String() string {
 	s := fmt.Sprintf("consolestore %s (%s)", Version, Channel)
 	if Commit != "" {

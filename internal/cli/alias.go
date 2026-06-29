@@ -8,11 +8,11 @@ import (
 	"consolestore/internal/localstore"
 )
 
-// runAlias handles `store alias list` and `store alias rm <name> [n]`. (Preset
+// runAlias handles `console alias list` and `console alias rm <name> [n]`. (Preset
 // CREATION happens inside the TUI via `:alias set`.)
 func runAlias(d Deps, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(d.Out, "usage: store alias list | store alias rm <name> [n]")
+		fmt.Fprintln(d.Out, "usage: console alias list | console alias rm <name> [n]")
 		return 2
 	}
 	switch args[0] {
@@ -20,7 +20,7 @@ func runAlias(d Deps, args []string) int {
 		return aliasList(d)
 	case "rm", "remove", "delete":
 		if len(args) < 2 {
-			fmt.Fprintln(d.Out, "usage: store alias rm <name> [n]")
+			fmt.Fprintln(d.Out, "usage: console alias rm <name> [n]")
 			return 2
 		}
 		idx := -1 // -1 means no explicit index given
@@ -91,7 +91,7 @@ func aliasRemove(d Deps, name string, idx int) int {
 			for i, p := range matches {
 				fmt.Fprintf(d.Out, "  %d) %s · %s · %s\n", i+1, p.RestaurantName, p.AddrLine, summarize(p))
 			}
-			fmt.Fprintf(d.Out, "run: store alias rm %s <n>\n", name)
+			fmt.Fprintf(d.Out, "run: console alias rm %s <n>\n", name)
 			return 1
 		}
 	}

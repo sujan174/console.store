@@ -14,7 +14,7 @@ import (
 const swiggyBetaOrderCap = 1000
 
 // runOrder resolves preset(s) named `name` and orders one. idx (1-based, 0 =
-// none given) selects directly: `store order coffee 2`. With no index and
+// none given) selects directly: `console order coffee 2`. With no index and
 // several matches it lists them and, when stdin is interactive, lets the user
 // press a number; a single match runs straight through to the bill + confirm.
 func runOrder(d Deps, name string, idx int) int {
@@ -46,7 +46,7 @@ func runOrder(d Deps, name string, idx int) int {
 	// list — the user re-runs with a number. Interactively, offer the picker.
 	if !d.Interactive {
 		listPresets(d.Out, name, matches, st)
-		fmt.Fprintf(d.Out, "\n%s\n", st.dim(fmt.Sprintf("run  store order %s <n>  to order one.", name)))
+		fmt.Fprintf(d.Out, "\n%s\n", st.dim(fmt.Sprintf("run  console order %s <n>  to order one.", name)))
 		return 0
 	}
 	i, ok := pickPreset(d, name, matches, st)
@@ -69,7 +69,7 @@ func listPresets(out io.Writer, name string, matches []localstore.Preset, st sty
 }
 
 func placePreset(d Deps, p localstore.Preset, st style) int {
-	adjust := st.dim("open `store` to adjust.")
+	adjust := st.dim("open `console` to adjust.")
 	items := presetToCartItems(p)
 	// Push (override any existing cart), then pull the authoritative cart/bill.
 	if _, err := d.Backend.UpdateCart(p.AddrID, p.RestaurantID, p.RestaurantName, items); err != nil {
@@ -104,7 +104,7 @@ func placePreset(d Deps, p localstore.Preset, st style) int {
 
 	if !d.Armed {
 		fmt.Fprintf(d.Out, "\n%s\n%s\n", st.warn("browse-only build — order NOT placed."),
-			st.dim("run the armed `store` to place, or open `store` to adjust the cart."))
+			st.dim("run the armed `console` to place, or open `console` to adjust the cart."))
 		return 0
 	}
 
@@ -113,7 +113,7 @@ func placePreset(d Deps, p localstore.Preset, st style) int {
 		// immediately and look like a confirming Enter, so we'd place a REAL order
 		// with no human in the loop. Refuse instead.
 		fmt.Fprintf(d.Out, "\n%s\n%s\n", st.warn("not placed — placing an order needs an interactive terminal."),
-			st.dim(fmt.Sprintf("run  store order %s  directly in your shell to confirm and place.", p.Name)))
+			st.dim(fmt.Sprintf("run  console order %s  directly in your shell to confirm and place.", p.Name)))
 		return 1
 	}
 
@@ -122,7 +122,7 @@ func placePreset(d Deps, p localstore.Preset, st style) int {
 	order, err := d.Backend.PlaceOrder(p.AddrID) // never retried
 	if err != nil {
 		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn(fmt.Sprintf("order failed: %v", err)),
-			st.dim("if you may have been charged, run `store status` before retrying."))
+			st.dim("if you may have been charged, run `console status` before retrying."))
 		return 1
 	}
 	etaLo, etaHi := localstore.ParseETAMinutes(order.ETA)

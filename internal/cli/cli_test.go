@@ -74,7 +74,7 @@ func TestDispatchHelp(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("help exit = %d, want 0", code)
 	}
-	if !strings.Contains(out.String(), "store order") || !strings.Contains(out.String(), "store status") {
+	if !strings.Contains(out.String(), "console order") || !strings.Contains(out.String(), "console status") {
 		t.Fatalf("help should list commands:\n%s", out.String())
 	}
 }
@@ -93,7 +93,7 @@ func TestDispatchNeedsAuth(t *testing.T) {
 	if code == 0 {
 		t.Fatal("a backend command while signed-out must return non-zero")
 	}
-	if !strings.Contains(strings.ToLower(out.String()), "run `store`") && !strings.Contains(out.String(), "sign in") {
+	if !strings.Contains(strings.ToLower(out.String()), "run `console`") && !strings.Contains(out.String(), "sign in") {
 		t.Fatalf("should tell the user to sign in:\n%s", out.String())
 	}
 }

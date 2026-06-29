@@ -188,10 +188,10 @@ func storeBlock(caps render.Caps, consoleW int) []string {
 
 // promptLine is the top prompt — the command the user just "ran" to arrive here,
 // with the running build's version as a trailing shell comment so it's visible
-// on the start screen (e.g. "~ % store   # v0.1.0-alpha.3 · alpha").
+// on the start screen (e.g. "~ % console   # v0.1.0-alpha.3 · alpha").
 func promptLine() string {
 	return strings.Repeat(" ", promptIndent) +
-		theme.DimStyle.Render("~ % ") + theme.TextStyle.Render("store") +
+		theme.DimStyle.Render("~ % ") + theme.TextStyle.Render("console") +
 		theme.FaintStyle.Render("   # "+version.Version+" · "+version.Channel)
 }
 

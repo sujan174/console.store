@@ -21,7 +21,7 @@ Write-Host "console.store channel $channel — fetching windows/$arch..." -Foreg
 $sum = (Invoke-WebRequest -UseBasicParsing "$base/$channel/checksum/$asset$q").Content.Trim()
 $dir = Join-Path $env:LOCALAPPDATA "Programs\console.store"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
-$out = Join-Path $dir "store.exe"
+$out = Join-Path $dir "console.exe"
 $tmp = "$out.new"
 
 Invoke-WebRequest -UseBasicParsing "$base/$channel/download/$asset$q" -OutFile $tmp
@@ -44,5 +44,5 @@ if ($userPath -notlike "*$dir*") {
   [Environment]::SetEnvironmentVariable("Path", "$userPath;$dir", "User")
   Write-Host "added $dir to your PATH (restart the terminal)" -ForegroundColor DarkGray
 }
-Write-Host "OK installed store -> $out" -ForegroundColor Green
-Write-Host "run: store"
+Write-Host "OK installed console -> $out" -ForegroundColor Green
+Write-Host "run: console"

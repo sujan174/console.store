@@ -42,6 +42,9 @@ Thumbs.db
 /safestore
 /localstore
 /localsafestore
+/localconsole
+/localsafeconsole
+/console
 
 # runtime + debug-capture logs — never publish (may contain addresses/order data)
 *.log

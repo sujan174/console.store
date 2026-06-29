@@ -69,8 +69,8 @@ fi
 # 4. install
 mkdir -p "$BIN_DIR"
 chmod +x "$TMP"
-mv "$TMP" "$BIN_DIR/store"
-printf "${c_grn}✓${c_rst} installed store → %s\n" "$BIN_DIR/store"
+mv "$TMP" "$BIN_DIR/console"
+printf "${c_grn}✓${c_rst} installed console → %s\n" "$BIN_DIR/console"
 
 # 4b. persist the channel marker so self-update tracks this channel — and, for
 # alpha, carries the access code (without it the alpha manifest fetch is 403 and
@@ -89,4 +89,4 @@ case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) printf "${c_dim}note:${c_rst} %s is not on your PATH — add:\n  export PATH=\"%s:\$PATH\"\n" "$BIN_DIR" "$BIN_DIR" ;;
 esac
-say "run: store"
+say "run: console"

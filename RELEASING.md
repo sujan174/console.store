@@ -1,6 +1,6 @@
 # Releasing console.store
 
-How `store` ships, updates itself, and how to push to each channel. This is the
+How `console` ships, updates itself, and how to push to each channel. This is the
 agent-facing playbook **and** the human runbook. If you are an agent and the user
 says "push this to alpha / beta / main", do exactly what **§3** says.
 
@@ -8,14 +8,14 @@ says "push this to alpha / beta / main", do exactly what **§3** says.
 
 ## 1. The model in one paragraph
 
-Users install one binary, always named **`store`**, via
+Users install one binary, always named **`console`**, via
 `curl -fsSL consolestore.in/install | sh`. On every launch it checks its channel's
 signed manifest and, if a newer signed build exists, downloads + verifies + swaps
 itself and re-execs — so the running session is already on the latest. The binary
 name never changes; only its **channel** differs. The channel is pinned in
 `~/.config/console-store/channel.json` and chosen at install time (or via
-`store update --channel …`). Local dev builds are a *different* binary name
-(`localstore` / `localsafestore`, see `scripts/build.sh`) and never auto-update.
+`console update --channel …`). Local dev builds are a *different* binary name
+(`localconsole` / `localsafeconsole`, see `scripts/build.sh`) and never auto-update.
 
 ## 2. Channels
 
@@ -29,7 +29,7 @@ Windows: `irm consolestore.in/install.ps1 | iex` (set `$env:CONSOLE_CHANNEL` /
 `$env:CONSOLE_ALPHA_CODE` for non-stable).
 
 A user switches channels without reinstalling:
-`store update --channel beta` (alpha needs `--code`). The marker file is rewritten
+`console update --channel beta` (alpha needs `--code`). The marker file is rewritten
 and the next launch tracks the new channel.
 
 ## 3. Pushing a release — what the agent does
@@ -45,7 +45,7 @@ re-tagging the same commit — never rebuild to move a build up a channel.**
 | "push to main" / "production" / "stable" / "release it" | `git tag vX.Y.Z <same-commit> && git push origin vX.Y.Z` |
 
 **Enforced promotion path (local → alpha → beta → production).** Every change is
-first built + tested locally as `localstore`/`localsafestore` (`scripts/build.sh`,
+first built + tested locally as `localconsole`/`localsafeconsole` (`scripts/build.sh`,
 which gates on vet+test), then shipped to **alpha**, then promoted to **beta**,
 then **stable** — never skipping. CI **enforces** this: the "Enforce promotion
 path" step refuses a `-beta` tag unless an `-alpha` release exists on the **same
@@ -80,7 +80,7 @@ point (its gate is the local `build.sh` run). Promotion = re-tag the same commit
 
 `.github/workflows/release.yml`, triggered by `push: tags: ['v*']`:
 1. **Gate** — `go vet ./...` + `go test ./...` (arming defaults OFF under test).
-2. **GoReleaser** (`.goreleaser.yaml`) cross-compiles the **armed** `store` for
+2. **GoReleaser** (`.goreleaser.yaml`) cross-compiles the **armed** `console` for
    darwin/linux/windows × amd64/arm64, stamps version/channel/commit + the armed
    ldflag, and publishes the binaries + `SHA256SUMS` to a GitHub Release
    (`prerelease: auto` marks `-alpha`/`-beta` tags as prereleases).
@@ -116,15 +116,15 @@ is gated by code and streamed server-side (+ logged).
 gh run watch                                   # the release workflow
 curl -s -o /dev/null -w "%{http_code}\n" https://consolestore.in/stable/manifest.json   # 200
 # on a machine tracking that channel, just launch:
-store version                                  # should show the new vX.Y.Z
+console version                                  # should show the new vX.Y.Z
 ```
 
-For a fresh stable install end-to-end: `curl -fsSL consolestore.in/install | sh && store version`.
+For a fresh stable install end-to-end: `curl -fsSL consolestore.in/install | sh && console version`.
 For alpha logging, check Railway logs for an `alpha-grant who=…` line after a coded fetch.
 
 ## 7. Safety invariants (do not break)
 
-- The published `store` is **armed** — it places real Swiggy orders on the user's
+- The published `console` is **armed** — it places real Swiggy orders on the user's
   own account after explicit Enter-to-confirm. Never auto-confirm in code/tests.
 - The updater **never touches the OS keyring** — auth survives every update.
 - The ed25519 signing **private key lives only in the GH secret**; the repo holds

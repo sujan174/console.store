@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Rebuild the two LOCAL console.store dev binaries into your PATH.
 #
-#   localstore      ARMED     — can place REAL Swiggy orders (CONSOLE_LIVE_ORDERS baked on)
-#   localsafestore  disarmed  — browse + cart only; "place order" is blocked
+#   localconsole      ARMED     — can place REAL Swiggy orders (CONSOLE_LIVE_ORDERS baked on)
+#   localsafeconsole  disarmed  — browse + cart only; "place order" is blocked
 #
 # These are LOCAL builds for development/testing. They are stamped Version=dev,
-# so they NEVER auto-update. The production binary is the plain `store`, installed
+# so they NEVER auto-update. The production binary is the plain `console`, installed
 # via `curl -fsSL consolestore.in/install | sh`, which self-updates on launch.
-# The local names are deliberately distinct from `store` so a local build never
+# The local names are deliberately distinct from `console` so a local build never
 # clobbers the installed, auto-updating production binary in ~/.local/bin.
 #
 # Both talk to live Swiggy with your keyring token. The ONLY difference between
@@ -37,18 +37,18 @@ echo
 
 echo "building from $ROOT  ->  $BIN"
 
-# localsafestore: plain build, liveOrdersDefault stays "0" (disarmed).
-go build -ldflags "$VER_FLAGS" -o "$BIN/localsafestore" ./cmd/store
-echo "  ✓ localsafestore  (disarmed — orders blocked)"
+# localsafeconsole: plain build, liveOrdersDefault stays "0" (disarmed).
+go build -ldflags "$VER_FLAGS" -o "$BIN/localsafeconsole" ./cmd/store
+echo "  ✓ localsafeconsole  (disarmed — orders blocked)"
 
-# localstore: stamp the arming default to "1" (armed).
-go build -ldflags "$ARM_FLAG" -o "$BIN/localstore" ./cmd/store
-echo "  ✓ localstore      (ARMED — places REAL orders)"
+# localconsole: stamp the arming default to "1" (armed).
+go build -ldflags "$ARM_FLAG" -o "$BIN/localconsole" ./cmd/store
+echo "  ✓ localconsole      (ARMED — places REAL orders)"
 
 echo
-echo "⚠  'localstore' WILL place real Swiggy orders on your account when you confirm checkout."
-echo "   Use 'localsafestore' to browse/cart with no risk."
-echo "   (Local dev builds never auto-update. Production = 'store' via consolestore.in/install.)"
+echo "⚠  'localconsole' WILL place real Swiggy orders on your account when you confirm checkout."
+echo "   Use 'localsafeconsole' to browse/cart with no risk."
+echo "   (Local dev builds never auto-update. Production = 'console' via consolestore.in/install.)"
 if ! printf '%s' ":$PATH:" | grep -q ":$BIN:"; then
   echo
   echo "note: $BIN is not on your PATH — add it or run the full path."

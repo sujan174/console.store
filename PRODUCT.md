@@ -1,10 +1,10 @@
 # consolestore — Product
 
-A **terminal-native food ordering shop**. You run one binary, `store`, and order real food through Swiggy — without leaving your shell. It looks and feels like a terminal session (Tokyo Night, a `~ % store` shell prompt, a `:` command palette), but every order is a real Swiggy order delivered to your door.
+A **terminal-native food ordering shop**. You run one binary, `console`, and order real food through Swiggy — without leaving your shell. It looks and feels like a terminal session (Tokyo Night, a `~ % console` shell prompt, a `:` command palette), but every order is a real Swiggy order delivered to your door.
 
 Two ways to use it:
-- **`store`** (no args) → a full interactive TUI for browsing, customizing, and ordering.
-- **`store <command>`** → a headless CLI for the things you do often: check your order, or re-order a saved favourite in one line.
+- **`console`** (no args) → a full interactive TUI for browsing, customizing, and ordering.
+- **`console <command>`** → a headless CLI for the things you do often: check your order, or re-order a saved favourite in one line.
 
 First launch opens your browser once to sign in to Swiggy (OAuth). The token is stored in your OS keyring. There's no server, no account to create here, no database — it all runs in one local process.
 
@@ -34,19 +34,19 @@ For power users who don't want to open the app:
 
 | Command | What it does |
 |---|---|
-| `store` | Open the interactive TUI. |
-| `store status` | Your live order's status + ETA, or "no live orders". |
-| `store order <name>` | Order a saved preset by name (see below). |
-| `store alias list` | List your saved presets. |
-| `store alias rm <name> [n]` | Remove a preset (the *n*th if several share the name). |
-| `store help` | Usage. |
+| `console` | Open the interactive TUI. |
+| `console status` | Your live order's status + ETA, or "no live orders". |
+| `console order <name>` | Order a saved preset by name (see below). |
+| `console alias list` | List your saved presets. |
+| `console alias rm <name> [n]` | Remove a preset (the *n*th if several share the name). |
+| `console help` | Usage. |
 
 ### Presets (aliases)
 
 A **preset** is a named, saved order. You build a cart you like in the TUI, press `:`, and run `alias set breakfast`. From then on:
 
 ```
-$ store order breakfast
+$ console order breakfast
 delivering to: Home · HSR Layout
 from:          Blue Tokai
   2 × Cold Coffee                 ₹240
@@ -102,7 +102,7 @@ A real little prompt with full line editing: type freely (spaces included), move
 ## Safety
 
 Ordering places **real money orders**, so it's gated:
-- The shipped **`store`** binary (installed via `consolestore.in/install`, auto-updating) is armed and will place real orders on confirm. The local dev build **`localsafestore`** is a browse-and-cart-only build that can never place an order — it'll show you the preset and bill, then stop (`localstore` is the armed local build).
+- The shipped **`console`** binary (installed via `consolestore.in/install`, auto-updating) is armed and will place real orders on confirm. The local dev build **`localsafeconsole`** is a browse-and-cart-only build that can never place an order — it'll show you the preset and bill, then stop (`localconsole` is the armed local build).
 - Even the armed build respects `CONSOLE_LIVE_ORDERS`; plain `go run`/`go build` stays disarmed.
 - The place step always needs an explicit Enter — there's no fire-and-forget. Order placement is never silently retried (a network blip could otherwise double-order).
 - Your Swiggy token never leaves the OS keyring.

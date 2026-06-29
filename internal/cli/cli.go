@@ -50,19 +50,19 @@ func Dispatch(args []string, d Deps) int {
 	case "status":
 		return requireAuth(d, func() int { return runStatus(d) })
 	case "order":
-		// `store order status` is a synonym for `store status`.
+		// `console order status` is a synonym for `console status`.
 		if len(args) >= 2 && args[1] == "status" {
 			return requireAuth(d, func() int { return runStatus(d) })
 		}
 		if len(args) < 2 {
-			fmt.Fprintln(d.Out, "usage: store order <name> [number]")
+			fmt.Fprintln(d.Out, "usage: console order <name> [number]")
 			return 2
 		}
-		idx := 0 // optional preset number: `store order coffee 2`
+		idx := 0 // optional preset number: `console order coffee 2`
 		if len(args) >= 3 {
 			n, err := strconv.Atoi(args[2])
 			if err != nil || n < 1 {
-				fmt.Fprintln(d.Out, "usage: store order <name> [number]   (number picks among same-named presets)")
+				fmt.Fprintln(d.Out, "usage: console order <name> [number]   (number picks among same-named presets)")
 				return 2
 			}
 			idx = n
@@ -87,7 +87,7 @@ func Dispatch(args []string, d Deps) int {
 
 func requireAuth(d Deps, fn func() int) int {
 	if !d.SignedIn {
-		fmt.Fprintln(d.Out, "not signed in — run `store` once to authorize, then try again.")
+		fmt.Fprintln(d.Out, "not signed in — run `console` once to authorize, then try again.")
 		return 1
 	}
 	return fn()

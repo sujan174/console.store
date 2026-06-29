@@ -14,7 +14,7 @@ func runLogout(d Deps) int {
 		fmt.Fprintf(d.Out, "store: logout failed: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(d.Out, "%s\n%s\n", st.ok("✓ disconnected from Swiggy."), st.dim("run `store` to reconnect."))
+	fmt.Fprintf(d.Out, "%s\n%s\n", st.ok("✓ disconnected from Swiggy."), st.dim("run `console` to reconnect."))
 	return 0
 }
 
@@ -22,7 +22,7 @@ func runLogout(d Deps) int {
 func runWhoami(d Deps) int {
 	st := newStyle(d.Color)
 	if !d.SignedIn {
-		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn("not signed in."), st.dim("run `store` to connect your Swiggy account."))
+		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn("not signed in."), st.dim("run `console` to connect your Swiggy account."))
 		return 0
 	}
 	fmt.Fprintf(d.Out, "%s\n", st.ok("✓ connected to Swiggy."))

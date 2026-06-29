@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## What this is
 
-`console.store` — a **terminal-native CLI** food/snack ordering shop, Tokyo Night themed. You run the `store` binary, get a `bubbletea` TUI that brokers real orders through **Swiggy's Food MCP API**. First run does a one-time browser authorize (loopback OAuth); the token lives in the OS keyring. There is no SSH server and no database — the app runs in-process.
+`console.store` — a **terminal-native CLI** food/snack ordering shop, Tokyo Night themed. You run the `console` binary, get a `bubbletea` TUI that brokers real orders through **Swiggy's Food MCP API**. First run does a one-time browser authorize (loopback OAuth); the token lives in the OS keyring. There is no SSH server and no database — the app runs in-process.
 
 > History: this was once an SSH-served TUI with a separate privileged broker + Postgres token store. That era is gone (`cmd/sshd`, `cmd/broker`, `internal/store`, the Makefile/docker-compose were removed). Don't reintroduce them.
 
@@ -24,12 +24,12 @@ gofmt -w <file>                   # format
 Go 1.26. No linter config — `go vet` + `gofmt` are the bar.
 
 **Two LOCAL dev binaries (`scripts/build.sh`).** It gates on `go vet ./...` + `go test ./...`, then installs into `$BIN` (default `~/.local/bin`):
-- **`localstore` = ARMED** — built with `-ldflags "-X console.store/internal/swiggy.liveOrdersDefault=1"`. Places REAL Swiggy orders on checkout confirm.
-- **`localsafestore` = disarmed** — plain build. Browse + cart only; place-order is blocked.
-- Both are `Version=dev` (never auto-update); names are distinct from the installed production `store`.
+- **`localconsole` = ARMED** — built with `-ldflags "-X console.store/internal/swiggy.liveOrdersDefault=1"`. Places REAL Swiggy orders on checkout confirm.
+- **`localsafeconsole` = disarmed** — plain build. Browse + cart only; place-order is blocked.
+- Both are `Version=dev` (never auto-update); names are distinct from the installed production `console`.
 - Plain `go build` / `go run` stays disarmed. Orders are also gated by env `CONSOLE_LIVE_ORDERS=1`.
 
-**Production `store`** is the armed, auto-updating binary installed via `curl -fsSL consolestore.in/install | sh`, built+signed+published by the release pipeline. To release, see [`RELEASING.md`](RELEASING.md).
+**Production `console`** is the armed, auto-updating binary installed via `curl -fsSL consolestore.in/install | sh`, built+signed+published by the release pipeline. To release, see [`RELEASING.md`](RELEASING.md).
 
 **NEVER place a real order** from the implementation or tests — the user does that. Tests use mock backends only.
 

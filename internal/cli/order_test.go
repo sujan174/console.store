@@ -62,7 +62,7 @@ func TestOrderArmedPlacesAfterConfirm(t *testing.T) {
 }
 
 // SAFETY: an armed order with NON-interactive stdin (piped/EOF, e.g.
-// `echo | store order x`) must NOT auto-place — prompt() returns "" on EOF and
+// `echo | console order x`) must NOT auto-place — prompt() returns "" on EOF and
 // would otherwise look like a confirming Enter.
 func TestOrderArmedNonInteractiveDoesNotPlace(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -116,7 +116,7 @@ func TestOrderSoldOutAborts(t *testing.T) {
 	if be.placeN != 0 {
 		t.Fatal("must not place when an item is unavailable")
 	}
-	if !strings.Contains(strings.ToLower(out.String()), "open `store`") && !strings.Contains(strings.ToLower(out.String()), "open store") {
+	if !strings.Contains(strings.ToLower(out.String()), "open `console`") && !strings.Contains(strings.ToLower(out.String()), "open store") {
 		t.Fatalf("should prompt the user to open the TUI:\n%s", out.String())
 	}
 }
@@ -154,7 +154,7 @@ func seedTwoBreakfasts(t *testing.T) {
 	seedPreset(t, p2)
 }
 
-// `store order breakfast` (no number) with several same-named presets LISTS them
+// `console order breakfast` (no number) with several same-named presets LISTS them
 // and places nothing — the user re-runs with a number.
 func TestOrderMultiPresetListsWithoutIndex(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -174,12 +174,12 @@ func TestOrderMultiPresetListsWithoutIndex(t *testing.T) {
 	if !strings.Contains(s, "1) Blue Tokai") || !strings.Contains(s, "2) Truffles") {
 		t.Fatalf("should list numbered presets:\n%s", s)
 	}
-	if !strings.Contains(s, "store order breakfast") {
+	if !strings.Contains(s, "console order breakfast") {
 		t.Fatalf("non-interactive list should hint the numbered form:\n%s", s)
 	}
 }
 
-// `store order breakfast`, then the user presses a number → orders that preset.
+// `console order breakfast`, then the user presses a number → orders that preset.
 func TestOrderInteractivePick(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	seedTwoBreakfasts(t)
@@ -200,7 +200,7 @@ func TestOrderInteractivePick(t *testing.T) {
 	}
 }
 
-// `store order breakfast 2` orders the 2nd preset directly (bill + confirm).
+// `console order breakfast 2` orders the 2nd preset directly (bill + confirm).
 func TestOrderIndexPicksDirectly(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	seedTwoBreakfasts(t)

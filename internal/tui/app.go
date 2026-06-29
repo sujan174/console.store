@@ -3366,7 +3366,7 @@ func (m *Model) aliasSet(name string) []screens.CmdLine {
 	}
 	return []screens.CmdLine{
 		{Text: fmt.Sprintf("saved preset %q — %d item(s) from %s", name, len(plines), m.cartRestaurant), Color: theme.Green},
-		{Text: fmt.Sprintf("run it from your shell: store order %s", name), Color: theme.Dim},
+		{Text: fmt.Sprintf("run it from your shell: console order %s", name), Color: theme.Dim},
 	}
 }
 

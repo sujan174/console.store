@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`consolestore` — a **terminal-native** food/snack ordering shop, Tokyo Night themed. Run the `store` binary with no args and you get a `bubbletea` TUI that brokers real orders through **Swiggy's Food MCP API**. Run it with a subcommand (`store status`, `store order <name>`, `store alias …`, `store help`) and it acts as a **headless CLI** — plain text, no TUI. First run does a one-time browser authorize (loopback OAuth); the token lives in the OS keyring. The whole app runs **in-process** — there is no server and no database.
+`consolestore` — a **terminal-native** food/snack ordering shop, Tokyo Night themed. Run the `console` binary with no args and you get a `bubbletea` TUI that brokers real orders through **Swiggy's Food MCP API**. Run it with a subcommand (`console status`, `console order <name>`, `console alias …`, `console help`) and it acts as a **headless CLI** — plain text, no TUI. First run does a one-time browser authorize (loopback OAuth); the token lives in the OS keyring. The whole app runs **in-process** — there is no server and no database.
 
-> The splash reads like a terminal session (a `~ % store` shell prompt, Tokyo Night). There is NO ssh feature — it was dropped; don't reintroduce an "ssh" prompt/wordmark, and don't add a real SSH server, a socket broker, or a database. Everything runs in one process.
+> The splash reads like a terminal session (a `~ % console` shell prompt, Tokyo Night). There is NO ssh feature — it was dropped; don't reintroduce an "ssh" prompt/wordmark, and don't add a real SSH server, a socket broker, or a database. Everything runs in one process.
 
 ## Commands
 
@@ -25,12 +25,12 @@ gofmt -w <file>                   # format
 Go 1.26. No linter config — `go vet` + `gofmt` are the bar. Stdlib only; no new dependencies without reason.
 
 **Two LOCAL dev binaries (`scripts/build.sh`).** It gates on `go vet ./...` + `go test ./...`, then installs into `$BIN` (default `~/.local/bin`):
-- **`localstore` = ARMED** — built with `-ldflags "-X consolestore/internal/swiggy.liveOrdersDefault=1"`. Places REAL Swiggy orders on checkout/CLI confirm.
-- **`localsafestore` = disarmed** — plain build. Browse + cart only; place-order is blocked.
-- Both are stamped `Version=dev`, so they NEVER auto-update. The names are deliberately distinct from `store` so a local build never clobbers the installed, auto-updating production binary in `~/.local/bin`.
+- **`localconsole` = ARMED** — built with `-ldflags "-X consolestore/internal/swiggy.liveOrdersDefault=1"`. Places REAL Swiggy orders on checkout/CLI confirm.
+- **`localsafeconsole` = disarmed** — plain build. Browse + cart only; place-order is blocked.
+- Both are stamped `Version=dev`, so they NEVER auto-update. The names are deliberately distinct from `console` so a local build never clobbers the installed, auto-updating production binary in `~/.local/bin`.
 - Plain `go build` / `go run` stays disarmed. Orders are also gated by env `CONSOLE_LIVE_ORDERS=1`.
 
-**Production binary = `store`** — the armed, auto-updating binary users install via `curl -fsSL consolestore.in/install | sh`. Built/signed/published by the release pipeline, NOT by `build.sh`. To ship a release, see **Releasing & channels** below and [`RELEASING.md`](RELEASING.md).
+**Production binary = `console`** — the armed, auto-updating binary users install via `curl -fsSL consolestore.in/install | sh`. Built/signed/published by the release pipeline, NOT by `build.sh`. To ship a release, see **Releasing & channels** below and [`RELEASING.md`](RELEASING.md).
 
 **NEVER place a real order** from the implementation or tests — the user does that. Tests use mock backends only and arming defaults OFF under `go test`. `place_food_order` is never auto-retried (a 5xx may mean the order placed → duplicate risk).
 
@@ -66,19 +66,19 @@ cmd/capture/          read-only dev tool: polls the tracking tools for a live or
 
 ## Headless CLI + order presets (`internal/cli`, `internal/localstore/presets.go`)
 
-`store <subcommand>` runs without the TUI:
-- `store status` — live order status (active orders + `track_food_order` ETA), or "no live orders".
-- `store order <name>` — order a saved **preset**: push it to the cart (overrides any existing cart), pull the real bill, confirm with Enter, then place (armed) / no-op (disarmed `localsafestore`). Aborts if an item is sold out or the restaurant won't serve the address. Multiple presets can share a name (you pick).
-- `store alias list | rm <name> [n]` — manage presets from the shell.
+`console <subcommand>` runs without the TUI:
+- `console status` — live order status (active orders + `track_food_order` ETA), or "no live orders".
+- `console order <name>` — order a saved **preset**: push it to the cart (overrides any existing cart), pull the real bill, confirm with Enter, then place (armed) / no-op (disarmed `localsafeconsole`). Aborts if an item is sold out or the restaurant won't serve the address. Multiple presets can share a name (you pick).
+- `console alias list | rm <name> [n]` — manage presets from the shell.
 
 A **preset** is a named cart snapshot (`presets.json`): restaurant id + saved address + lines (item SwiggyID, qty, variant/addon selections). Created **inside the TUI** via the `:alias set <name>` palette command, which captures the current cart. Presets exist because Swiggy's order API returns NO line items (`get_food_orders`/`get_food_order_details` are coarse text only) — so "reorder" is sourced from our own snapshots. Bound to one saved address (the terminal can't know GPS; the user manages region-specific presets). `cli.Backend` is structurally satisfied by `datasource.BrokerBackend`, so the CLI reuses the same account-pinned backend.
 
 ## Releasing & channels (install + auto-update)
 
-`store` installs via `curl -fsSL consolestore.in/install | sh` and **self-updates on every launch** from its channel. Three channels: **stable** (the bare curl), **beta**, **alpha** (invite-only, per-person codes). Full details + the trust model are in [`RELEASING.md`](RELEASING.md).
+`console` installs via `curl -fsSL consolestore.in/install | sh` and **self-updates on every launch** from its channel. Three channels: **stable** (the bare curl), **beta**, **alpha** (invite-only, per-person codes). Full details + the trust model are in [`RELEASING.md`](RELEASING.md).
 
 **Enforced promotion path: local → alpha → beta → production. NEVER skip.** Every
-change is first built+tested locally (`scripts/build.sh` → `localstore`/`localsafestore`),
+change is first built+tested locally (`scripts/build.sh` → `localconsole`/`localsafeconsole`),
 then alpha, then beta, then stable. CI's "Enforce promotion path" step REFUSES a
 beta tag without an alpha release on the same commit, and a stable tag without a
 beta — so you cannot ship straight to beta/production. Promotion = re-tag the SAME commit.
@@ -88,9 +88,9 @@ beta — so you cannot ship straight to beta/production. Promotion = re-tag the 
 - "push to **beta**" → re-tag the SAME commit `git tag vX.Y.Z-beta.N && git push origin …` (must already be an alpha on that commit)
 - "push to **main** / **production** / **stable**" → `git tag vX.Y.Z && git push origin vX.Y.Z` (must already be a beta on that commit)
 
-The release workflow (`.github/workflows/release.yml`) gates (vet+test) → GoReleaser cross-compiles the armed `store` → `cmd/signtool` signs the manifest envelope with `CONSOLE_SIGN_KEY` → publishes to the GitHub Release. Promotion = re-tagging the same commit up the chain (alpha→beta→stable); never rebuild to promote. **Read [`RELEASING.md`](RELEASING.md) before tagging** — it covers version-bump rules, prerequisites (signing key, landing deploy), and how to confirm a release went out. The signing private key lives ONLY in the GH secret `CONSOLE_SIGN_KEY`; never commit it. Alpha tester codes live in the Railway env `CONSOLE_ALPHA_CODES`.
+The release workflow (`.github/workflows/release.yml`) gates (vet+test) → GoReleaser cross-compiles the armed `console` → `cmd/signtool` signs the manifest envelope with `CONSOLE_SIGN_KEY` → publishes to the GitHub Release. Promotion = re-tagging the same commit up the chain (alpha→beta→stable); never rebuild to promote. **Read [`RELEASING.md`](RELEASING.md) before tagging** — it covers version-bump rules, prerequisites (signing key, landing deploy), and how to confirm a release went out. The signing private key lives ONLY in the GH secret `CONSOLE_SIGN_KEY`; never commit it. Alpha tester codes live in the Railway env `CONSOLE_ALPHA_CODES`.
 
-Self-update internals: `internal/updater` (launch-time `RunDefault`, ed25519 signed-manifest verify against the embedded pubkey in `pubkey.go`, atomic binary swap + re-exec). The OS keyring token is never touched by the updater, so auth survives every update. Local `localstore`/`localsafestore` builds are `Version=dev` and never update.
+Self-update internals: `internal/updater` (launch-time `RunDefault`, ed25519 signed-manifest verify against the embedded pubkey in `pubkey.go`, atomic binary swap + re-exec). The OS keyring token is never touched by the updater, so auth survives every update. Local `localconsole`/`localsafeconsole` builds are `Version=dev` and never update.
 
 ## Architecture (the TUI)
 
