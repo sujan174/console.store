@@ -9,6 +9,10 @@ import (
 	"consolestore/internal/localstore"
 )
 
+// swiggyBetaOrderCap mirrors screens.SwiggyBetaOrderCap: Swiggy's MCP beta blocks
+// place_food_order for carts ≥ ₹1000. Duplicated because cli must not import tui.
+const swiggyBetaOrderCap = 1000
+
 // runOrder resolves preset(s) named `name` and orders one. idx (1-based, 0 =
 // none given) selects directly: `store order coffee 2`. With no index and
 // several matches it lists them and, when stdin is interactive, lets the user
@@ -87,6 +91,16 @@ func placePreset(d Deps, p localstore.Preset, st style) int {
 	}
 
 	renderCart(d.Out, p.AddrLine, p.RestaurantName, cart, st)
+
+	// Swiggy's MCP beta rejects place_food_order for carts ≥ ₹1000. Refuse here
+	// with a clear message instead of letting it fail server-side. (Constant is
+	// duplicated from screens.SwiggyBetaOrderCap — cli must not import tui.)
+	if cart.Total >= swiggyBetaOrderCap {
+		fmt.Fprintf(d.Out, "\n%s\n%s\n",
+			st.warn(fmt.Sprintf("order is ₹%d — ₹1000 or more can't be placed here (Swiggy MCP beta).", cart.Total)),
+			st.dim("place this one in the Swiggy app instead."))
+		return 1
+	}
 
 	if !d.Armed {
 		fmt.Fprintf(d.Out, "\n%s\n%s\n", st.warn("browse-only build — order NOT placed."),

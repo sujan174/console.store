@@ -2776,6 +2776,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.checkout = m.buildCheckout()
 					return m, nil
 				}
+				if m.live && m.checkout.OverCap() {
+					// Swiggy's MCP beta rejects carts ≥ ₹1000. The page already shows
+					// the bordered cap notice + a disabled bar; refuse to fire.
+					return m, nil
+				}
 				if m.live && !m.placingOrder {
 					m.placingOrder = true
 					m.orderErr = ""

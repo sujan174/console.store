@@ -19,6 +19,43 @@ func TestCheckoutShowsBillAndPayToRider(t *testing.T) {
 	}
 }
 
+// At/over Swiggy's ₹1000 beta cap the checkout shows the evident "use the Swiggy
+// app" callout, disables the place bar, and OverCap() reports true.
+func TestCheckoutBetaCapOver1000(t *testing.T) {
+	lines := []screens.CartLine{{Item: catalog.Item{Name: "Family Feast", Price: 1180}, Qty: 1}}
+	co := screens.NewCheckout("Onesta", catalog.Address{Line: "HSR", Label: "home"}, lines, "~45 min").
+		WithBill(screens.Bill{Live: true, ItemTotal: 1180, ToPay: 1180}).WithLiveSync(true, "")
+	if !co.OverCap() {
+		t.Fatal("OverCap should be true at ₹1180")
+	}
+	v := co.View(0)
+	for _, want := range []string{"₹1000 or more", "Swiggy app", "use the Swiggy app"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("over-cap checkout missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "❯ place order") {
+		t.Errorf("place bar must be disabled over the cap:\n%s", v)
+	}
+}
+
+// Just under ₹1000 the cap notice is absent and the order is placeable.
+func TestCheckoutUnderCapPlaceable(t *testing.T) {
+	lines := []screens.CartLine{{Item: catalog.Item{Name: "Cold Coffee", Price: 990}, Qty: 1}}
+	co := screens.NewCheckout("Blue Tokai", catalog.Address{Line: "HSR", Label: "home"}, lines, "~45 min").
+		WithBill(screens.Bill{Live: true, ItemTotal: 990, ToPay: 990}).WithLiveSync(true, "")
+	if co.OverCap() {
+		t.Fatal("OverCap should be false at ₹990")
+	}
+	v := co.View(0)
+	if strings.Contains(v, "₹1000 or more") || strings.Contains(v, "Swiggy app") {
+		t.Errorf("under-cap checkout must not show the beta-cap notice:\n%s", v)
+	}
+	if !strings.Contains(v, "❯ place order") {
+		t.Errorf("under-cap place bar should be enabled:\n%s", v)
+	}
+}
+
 func TestConfirmedShowsCupAndOrderId(t *testing.T) {
 	co := screens.NewCheckout("Blue Tokai", catalog.Address{Line: "HSR"}, []screens.CartLine{{Item: catalog.Item{Name: "X", Price: 149}, Qty: 1}}, "~40 min").Placed("#SW1A2B", "~40 min")
 	v := co.View(0)
