@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"sync"
@@ -131,7 +132,14 @@ func (m *Manager) CallbackHandler() http.HandlerFunc {
 			return
 		}
 		if err := m.HandleCallback(r.Context(), q.Get("state"), q.Get("code")); err != nil {
-			http.Error(w, "authorization failed", http.StatusBadRequest)
+			// Log the real reason (swallowing it makes "authorization failed"
+			// impossible to diagnose). A CSRF/state failure almost always means the
+			// callback hit a DIFFERENT console.store process than the one that
+			// opened the link — i.e. a second instance is holding this port.
+			log.Printf("auth: callback rejected: %v", err)
+			http.Error(w, "authorization failed: "+err.Error()+
+				"\n\nIf another console.store is running, close it (it's holding this port) and try again.",
+				http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain")

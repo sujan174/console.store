@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -155,7 +156,18 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 	launchTUI = func() error {
 		// Loopback callback server (browser redirects here after authorize).
 		// Only needed for the TUI auth gate; not started for headless paths.
-		go serveCallback(ctx, authMgr, redirect)
+		// Bind the port HERE (before the alt-screen hides stderr) so a conflict —
+		// another console.store already holding it — is reported loudly instead of
+		// silently breaking auth (the browser callback would hit the other
+		// instance, whose session never started this login → "authorization failed").
+		addr := callbackAddr(redirect)
+		if ln, lerr := net.Listen("tcp", addr); lerr != nil {
+			fmt.Fprintf(os.Stderr,
+				"\n⚠  console.store: sign-in port %s is already in use — another console.store is\n"+
+					"   running. Close it before signing in, or authorization will fail.\n\n", addr)
+		} else {
+			go serveCallback(ctx, authMgr, ln)
+		}
 
 		caps := render.DetectCaps(os.Getenv("TERM"), os.Environ(), truecolor())
 		snap := swiggysnap.NewSnapshot()
@@ -220,14 +232,13 @@ func truecolor() bool {
 	return strings.EqualFold(os.Getenv("TERM_PROGRAM"), "vscode")
 }
 
-func serveCallback(ctx context.Context, m *auth.Manager, redirect string) {
-	addr := callbackAddr(redirect) // host:port from the redirect URI
+func serveCallback(ctx context.Context, m *auth.Manager, ln net.Listener) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/cb", m.CallbackHandler())
-	srv := &http.Server{Addr: addr, Handler: mux}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() { <-ctx.Done(); srv.Close() }()
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Printf("callback listener on %s: %v", addr, err)
+	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+		log.Printf("callback listener: %v", err)
 	}
 }
 
