@@ -132,3 +132,27 @@ For alpha logging, check Railway logs for an `alpha-grant who=…` line after a 
   forge a binary (signature still required).
 - Re-tagging the same commit is how you promote; **rebuilding to promote is wrong**
   (it produces different bytes than the channel below validated).
+
+## 8. Recovery runbook (a bad release is never unrecoverable)
+
+The installer is a **static script on the landing**, independent of the binary — a
+bad *binary* release can never break new installs. And a bad binary self-rescues in
+the common case. Escalating recovery paths:
+
+1. **Fix-forward (the normal fix).** Push a higher version on the same channel
+   (`vX.Y.Z-alpha.N+1`). On the next launch every install runs the update check
+   first and auto-updates to it. This works whenever the bad binary crashes *after*
+   its launch-time update check (the usual case for app-logic bugs).
+2. **Force re-pull (`CONSOLE_FORCE_UPDATE=1`).** If a release got a **mis-stamped
+   version** so the binary thinks it's already newest and won't update, the user
+   runs `CONSOLE_FORCE_UPDATE=1 console` once — it bypasses the newer-than check and
+   re-pulls the channel's current signed build, then unset the var.
+3. **Reinstall (always works).** `curl -fsSL consolestore.in/install | sh` (add
+   `--alpha --code <CODE>` for alpha) installs the channel's latest fresh, over the
+   top. This is the ground-truth recovery for any stuck state.
+4. **Windows mid-swap.** If `console.exe` ever goes missing (process killed during a
+   swap), `console.exe.old` in the same folder is the previous binary — rename it
+   back, or just reinstall.
+
+Never delete/move a published tag to "undo" a bad release — cut a new counter and
+fix-forward; the install script is the immutable escape hatch.

@@ -1,0 +1,37 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The landing serves the installers from `landing page/public/`, which are
+      # copies of the canonical `scripts/` versions. They MUST stay byte-identical
+      # — a drift means users get a stale/broken installer. Fail the build on drift.
+      - name: Installer copies in sync (scripts/ ↔ landing public/)
+        run: |
+          set -eu
+          diff -u scripts/install.sh "landing page/public/install.sh" \
+            || { echo "::error::scripts/install.sh and landing page/public/install.sh differ — run: cp scripts/install.sh 'landing page/public/install.sh'"; exit 1; }
+          diff -u scripts/install.ps1 "landing page/public/install.ps1" \
+            || { echo "::error::scripts/install.ps1 and landing page/public/install.ps1 differ — run: cp scripts/install.ps1 'landing page/public/install.ps1'"; exit 1; }
+          echo "installer copies are in sync"
+
+      - name: Installer scripts parse
+        run: sh -n scripts/install.sh
+
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.26" }
+
+      - name: Gate (vet + test, arming OFF)
+        run: |
+          go vet ./...
+          go test ./...

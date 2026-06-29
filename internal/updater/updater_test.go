@@ -82,6 +82,22 @@ func TestRunNoopWhenEqual(t *testing.T) {
 	}
 }
 
+func TestRunForceAppliesEqualVersion(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	srv := buildServer(t, priv, "v0.1.0", []byte("REPULLED"))
+	defer srv.Close()
+	o, reexeced, _ := baseOptions(t, srv, pub, "v0.1.0")
+	o.Force = true // recovery hatch: re-pull even though the channel isn't "newer"
+	Run(context.Background(), *o)
+	got, _ := os.ReadFile(o.ExePath)
+	if string(got) != "REPULLED" {
+		t.Fatalf("force did not re-pull the equal-version build: %q", got)
+	}
+	if *reexeced != o.ExePath {
+		t.Fatal("force did not re-exec")
+	}
+}
+
 func TestRunRejectsBadSignature(t *testing.T) {
 	_, priv, _ := ed25519.GenerateKey(nil)
 	otherPub, _, _ := ed25519.GenerateKey(nil)

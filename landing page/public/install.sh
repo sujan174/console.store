@@ -53,8 +53,12 @@ SUM="$(curl -fsSL "${BASE}/${CHANNEL}/checksum/${ASSET}${Q}")" \
   || die "could not reach ${BASE} (alpha needs a valid --code)"
 [ -n "$SUM" ] || die "empty checksum from server"
 
-# 2. download binary
-TMP="$(mktemp)"
+# 2. download binary — temp file lives IN $BIN_DIR so the final mv is a same-
+# filesystem atomic rename (a cross-fs mv copies+unlinks and can leave a partial
+# binary on PATH if interrupted). The trap clears the temp on any early exit.
+mkdir -p "$BIN_DIR" || die "cannot create $BIN_DIR"
+TMP="$(mktemp "$BIN_DIR/.console.XXXXXX")" || die "cannot create a temp file in $BIN_DIR"
+trap 'rm -f "$TMP"' EXIT
 curl -fSL --progress-bar "${BASE}/${CHANNEL}/download/${ASSET}${Q}" -o "$TMP" \
   || die "download failed"
 
@@ -66,10 +70,9 @@ else
 fi
 [ "$GOT" = "$SUM" ] || die "checksum mismatch — refusing to install"
 
-# 4. install
-mkdir -p "$BIN_DIR"
+# 4. install (atomic rename within $BIN_DIR)
 chmod +x "$TMP"
-mv "$TMP" "$BIN_DIR/console"
+mv -f "$TMP" "$BIN_DIR/console"
 printf "${c_grn}✓${c_rst} installed console → %s\n" "$BIN_DIR/console"
 
 # 4b. persist the channel marker so self-update tracks this channel — and, for

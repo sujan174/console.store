@@ -1,6 +1,9 @@
 # console.store installer (Windows) — irm consolestore.in/install.ps1 | iex
 #   $env:CONSOLE_CHANNEL = "beta"|"alpha"   ;  $env:CONSOLE_ALPHA_CODE = "<code>"
 $ErrorActionPreference = "Stop"
+# Invoke-WebRequest renders a progress bar per-chunk that throttles downloads to
+# a crawl (a ~10 MB binary can take a minute and look hung). Silence it.
+$ProgressPreference = "SilentlyContinue"
 $base = if ($env:CONSOLE_BASE) { $env:CONSOLE_BASE } else { "https://consolestore.in" }
 $channel = if ($env:CONSOLE_CHANNEL) { $env:CONSOLE_CHANNEL } else { "stable" }
 $code = $env:CONSOLE_ALPHA_CODE

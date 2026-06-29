@@ -34,6 +34,7 @@ type Options struct {
 	Out     io.Writer
 	Pub     ed25519.PublicKey
 	HTTP    *http.Client
+	Force   bool // bypass the Newer() gate — recovery escape hatch (CONSOLE_FORCE_UPDATE=1)
 
 	swap   func(string, []byte, os.FileMode) error
 	reexec func(string) error
@@ -86,7 +87,10 @@ func Run(ctx context.Context, o Options) {
 	if pl.Channel != o.Mark.Channel {
 		return // signed manifest is for a different channel — refuse
 	}
-	if !Newer(o.Current, pl.Version) {
+	// Force re-pulls the channel's current signed build even when it isn't
+	// "newer" — the recovery hatch for a mis-stamped version that otherwise
+	// thinks it's already ahead of the channel and never updates.
+	if !o.Force && !Newer(o.Current, pl.Version) {
 		return
 	}
 	wantSum, ok := pl.Assets[AssetKey(o.GOOS, o.GOARCH)]
@@ -183,5 +187,6 @@ func RunDefault(ctx context.Context) {
 		ExePath: exe,
 		Out:     os.Stderr,
 		Pub:     PublicKey(),
+		Force:   os.Getenv("CONSOLE_FORCE_UPDATE") == "1",
 	})
 }
