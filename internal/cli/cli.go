@@ -74,6 +74,10 @@ func Dispatch(args []string, d Deps) int {
 		return runWhoami(d)
 	case "alias":
 		return runAlias(d, args[1:]) // alias list/rm need no backend
+	case "version", "--version", "-v":
+		return runVersion(d)
+	case "update", "upgrade", "self-update":
+		return runUpdate(d, args[1:])
 	default:
 		fmt.Fprintf(d.Out, "store: unknown command %q\n\n", args[0])
 		printUsage(d.Out)

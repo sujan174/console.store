@@ -17,6 +17,9 @@ usage:
   store alias rm <name> [n]   remove preset <name> (the nth, if several share it)
   store whoami                show connection + saved addresses
   store logout                disconnect your Swiggy account
+  store version               print version + channel
+  store update [--channel stable|beta|alpha [--code X]]
+                              switch channel, or check for updates now
   store help                  show this help
 
 presets are created inside the app: build a cart, press : and run
