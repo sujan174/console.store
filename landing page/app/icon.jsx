@@ -1,8 +1,7 @@
 import { ImageResponse } from "next/og";
 
-// Favicon — plain, static (non-neon) mark: solid brand-blue bowl+steam on a
-// white tile. Single colour + bold strokes so it stays legible at 16–32px in
-// Google results and browser tabs.
+// Favicon — pure black circle, large white bowl+steam mark, no glow, centered.
+// Tight viewBox crops to the mark so it fills the circle.
 export const size = { width: 64, height: 64 };
 export const contentType = "image/png";
 
@@ -16,22 +15,22 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#ffffff",
-          borderRadius: 13,
+          background: "#000000",
+          borderRadius: 32,
         }}
       >
-        <svg width="50" height="50" viewBox="0 0 64 64" fill="none">
+        <svg width="54" height="54" viewBox="10 20 42 28" fill="none">
           <path
             d="M15 25 L26 34 L15 43"
-            stroke="#4a6fd4"
-            strokeWidth="6.4"
+            stroke="#ffffff"
+            strokeWidth="6"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <rect x="30" y="41" width="20" height="5" rx="2.5" fill="#4a6fd4" />
-          <path d="M34 31 a6 6 0 0 0 12 0 Z" fill="#4a6fd4" />
-          <path d="M38 28 Q40 25 38 22" stroke="#4a6fd4" strokeWidth="2" fill="none" strokeLinecap="round" />
-          <path d="M43 28 Q45 25 43 22" stroke="#4a6fd4" strokeWidth="2" fill="none" strokeLinecap="round" />
+          <rect x="30" y="41" width="20" height="5" rx="2.5" fill="#ffffff" />
+          <path d="M34 31 a6 6 0 0 0 12 0 Z" fill="#ffffff" />
+          <path d="M38 28 Q40 25 38 22" stroke="#ffffff" strokeWidth="2" fill="none" strokeLinecap="round" />
+          <path d="M43 28 Q45 25 43 22" stroke="#ffffff" strokeWidth="2" fill="none" strokeLinecap="round" />
         </svg>
       </div>
     ),
