@@ -35,6 +35,9 @@ func ParseEnvelope(b []byte) (Envelope, error) {
 
 // Verify checks the signature over the exact payload bytes, then parses them.
 func (e Envelope) Verify(pub ed25519.PublicKey) (Payload, error) {
+	if len(pub) != ed25519.PublicKeySize {
+		return Payload{}, errors.New("updater: no signing key configured")
+	}
 	raw, err := base64.StdEncoding.DecodeString(e.Payload)
 	if err != nil {
 		return Payload{}, err

@@ -55,3 +55,17 @@ func TestVerifyRejectsTamper(t *testing.T) {
 		t.Fatal("verify accepted a tampered payload")
 	}
 }
+
+func TestVerifyNilKeyReturnsError(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(nil)
+	env, _ := ParseEnvelope(signEnvelope(t, priv, Payload{Version: "v1"}))
+	if _, err := env.Verify(nil); err == nil {
+		t.Fatal("Verify(nil) should return an error, not panic")
+	}
+}
+
+func TestPublicKeyEmptyBeforeKeygen(t *testing.T) {
+	if PublicKey() != nil {
+		t.Fatal("PublicKey() should be nil while signingPubKeyB64 is empty")
+	}
+}
