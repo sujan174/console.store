@@ -20,6 +20,12 @@ while [ $# -gt 0 ]; do
 done
 [ -n "${CONSOLE_CHANNEL:-}" ] && CHANNEL="$CONSOLE_CHANNEL"
 
+if [ "$CHANNEL" = "alpha" ] && [ -z "$CODE" ]; then
+  c_red='\033[31m'; c_rst='\033[0m'
+  printf "${c_red}error${c_rst} %s\n" "alpha channel is invite-only — pass --code <your-code> (or set CONSOLE_ALPHA_CODE)" >&2
+  exit 1
+fi
+
 c_dim='\033[2m'; c_cyan='\033[36m'; c_grn='\033[32m'; c_red='\033[31m'; c_rst='\033[0m'
 say() { printf "${c_cyan}console.store${c_rst} %s\n" "$1"; }
 die() { printf "${c_red}error${c_rst} %s\n" "$1" >&2; exit 1; }
