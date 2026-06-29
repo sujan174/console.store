@@ -27,16 +27,20 @@ export function OgImage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: 56,
-              height: 56,
+              width: 64,
+              height: 64,
               borderRadius: 14,
               border: "2px solid #2a2e47",
-              background: "#0e0f18",
-              color: "#c0caf5",
-              fontSize: 34
+              background: "#0e0f18"
             }}
           >
-            ›
+            <svg width="44" height="44" viewBox="0 0 64 64" fill="none">
+              <path d="M15 25 L26 34 L15 43" stroke="#7aa2f7" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+              <rect x="30" y="41" width="20" height="4.4" rx="2.2" fill="#7aa2f7" />
+              <path d="M34 31 a6 6 0 0 0 12 0 Z" fill="#ffffff" />
+              <path d="M38 28 Q40 25 38 22" stroke="#ffffff" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+              <path d="M43 28 Q45 25 43 22" stroke="#ffffff" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+            </svg>
           </div>
           <span style={{ color: "#8b93b8" }}>// terminal-native ordering</span>
         </div>

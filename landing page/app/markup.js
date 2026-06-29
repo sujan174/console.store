@@ -47,9 +47,20 @@ export const MARKUP = String.raw`
   <header id="top" style="position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:24px 28px 40px">
     <div style="display:flex;flex-direction:column;align-items:center;text-align:center">
       <div style="font-size:12.5px;letter-spacing:2px;color:var(--accent);margin:18px 0 6px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .15s">// terminal-native ordering</div>
-      <!-- particle wordmark: glyphs decode left-to-right into the wordmark, then freeze -->
-      <div style="position:relative;width:100%;height:clamp(150px,26vh,300px);margin:4px 0 2px;animation:introPop 1.3s cubic-bezier(.22,1,.36,1) both .05s">
-        <canvas data-ref="canvas" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
+      <!-- logo lockup: neon mark + particle wordmark, centered as a group -->
+      <div class="hero-lockup" style="display:flex;align-items:center;justify-content:center;gap:clamp(8px,1.8vw,24px);width:100%;height:clamp(150px,26vh,300px);margin:4px 0 2px;animation:introPop 1.3s cubic-bezier(.22,1,.36,1) both .05s">
+        <svg viewBox="0 0 64 64" fill="none" style="width:clamp(44px,7vw,98px);height:clamp(44px,7vw,98px);flex:none;overflow:visible">
+          <g style="filter:drop-shadow(0 0 5px #7aa2f7) drop-shadow(0 0 12px #4f7fd6)">
+            <path d="M15 25 L26 34 L15 43" stroke="#a9c4ff" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round"></path>
+            <rect x="30" y="41" width="20" height="4.4" rx="2.2" fill="#a9c4ff"></rect>
+          </g>
+          <path d="M34 31 a6 6 0 0 0 12 0 Z" fill="#ffffff"></path>
+          <path d="M38 28 Q40 25 38 22" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"></path>
+          <path d="M43 28 Q45 25 43 22" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"></path>
+        </svg>
+        <div style="position:relative;flex:none;width:clamp(260px,62vw,720px);height:100%">
+          <canvas data-ref="canvas" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
+        </div>
       </div>
       <h1 style="font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:clamp(34px,5.4vw,62px);line-height:1.02;letter-spacing:-1.5px;color:#c0caf5;margin:6px 0 0;max-width:18ch;animation:introUp .9s cubic-bezier(.22,1,.36,1) both .65s">dinner, piped through your terminal.</h1>
       <p style="max-width:60ch;color:#8b93b8;font-size:15px;line-height:1.7;margin:20px 0 0;animation:introUp .9s cubic-bezier(.22,1,.36,1) both .85s">a CLI and a full TUI for ordering real food through Swiggy — without leaving your shell. authorize once, then browse, reorder a saved favourite, and track delivery straight from the terminal.</p>
