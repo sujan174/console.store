@@ -139,7 +139,7 @@ func TestOrderMultiPresetListsWithoutIndex(t *testing.T) {
 	var out bytes.Buffer
 	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
 	code := Dispatch([]string{"order", "breakfast"}, Deps{
-		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+		SignedIn: true, Armed: true, Interactive: false, Out: &out, In: strings.NewReader(""), Backend: be,
 	})
 	if code != 0 {
 		t.Fatalf("listing exit = %d:\n%s", code, out.String())
@@ -151,8 +151,8 @@ func TestOrderMultiPresetListsWithoutIndex(t *testing.T) {
 	if !strings.Contains(s, "1) Blue Tokai") || !strings.Contains(s, "2) Truffles") {
 		t.Fatalf("should list numbered presets:\n%s", s)
 	}
-	if !strings.Contains(s, "pick 1-2") {
-		t.Fatalf("should prompt for a number:\n%s", s)
+	if !strings.Contains(s, "store order breakfast") {
+		t.Fatalf("non-interactive list should hint the numbered form:\n%s", s)
 	}
 }
 

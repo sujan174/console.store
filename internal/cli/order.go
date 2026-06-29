@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"strconv"
 	"time"
 
 	"console.store/internal/broker/api"
@@ -39,18 +38,19 @@ func runOrder(d Deps, name string, idx int) int {
 		return placePreset(d, matches[0], st)
 	}
 
-	listPresets(d.Out, name, matches, st)
-	fmt.Fprintf(d.Out, "\n%s ", st.dim(fmt.Sprintf("pick 1-%d:", len(matches))))
-	sel := prompt(d)
-	if sel == "" {
-		return 0 // listed only (e.g. non-interactive / no choice)
+	// Several share the name. On a non-interactive stdin (pipe/redirect), just
+	// list — the user re-runs with a number. Interactively, offer the picker.
+	if !d.Interactive {
+		listPresets(d.Out, name, matches, st)
+		fmt.Fprintf(d.Out, "\n%s\n", st.dim(fmt.Sprintf("run  store order %s <n>  to order one.", name)))
+		return 0
 	}
-	n, perr := strconv.Atoi(sel)
-	if perr != nil || n < 1 || n > len(matches) {
-		fmt.Fprintf(d.Out, "%s\n", st.warn("not a valid choice — aborted."))
-		return 1
+	i, ok := pickPreset(d, name, matches, st)
+	if !ok {
+		fmt.Fprintf(d.Out, "%s\n", st.dim("cancelled."))
+		return 0
 	}
-	return placePreset(d, matches[n-1], st)
+	return placePreset(d, matches[i], st)
 }
 
 // listPresets prints the numbered presets sharing a name (short address).
