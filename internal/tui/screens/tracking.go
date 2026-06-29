@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"strconv"
 	"strings"
 
 	"console.store/internal/tui/components"
@@ -62,6 +63,55 @@ func (t Tracking) Resolve(nowUnix int64) TrackState {
 	return est
 }
 
+// etaMinutes pulls the leading integer out of a live ETA string ("11 mins" → 11).
+// ok is false when there's no number (e.g. "arriving", "").
+func etaMinutes(s string) (int, bool) {
+	for _, w := range strings.Fields(s) {
+		if n, err := strconv.Atoi(w); err == nil {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
+func clampFrac(f float64) float64 {
+	if f < 0 {
+		return 0
+	}
+	if f > 1 {
+		return 1
+	}
+	return f
+}
+
+// journeyFrac is the rider's continuous position along the road in [0,1] —
+// proportional to progress, NOT the discrete stage. It uses Swiggy's live ETA as
+// the remaining distance: position = covered / (covered + remaining), where
+// covered is elapsed minutes and remaining is the live ETA. As the live ETA
+// counts down the rider advances smoothly; with no live ETA yet it falls back to
+// elapsed vs the initial estimate.
+func (t Tracking) journeyFrac(nowUnix int64, delivered bool) float64 {
+	if delivered {
+		return 1
+	}
+	elapsedMin := float64(nowUnix-t.placedAt) / 60
+	if elapsedMin < 0 {
+		elapsedMin = 0
+	}
+	if mins, ok := etaMinutes(t.liveETA); ok {
+		total := elapsedMin + float64(mins)
+		if total <= 0 {
+			return 0
+		}
+		return clampFrac(elapsedMin / total)
+	}
+	base := float64(t.etaHi)
+	if base <= 0 {
+		base = 45
+	}
+	return clampFrac(elapsedMin / base)
+}
+
 // wheelSpin are the rotating wheel glyphs (quarter-turns) cycled per frame so
 // the courier's wheels appear to spin.
 var wheelSpin = []string{"◐", "◓", "◑", "◒"}
@@ -70,18 +120,13 @@ var wheelSpin = []string{"◐", "◓", "◑", "◒"}
 // the road from the restaurant (left) to the delivery address (right). The
 // wheels spin and speed streaks flow each frame; once delivered the bike parks
 // at the destination with its wheels still. No emoji — pure box/line glyphs.
-func routeScene(step, frame, w int) []string {
+func routeScene(frac float64, delivered bool, frame, w int) []string {
 	if w < 16 {
 		w = 16
 	}
 	const spriteW = 5
-	delivered := step >= len(TrackStages)
 
-	pct := step
-	if pct > 3 {
-		pct = 3
-	}
-	x := pct * (w - spriteW) / 3 // left column of the 5-wide sprite
+	x := int(clampFrac(frac) * float64(w-spriteW)) // left column of the 5-wide sprite
 
 	wheel := "O" // parked
 	if !delivered {
@@ -135,8 +180,9 @@ func (t Tracking) View(nowUnix int64, frame int, spin string) string {
 		theme.GoldStyle.Render(t.place),
 		theme.PriceStyle.Render(t.addrLine), w) + "\n")
 
-	// animated courier scene (3 rows)
-	for _, line := range routeScene(ts.Stage, frame, w) {
+	// animated courier scene (3 rows) — the rider's position is proportional to
+	// progress (elapsed vs the live ETA remaining), not the discrete stage.
+	for _, line := range routeScene(t.journeyFrac(nowUnix, ts.Delivered), ts.Delivered, frame, w) {
 		b.WriteString("  " + line + "\n")
 	}
 	b.WriteString("\n")

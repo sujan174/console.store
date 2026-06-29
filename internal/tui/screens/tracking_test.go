@@ -26,6 +26,36 @@ func TestTrackingPrefersLiveETA(t *testing.T) {
 	}
 }
 
+// The rider's road position is proportional to progress (elapsed vs the live
+// ETA remaining), not the discrete stage.
+func TestTrackingRiderProportional(t *testing.T) {
+	const placed = 1_000_000
+	cases := []struct {
+		name      string
+		tk        Tracking
+		nowUnix   int64
+		want      float64
+		delivered bool
+	}{
+		{"delivered parks at end", NewTracking("R", "A", "X", placed, 30, 40).WithLive("Delivered", ""), placed + 60*60, 1, true},
+		{"half: 10 elapsed, 10 left", NewTracking("R", "A", "X", placed, 30, 40).WithLive("Out for delivery", "10 mins"), placed + 10*60, 0.5, false},
+		{"near: 18 elapsed, 2 left", NewTracking("R", "A", "X", placed, 30, 40).WithLive("Out for delivery", "2 mins"), placed + 18*60, 0.9, false},
+		{"no live ETA → time vs estimate", NewTracking("R", "A", "X", placed, 30, 40), placed + 20*60, 0.5, false},
+	}
+	for _, c := range cases {
+		got := c.tk.journeyFrac(c.nowUnix, c.delivered)
+		if got < c.want-0.02 || got > c.want+0.02 {
+			t.Errorf("%s: journeyFrac = %.3f, want ~%.2f", c.name, got, c.want)
+		}
+	}
+	// frac drives the sprite column: frac 0 sits far left of frac 1.
+	left := routeScene(0, false, 0, 40)
+	right := routeScene(1, true, 0, 40)
+	if left[2] == right[2] {
+		t.Fatal("rider road should differ between frac 0 and frac 1")
+	}
+}
+
 func TestTrackingLiveStatus(t *testing.T) {
 	tk := NewTracking("Blue Tokai", "HSR", "X1", 1_000_000, 55, 65).WithLive("Out for delivery", "11 mins")
 	v := tk.View(1_000_300, 0, "◐")
