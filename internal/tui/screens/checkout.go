@@ -126,6 +126,33 @@ func (c Checkout) payAmount() int {
 	return c.toPay()
 }
 
+// SwiggyBetaOrderCap is Swiggy's MCP beta ceiling: place_food_order is rejected
+// for carts of ₹1000 or more. We surface it in-app and block the CTA before it
+// can fail server-side.
+const SwiggyBetaOrderCap = 1000
+
+// OverCap reports whether the amount due hits Swiggy's ₹1000 beta ceiling, so
+// the order can only be placed through the Swiggy app.
+func (c Checkout) OverCap() bool { return c.payAmount() >= SwiggyBetaOrderCap }
+
+// capNotice is the evident callout shown when the order is at/over the beta cap:
+// a gold-bordered box telling the user to use the Swiggy app for this one.
+func capNotice() string {
+	inner := theme.GoldStyle.Bold(true).Render("⚠  order is ₹1000 or more") + "\n" +
+		theme.BrightStyle.Render("can't be placed here — Swiggy's MCP is in beta.") + "\n" +
+		theme.DimStyle.Render("place this one in the Swiggy app instead.")
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(theme.Gold)).
+		Padding(0, 2).
+		Render(inner)
+	lines := strings.Split(box, "\n")
+	for i, l := range lines {
+		lines[i] = "  " + l // indent to the page gutter
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (c Checkout) Init() tea.Cmd { return nil }
 
 func (c Checkout) View(frame int) string {
@@ -254,23 +281,32 @@ func (c Checkout) summaryView() string {
 	}
 	b.WriteString("\n")
 
-	// A place-order error (failed order, or a blocked order because a line is
-	// sold out) shows in red right above the CTA so it can't be missed.
+	// Notices above the CTA, in priority order so the one blocker that matters
+	// can't be missed: the ₹1000 beta cap (evident bordered box) first, then a
+	// place-order error, then a sold-out block.
 	blocked := c.hasUnavailable()
-	if c.orderErr != "" {
+	over := c.OverCap()
+	switch {
+	case over:
+		b.WriteString(capNotice() + "\n\n")
+	case c.orderErr != "":
 		b.WriteString("  " + theme.FavStyle.Render("⚠ "+c.orderErr) + "\n")
-	} else if blocked {
+	case blocked:
 		b.WriteString("  " + theme.FavStyle.Render("⚠ a sold-out item is in your cart — remove it to order") + "\n")
 	}
 
-	// Full-bleed place-order bar: green left bar + selected-row background. When
-	// the order is blocked (sold-out item) the bar reads dim/disabled.
+	// Full-bleed place-order bar: green left bar + selected-row background. The
+	// bar reads dim/disabled when the order is blocked (sold-out item) or over
+	// the ₹1000 beta cap.
+	disabled := blocked || over
 	barLabel := " ❯ place order "
 	switch {
 	case c.placing:
 		barLabel = " placing order… "
 	case c.mutating:
 		barLabel = " syncing… "
+	case over:
+		barLabel = " order ₹1000+ — use the Swiggy app "
 	case blocked:
 		barLabel = " place order — remove sold-out item "
 	}
@@ -278,7 +314,7 @@ func (c Checkout) summaryView() string {
 	barBg := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.Bright)).
 		Background(lipgloss.Color(theme.SelRowBg))
-	if blocked {
+	if disabled {
 		barBar = theme.FaintStyle.Render("▌")
 		barBg = theme.DimStyle
 	}

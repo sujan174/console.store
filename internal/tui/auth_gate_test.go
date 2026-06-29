@@ -24,10 +24,18 @@ func TestAuthGateViewNative(t *testing.T) {
 		WithPendingAuth(),
 	)
 	m.w, m.h = 80, 24
+	m.decodeStep = render.DecodeSteps // settle the boot banner so the button shows
 	v := m.View()
-	for _, want := range []string{"https://authz/x", "connect to swiggy", "opening your browser", "waiting for authorization"} {
+	// The login gate IS the start screen: same ssh banner, but a single
+	// "connect swiggy" button over a waiting spinner — no menu, no raw URL.
+	for _, want := range []string{"consolestore.in", "connect swiggy", "waiting for sign-in"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("gate view missing %q\n%s", want, v)
+		}
+	}
+	for _, unwanted := range []string{"enter store", "go to shop"} {
+		if strings.Contains(v, unwanted) {
+			t.Fatalf("login gate must not show the home menu (%q)\n%s", unwanted, v)
 		}
 	}
 }

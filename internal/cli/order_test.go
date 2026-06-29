@@ -121,6 +121,29 @@ func TestOrderSoldOutAborts(t *testing.T) {
 	}
 }
 
+// An order whose live cart totals ≥ ₹1000 is refused (Swiggy MCP beta cap) and
+// nothing is placed, even armed + interactive.
+func TestOrderOverBetaCapDoesNotPlace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, basePreset("feast"))
+	var out bytes.Buffer
+	big := availCart()
+	big.Total = 1180
+	be := &fakeBackend{cart: big, placed: api.Order{ID: "999"}}
+	code := Dispatch([]string{"order", "feast"}, Deps{
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+	})
+	if be.placeN != 0 {
+		t.Fatalf("must NOT place an order ≥ ₹1000; placed %d", be.placeN)
+	}
+	if code == 0 {
+		t.Fatal("over-cap order should return non-zero")
+	}
+	if !strings.Contains(strings.ToLower(out.String()), "swiggy app") {
+		t.Fatalf("should tell the user to use the Swiggy app:\n%s", out.String())
+	}
+}
+
 func seedTwoBreakfasts(t *testing.T) {
 	t.Helper()
 	p1 := basePreset("breakfast")

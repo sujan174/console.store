@@ -2776,6 +2776,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.checkout = m.buildCheckout()
 					return m, nil
 				}
+				if m.live && m.checkout.OverCap() {
+					// Swiggy's MCP beta rejects carts ≥ ₹1000. The page already shows
+					// the bordered cap notice + a disabled bar; refuse to fire.
+					return m, nil
+				}
 				if m.live && !m.placingOrder {
 					m.placingOrder = true
 					m.orderErr = ""
@@ -2965,7 +2970,10 @@ func (m Model) listRows(chrome int) int {
 
 func (m Model) View() string {
 	if m.needsAuth {
-		gate := screens.NewAuthGate(m.authorizeURL, m.authAutoOpen).WithFrame(m.frame).View()
+		// The login gate IS the start screen — same boot banner, but the home menu
+		// is a single "connect swiggy" button (↵ opens the browser to authorize).
+		gate := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSplashTick(m.splashTick).
+			WithPhrase(m.splashPhrase).WithConnect().View()
 		if m.w == 0 || m.h == 0 {
 			return gate
 		}

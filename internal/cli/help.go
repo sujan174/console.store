@@ -6,7 +6,7 @@ import (
 )
 
 func printUsage(out io.Writer) {
-	fmt.Fprint(out, `console.store — terminal food ordering
+	fmt.Fprint(out, `consolestore — terminal food ordering
 
 usage:
   store                       open the interactive app (TUI)

@@ -1,4 +1,4 @@
-// Package localstore persists console.store's Swiggy token in the OS keyring
+// Package localstore persists consolestore's Swiggy token in the OS keyring
 // and caches the (non-secret) OAuth client registration on disk. It replaces
 // the broker's Postgres+KMS store for the single-user native binary: one
 // machine, one account, keyed by the fixed LocalAccountID.

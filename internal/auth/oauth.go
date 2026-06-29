@@ -36,7 +36,7 @@ func Discover(ctx context.Context, httpc *http.Client, metadataURL string) (Meta
 
 func Register(ctx context.Context, httpc *http.Client, registrationURL, redirectURI, scope string) (string, error) {
 	body, _ := json.Marshal(map[string]any{
-		"client_name":                "console.store",
+		"client_name":                "consolestore",
 		"redirect_uris":              []string{redirectURI},
 		"grant_types":                []string{"authorization_code"},
 		"response_types":             []string{"code"},

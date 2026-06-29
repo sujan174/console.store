@@ -1,4 +1,4 @@
-// Package auth implements console.store's delegated authentication against
+// Package auth implements consolestore's delegated authentication against
 // Swiggy's OAuth 2.1 authorization server: PKCE, Dynamic Client Registration,
 // the authorization-code exchange, and a cross-device pending-authorize manager.
 // It never stores tokens itself — binding goes through an injected AccountStore.

@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// These structs decode the fields console.store uses; unknown fields are
+// These structs decode the fields consolestore uses; unknown fields are
 // ignored. They intentionally mirror catalog shapes so the catalog/swiggy
 // adapter (a later slice) maps them with minimal translation.
 
