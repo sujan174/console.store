@@ -1,4 +1,6 @@
-// Auto-ported from Claude Design "Console Store Landing.dc.html". Raw markup, mounted via dangerouslySetInnerHTML.
+// Ported from Claude Design "Console Store Landing.dc.html", then refined.
+// Raw markup, mounted via dangerouslySetInnerHTML. data-ref / data-action /
+// class hooks are wired up in logic.js — keep them in sync.
 export const MARKUP = String.raw`
 <div data-ref="root" style="--accent:#7aa2f7;position:relative;min-height:100vh;background:radial-gradient(1100px 620px at 78% -8%, rgba(122,162,247,0.13), transparent 60%),radial-gradient(900px 560px at 8% 18%, rgba(187,154,247,0.10), transparent 60%),#07070c">
 
@@ -16,7 +18,7 @@ export const MARKUP = String.raw`
   <div style="position:absolute;inset:-60px 0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(122,162,247,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(122,162,247,0.05) 1px,transparent 1px);background-size:54px 54px;mask-image:radial-gradient(1200px 760px at 60% 0%, #000 30%, transparent 78%);-webkit-mask-image:radial-gradient(1200px 760px at 60% 0%, #000 30%, transparent 78%);animation:gridPar both;animation-timeline:scroll(root)"></div>
 
   <!-- NAV -->
-  <nav style="position:relative;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:20px;max-width:1180px;margin:0 auto;padding:26px 28px;animation:introFade .8s ease both">
+  <nav class="site-nav" style="position:relative;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:20px;max-width:1180px;margin:0 auto;padding:26px 28px;animation:introFade .8s ease both">
     <a href="#top" style="display:inline-flex;align-items:center;gap:11px">
       <svg width="30" height="30" viewBox="0 0 64 64" fill="none" style="display:block;flex:none">
         <rect x="2" y="2" width="60" height="60" rx="16" fill="#0e0f18" stroke="#2a2e47" stroke-width="2"></rect>
@@ -33,7 +35,7 @@ export const MARKUP = String.raw`
     </div>
     <div style="display:inline-flex;align-items:center;gap:8px;font-size:11.5px;color:#8b93b8;border:1px solid rgba(122,162,247,0.18);padding:7px 11px;border-radius:999px">
       <span style="width:7px;height:7px;border-radius:99px;background:#e0af68;animation:pulseDot 2.4s ease-in-out infinite"></span>
-      private preview
+      v0 · invite-only
     </div>
   </nav>
 
@@ -41,29 +43,24 @@ export const MARKUP = String.raw`
   <header id="top" style="position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:24px 28px 40px">
     <div style="display:flex;flex-direction:column;align-items:center;text-align:center">
       <div style="font-size:12.5px;letter-spacing:2px;color:var(--accent);margin:18px 0 6px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .15s">// terminal-native ordering</div>
-      <!-- particle wordmark (swirls in from a burst on load, then freezes) -->
+      <!-- particle wordmark: glyphs decode left-to-right into the wordmark, then freeze -->
       <div style="position:relative;width:100%;height:clamp(150px,26vh,300px);margin:4px 0 2px;animation:introPop 1.3s cubic-bezier(.22,1,.36,1) both .05s">
         <canvas data-ref="canvas" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
       </div>
       <h1 style="font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:clamp(34px,5.4vw,62px);line-height:1.02;letter-spacing:-1.5px;color:#c0caf5;margin:6px 0 0;max-width:18ch;animation:introUp .9s cubic-bezier(.22,1,.36,1) both .65s">dinner, piped through your terminal.</h1>
-      <p style="max-width:60ch;color:#8b93b8;font-size:15px;line-height:1.7;margin:20px 0 0;animation:introUp .9s cubic-bezier(.22,1,.36,1) both .85s">order real food in three keystrokes, without leaving the shell. no tabs, no mouse, no checkout forms — authorize once and you are piping dinner straight through your terminal.</p>
+      <p style="max-width:60ch;color:#8b93b8;font-size:15px;line-height:1.7;margin:20px 0 0;animation:introUp .9s cubic-bezier(.22,1,.36,1) both .85s">a CLI and a full TUI for ordering real food through Swiggy — without leaving your shell. authorize once, then browse, reorder a saved favourite, and track delivery straight from the terminal.</p>
 
       <!-- install -->
       <div style="margin:30px 0 0;display:flex;flex-direction:column;align-items:center;gap:12px;animation:introUp .9s cubic-bezier(.22,1,.36,1) both 1.05s">
-        <div data-action="install" style="display:inline-flex;align-items:stretch;border:1px solid rgba(122,162,247,0.22);border-radius:9px;background:#0b0b13;box-shadow:0 18px 50px rgba(0,0,0,.5);cursor:pointer;overflow:hidden">
-          <div style="display:flex;align-items:center;gap:11px;padding:14px 18px;font-size:14px">
-            <span style="color:#565f89">$</span>
-            <span data-ref="install" style="color:#c0caf5">curl -fsSL consolestore.in/install | sh</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:7px;padding:0 16px;background:rgba(224,175,104,0.1);border-left:1px solid rgba(224,175,104,0.25);color:#e0af68;font-size:11.5px;letter-spacing:.5px">
-            <span style="width:6px;height:6px;border-radius:99px;background:#e0af68"></span>not live yet
-          </div>
+        <div data-action="install" style="display:inline-flex;align-items:center;gap:11px;border:1px solid rgba(122,162,247,0.22);border-radius:9px;background:#0b0b13;box-shadow:0 18px 50px rgba(0,0,0,.5);cursor:pointer;padding:14px 18px;font-size:14px">
+          <span style="color:#565f89">$</span>
+          <span data-ref="install" style="color:#c0caf5">curl -fsSL consolestore.in/install | sh</span>
         </div>
         <div style="font-size:12px;color:#565f89">armed builds place real orders. the default stays safe.</div>
       </div>
 
       <div style="margin-top:26px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;font-size:12.5px;color:#8b93b8;animation:introUp .9s cubic-bezier(.22,1,.36,1) both 1.25s">
-        <span>no tabs</span><span style="color:#3b3b5a">·</span>
+        <span>one binary</span><span style="color:#3b3b5a">·</span>
         <span>no mouse</span><span style="color:#3b3b5a">·</span>
         <span>no cookie walls</span><span style="color:#3b3b5a">·</span>
         <span>no checkout forms</span><span style="color:#3b3b5a">·</span>
@@ -73,11 +70,9 @@ export const MARKUP = String.raw`
   </header>
 
   <!-- toast -->
-  
-    <div data-ref="toast" style="display:none;position:fixed;left:50%;bottom:34px;transform:translateX(-50%);z-index:50;display:flex;align-items:center;gap:10px;background:#0d0d16;border:1px solid rgba(224,175,104,0.3);border-radius:10px;padding:13px 18px;font-size:13px;color:#c0caf5;box-shadow:0 20px 60px rgba(0,0,0,.6)">
-      <span style="color:#e0af68">●</span> coming soon — the curl line is a placeholder.
-    </div>
-  
+  <div data-ref="toast" style="display:none;position:fixed;left:50%;bottom:34px;transform:translateX(-50%);z-index:50;align-items:center;gap:10px;background:#0d0d16;border:1px solid rgba(224,175,104,0.3);border-radius:10px;padding:13px 18px;font-size:13px;color:#c0caf5;box-shadow:0 20px 60px rgba(0,0,0,.6)">
+    <span style="color:#e0af68">●</span> coming soon — the curl line is a placeholder.
+  </div>
 
   <!-- LIVE TERMINAL -->
   <section id="run" style="position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:60px 28px 30px" data-reveal>
@@ -109,8 +104,85 @@ export const MARKUP = String.raw`
     </div>
   </section>
 
+  <!-- TUI / CLI showcase (toggle) -->
+  <section id="keys" style="position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:60px 28px 20px" data-reveal>
+    <div style="text-align:center;margin-bottom:38px">
+      <div style="font-size:12.5px;letter-spacing:2px;color:var(--accent);margin-bottom:16px">// two ways to drive it</div>
+      <div style="display:inline-flex;gap:5px;border:1px solid rgba(122,162,247,0.2);border-radius:999px;padding:5px;background:#0b0b13">
+        <button data-toggle="tui" style="border:0;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;padding:8px 24px;border-radius:999px;background:rgba(122,162,247,0.18);color:#c0caf5;transition:background .2s,color .2s">TUI</button>
+        <button data-toggle="cli" style="border:0;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;padding:8px 24px;border-radius:999px;background:transparent;color:#565f89;transition:background .2s,color .2s">CLI</button>
+      </div>
+      <div style="font-size:12px;color:#565f89;margin-top:14px">the full interactive app — or two commands from your shell.</div>
+    </div>
+
+    <!-- TUI panel -->
+    <div data-panel="tui">
+      <div class="keys-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:46px;align-items:center">
+        <div>
+          <div style="font-size:12.5px;letter-spacing:2px;color:var(--accent);margin-bottom:12px">// the interactive app</div>
+          <h2 style="font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:clamp(26px,3.4vw,40px);letter-spacing:-1px;color:#c0caf5;margin:0 0 16px">no mouse. just home row.</h2>
+          <p style="color:#8b93b8;font-size:14px;line-height:1.7;margin:0 0 26px">move with the <span style="color:#c0caf5">arrow keys</span>, change quantity with <span style="color:#c0caf5">+ / −</span>, jump to the cart with <span style="color:#c0caf5">c</span>, open with <span style="color:#c0caf5">↵</span>, step back with <span style="color:#c0caf5">esc</span>, and drop into a <span style="color:#bb9af7">:</span> command palette for search, checkout, tracking, and saving presets.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:9px">
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">↑</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">↓</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">←</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">→</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">↵</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">c</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">+</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">−</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">⌫</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">/</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(187,154,247,0.35);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#bb9af7;font-size:13px">:</span>
+            <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#565f89;font-size:13px">esc</span>
+          </div>
+        </div>
+        <!-- command palette mock -->
+        <div style="border:1px solid rgba(122,162,247,0.16);border-radius:11px;background:#0a0a11;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid rgba(122,162,247,0.1)">
+            <span style="color:#bb9af7">:</span><span data-ref="palette" style="color:#c0caf5"></span><span style="display:inline-block;width:8px;height:15px;background:#7aa2f7;animation:blink 1s step-end infinite;vertical-align:middle"></span>
+          </div>
+          <div style="padding:8px 0">
+            <div data-cmd style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;color:#a9b1d6"><span><span style="color:#7aa2f7">checkout</span>  review cart &amp; pay</span><span style="color:#565f89">↵</span></div>
+            <div data-cmd style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;color:#a9b1d6"><span><span style="color:#7aa2f7">track</span>     follow a live order</span><span style="color:#565f89">↵</span></div>
+            <div data-cmd style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;color:#a9b1d6"><span><span style="color:#7aa2f7">alias set</span> save this cart as a preset</span><span style="color:#565f89">↵</span></div>
+            <div data-cmd style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;color:#a9b1d6"><span><span style="color:#7aa2f7">arm</span>       enable live checkout</span><span style="color:#e0af68">!</span></div>
+            <div data-cmd style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;color:#a9b1d6"><span><span style="color:#7aa2f7">help</span>      keys &amp; commands</span><span style="color:#565f89">↵</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLI panel (hidden until toggled) -->
+    <div data-panel="cli" style="display:none">
+      <div class="keys-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:46px;align-items:center">
+        <div>
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:1.5px;color:#bb9af7;border:1px solid rgba(187,154,247,0.3);border-radius:999px;padding:5px 12px;margin-bottom:18px">★ FOR POWER USERS</span>
+          <h2 style="font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:clamp(26px,3.4vw,40px);letter-spacing:-1px;color:#c0caf5;margin:0 0 16px">order without the app.</h2>
+          <p style="color:#8b93b8;font-size:14px;line-height:1.7;margin:0 0 16px">save a cart once as a <span style="color:#c0caf5">preset</span>, and you never have to open the app to eat again. <span style="color:#c0caf5">store order &lt;name&gt;</span> pushes it to your cart, shows the real bill, and waits for a single <span style="color:var(--accent)">↵</span> — two or three keystrokes, five to ten seconds.</p>
+          <p style="color:#8b93b8;font-size:14px;line-height:1.7;margin:0 0 22px">checking a live order? <span style="color:#c0caf5">store status</span> — one command, live ETA, done. for a developer it's the fastest path from craving to confirmed: no app, no browser, no breaking flow.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <span style="font-size:12px;color:#9aa5c4;border:1px solid rgba(122,162,247,0.18);border-radius:7px;padding:6px 11px;background:#0d0d16">reorder in ~8s</span>
+            <span style="font-size:12px;color:#9aa5c4;border:1px solid rgba(122,162,247,0.18);border-radius:7px;padding:6px 11px;background:#0d0d16">status in one command</span>
+            <span style="font-size:12px;color:#9aa5c4;border:1px solid rgba(122,162,247,0.18);border-radius:7px;padding:6px 11px;background:#0d0d16">no app · no browser</span>
+          </div>
+        </div>
+        <!-- animated headless terminal -->
+        <div style="border:1px solid rgba(187,154,247,0.22);border-radius:11px;background:#0a0a11;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid rgba(122,162,247,0.1);background:#0e0f18">
+            <span style="width:10px;height:10px;border-radius:99px;background:#f7768e"></span>
+            <span style="width:10px;height:10px;border-radius:99px;background:#e0af68"></span>
+            <span style="width:10px;height:10px;border-radius:99px;background:#9ece6a"></span>
+            <span style="margin-left:6px;font-size:11.5px;color:#565f89">zsh — no TUI, just the shell</span>
+          </div>
+          <div data-ref="cli" style="padding:18px 18px 20px;font-size:13px;line-height:1.95;min-height:268px"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- marquee -->
-  <section style="position:relative;z-index:2;overflow:hidden;border-top:1px solid rgba(122,162,247,0.1);border-bottom:1px solid rgba(122,162,247,0.1);margin-top:46px;background:#090910">
+  <section style="position:relative;z-index:2;overflow:hidden;border-top:1px solid rgba(122,162,247,0.1);border-bottom:1px solid rgba(122,162,247,0.1);margin-top:54px;background:#090910">
     <div style="display:flex;width:max-content;animation:drift 26s linear infinite;will-change:transform">
       <span style="padding:22px 44px;font-size:18px;color:#565f89">terminal-native ordering</span><span style="padding:22px 44px;font-size:18px;color:#7aa2f7">·</span>
       <span style="padding:22px 44px;font-size:18px;color:#565f89">os keyring auth</span><span style="padding:22px 44px;font-size:18px;color:#bb9af7">·</span>
@@ -131,7 +203,7 @@ export const MARKUP = String.raw`
     <h2 style="font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:clamp(26px,3.6vw,42px);letter-spacing:-1px;color:#c0caf5;margin:0 0 14px;max-width:22ch">a browser order is a chore. this is three keystrokes.</h2>
     <p style="color:#8b93b8;font-size:14px;line-height:1.7;max-width:60ch;margin:0 0 34px">no tabs to dig through, no address re-entry, no cookie wall, no “are you still here?”. you stay on home row and dinner is already moving.</p>
 
-    <!-- the browser way  vs  console.store -->
+    <!-- the browser way  vs  consolestore -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:14px">
       <div style="border:1px solid rgba(247,118,142,0.16);border-radius:14px;background:#0c0a0d;padding:26px 26px 22px;display:flex;flex-direction:column">
         <div style="display:flex;align-items:center;gap:9px;margin-bottom:18px">
@@ -152,22 +224,22 @@ export const MARKUP = String.raw`
       <div style="border:1px solid rgba(158,206,106,0.2);border-radius:14px;background:#0a0c0a;padding:26px 26px 22px;display:flex;flex-direction:column">
         <div style="display:flex;align-items:center;gap:9px;margin-bottom:18px">
           <span style="width:8px;height:8px;border-radius:99px;background:#9ece6a"></span>
-          <span style="font-size:12px;letter-spacing:1px;color:#9ece6a">CONSOLE.STORE</span>
+          <span style="font-size:12px;letter-spacing:1px;color:#9ece6a">CONSOLESTORE</span>
         </div>
         <div style="background:#070908;border:1px solid rgba(158,206,106,0.12);border-radius:9px;padding:15px 16px;font-size:13.5px;line-height:2;flex:1">
-          <div><span style="color:#565f89">$</span> <span style="color:#c0caf5">store</span></div>
-          <div><span style="color:#7aa2f7">↵</span> <span style="color:#8b93b8">open “your usual”</span></div>
-          <div><span style="color:#9ece6a">+</span> <span style="color:#8b93b8">add</span>&nbsp;&nbsp;<span style="color:#bb9af7">:</span><span style="color:#8b93b8">checkout</span></div>
+          <div><span style="color:#565f89">$</span> <span style="color:#c0caf5">store order</span> <span style="color:#e0af68">dinner</span></div>
+          <div><span style="color:#565f89">  real bill, your saved preset</span></div>
           <div><span style="color:#7aa2f7">↵</span> <span style="color:#9ece6a">order placed.</span></div>
+          <div><span style="color:#565f89">$</span> <span style="color:#c0caf5">store status</span> <span style="color:#7dcfff">→ 6 mins</span></div>
         </div>
-        <div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(158,206,106,0.14);font-size:12px;color:#565f89">3 keystrokes · 0 tabs · ~9s · hands on home row</div>
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(158,206,106,0.14);font-size:12px;color:#565f89">2–3 keystrokes · 0 tabs · ~9s · hands on home row</div>
       </div>
     </div>
 
     <!-- facts, man-page style (the rest — security sits under the speed story) -->
     <div style="border:1px solid rgba(122,162,247,0.12);border-radius:14px;background:#0a0a12;padding:24px 28px;color:#8b93b8">
       <div style="display:flex;justify-content:space-between;align-items:center;color:#565f89;font-size:12.5px;border-bottom:1px solid rgba(122,162,247,0.1);padding-bottom:13px;margin-bottom:18px">
-        <span style="color:#c0caf5">console.store(1)</span><span style="letter-spacing:1px">FACTS, NOT FEATURES</span>
+        <span style="color:#c0caf5">consolestore(1)</span><span style="letter-spacing:1px">FACTS, NOT FEATURES</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:26px 44px;font-size:13px;line-height:1.5">
 
@@ -179,7 +251,7 @@ export const MARKUP = String.raw`
 
         <div>
           <div style="color:#bb9af7;letter-spacing:1.5px;font-size:11.5px;margin-bottom:10px">RUNTIME</div>
-          <div style="display:flex;gap:12px;margin-bottom:8px"><span style="color:#9aa5c4;min-width:74px">process</span><span>in-process. no sshd, no postgres, no docker.</span></div>
+          <div style="display:flex;gap:12px;margin-bottom:8px"><span style="color:#9aa5c4;min-width:74px">process</span><span>one local process. no server, no database, no docker.</span></div>
           <div style="display:flex;gap:12px"><span style="color:#9aa5c4;min-width:74px">backend</span><span>swiggy food + instamart, brokered live.</span></div>
         </div>
 
@@ -191,46 +263,10 @@ export const MARKUP = String.raw`
 
         <div>
           <div style="color:#9ece6a;letter-spacing:1.5px;font-size:11.5px;margin-bottom:10px">SURFACE</div>
-          <div style="display:flex;gap:12px;margin-bottom:8px"><span style="color:#9aa5c4;min-width:74px">input</span><span>home row only — j/k ↵ / : . no mouse.</span></div>
-          <div style="display:flex;gap:12px"><span style="color:#9aa5c4;min-width:74px">render</span><span>tokyo night, truecolor, kitty hero art.</span></div>
+          <div style="display:flex;gap:12px;margin-bottom:8px"><span style="color:#9aa5c4;min-width:74px">tui</span><span>browse, customize, cart, checkout, track.</span></div>
+          <div style="display:flex;gap:12px"><span style="color:#9aa5c4;min-width:74px">cli</span><span><span style="color:#c0caf5">store order</span> · <span style="color:#c0caf5">store status</span> · <span style="color:#c0caf5">alias</span>.</span></div>
         </div>
 
-      </div>
-    </div>
-  </section>
-
-  <!-- KEYBOARD UX -->
-  <section id="keys" style="position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:70px 28px 40px" data-reveal>
-    <div class="keys-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:46px;align-items:center">
-      <div>
-        <div style="font-size:12.5px;letter-spacing:2px;color:var(--accent);margin-bottom:12px">// driven from home row</div>
-        <h2 style="font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:clamp(26px,3.4vw,40px);letter-spacing:-1px;color:#c0caf5;margin:0 0 16px">no mouse. no menus. no tabs.</h2>
-        <p style="color:#8b93b8;font-size:14px;line-height:1.7;margin:0 0 26px">every action is one keystroke away. move with <span style="color:#c0caf5">j/k</span>, switch category with <span style="color:#c0caf5">←/→</span>, open with <span style="color:#c0caf5">↵</span>, and drop into a command palette with <span style="color:#bb9af7">:</span> for everything else.</p>
-        <div style="display:flex;flex-wrap:wrap;gap:9px">
-          <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">j</span>
-          <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">k</span>
-          <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">/</span>
-          <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">↵</span>
-          <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">c</span>
-          <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">a</span>
-          <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">i</span>
-          <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#c0caf5;font-size:13px">tab</span>
-          <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(187,154,247,0.35);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#bb9af7;font-size:13px">:</span>
-          <span data-key style="display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 9px;border:1px solid rgba(122,162,247,0.2);border-bottom-width:3px;border-radius:7px;background:#0d0d16;color:#565f89;font-size:13px">esc</span>
-        </div>
-      </div>
-      <!-- command palette mock -->
-      <div style="border:1px solid rgba(122,162,247,0.16);border-radius:11px;background:#0a0a11;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
-        <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid rgba(122,162,247,0.1)">
-          <span style="color:#bb9af7">:</span><span data-ref="palette" style="color:#c0caf5"></span><span style="display:inline-block;width:8px;height:15px;background:#7aa2f7;animation:blink 1s step-end infinite;vertical-align:middle"></span>
-        </div>
-        <div style="padding:8px 0">
-          <div data-cmd style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;color:#a9b1d6"><span><span style="color:#7aa2f7">checkout</span>  review cart &amp; pay</span><span style="color:#565f89">↵</span></div>
-          <div data-cmd style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;color:#a9b1d6"><span><span style="color:#7aa2f7">track</span>     follow a live order</span><span style="color:#565f89">↵</span></div>
-          <div data-cmd style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;color:#a9b1d6"><span><span style="color:#7aa2f7">address</span>   switch delivery point</span><span style="color:#565f89">↵</span></div>
-          <div data-cmd style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;color:#a9b1d6"><span><span style="color:#7aa2f7">arm</span>       enable live checkout</span><span style="color:#e0af68">!</span></div>
-          <div data-cmd style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;color:#a9b1d6"><span><span style="color:#7aa2f7">help</span>      keys &amp; commands</span><span style="color:#565f89">↵</span></div>
-        </div>
       </div>
     </div>
   </section>
@@ -239,7 +275,7 @@ export const MARKUP = String.raw`
   <section style="position:relative;z-index:2;max-width:980px;margin:0 auto;padding:90px 28px" data-reveal>
     <div style="font-size:12.5px;letter-spacing:2px;color:var(--accent);margin-bottom:22px;text-align:center">// why terminal-native</div>
     <p style="font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:clamp(26px,4.2vw,50px);line-height:1.12;letter-spacing:-1.4px;color:#c0caf5;text-align:center;margin:0">your terminal is already open.<br><span style="color:#565f89">why leave it</span> to get lunch?</p>
-    <p style="max-width:54ch;margin:30px auto 0;text-align:center;color:#8b93b8;font-size:14px;line-height:1.7">no tab-hunting, no cookie banners, no context switch. a ⌘+T, three keystrokes, and food is moving. the site can be loud because the product underneath is intentionally strict.</p>
+    <p style="max-width:54ch;margin:30px auto 0;text-align:center;color:#8b93b8;font-size:14px;line-height:1.7">no tab-hunting, no cookie banners, no context switch. one command, a real Swiggy bill, and one ↵ — food is moving. the site can be loud because the product underneath is intentionally strict.</p>
   </section>
 
   <!-- FAQ -->
@@ -252,8 +288,12 @@ export const MARKUP = String.raw`
         <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8b93b8;font-size:13.5px;line-height:1.7">not yet — this is a private preview. the curl line on this page is a placeholder and the install endpoint isn't serving the binary.</p></div>
       </div>
       <div data-faq style="border-bottom:1px solid rgba(122,162,247,0.12)">
+        <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#c0caf5;font-size:15px">can I order without opening the app?<span data-faq-i style="color:#565f89;transition:transform .2s">+</span></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8b93b8;font-size:13.5px;line-height:1.7">yes — that's the point for power users. save a cart as a preset once (<span style="color:#c0caf5">:alias set dinner</span> in the TUI), then <span style="color:#c0caf5">store order dinner</span> shows the real bill and places it on ↵. <span style="color:#c0caf5">store status</span> prints your live ETA. no TUI, no browser.</p></div>
+      </div>
+      <div data-faq style="border-bottom:1px solid rgba(122,162,247,0.12)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#c0caf5;font-size:15px">does it actually place real orders?<span data-faq-i style="color:#565f89;transition:transform .2s">+</span></div>
-        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8b93b8;font-size:13.5px;line-height:1.7">only the armed <span style="color:#c0caf5">store</span> build, and only after you set <span style="color:#c0caf5">CONSOLE_LIVE_ORDERS=1</span>. plain builds and <span style="color:#c0caf5">safestore</span> stay at browse + cart.</p></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8b93b8;font-size:13.5px;line-height:1.7">only the armed <span style="color:#c0caf5">store</span> build, and only after you set <span style="color:#c0caf5">CONSOLE_LIVE_ORDERS=1</span>. plain builds and <span style="color:#c0caf5">safestore</span> stay at browse + cart. placement always needs an explicit ↵ and is never silently retried.</p></div>
       </div>
       <div data-faq style="border-bottom:1px solid rgba(122,162,247,0.12)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#c0caf5;font-size:15px">where do my tokens go?<span data-faq-i style="color:#565f89;transition:transform .2s">+</span></div>
@@ -278,7 +318,6 @@ export const MARKUP = String.raw`
         <div>
           <div data-action="install" style="display:inline-flex;align-items:center;gap:11px;border:1px solid rgba(122,162,247,0.18);border-radius:8px;background:#0b0b13;padding:12px 16px;font-size:13px;cursor:pointer;margin-bottom:16px">
             <span style="color:#565f89">$</span><span style="color:#c0caf5">curl -fsSL consolestore.in/install | sh</span>
-            <span style="color:#e0af68;font-size:11px;border-left:1px solid rgba(224,175,104,0.25);padding-left:11px">soon</span>
           </div>
           <div style="font-size:12px;color:#565f89">// not affiliated with swiggy. preview build, no warranty, no real orders on this page.</div>
         </div>
@@ -286,12 +325,12 @@ export const MARKUP = String.raw`
           <div style="display:flex;flex-direction:column;gap:10px">
             <span style="color:#565f89;font-size:11px;letter-spacing:1px">product</span>
             <a href="#run" style="transition:color .15s" class="lnk">run</a>
-            <a href="#keys" style="transition:color .15s" class="lnk">keyboard ux</a>
+            <a href="#keys" style="transition:color .15s" class="lnk">keyboard &amp; cli</a>
             <a href="#features" style="transition:color .15s" class="lnk">features</a>
           </div>
           <div style="display:flex;flex-direction:column;gap:10px">
             <span style="color:#565f89;font-size:11px;letter-spacing:1px">status</span>
-            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:7px;height:7px;border-radius:99px;background:#e0af68;animation:pulseDot 2.4s ease-in-out infinite"></span>private preview</span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:7px;height:7px;border-radius:99px;background:#e0af68;animation:pulseDot 2.4s ease-in-out infinite"></span>v0 · invite-only</span>
             <span style="color:#565f89">launching soon</span>
           </div>
         </div>

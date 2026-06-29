@@ -26,6 +26,7 @@ export function mount(root) {
     term: root.querySelector('[data-ref="term"]'),
     key: root.querySelector('[data-ref="key"]'),
     palette: root.querySelector('[data-ref="palette"]'),
+    cli: root.querySelector('[data-ref="cli"]'),
     install: root.querySelector('[data-ref="install"]'),
     toast: root.querySelector('[data-ref="toast"]'),
   };
@@ -42,6 +43,29 @@ export function mount(root) {
   };
   const installEls = Array.from(root.querySelectorAll('[data-action="install"]'));
   installEls.forEach((el) => el.addEventListener("click", pingInstall));
+
+  // ---- TUI / CLI toggle ----
+  const toggleBtns = Array.from(root.querySelectorAll("[data-toggle]"));
+  const panels = {
+    tui: root.querySelector('[data-panel="tui"]'),
+    cli: root.querySelector('[data-panel="cli"]'),
+  };
+  const setPanel = (which) => {
+    Object.keys(panels).forEach((k) => {
+      if (panels[k]) panels[k].style.display = k === which ? "block" : "none";
+    });
+    toggleBtns.forEach((b) => {
+      const on = b.getAttribute("data-toggle") === which;
+      b.style.background = on ? "rgba(122,162,247,0.18)" : "transparent";
+      b.style.color = on ? "#c0caf5" : "#565f89";
+    });
+  };
+  const toggleHandlers = [];
+  toggleBtns.forEach((b) => {
+    const h = () => setPanel(b.getAttribute("data-toggle"));
+    b.addEventListener("click", h);
+    toggleHandlers.push([b, h]);
+  });
 
   // ---- scroll reveal: CSS scroll-driven (view timeline) ----
   const initReveal = () => {
@@ -140,28 +164,38 @@ export function mount(root) {
     tick();
   };
 
-  // ============ ASCII PARTICLE WORDMARK ============
+  // ============ DECODE-WAVE WORDMARK ============
+  // A faint shimmering glyph silhouette of "consolestore" resolves into a
+  // crisp, coloured wordmark under a light wave that sweeps left -> right,
+  // then freezes. Calmer and more legible than the old radial burst.
   const startParticles = () => {
     const cv = refs.canvas;
     if (!cv) return;
     const ctx = cv.getContext("2d");
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const glyphs = "consolestore.in$>_#/·▌░▒█01".split("");
-    const wordPal = [
-      "#7aa2f7",
-      "#7aa2f7",
-      "#7aa2f7",
-      "#9aa5c4",
-      "#9aa5c4",
-      "#c0caf5",
-      "#7dcfff",
-      "#bb9af7",
-      "#9ece6a",
-      "#e0af68",
+    // noisy pool used while a glyph is still "decoding"
+    const noise = "01<>{}[]/\\#$*+=:.;_|abcdefnorstu".split("");
+    // settled glyphs lean on the brand letters for thematic texture
+    const ink = "consolestore·/>_".split("");
+    // resolved colours — weighted toward the bright foreground so it reads
+    const pal = [
+      "#c0caf5", "#c0caf5", "#c0caf5", "#c0caf5",
+      "#9aa5c4", "#9aa5c4", "#9aa5c4",
+      "#7aa2f7", "#7aa2f7",
+      "#7dcfff", "#bb9af7",
     ];
-    let W = 0,
-      H = 0,
-      parts = [];
+
+    // animation timeline (ms)
+    const FADE = 460; // glyphs fade in
+    const WAVE0 = 460; // wave starts
+    const WAVE1 = 2200; // wave ends (fully resolved)
+    const SETTLE = 3200; // freeze
+
+    let W = 0, H = 0, parts = [];
+    const easeInOut = (t) =>
+      t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+    const lerp = (a, b, t) => a + (b - a) * t;
 
     const buildTargets = () => {
       if (W < 10 || H < 10) return;
@@ -178,7 +212,7 @@ export function mount(root) {
       octx.fillStyle = "#fff";
       octx.fillText(word, W / 2, H / 2 + 2);
       const data = octx.getImageData(0, 0, W, H).data;
-      const gap = fs > 96 ? 7 : 6;
+      const gap = fs > 96 ? 6 : 5;
       const targets = [];
       for (let y = 0; y < H; y += gap)
         for (let x = 0; x < W; x += gap) {
@@ -187,30 +221,17 @@ export function mount(root) {
       const next = [];
       for (let i = 0; i < targets.length; i++) {
         const old = parts[i];
-        const a0 = Math.random() * Math.PI * 2,
-          r0 = 130 + Math.random() * 300;
         next.push({
-          x: old ? old.x : W / 2 + Math.cos(a0) * r0,
-          y: old ? old.y : H / 2 + Math.sin(a0) * r0 * 0.7 + 60,
-          vx: old ? old.vx : -Math.sin(a0) * 3.4,
-          vy: old ? old.vy : Math.cos(a0) * 3.4,
           tx: targets[i].x,
           ty: targets[i].y,
-          ch: glyphs[(Math.random() * glyphs.length) | 0],
-          col: wordPal[(Math.random() * wordPal.length) | 0],
-          amb: false,
-        });
-      }
-      const amb = Math.min(120, Math.floor(W / 14));
-      for (let i = 0; i < amb; i++) {
-        next.push({
-          x: Math.random() * W,
-          y: Math.random() * H,
-          vx: (Math.random() - 0.5) * 0.3,
-          vy: (Math.random() - 0.5) * 0.3,
-          ch: glyphs[(Math.random() * glyphs.length) | 0],
-          col: "#2a2c44",
-          amb: true,
+          seed: (i * 37) % 997,
+          // gentle in-place shimmer offset while decoding
+          drift: 4 + (i % 5),
+          phase: (i % 17) * 0.4,
+          lockCh: old ? old.lockCh : ink[(Math.random() * ink.length) | 0],
+          col: old ? old.col : pal[(Math.random() * pal.length) | 0],
+          locked: false,
+          lockAt: 0,
         });
       }
       parts = next;
@@ -224,9 +245,8 @@ export function mount(root) {
       cv.height = H * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       buildTargets();
-      // After the wordmark has settled the rAF loop is stopped, so a later
-      // resize (e.g. a mobile browser collapsing its address bar) would leave
-      // the canvas blank. Repaint the static frame once on every settled resize.
+      // The rAF loop stops after SETTLE, so a later resize (mobile address bar
+      // collapsing) would leave the canvas blank. Repaint once when settled.
       if (settled) tick();
     };
 
@@ -240,49 +260,48 @@ export function mount(root) {
       if (S.dead) return;
       if (parts.length === 0) buildTargets();
       ctx.clearRect(0, 0, W, H);
-      ctx.font = `600 12.5px 'JetBrains Mono', monospace`;
+      ctx.font = `600 12px 'JetBrains Mono', monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const elapsed = performance.now() - t0;
-      const sweepX =
-        elapsed > 1500 && elapsed < 2700
-          ? ((elapsed - 1500) / 1100) * (W + 120) - 60
-          : -99999;
+
+      const elapsed = settled ? SETTLE : performance.now() - t0;
+      const pad = 70;
+      const wp = Math.max(0, Math.min(1, (elapsed - WAVE0) / (WAVE1 - WAVE0)));
+      const wave = -pad + easeInOut(wp) * (W + 2 * pad);
+      const fadeIn = Math.min(1, elapsed / FADE);
+      const decodeStep = Math.floor(elapsed / 64);
+
       for (let i = 0; i < parts.length; i++) {
         const p = parts[i];
-        if (settled) {
-          if (!p.amb) {
-            p.x = p.tx;
-            p.y = p.ty;
-          }
+        if (!p.locked && (settled || wave >= p.tx)) {
+          p.locked = true;
+          p.lockAt = elapsed;
+        }
+
+        let x, y, col, a, ch;
+        if (p.locked) {
+          const lp = settled ? 1 : easeOut(Math.min(1, (elapsed - p.lockAt) / 240));
+          const dx = Math.sin(elapsed / 280 + p.phase) * p.drift * (1 - lp);
+          const dy = Math.cos(elapsed / 320 + p.phase) * p.drift * (1 - lp);
+          x = p.tx + dx;
+          y = p.ty + dy;
+          ch = p.lockCh;
+          // brief white flash right as it locks, easing to its brand colour
+          col = lp < 0.5 ? "#ffffff" : p.col;
+          a = 0.55 + 0.45 * lp;
         } else {
-          if (!p.amb) {
-            p.vx += (p.tx - p.x) * 0.03;
-            p.vy += (p.ty - p.y) * 0.03;
-          } else {
-            p.vx += (Math.random() - 0.5) * 0.04;
-            p.vy += (Math.random() - 0.5) * 0.04;
-          }
-          p.vx *= 0.9;
-          p.vy *= 0.9;
-          p.x += p.vx;
-          p.y += p.vy;
-          if (p.amb) {
-            if (p.x < 0) p.x = W;
-            if (p.x > W) p.x = 0;
-            if (p.y < 0) p.y = H;
-            if (p.y > H) p.y = 0;
-          }
+          // decoding: shimmer in place, dim, cycling noise glyphs
+          x = p.tx + Math.sin(elapsed / 260 + p.phase) * p.drift;
+          y = p.ty + Math.cos(elapsed / 300 + p.phase) * p.drift;
+          ch = noise[(decodeStep + p.seed) % noise.length];
+          const near = wave > p.tx - 34; // pre-glow just ahead of the wave
+          col = near ? "#7dcfff" : "#3a3f5e";
+          a = (near ? 0.7 : 0.26) * fadeIn;
         }
-        let col = p.col,
-          a = p.amb ? 0.5 : 1;
-        if (!p.amb && Math.abs(p.tx - sweepX) < 46) {
-          col = "#ffffff";
-          a = 1;
-        }
+
         ctx.globalAlpha = a;
         ctx.fillStyle = col;
-        ctx.fillText(p.ch, p.x, p.y);
+        ctx.fillText(ch, x, y);
       }
       ctx.globalAlpha = 1;
       if (!settled) S.raf = requestAnimationFrame(tick);
@@ -296,7 +315,7 @@ export function mount(root) {
           settled = true;
           tick();
         }
-      }, 2700)
+      }, SETTLE)
     );
   };
 
@@ -325,6 +344,100 @@ export function mount(root) {
       typeOne();
     };
     typeOne();
+  };
+
+  // ============ ANIMATED HEADLESS CLI ============
+  const cliColors = {
+    A: "#565f89", V: "#9aa5c4", B: "#c0caf5",
+    G: "#9ece6a", Cy: "#7dcfff", Au: "#e0af68",
+  };
+  const startCli = async () => {
+    const el = refs.cli;
+    if (!el) return;
+    const { A, V, B, G, Cy, Au } = cliColors;
+    const cur = `<span style="display:inline-block;width:8px;height:14px;background:#7aa2f7;vertical-align:middle;animation:blink 1s step-end infinite"></span>`;
+    const rowB = (l, r, rc) =>
+      `<div style="display:flex;justify-content:space-between"><span style="color:${A}">&nbsp;&nbsp;${l}</span><span style="color:${rc}">${r}</span></div>`;
+    const note = (c, t) => `<div style="color:${c}">&nbsp;&nbsp;${t}</div>`;
+    const set = (h) => { if (el) el.innerHTML = h; };
+
+    // "store order breakfast" coloured up to n chars (cmd blue, arg gold)
+    const orderCmd = "store order breakfast";
+    const colorOrder = (n) => {
+      const head = orderCmd.slice(0, Math.min(n, 11));
+      const arg = n > 12 ? orderCmd.slice(12, n) : "";
+      return (
+        `<span style="color:${B}">${head}</span>` +
+        (n > 11 ? " " : "") +
+        (arg ? `<span style="color:${Au}">${arg}</span>` : "")
+      );
+    };
+
+    while (!S.dead) {
+      // 1) type the order command
+      for (let i = 0; i <= orderCmd.length; i++) {
+        if (S.dead) return;
+        set(`<div><span style="color:${A}">$</span> ${colorOrder(i)}${cur}</div>`);
+        await wait(52);
+      }
+      const head1 = `<div><span style="color:${A}">$</span> ${colorOrder(orderCmd.length)}</div>`;
+      await wait(380);
+
+      // 2) reveal the bill, line by line
+      const billLines = [
+        rowB("delivering to", "Home · HSR Layout", V),
+        rowB("from", "Blue Tokai", V),
+        rowB("2 × Cold Coffee", "₹240", G),
+        rowB("to pay", "₹300", Cy),
+        note(A, "press ↵ to place · ⌃C to cancel"),
+      ];
+      let acc = head1;
+      for (const ln of billLines) {
+        if (S.dead) return;
+        acc += ln;
+        set(acc);
+        await wait(300);
+      }
+
+      // 3) confirm
+      await wait(680);
+      acc += note(G, "✓ order placed");
+      set(acc);
+      await wait(1500);
+
+      // 4) status command
+      acc += `<div style="height:14px"></div>`;
+      const statusCmd = "store status";
+      for (let i = 0; i <= statusCmd.length; i++) {
+        if (S.dead) return;
+        set(
+          acc +
+            `<div><span style="color:${A}">$</span> <span style="color:${B}">${statusCmd.slice(0, i)}</span>${cur}</div>`
+        );
+        await wait(58);
+      }
+      acc += `<div><span style="color:${A}">$</span> <span style="color:${B}">${statusCmd}</span></div>`;
+      await wait(360);
+      acc += `<div><span style="color:${Cy}">&nbsp;&nbsp;◐ on the way to you</span><span style="color:${V}"> · 6 mins</span></div>`;
+      set(acc);
+      await wait(2800);
+
+      set("");
+      await wait(520);
+    }
+  };
+
+  const staticCli = () => {
+    const el = refs.cli;
+    if (!el) return;
+    const { A, V, B, G, Cy, Au } = cliColors;
+    el.innerHTML =
+      `<div><span style="color:${A}">$</span> <span style="color:${B}">store order</span> <span style="color:${Au}">breakfast</span></div>` +
+      `<div style="display:flex;justify-content:space-between"><span style="color:${A}">&nbsp;&nbsp;to pay</span><span style="color:${Cy}">₹300</span></div>` +
+      `<div style="color:${G}">&nbsp;&nbsp;✓ order placed</div>` +
+      `<div style="height:14px"></div>` +
+      `<div><span style="color:${A}">$</span> <span style="color:${B}">store status</span></div>` +
+      `<div><span style="color:${Cy}">&nbsp;&nbsp;◐ on the way to you</span><span style="color:${V}"> · 6 mins</span></div>`;
   };
 
   // ============ TUI SCREENS ============
@@ -356,7 +469,7 @@ export function mount(root) {
 
     const splash = () =>
       [
-        line(sp(C.dim, "~ % ") + sp(C.text, "ssh consolestore.in")),
+        line(sp(C.dim, "~ % ") + sp(C.text, "store")),
         gap(14),
         `<div style="font-size:30px;letter-spacing:5px;font-weight:600;color:#c0caf5;line-height:1.1">consolestore</div>`,
         gap(8),
@@ -570,7 +683,7 @@ export function mount(root) {
     };
 
     const typeSsh = async () => {
-      const cmd = "ssh consolestore.in";
+      const cmd = "store";
       for (let i = 0; i <= cmd.length; i++) {
         if (S.dead) return;
         set(
@@ -596,7 +709,7 @@ export function mount(root) {
     };
 
     while (!S.dead) {
-      setKey("ssh");
+      setKey("run");
       await typeSsh();
       if (S.dead) return;
       set(Sc.splash());
@@ -651,6 +764,7 @@ export function mount(root) {
 
   // ---- boot ----
   if (refs.toast) refs.toast.style.display = "none";
+  setPanel("tui");
   initReveal();
   initFaq();
   if (!reduce) {
@@ -658,8 +772,10 @@ export function mount(root) {
     startParticles();
     startTerminal();
     startPalette();
+    startCli();
   } else {
     staticTerminal();
+    staticCli();
   }
 
   // ---- cleanup ----
@@ -672,5 +788,6 @@ export function mount(root) {
     if (S.ambResize) window.removeEventListener("resize", S.ambResize);
     installEls.forEach((el) => el.removeEventListener("click", pingInstall));
     faqHandlers.forEach(([q, h]) => q.removeEventListener("click", h));
+    toggleHandlers.forEach(([b, h]) => b.removeEventListener("click", h));
   };
 }

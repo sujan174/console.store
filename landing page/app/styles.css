@@ -49,17 +49,15 @@ a {
 
 /* ---- responsive overrides (markup uses inline styles, so !important) ---- */
 
-/* Tablet and below: keyboard-ux two-column stacks to one. */
+/* Tablet and below: two-column blocks stack to one, and the top nav is hidden
+   (the page is a single scroll; the nav is desktop-only). */
 @media (max-width: 820px) {
-  .keys-grid {
+  .keys-grid,
+  .power-grid {
     grid-template-columns: 1fr !important;
     gap: 30px !important;
   }
-}
-
-/* Phone: drop the center nav links (brand + status chip remain), tighten pads. */
-@media (max-width: 640px) {
-  .nav-mid {
+  .site-nav {
     display: none !important;
   }
 }

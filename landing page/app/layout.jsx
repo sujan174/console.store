@@ -5,20 +5,19 @@ const SITE = "https://consolestore.in";
 export const metadata = {
   metadataBase: new URL(SITE),
   title: {
-    default: "console.store — order food from your terminal | consolestore.in",
+    default: "consolestore — order food from your terminal | consolestore.in",
     template: "%s | consolestore.in"
   },
   description:
-    "console.store (consolestore.in) is a terminal-native CLI food ordering shop. Browse restaurants, rebuild your usual cart, and check out real Swiggy orders in three keystrokes — no browser, no tabs, no mouse.",
-  applicationName: "console.store",
-  authors: [{ name: "console.store" }],
-  creator: "console.store",
-  publisher: "console.store",
+    "consolestore (consolestore.in) is a terminal-native CLI and TUI for ordering food through Swiggy. Browse restaurants, reorder a saved preset, and check out real orders straight from your shell — no browser, no mouse.",
+  applicationName: "consolestore",
+  authors: [{ name: "consolestore" }],
+  creator: "consolestore",
+  publisher: "consolestore",
   category: "technology",
   keywords: [
     "console store",
     "consolestore",
-    "console.store",
     "consolestore.in",
     "terminal food ordering",
     "CLI food ordering",
@@ -30,17 +29,17 @@ export const metadata = {
     "developer tools"
   ],
   openGraph: {
-    title: "console.store — order food from your terminal",
+    title: "consolestore — order food from your terminal",
     description:
       "A Tokyo Night terminal shop for hungry builders. Search, cart, checkout, and track real Swiggy orders from the command line.",
     url: SITE,
-    siteName: "console.store",
+    siteName: "consolestore",
     type: "website",
     locale: "en_US"
   },
   twitter: {
     card: "summary_large_image",
-    title: "console.store — order food from your terminal",
+    title: "consolestore — order food from your terminal",
     description:
       "Terminal-native food ordering. Search, cart, checkout, and track from the command line — no browser required."
   },
@@ -77,7 +76,7 @@ const jsonLd = {
     {
       "@type": "Organization",
       "@id": `${SITE}/#org`,
-      name: "console.store",
+      name: "consolestore",
       alternateName: ["consolestore", "consolestore.in", "console store"],
       url: SITE,
       description:
@@ -87,14 +86,14 @@ const jsonLd = {
       "@type": "WebSite",
       "@id": `${SITE}/#website`,
       url: SITE,
-      name: "console.store",
+      name: "consolestore",
       alternateName: ["consolestore", "console store", "consolestore.in"],
       publisher: { "@id": `${SITE}/#org` },
       inLanguage: "en"
     },
     {
       "@type": "SoftwareApplication",
-      name: "console.store",
+      name: "consolestore",
       alternateName: "consolestore",
       applicationCategory: "DeveloperApplication",
       operatingSystem: "macOS, Linux, Windows",

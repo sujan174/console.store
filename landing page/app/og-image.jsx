@@ -44,14 +44,14 @@ export function OgImage() {
         <div
           style={{
             display: "flex",
-            fontSize: 120,
+            fontSize: 104,
             fontWeight: 700,
             letterSpacing: -4,
             marginTop: 28,
             color: "#c0caf5"
           }}
         >
-          console<span style={{ color: "#7aa2f7" }}>.store</span>
+          consolestore<span style={{ color: "#7aa2f7" }}>.in</span>
         </div>
 
         <div style={{ display: "flex", fontSize: 40, color: "#8b93b8", marginTop: 18 }}>
