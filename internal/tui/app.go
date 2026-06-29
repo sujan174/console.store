@@ -2958,16 +2958,7 @@ func (m Model) listRows(chrome int) int {
 
 func (m Model) View() string {
 	if m.needsAuth {
-		lead := "  Press [ Enter ] to open your browser and reconnect.\n\n" +
-			"  Or copy this link:\n\n"
-		if m.authAutoOpen {
-			lead = "  Opening your browser to log in to Swiggy…\n\n" +
-				"  If it didn't open, copy this link:\n\n"
-		}
-		gate := "  console.store needs to connect to your Swiggy account.\n\n" +
-			lead +
-			"     " + m.authorizeURL + "\n\n" +
-			"  [ Enter ] open in browser       waiting for authorization…\n"
+		gate := screens.NewAuthGate(m.authorizeURL, m.authAutoOpen).WithFrame(m.frame).View()
 		if m.w == 0 || m.h == 0 {
 			return gate
 		}

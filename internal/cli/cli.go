@@ -19,6 +19,7 @@ type Backend interface {
 	PlaceOrder(addressID string) (api.Order, error)
 	ActiveOrders(addressID string) ([]api.Order, error)
 	TrackOrder(orderID string) (api.Tracking, error)
+	Logout() error
 }
 
 // Deps carries everything a command needs. In/Out default to os.Stdin/os.Stdout
@@ -66,6 +67,10 @@ func Dispatch(args []string, d Deps) int {
 			idx = n
 		}
 		return requireAuth(d, func() int { return runOrder(d, args[1], idx) })
+	case "logout", "disconnect", "signout":
+		return runLogout(d)
+	case "whoami", "account":
+		return runWhoami(d)
 	case "alias":
 		return runAlias(d, args[1:]) // alias list/rm need no backend
 	default:

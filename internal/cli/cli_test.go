@@ -10,15 +10,17 @@ import (
 
 // fakeBackend implements cli.Backend for tests. No network, no real orders.
 type fakeBackend struct {
-	addrs    []api.Address
-	cart     api.Cart
-	placed   api.Order
-	active   []api.Order
-	tracking api.Tracking
-	placeErr error
-	updErr   error
-	getErr   error
-	placeN   int
+	addrs     []api.Address
+	cart      api.Cart
+	placed    api.Order
+	active    []api.Order
+	tracking  api.Tracking
+	placeErr  error
+	updErr    error
+	getErr    error
+	logoutErr error
+	placeN    int
+	logoutN   int
 }
 
 func (f *fakeBackend) Addresses() ([]api.Address, error) { return f.addrs, nil }
@@ -29,6 +31,42 @@ func (f *fakeBackend) GetCart(_, _ string) (api.Cart, error)    { return f.cart,
 func (f *fakeBackend) PlaceOrder(string) (api.Order, error)     { f.placeN++; return f.placed, f.placeErr }
 func (f *fakeBackend) ActiveOrders(string) ([]api.Order, error) { return f.active, nil }
 func (f *fakeBackend) TrackOrder(string) (api.Tracking, error)  { return f.tracking, nil }
+func (f *fakeBackend) Logout() error                            { f.logoutN++; return f.logoutErr }
+
+func TestLogoutAndWhoami(t *testing.T) {
+	var out bytes.Buffer
+	be := &fakeBackend{addrs: []api.Address{{Label: "Home", Line: "FD 46 Enclave, Bengaluru"}}}
+
+	// logout while signed in disconnects.
+	if code := Dispatch([]string{"logout"}, Deps{SignedIn: true, Out: &out, Backend: be}); code != 0 {
+		t.Fatalf("logout exit = %d", code)
+	}
+	if be.logoutN != 1 {
+		t.Fatalf("logout should call Logout once, got %d", be.logoutN)
+	}
+
+	// logout while signed out is a no-op (does not call Logout).
+	be.logoutN = 0
+	out.Reset()
+	Dispatch([]string{"logout"}, Deps{SignedIn: false, Out: &out, Backend: be})
+	if be.logoutN != 0 {
+		t.Fatal("logout while signed out must not call Logout")
+	}
+
+	// whoami signed in shows the address.
+	out.Reset()
+	Dispatch([]string{"whoami"}, Deps{SignedIn: true, Out: &out, Backend: be})
+	if !strings.Contains(out.String(), "Home") {
+		t.Fatalf("whoami should list saved addresses:\n%s", out.String())
+	}
+
+	// whoami signed out says so.
+	out.Reset()
+	Dispatch([]string{"whoami"}, Deps{SignedIn: false, Out: &out, Backend: be})
+	if !strings.Contains(strings.ToLower(out.String()), "not signed in") {
+		t.Fatalf("whoami signed out should say so:\n%s", out.String())
+	}
+}
 
 func TestDispatchHelp(t *testing.T) {
 	var out bytes.Buffer

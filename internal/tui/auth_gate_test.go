@@ -25,7 +25,7 @@ func TestAuthGateViewNative(t *testing.T) {
 	)
 	m.w, m.h = 80, 24
 	v := m.View()
-	for _, want := range []string{"https://authz/x", "open in browser", "waiting for authorization"} {
+	for _, want := range []string{"https://authz/x", "connect to swiggy", "opening your browser", "waiting for authorization"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("gate view missing %q\n%s", want, v)
 		}

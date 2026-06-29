@@ -15,6 +15,8 @@ usage:
   store order <name> <n>      order the nth same-named preset directly
   store alias list            list your saved presets
   store alias rm <name> [n]   remove preset <name> (the nth, if several share it)
+  store whoami                show connection + saved addresses
+  store logout                disconnect your Swiggy account
   store help                  show this help
 
 presets are created inside the app: build a cart, press : and run
