@@ -18,11 +18,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"consolestore/internal/auth"
 	"consolestore/internal/broker"
@@ -179,6 +182,15 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 		}
 
 		caps := render.DetectCaps(os.Getenv("TERM"), os.Environ(), truecolor())
+
+		// Force lipgloss to emit 24-bit color when the terminal supports it.
+		// Without this, termenv's own (conservative) detection downgrades the
+		// Tokyo Night hex palette to 16/256 colors on Windows/PowerShell — the
+		// "bland, colorless" look. NO_COLOR still wins (we leave the profile alone).
+		if truecolor() && os.Getenv("NO_COLOR") == "" {
+			lipgloss.SetColorProfile(termenv.TrueColor)
+		}
+
 		snap := swiggysnap.NewSnapshot()
 
 		// authClient lets the TUI poll the loopback callback and start a fresh flow
@@ -225,17 +237,23 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 	return be, signedIn, launchTUI, nil
 }
 
-// truecolor reports whether the terminal advertises 24-bit color via COLORTERM.
-// truecolor reports whether the terminal advertises 24-bit color. Windows
-// Terminal (WT_SESSION) and the VS Code integrated terminal (TERM_PROGRAM=vscode)
-// support truecolor but don't set COLORTERM, so without these checks lipgloss
-// strips the whole palette on Windows.
+// truecolor reports whether the terminal supports 24-bit color. COLORTERM,
+// Windows Terminal (WT_SESSION), and the VS Code integrated terminal
+// (TERM_PROGRAM=vscode) advertise it but often don't set COLORTERM, so termenv
+// under-detects and lipgloss strips the palette. On Windows we assume truecolor
+// outright: every supported Windows build (10 1607+ conhost, Windows Terminal,
+// PowerShell) renders 24-bit SGR once VT processing is on, but termenv routinely
+// downgrades it to 16/256 colors — which is what washes the Tokyo Night palette
+// out to "bland" in PowerShell.
 func truecolor() bool {
 	ct := strings.ToLower(os.Getenv("COLORTERM"))
 	if ct == "truecolor" || ct == "24bit" {
 		return true
 	}
 	if os.Getenv("WT_SESSION") != "" {
+		return true
+	}
+	if runtime.GOOS == "windows" {
 		return true
 	}
 	return strings.EqualFold(os.Getenv("TERM_PROGRAM"), "vscode")
