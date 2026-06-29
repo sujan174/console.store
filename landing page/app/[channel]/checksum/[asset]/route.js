@@ -1,0 +1,38 @@
+import { latestTag, ghAssetURL, checkAlphaCode } from "../../../_lib/channels.js";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const CHANNELS = new Set(["stable", "beta", "alpha"]);
+const ASSET_RE = /^store_[a-z0-9]+_[a-z0-9]+(\.exe)?$/;
+
+// Returns the hex sha256 for an asset as text/plain, read from the signed
+// manifest envelope. The install scripts use this to verify downloads without
+// needing jq or base64 JSON parsing in shell.
+export async function GET(req, { params }) {
+  const { channel, asset } = await params;
+  if (!CHANNELS.has(channel) || !ASSET_RE.test(asset)) {
+    return new Response("bad request", { status: 400 });
+  }
+  if (channel === "alpha") {
+    const code = new URL(req.url).searchParams.get("code") || req.headers.get("x-console-code") || "";
+    if (!checkAlphaCode(code).ok) return new Response("alpha is invite-only", { status: 403 });
+  }
+  const tag = await latestTag(channel);
+  if (!tag) return new Response("no release", { status: 404 });
+
+  const res = await fetch(ghAssetURL(tag, "console-manifest.json"), {
+    headers: { "User-Agent": "consolestore-landing" },
+  });
+  if (!res.ok) return new Response("manifest missing", { status: 502 });
+  const env = await res.json();
+  const payload = JSON.parse(Buffer.from(env.payload, "base64").toString("utf8"));
+  // asset name → asset key: strip "store_" prefix and ".exe" suffix.
+  const key = asset.replace(/^store_/, "").replace(/\.exe$/, "");
+  const sum = payload.assets?.[key];
+  if (!sum) return new Response("unknown asset", { status: 404 });
+  return new Response(sum + "\n", {
+    status: 200,
+    headers: { "content-type": "text/plain", "cache-control": "no-store" },
+  });
+}
