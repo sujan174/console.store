@@ -52,9 +52,14 @@ export const MARKUP = String.raw`
 
       <!-- install -->
       <div style="margin:30px 0 0;display:flex;flex-direction:column;align-items:center;gap:12px;animation:introUp .9s cubic-bezier(.22,1,.36,1) both 1.05s">
-        <div data-action="install" style="display:inline-flex;align-items:center;gap:11px;border:1px solid rgba(122,162,247,0.22);border-radius:9px;background:#0b0b13;box-shadow:0 18px 50px rgba(0,0,0,.5);cursor:pointer;padding:14px 18px;font-size:14px">
-          <span style="color:#565f89">$</span>
-          <span data-ref="install" style="color:#c0caf5">curl -fsSL consolestore.in/install | sh</span>
+        <div data-action="install" style="display:inline-flex;align-items:stretch;border:1px solid rgba(122,162,247,0.22);border-radius:9px;background:#0b0b13;box-shadow:0 18px 50px rgba(0,0,0,.5);cursor:not-allowed;overflow:hidden;font-size:14px">
+          <div style="display:flex;align-items:center;gap:11px;padding:14px 18px">
+            <span style="color:#565f89">$</span>
+            <span data-ref="install" style="color:#c0caf5">curl -fsSL consolestore.in/install | sh</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;padding:0 16px;background:rgba(224,175,104,0.1);border-left:1px solid rgba(224,175,104,0.25);color:#e0af68;font-size:12px;letter-spacing:.5px;cursor:not-allowed">
+            <span style="width:6px;height:6px;border-radius:99px;background:#e0af68"></span>coming soon
+          </div>
         </div>
         <div style="font-size:12px;color:#565f89">armed builds place real orders. the default stays safe.</div>
       </div>
@@ -324,8 +329,9 @@ export const MARKUP = String.raw`
       <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:clamp(40px,9vw,120px);letter-spacing:-3px;line-height:.9;margin-bottom:40px;background:linear-gradient(90deg,#3a3f5e,#6b73a0,#3a3f5e);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:sheen 6s linear infinite">consolestore</div>
       <div style="display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;align-items:flex-end">
         <div>
-          <div data-action="install" style="display:inline-flex;align-items:center;gap:11px;border:1px solid rgba(122,162,247,0.18);border-radius:8px;background:#0b0b13;padding:12px 16px;font-size:13px;cursor:pointer;margin-bottom:16px">
+          <div data-action="install" style="display:inline-flex;align-items:center;gap:11px;border:1px solid rgba(122,162,247,0.18);border-radius:8px;background:#0b0b13;padding:12px 16px;font-size:13px;cursor:not-allowed;margin-bottom:16px">
             <span style="color:#565f89">$</span><span style="color:#c0caf5">curl -fsSL consolestore.in/install | sh</span>
+            <span style="color:#e0af68;font-size:11px;border-left:1px solid rgba(224,175,104,0.25);padding-left:11px">coming soon</span>
           </div>
           <div style="font-size:12px;color:#565f89">// not affiliated with swiggy. preview build, no warranty, no real orders on this page.</div>
         </div>
