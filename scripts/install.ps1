@@ -5,6 +5,10 @@ $base = if ($env:CONSOLE_BASE) { $env:CONSOLE_BASE } else { "https://consolestor
 $channel = if ($env:CONSOLE_CHANNEL) { $env:CONSOLE_CHANNEL } else { "stable" }
 $code = $env:CONSOLE_ALPHA_CODE
 
+if ($channel -eq "alpha" -and -not $code) {
+  throw "alpha channel is invite-only — set `$env:CONSOLE_ALPHA_CODE to your access code"
+}
+
 $arch = if ([Environment]::Is64BitOperatingSystem) {
   if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
 } else { throw "unsupported 32-bit OS" }
