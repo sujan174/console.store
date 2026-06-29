@@ -3057,7 +3057,10 @@ func (m Model) View() string {
 	var body string
 	switch m.screen {
 	case scrRestaurant:
-		chrome := 14 + screens.BrandHeaderLines
+		// chrome above the list: name + meta + category bar + their blanks + the
+		// footer; the list windows to the rest so it fills the viewport (the old
+		// 14 left a ~5-row blank gap above the footer).
+		chrome := 10 + screens.BrandHeaderLines
 		body = m.rest.WithMaxRows(m.listRows(chrome)).View()
 	case scrCheckout, scrConfirm:
 		body = m.checkout.WithPlacing(m.placingOrder).View(m.frame)
@@ -3075,9 +3078,10 @@ func (m Model) View() string {
 	case scrImCart:
 		body = m.imCart.View()
 	default: // scrMenu
-		// reserves the store switcher (2) + the detail strip (name/stats + blank)
-		// + the trailing key-hint line (lifted to the footer).
-		body = m.menu.WithMaxRows(m.listRows(19 + screens.BrandHeaderLines)).View()
+		// chrome above the list: store switcher (2) + detail strip + a section
+		// header + the footer; the list windows to whatever rows remain so the
+		// brand header stays pinned and the page fills the viewport (no big gap).
+		body = m.menu.WithMaxRows(m.listRows(8 + screens.BrandHeaderLines)).View()
 	}
 
 	// The footer — the screen's hint line + optional command palette + status
