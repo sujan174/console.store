@@ -14,7 +14,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="${BIN:-$HOME/.local/bin}"
-ARM_FLAG='-X console.store/internal/swiggy.liveOrdersDefault=1'
+COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+VER_FLAGS="-X console.store/internal/version.Version=dev -X console.store/internal/version.Channel=stable -X console.store/internal/version.Commit=$COMMIT"
+ARM_FLAG="-X console.store/internal/swiggy.liveOrdersDefault=1 $VER_FLAGS"
 
 mkdir -p "$BIN"
 cd "$ROOT"
@@ -30,7 +32,7 @@ echo
 echo "building from $ROOT  ->  $BIN"
 
 # safestore: plain build, liveOrdersDefault stays "0" (disarmed).
-go build -o "$BIN/safestore" ./cmd/store
+go build -ldflags "$VER_FLAGS" -o "$BIN/safestore" ./cmd/store
 echo "  ✓ safestore  (disarmed — orders blocked)"
 
 # store: stamp the arming default to "1" (armed).
