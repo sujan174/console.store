@@ -1316,8 +1316,11 @@ func (m Model) onTick() (Model, tea.Cmd) {
 	}
 	if m.screen == scrTracking {
 		m.trackTick++
-		// Re-poll every ~500 ticks (~30s at 60ms).
-		if m.trackTick%500 == 0 && m.hasActiveOrder && m.backend != nil {
+		// Re-poll every ~500 ticks (~30s at 60ms) so the ETA stays synced with
+		// Swiggy. Keyed on the order id (not hasActiveOrder) so polling keeps
+		// refreshing while the screen is open, even if the delivery heuristic has
+		// cleared the active-order flag.
+		if m.trackTick%500 == 0 && m.activeOrder.OrderID != "" && m.backend != nil {
 			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
 		}
 	}

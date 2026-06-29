@@ -35,7 +35,11 @@ func (t Tracking) WithLive(status, eta string) Tracking {
 	return t
 }
 
-// Resolve picks the live status when available, else the time fallback.
+// Resolve picks the live status/ETA when available, else a time estimate. The
+// live ETA from track_food_order is authoritative (it's what the CLI shows), so
+// it is ALWAYS preferred for the displayed time once a poll has landed — the
+// local time-based countdown is only a pre-first-poll placeholder, never an
+// override of real data.
 func (t Tracking) Resolve(nowUnix int64) TrackState {
 	if st, delivered, ok := StageFromStatus(t.liveStatus); ok {
 		eta := t.liveETA
@@ -47,7 +51,15 @@ func (t Tracking) Resolve(nowUnix int64) TrackState {
 		}
 		return TrackState{Stage: st, Delivered: delivered, ETAText: eta, Estimated: false}
 	}
-	return TrackProgressByTime(t.placedAt, t.etaLo, t.etaHi, nowUnix)
+	// No mappable live status yet — estimate the stage from elapsed time. But if a
+	// live ETA arrived, trust it over the local countdown so the time stays synced
+	// with Swiggy even when the status phrasing doesn't match our stage rules.
+	est := TrackProgressByTime(t.placedAt, t.etaLo, t.etaHi, nowUnix)
+	if t.liveETA != "" {
+		est.ETAText = t.liveETA
+		est.Estimated = false
+	}
+	return est
 }
 
 // wheelSpin are the rotating wheel glyphs (quarter-turns) cycled per frame so
