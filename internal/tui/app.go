@@ -1140,6 +1140,7 @@ func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, sels []catal
 	if wasEmpty {
 		m.cartRestaurant = rest
 		m.cartSection = section
+		m.cartForeign = false // a real in-app add now owns the cart
 	}
 	return m
 }
@@ -1179,6 +1180,7 @@ func (m Model) commitAddNoSync(item catalog.Item, addons []catalog.AddOn, sels [
 	if wasEmpty {
 		m.cartRestaurant = rest
 		m.cartSection = section
+		m.cartForeign = false // a real in-app add now owns the cart
 	}
 	return m
 }

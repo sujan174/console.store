@@ -12,6 +12,38 @@ import (
 	"console.store/internal/tui/screens"
 )
 
+// Regression: a foreign cart that was later emptied leaves cartForeign stuck
+// true. Adding a fresh item from a real restaurant must take ownership of the
+// cart (clear the flag) so :alias set is no longer wrongly refused.
+func TestAliasSetAfterEmptiedForeignCart(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	snap := swiggysnap.NewSnapshot()
+	m := New(render.Caps{}, WithLiveBackend(&liveFake{}, snap, "local", ""))
+	m.addr = catalog.Address{ID: "a1", Line: "Home"}
+	// Stuck state: foreign flag set, but the foreign lines were removed.
+	m.cartForeign = true
+	m.lines = nil
+
+	m = m.commitAdd(catalog.Item{ID: "i1", SwiggyID: "i1", Name: "Latte", Section: catalog.SectionFood},
+		nil, nil, 0, "Blue Tokai", catalog.SectionFood)
+
+	if m.cartForeign {
+		t.Fatal("an in-app add to an empty cart must clear cartForeign")
+	}
+	if m.cartRestaurant != "Blue Tokai" {
+		t.Fatalf("cartRestaurant = %q, want Blue Tokai", m.cartRestaurant)
+	}
+
+	lines := m.aliasSet("breakfast")
+	joined := ""
+	for _, l := range lines {
+		joined += l.Text + "\n"
+	}
+	if strings.Contains(strings.ToLower(joined), "open a restaurant") {
+		t.Fatalf("alias must not be refused as foreign after an app add:\n%s", joined)
+	}
+}
+
 func TestAliasSetCapturesCart(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	snap := swiggysnap.NewSnapshot()
