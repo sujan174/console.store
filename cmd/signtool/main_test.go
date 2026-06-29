@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"testing"
 
@@ -9,7 +10,7 @@ import (
 )
 
 func TestBuildEnvelopeVerifies(t *testing.T) {
-	pub, priv, _ := ed25519.GenerateKey(nil)
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	b, err := buildEnvelope(priv, "v0.3.0", "beta", map[string]string{"linux_amd64": "ff00"})
 	if err != nil {
 		t.Fatal(err)

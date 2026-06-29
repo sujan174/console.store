@@ -40,7 +40,8 @@ func main() {
 func keygen() {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "signtool:", err)
+		os.Exit(1)
 	}
 	fmt.Println("PUBLIC=" + base64.StdEncoding.EncodeToString(pub))
 	fmt.Println("PRIVATE=" + base64.StdEncoding.EncodeToString(priv))
@@ -51,13 +52,21 @@ func signCmd(args []string) error {
 	for i := 0; i+1 < len(args); i += 2 {
 		flags[strings.TrimPrefix(args[i], "--")] = args[i+1]
 	}
+	for _, k := range []string{"version", "channel", "dir", "out"} {
+		if flags[k] == "" {
+			return fmt.Errorf("sign: missing required --%s", k)
+		}
+	}
 	keyB64 := os.Getenv("CONSOLE_SIGN_KEY")
 	if keyB64 == "" {
 		return fmt.Errorf("CONSOLE_SIGN_KEY not set")
 	}
 	keyB, err := base64.StdEncoding.DecodeString(keyB64)
-	if err != nil || len(keyB) != ed25519.PrivateKeySize {
-		return fmt.Errorf("bad CONSOLE_SIGN_KEY")
+	if err != nil {
+		return fmt.Errorf("CONSOLE_SIGN_KEY: invalid base64")
+	}
+	if len(keyB) != ed25519.PrivateKeySize {
+		return fmt.Errorf("CONSOLE_SIGN_KEY: wrong length (want %d bytes)", ed25519.PrivateKeySize)
 	}
 	priv := ed25519.PrivateKey(keyB)
 
