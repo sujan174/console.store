@@ -36,7 +36,9 @@ func buildServer(t *testing.T, priv ed25519.PrivateKey, version string, newBin [
 func baseOptions(t *testing.T, srv *httptest.Server, pub ed25519.PublicKey, cur string) (*Options, *string, *bytes.Buffer) {
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "store")
-	os.WriteFile(exe, []byte("OLD"), 0o755)
+	if err := os.WriteFile(exe, []byte("OLD"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	reexeced := new(string)
 	var out bytes.Buffer
 	o := &Options{

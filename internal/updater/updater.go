@@ -17,6 +17,11 @@ import (
 
 const defaultBase = "https://consolestore.in"
 
+const (
+	manifestTimeout = 1500 * time.Millisecond
+	downloadTimeout = 10 * time.Minute
+)
+
 // Options configures one update attempt. Zero fields are filled with
 // production defaults by Run; tests set them explicitly.
 type Options struct {
@@ -48,7 +53,9 @@ func (o *Options) defaults() {
 		o.Out = io.Discard
 	}
 	if o.HTTP == nil {
-		o.HTTP = &http.Client{Timeout: 1500 * time.Millisecond}
+		// No global Timeout: it would also cap the multi-MB binary download.
+		// Per-request deadlines (below) bound the manifest check instead.
+		o.HTTP = &http.Client{}
 	}
 	if o.swap == nil {
 		o.swap = swap
@@ -63,10 +70,10 @@ func (o *Options) defaults() {
 // continues on the current binary.
 func Run(ctx context.Context, o Options) {
 	o.defaults()
-	cleanupOld(o.ExePath)
 	if o.Pub == nil || o.ExePath == "" {
 		return
 	}
+	cleanupOld(o.ExePath)
 
 	env, err := o.fetchManifest(ctx)
 	if err != nil {
@@ -109,6 +116,8 @@ func (o Options) assetName() string {
 }
 
 func (o Options) fetchManifest(ctx context.Context) (Envelope, error) {
+	ctx, cancel := context.WithTimeout(ctx, manifestTimeout)
+	defer cancel()
 	u := fmt.Sprintf("%s/%s/manifest.json", o.Base, o.Mark.Channel)
 	b, err := o.get(ctx, u)
 	if err != nil {
@@ -118,6 +127,8 @@ func (o Options) fetchManifest(ctx context.Context) (Envelope, error) {
 }
 
 func (o Options) download(ctx context.Context) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
+	defer cancel()
 	u := fmt.Sprintf("%s/%s/download/%s", o.Base, o.Mark.Channel, o.assetName())
 	return o.get(ctx, u)
 }
