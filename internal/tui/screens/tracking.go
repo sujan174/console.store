@@ -15,7 +15,16 @@ type Tracking struct {
 	placedAt                 int64
 	etaLo, etaHi             int
 	liveStatus, liveETA      string
+	viewportH                int // terminal height; trims the secondary notes on a short screen
 }
+
+// WithViewport sets the terminal height so the page can drop secondary "open the
+// Swiggy app" / "rate the delivery" notes on a short terminal instead of
+// overflowing (which scrolls the header off the top). 0 = unknown → full.
+func (t Tracking) WithViewport(h int) Tracking { t.viewportH = h; return t }
+
+// compact reports whether to trim the secondary notes for a short terminal.
+func (t Tracking) compact() bool { return t.viewportH > 0 && t.viewportH < 22 }
 
 // NewTracking constructs a Tracking screen with order metadata and ETA bounds.
 func NewTracking(place, addrLine, orderID string, placedAt int64, etaLo, etaHi int) Tracking {
@@ -212,19 +221,29 @@ func (t Tracking) View(nowUnix int64, frame int, spin string) string {
 		}
 		b.WriteString("  " + padTo(mark, 2) + text + "\n")
 	}
-	b.WriteString("\n")
 
+	compact := t.compact()
+	if !compact {
+		b.WriteString("\n")
+	}
+	swiggyNote := func(s string) {
+		if !compact {
+			b.WriteString("  " + theme.DimStyle.Render(s) + "\n")
+		}
+	}
 	if ts.Delivered {
 		if ts.Estimated {
 			// Time-based delivered estimate — can't confirm yet.
 			b.WriteString("  " + theme.DimStyle.Render(padTo("status", 7)) + theme.GoldStyle.Render("est. delivered") + "\n")
-			b.WriteString("  " + theme.DimStyle.Render("confirm delivery & contact rider → open the Swiggy app") + "\n\n")
+			swiggyNote("confirm delivery & contact rider → open the Swiggy app")
 		} else {
 			// Live confirmed delivery.
 			b.WriteString("  " + theme.DimStyle.Render(padTo("status", 7)) + theme.GreenStyle.Render("delivered ✓") + "\n")
-			b.WriteString("  " + theme.DimStyle.Render("rider contact & live map → open the Swiggy app") + "\n\n")
-			b.WriteString("  " + theme.GreenStyle.Bold(true).Render("enjoy your order!") + "\n")
-			b.WriteString("  " + theme.DimStyle.Render("rate the delivery in the Swiggy app — thank you!") + "\n\n")
+			swiggyNote("rider contact & live map → open the Swiggy app")
+			if !compact {
+				b.WriteString("\n  " + theme.GreenStyle.Bold(true).Render("enjoy your order!") + "\n")
+				swiggyNote("rate the delivery in the Swiggy app — thank you!")
+			}
 		}
 	} else {
 		// Live status → a friendly phrase plus a real ETA when we have one (e.g.
@@ -238,8 +257,9 @@ func (t Tracking) View(nowUnix int64, frame int, spin string) string {
 			}
 		}
 		b.WriteString("  " + theme.DimStyle.Render(padTo(label, 7)) + theme.GreenStyle.Render(line) + "\n")
-		b.WriteString("  " + theme.DimStyle.Render("rider contact & live map → open the Swiggy app") + "\n\n")
+		swiggyNote("rider contact & live map → open the Swiggy app")
 	}
+	b.WriteString("\n")
 
 	b.WriteString(components.Hint("d", "done", "esc", "back to menu"))
 	return b.String()

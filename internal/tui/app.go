@@ -3063,9 +3063,9 @@ func (m Model) View() string {
 		chrome := 10 + screens.BrandHeaderLines
 		body = m.rest.WithMaxRows(m.listRows(chrome)).View()
 	case scrCheckout, scrConfirm:
-		body = m.checkout.WithPlacing(m.placingOrder).View(m.frame)
+		body = m.checkout.WithPlacing(m.placingOrder).WithViewport(m.h).View(m.frame)
 	case scrTracking:
-		body = m.track.View(m.nowUnix, m.frame, m.spin())
+		body = m.track.WithViewport(m.h).View(m.nowUnix, m.frame, m.spin())
 	case scrInstamart:
 		if m.live {
 			// Live vertical: show "coming soon" placeholder until Instamart is built.
