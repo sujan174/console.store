@@ -19,7 +19,7 @@ export default function Icon() {
           borderRadius: 32,
         }}
       >
-        <svg width="54" height="54" viewBox="10 20 42 28" fill="none">
+        <svg width="56" height="56" viewBox="10 13 42 42" fill="none">
           <path
             d="M15 25 L26 34 L15 43"
             stroke="#ffffff"
