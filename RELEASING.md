@@ -44,6 +44,15 @@ re-tagging the same commit — never rebuild to move a build up a channel.**
 | "push to beta" / "promote to beta" | `git tag vX.Y.Z-beta.N <same-commit> && git push origin vX.Y.Z-beta.N` |
 | "push to main" / "production" / "stable" / "release it" | `git tag vX.Y.Z <same-commit> && git push origin vX.Y.Z` |
 
+**Enforced promotion path (local → alpha → beta → production).** Every change is
+first built + tested locally as `localstore`/`localsafestore` (`scripts/build.sh`,
+which gates on vet+test), then shipped to **alpha**, then promoted to **beta**,
+then **stable** — never skipping. CI **enforces** this: the "Enforce promotion
+path" step refuses a `-beta` tag unless an `-alpha` release exists on the **same
+commit**, and refuses a stable tag unless a `-beta` does. So you cannot tag beta
+or production directly — the release fails before it builds. alpha is the entry
+point (its gate is the local `build.sh` run). Promotion = re-tag the same commit.
+
 **Choosing the version number:**
 - New work in flight → start an alpha cycle: bump the base version, start at `-alpha.1`
   (e.g. last stable `v0.3.0` → first alpha of the next release is `v0.4.0-alpha.1`).

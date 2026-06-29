@@ -10,6 +10,7 @@ import (
 	"consolestore/internal/catalog"
 	"consolestore/internal/tui/components"
 	"consolestore/internal/tui/theme"
+	"consolestore/internal/version"
 )
 
 // plural renders "1 result" / "N results".
@@ -20,8 +21,9 @@ func plural(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
-// Version is the build tag shown under the brand logo (rendered by the root).
-const Version = "v1.4"
+// Version is the build tag shown in the brand header, sourced from the stamped
+// build identity (internal/version). "dev" on unstamped local builds.
+var Version = version.Version
 
 type Menu struct {
 	places          []catalog.Place

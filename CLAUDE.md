@@ -77,10 +77,16 @@ A **preset** is a named cart snapshot (`presets.json`): restaurant id + saved ad
 
 `store` installs via `curl -fsSL consolestore.in/install | sh` and **self-updates on every launch** from its channel. Three channels: **stable** (the bare curl), **beta**, **alpha** (invite-only, per-person codes). Full details + the trust model are in [`RELEASING.md`](RELEASING.md).
 
+**Enforced promotion path: local → alpha → beta → production. NEVER skip.** Every
+change is first built+tested locally (`scripts/build.sh` → `localstore`/`localsafestore`),
+then alpha, then beta, then stable. CI's "Enforce promotion path" step REFUSES a
+beta tag without an alpha release on the same commit, and a stable tag without a
+beta — so you cannot ship straight to beta/production. Promotion = re-tag the SAME commit.
+
 **Agent release commands — when the user says "push to <channel>", cut the matching git tag (CI does the rest):**
-- "push to **alpha**" → `git tag vX.Y.Z-alpha.N && git push origin vX.Y.Z-alpha.N`
-- "push to **beta**" → re-tag the SAME commit `git tag vX.Y.Z-beta.N && git push origin …` (promote, don't rebuild)
-- "push to **main** / **production** / **stable**" → `git tag vX.Y.Z && git push origin vX.Y.Z`
+- "push to **alpha**" → `git tag vX.Y.Z-alpha.N && git push origin vX.Y.Z-alpha.N` (entry point, after a local build.sh run)
+- "push to **beta**" → re-tag the SAME commit `git tag vX.Y.Z-beta.N && git push origin …` (must already be an alpha on that commit)
+- "push to **main** / **production** / **stable**" → `git tag vX.Y.Z && git push origin vX.Y.Z` (must already be a beta on that commit)
 
 The release workflow (`.github/workflows/release.yml`) gates (vet+test) → GoReleaser cross-compiles the armed `store` → `cmd/signtool` signs the manifest envelope with `CONSOLE_SIGN_KEY` → publishes to the GitHub Release. Promotion = re-tagging the same commit up the chain (alpha→beta→stable); never rebuild to promote. **Read [`RELEASING.md`](RELEASING.md) before tagging** — it covers version-bump rules, prerequisites (signing key, landing deploy), and how to confirm a release went out. The signing private key lives ONLY in the GH secret `CONSOLE_SIGN_KEY`; never commit it. Alpha tester codes live in the Railway env `CONSOLE_ALPHA_CODES`.
 

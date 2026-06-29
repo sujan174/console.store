@@ -1,6 +1,9 @@
 package screens
 
-import "consolestore/internal/tui/theme"
+import (
+	"consolestore/internal/tui/theme"
+	"consolestore/internal/version"
+)
 
 // settingsItems are the rows in the Settings modal. Only Disconnect today; the
 // slice is the seam for future settings.
@@ -60,5 +63,7 @@ func (s Settings) ModalView() string {
 			lines[i] = "  " + theme.ItemStyle.Render(label)
 		}
 	}
+	// Non-selectable footer: the running build's version + channel.
+	lines = append(lines, "", "  "+theme.FaintStyle.Render("version  "+version.Version+" ("+version.Channel+")"))
 	return autoCard("settings", lines, "↑↓ move   ↵ select   esc close")
 }
