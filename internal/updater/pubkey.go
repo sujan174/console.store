@@ -5,9 +5,10 @@ import (
 	"encoding/base64"
 )
 
-// signingPubKeyB64 is the ed25519 public key that signs release manifests.
-// Replaced with the real key in Task 11 (signtool keygen). Empty until then.
-const signingPubKeyB64 = ""
+// signingPubKeyB64 is the ed25519 public key that verifies release manifests.
+// Its private counterpart lives ONLY in the GH Actions secret CONSOLE_SIGN_KEY
+// (never committed). Generated 2026-06-29 via `signtool keygen`.
+const signingPubKeyB64 = "2eKjjdwLlQcgyxWZZZNcxIzv7wFFAYQfncuW3wgdNu4="
 
 // PublicKey returns the embedded signing public key. Returns nil if unset
 // (dev builds before keygen) — callers treat nil as "cannot verify, skip update".
