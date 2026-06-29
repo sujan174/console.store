@@ -53,6 +53,7 @@ type Splash struct {
 	sel        int    // selected home item (seam for future multi-item home)
 	phrase     string // Minecraft-style splash line shown by the wordmark
 	orderLabel string // non-empty when an order is live (e.g. "Blue Tokai · ~12 min")
+	connect    bool   // pre-auth gate: replace the home menu with a "connect swiggy" button
 	caps       render.Caps
 	logoCache  string // render.Logo is constant per session; computed once here
 }
@@ -88,6 +89,15 @@ func (s Splash) WithPhrase(p string) Splash { s.phrase = p; return s }
 // WithOrder sets a live-order label (e.g. "Blue Tokai · ~12 min"). An empty
 // label means no active order — the splash renders the standard 2-item layout.
 func (s Splash) WithOrder(label string) Splash { s.orderLabel = label; return s }
+
+// WithConnect flips the splash into the pre-auth gate: the exact same boot
+// banner, but the home menu is replaced by a single blue "connect swiggy"
+// button over a waiting spinner. Pressing ↵ opens the browser to authorize.
+// This is the login screen, so it reads identically to the start screen.
+func (s Splash) WithConnect() Splash { s.connect = true; return s }
+
+// authSpin drives the gate's "waiting for sign-in" spinner.
+var authSpin = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 // blockWidth is the widest display width across lines.
 func blockWidth(lines []string) int {
@@ -201,7 +211,26 @@ func splashBtn(label string, focused bool) string {
 	return "  " + theme.DimStyle.Render(label)
 }
 
+// connectPrompt is the pre-auth call-to-action: one blue "connect swiggy"
+// button over a dim waiting spinner. ↵ opens the browser to the Swiggy
+// authorize page; the loopback callback is polled while this is shown.
+func (s Splash) connectPrompt() string {
+	ind := strings.Repeat(" ", promptIndent)
+	spin := authSpin[(s.frame/3)%len(authSpin)]
+	lines := []string{
+		ind + splashBtn("connect swiggy", true),
+		"",
+		ind + "  " + theme.GreenStyle.Render(spin) + theme.DimStyle.Render("  waiting for sign-in…"),
+		"",
+		strings.Repeat(" ", promptIndent+2) + theme.FaintStyle.Render("↵ open browser   ·   q quit"),
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (s Splash) prompt() string {
+	if s.connect {
+		return s.connectPrompt()
+	}
 	ind := strings.Repeat(" ", promptIndent)
 
 	// Render each home item (from HomeItems) as a left-aligned blue button, so

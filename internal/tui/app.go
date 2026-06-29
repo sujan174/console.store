@@ -2965,7 +2965,10 @@ func (m Model) listRows(chrome int) int {
 
 func (m Model) View() string {
 	if m.needsAuth {
-		gate := screens.NewAuthGate(m.authorizeURL, m.authAutoOpen).WithFrame(m.frame).View()
+		// The login gate IS the start screen — same boot banner, but the home menu
+		// is a single "connect swiggy" button (↵ opens the browser to authorize).
+		gate := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSplashTick(m.splashTick).
+			WithPhrase(m.splashPhrase).WithConnect().View()
 		if m.w == 0 || m.h == 0 {
 			return gate
 		}
