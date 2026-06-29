@@ -1976,9 +1976,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case "backspace":
 				m.cmd = m.cmd.Backspace()
+			case "delete":
+				m.cmd = m.cmd.Delete()
+			case "left":
+				m.cmd = m.cmd.Left()
+			case "right":
+				m.cmd = m.cmd.Right()
+			case "home", "ctrl+a":
+				m.cmd = m.cmd.Home()
+			case "end", "ctrl+e":
+				m.cmd = m.cmd.End()
 			default:
-				if k.Type == tea.KeyRunes {
-					m.cmd = m.cmd.Append(string(k.Runes))
+				// Space arrives as its own key type (tea.KeySpace), not KeyRunes —
+				// handle it explicitly so multi-word commands (`alias set x`) work.
+				switch {
+				case k.Type == tea.KeySpace:
+					m.cmd = m.cmd.Insert(" ")
+				case k.Type == tea.KeyRunes:
+					m.cmd = m.cmd.Insert(string(k.Runes))
 				}
 			}
 			return m, nil

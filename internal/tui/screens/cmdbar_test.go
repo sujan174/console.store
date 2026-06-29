@@ -7,6 +7,39 @@ import (
 	"console.store/internal/tui/screens"
 )
 
+func TestCmdBarSpaceAndCaretEditing(t *testing.T) {
+	// Typed runes + space build a multi-word command.
+	c := screens.NewCmdBar().Insert("a").Insert(" ").Insert("b")
+	if c.Text() != "a b" {
+		t.Fatalf("space not inserted: %q", c.Text())
+	}
+	// Caret insert mid-string: "ac", ← (caret before c), insert "b" → "abc".
+	c = screens.NewCmdBar().Insert("ac").Left().Insert("b")
+	if c.Text() != "abc" {
+		t.Fatalf("mid-string insert: %q, want abc", c.Text())
+	}
+	// Backspace deletes before the caret; Delete deletes at the caret.
+	if got := screens.NewCmdBar().WithText("abc").Backspace().Text(); got != "ab" {
+		t.Fatalf("backspace at end: %q, want ab", got)
+	}
+	if got := screens.NewCmdBar().WithText("abc").Home().Delete().Text(); got != "bc" {
+		t.Fatalf("forward delete at home: %q, want bc", got)
+	}
+	// Caret never goes out of range.
+	c = screens.NewCmdBar().Left().Left() // empty, caret stays 0
+	if c.Insert("x").Text() != "x" {
+		t.Fatal("left past start corrupted the buffer")
+	}
+	// End jumps the caret to the end so the next insert appends.
+	if got := screens.NewCmdBar().WithText("ab").Home().End().Insert("c").Text(); got != "abc" {
+		t.Fatalf("End+insert: %q, want abc", got)
+	}
+	// The rendered input shows a space in the text.
+	if v := screens.NewCmdBar().Insert("a b").View(false); !strings.Contains(v, "a b") {
+		t.Fatalf("View should render the space:\n%s", v)
+	}
+}
+
 func TestCmdHelpLists(t *testing.T) {
 	c := screens.NewCmdBar().WithText("help")
 	c, action := c.Run()

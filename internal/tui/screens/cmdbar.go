@@ -16,28 +16,101 @@ const streak = 7
 type CmdLine struct{ Text, Color string }
 
 // CmdBar is the vim-style `:` command palette (design lines 446-457, runCmd 659-736).
-// It holds the in-progress text and the prior output lines (last ~9).
+// It holds the in-progress text, a caret position (in runes) for mid-string
+// editing, and the prior output lines (last ~9).
 type CmdBar struct {
-	text string
-	out  []CmdLine
+	text  string
+	caret int // caret position in text, in runes
+	out   []CmdLine
 }
 
 func NewCmdBar() CmdBar { return CmdBar{} }
 
 func (c CmdBar) Text() string { return c.text }
 
-func (c CmdBar) WithText(s string) CmdBar { c.text = s; return c }
+func (c CmdBar) WithText(s string) CmdBar {
+	c.text = s
+	c.caret = len([]rune(s))
+	return c
+}
 
-func (c CmdBar) Backspace() CmdBar {
-	if c.text != "" {
-		c.text = c.text[:len(c.text)-1]
+// clamp keeps the caret within [0, len(runes)] — makes a stale caret left over
+// from a prior Run (which clears text) harmless before the next edit.
+func (c CmdBar) clamp() CmdBar {
+	n := len([]rune(c.text))
+	if c.caret < 0 {
+		c.caret = 0
+	}
+	if c.caret > n {
+		c.caret = n
 	}
 	return c
 }
 
-func (c CmdBar) Append(s string) CmdBar { c.text += s; return c }
+// Insert adds s at the caret and advances the caret past it.
+func (c CmdBar) Insert(s string) CmdBar {
+	c = c.clamp()
+	r := []rune(c.text)
+	ins := []rune(s)
+	out := append(append(append([]rune{}, r[:c.caret]...), ins...), r[c.caret:]...)
+	c.text = string(out)
+	c.caret += len(ins)
+	return c
+}
 
-func (c CmdBar) ClearText() CmdBar { c.text = ""; return c }
+// Append adds s at the end and moves the caret to the end (caret-agnostic helper).
+func (c CmdBar) Append(s string) CmdBar {
+	c.text += s
+	c.caret = len([]rune(c.text))
+	return c
+}
+
+// Backspace deletes the rune before the caret.
+func (c CmdBar) Backspace() CmdBar {
+	c = c.clamp()
+	if c.caret == 0 {
+		return c
+	}
+	r := []rune(c.text)
+	c.text = string(r[:c.caret-1]) + string(r[c.caret:])
+	c.caret--
+	return c
+}
+
+// Delete removes the rune at the caret (forward delete).
+func (c CmdBar) Delete() CmdBar {
+	c = c.clamp()
+	r := []rune(c.text)
+	if c.caret >= len(r) {
+		return c
+	}
+	c.text = string(r[:c.caret]) + string(r[c.caret+1:])
+	return c
+}
+
+// Left moves the caret one rune left.
+func (c CmdBar) Left() CmdBar {
+	c = c.clamp()
+	if c.caret > 0 {
+		c.caret--
+	}
+	return c
+}
+
+// Right moves the caret one rune right.
+func (c CmdBar) Right() CmdBar {
+	c = c.clamp()
+	if c.caret < len([]rune(c.text)) {
+		c.caret++
+	}
+	return c
+}
+
+// Home / End jump the caret to the start / end of the text.
+func (c CmdBar) Home() CmdBar { c.caret = 0; return c }
+func (c CmdBar) End() CmdBar  { c.caret = len([]rune(c.text)); return c }
+
+func (c CmdBar) ClearText() CmdBar { c.text = ""; c.caret = 0; return c }
 
 // Run executes the current text. Returns the updated bar (with output appended)
 // and an action: "" | "instamart" | "clear" | "close".
@@ -191,6 +264,30 @@ func (c CmdBar) AppendOut(lines []CmdLine) CmdBar {
 	return c
 }
 
+// input renders the in-progress text with a block caret drawn AT the caret
+// position (reverse video on the rune under it, a trailing block at the end),
+// so ←/→ editing is visible mid-string — matching the search field. When blink
+// is off the caret cell shows the plain glyph so the text never strobe-hides.
+func (c CmdBar) input(blink bool) string {
+	c = c.clamp()
+	r := []rune(c.text)
+	before := string(r[:c.caret])
+	at := " "
+	after := ""
+	if c.caret < len(r) {
+		at = string(r[c.caret])
+		after = string(r[c.caret+1:])
+	}
+	caret := at
+	if blink {
+		caret = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Bg)).
+			Background(lipgloss.Color(theme.Cursor)).
+			Render(at)
+	}
+	return theme.BrightStyle.Render(before) + caret + theme.BrightStyle.Render(after)
+}
+
 // View renders the palette body (output lines, prompt with blinking cursor, hint)
 // on the PanelCmd background. Width matches the content column.
 func (c CmdBar) View(blink bool) string {
@@ -199,11 +296,7 @@ func (c CmdBar) View(blink bool) string {
 		lines = append(lines, theme.Fg(l.Color).Render(l.Text))
 	}
 
-	cursor := " "
-	if blink {
-		cursor = theme.CursorStyle.Render("▋")
-	}
-	prompt := theme.PurpleStyle.Render(":") + " " + theme.BrightStyle.Render(c.text) + cursor
+	prompt := theme.PurpleStyle.Render(":") + " " + c.input(blink)
 	lines = append(lines, prompt)
 
 	hint := theme.FaintStyle.Render("type ") + theme.DimStyle.Render("help") +
