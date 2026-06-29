@@ -117,8 +117,14 @@ func placePreset(d Deps, p localstore.Preset, st style) int {
 		return 1
 	}
 
-	fmt.Fprintf(d.Out, "\n%s %s\n", st.ok("press Enter to place this order"), st.dim("· Ctrl-C to cancel"))
-	_ = prompt(d)                                // any line (incl. empty Enter) confirms; Ctrl-C kills the process
+	fmt.Fprintf(d.Out, "\n%s %s\n", st.ok("press Enter to place this order"), st.dim("· Ctrl-C / n to cancel"))
+	if !confirm(d) {
+		// Ctrl-C (ctx canceled), EOF, or any non-affirmative answer. We trap SIGINT
+		// in main, so Ctrl-C can't kill us — confirm() is the ONLY gate, and it
+		// failing means the user did not approve. Place NOTHING.
+		fmt.Fprintf(d.Out, "\n%s\n", st.dim("cancelled — no order placed."))
+		return 0
+	}
 	order, err := d.Backend.PlaceOrder(p.AddrID) // never retried
 	if err != nil {
 		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn(fmt.Sprintf("order failed: %v", err)),

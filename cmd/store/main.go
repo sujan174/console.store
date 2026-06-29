@@ -98,6 +98,7 @@ func run(args []string) error {
 		SignedIn:    signedIn,
 		Color:       colorEnabled(),
 		Interactive: isTerminal(os.Stdin),
+		Ctx:         ctx, // canceled on Ctrl-C/SIGTERM → order confirm treats it as cancel
 		In:          os.Stdin,
 		Out:         os.Stdout,
 	})

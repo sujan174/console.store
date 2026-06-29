@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strconv"
@@ -28,8 +29,9 @@ type Deps struct {
 	Backend     Backend
 	Armed       bool
 	SignedIn    bool
-	Color       bool // emit ANSI colour (set when Out is a terminal; off in tests/pipes)
-	Interactive bool // stdin is a terminal — required to confirm a real order placement
+	Color       bool            // emit ANSI colour (set when Out is a terminal; off in tests/pipes)
+	Interactive bool            // stdin is a terminal — required to confirm a real order placement
+	Ctx         context.Context // canceled on Ctrl-C / SIGTERM — a canceled ctx means "do NOT place"
 	In          io.Reader
 	Out         io.Writer
 }
@@ -104,6 +106,68 @@ func firstAddressID(d Deps) (string, error) {
 		return "", fmt.Errorf("no saved addresses on the account")
 	}
 	return addrs[0].ID, nil
+}
+
+// confirm asks the user to approve a real, paid, non-cancellable order. It
+// returns true ONLY on an affirmative line (empty Enter, or y/yes). It returns
+// false — DO NOT place — on Ctrl-C/SIGTERM (d.Ctx canceled), on EOF or a read
+// error before any newline, on a raw ETX byte (0x03), or on any other answer.
+//
+// This is the safety gate. The process traps SIGINT (signal.NotifyContext in
+// main), so Ctrl-C does NOT kill us — it only cancels d.Ctx. We therefore must
+// check the context ourselves; never assume "Ctrl-C killed the process".
+func confirm(d Deps) bool {
+	if d.In == nil {
+		return false // no input source → cannot have confirmed
+	}
+	ctx := d.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	type result struct {
+		line    string
+		newline bool // a full line was read (vs EOF/error/ETX)
+	}
+	ch := make(chan result, 1)
+	go func() {
+		var b strings.Builder
+		buf := make([]byte, 1)
+		for {
+			n, err := d.In.Read(buf)
+			if n > 0 {
+				switch buf[0] {
+				case '\n':
+					ch <- result{strings.TrimSpace(b.String()), true}
+					return
+				case 3: // ETX (Ctrl-C delivered as a byte, e.g. raw mode) → cancel
+					ch <- result{}
+					return
+				default:
+					b.WriteByte(buf[0])
+				}
+			}
+			if err != nil { // EOF / read error before a newline → cancel
+				ch <- result{}
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-ctx.Done(): // Ctrl-C / SIGTERM → cancel
+		return false
+	case r := <-ch:
+		if !r.newline {
+			return false
+		}
+		switch strings.ToLower(r.line) {
+		case "", "y", "yes":
+			return true
+		default:
+			return false
+		}
+	}
 }
 
 // prompt reads one trimmed line from d.In (empty Reader → "" = treated as Enter).
