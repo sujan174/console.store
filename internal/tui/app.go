@@ -1353,12 +1353,16 @@ func (m Model) activeOrderCheckCmd() tea.Cmd {
 	return datasource.LoadActiveOrdersCmd(m.backend, m.addr.ID)
 }
 
-// splashOrderLabel builds the splash track-order button label: the live ETA from
-// track_food_order when we have one ("Blue Tokai · 11 mins"), else the initial
-// placement estimate ("Blue Tokai · ~30 min").
-func splashOrderLabel(restaurant, liveETA string, etaHi int) string {
-	if strings.TrimSpace(liveETA) != "" {
-		return fmt.Sprintf("%s · %s", restaurant, liveETA)
+// splashOrderLabel builds the splash track-order button label: a real live ETA
+// from track_food_order when we have one ("Starbucks · 11 mins"); else a short
+// friendly status ("Starbucks · outside now" once the rider arrives — Swiggy
+// reports ETA "N/A" then); else the initial placement estimate.
+func splashOrderLabel(restaurant, status, liveETA string, etaHi int) string {
+	if e := strings.TrimSpace(liveETA); e != "" && !strings.EqualFold(e, "N/A") {
+		return fmt.Sprintf("%s · %s", restaurant, e)
+	}
+	if short := screens.ShortStatus(status); short != "" {
+		return fmt.Sprintf("%s · %s", restaurant, short)
 	}
 	return fmt.Sprintf("%s · ~%d min", restaurant, etaHi)
 }
@@ -1896,7 +1900,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.hasActiveOrder = true
 		m.confirmTick = 0
 		m.track = screens.NewTracking(restaurant, m.addr.Line, dm.Order.ID, placedAt, etaLo, etaHi)
-		m.splash = m.splash.WithOrder(splashOrderLabel(restaurant, "", etaHi))
+		m.splash = m.splash.WithOrder(splashOrderLabel(restaurant, "", "", etaHi))
 		return m, nil
 	case datasource.TrackingPolledMsg:
 		if dm.Err != nil {
@@ -1917,7 +1921,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Keep the splash track-order button's ETA in sync with the live ETA.
 		if m.hasActiveOrder {
-			m.splash = m.splash.WithOrder(splashOrderLabel(m.activeOrder.Restaurant, dm.Tracking.ETA, m.activeOrder.ETAHiMin))
+			m.splash = m.splash.WithOrder(splashOrderLabel(m.activeOrder.Restaurant, dm.Tracking.Status, dm.Tracking.ETA, m.activeOrder.ETAHiMin))
 		}
 		return m, nil
 	case datasource.ActiveOrdersLoadedMsg:
@@ -1946,7 +1950,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_ = localstore.SaveActiveOrder(ao)
 				m.activeOrder = ao
 				m.hasActiveOrder = true
-				m.splash = m.splash.WithOrder(splashOrderLabel(o.Restaurant, "", etaHi))
+				m.splash = m.splash.WithOrder(splashOrderLabel(o.Restaurant, o.Status, "", etaHi))
 				// Pull the live ETA now so the splash button shows it, not just the
 				// initial estimate (TrackingPolledMsg updates the label).
 				return m, datasource.PollTrackingCmd(m.backend, ao.OrderID)
@@ -1972,7 +1976,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if found {
 			// Order still live — refresh the splash label and pull the live ETA so
 			// the button stays in sync (TrackingPolledMsg applies the live ETA).
-			m.splash = m.splash.WithOrder(splashOrderLabel(m.activeOrder.Restaurant, "", m.activeOrder.ETAHiMin))
+			m.splash = m.splash.WithOrder(splashOrderLabel(m.activeOrder.Restaurant, "", "", m.activeOrder.ETAHiMin))
 			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
 		}
 		return m, nil

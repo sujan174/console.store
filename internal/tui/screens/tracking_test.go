@@ -56,6 +56,37 @@ func TestTrackingRiderProportional(t *testing.T) {
 	}
 }
 
+// "Arrived at location" (ETA "N/A") must read as a friendly "rider's outside"
+// line with no "N/A", and park the rider at the door.
+func TestArrivedStatusFriendly(t *testing.T) {
+	tk := NewTracking("Starbucks", "Home", "X", 1_000_000, 40, 45).WithLive("Arrived at location", "N/A")
+	v := tk.View(1_000_000+44*60, 0, "◐")
+	if !strings.Contains(v, "rider's outside") {
+		t.Fatalf("arrived should read friendly:\n%s", v)
+	}
+	if strings.Contains(v, "N/A") {
+		t.Fatalf("must not render N/A:\n%s", v)
+	}
+	if f := tk.journeyFrac(1_000_000+30*60, false); f != 1 {
+		t.Fatalf("arrived journeyFrac = %.2f, want 1 (parked at door)", f)
+	}
+}
+
+func TestStatusHelpers(t *testing.T) {
+	if got := StatusDisplay("Out for delivery"); got != "on the way to you" {
+		t.Fatalf("out-for-delivery = %q", got)
+	}
+	if got := ShortStatus("Arrived at location"); got != "outside now" {
+		t.Fatalf("arrived short = %q", got)
+	}
+	if cleanETA("N/A") != "" || cleanETA("11 mins") != "11 mins" {
+		t.Fatal("cleanETA should drop N/A but keep a real ETA")
+	}
+	if got := StatusDisplay("Some weird new status"); got != "Some weird new status" {
+		t.Fatalf("unknown status must pass through verbatim, got %q", got)
+	}
+}
+
 func TestTrackingLiveStatus(t *testing.T) {
 	tk := NewTracking("Blue Tokai", "HSR", "X1", 1_000_000, 55, 65).WithLive("Out for delivery", "11 mins")
 	v := tk.View(1_000_300, 0, "◐")

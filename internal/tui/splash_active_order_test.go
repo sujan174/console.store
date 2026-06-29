@@ -80,6 +80,20 @@ func TestSplashTrackButtonShowsLiveETA(t *testing.T) {
 	}
 }
 
+// The splash button label prefers a real ETA, falls back to a short friendly
+// status when Swiggy reports ETA "N/A" (rider arrived), then the estimate.
+func TestSplashOrderLabel(t *testing.T) {
+	if got := splashOrderLabel("Starbucks", "Out for delivery", "11 mins", 45); got != "Starbucks · 11 mins" {
+		t.Fatalf("real ETA label = %q", got)
+	}
+	if got := splashOrderLabel("Starbucks", "Arrived at location", "N/A", 45); got != "Starbucks · outside now" {
+		t.Fatalf("arrived label = %q, want 'Starbucks · outside now'", got)
+	}
+	if got := splashOrderLabel("Starbucks", "", "", 45); got != "Starbucks · ~45 min" {
+		t.Fatalf("estimate fallback = %q", got)
+	}
+}
+
 // No live order on the account → the splash stays clean (no track button), and
 // we don't fabricate one.
 func TestNoActiveOrderKeepsSplashClean(t *testing.T) {

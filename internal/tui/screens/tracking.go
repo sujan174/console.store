@@ -94,6 +94,10 @@ func (t Tracking) journeyFrac(nowUnix int64, delivered bool) float64 {
 	if delivered {
 		return 1
 	}
+	// Rider has arrived at the door — park the sprite at the destination.
+	if strings.Contains(strings.ToLower(t.liveStatus), "arrived") {
+		return 1
+	}
 	elapsedMin := float64(nowUnix-t.placedAt) / 60
 	if elapsedMin < 0 {
 		elapsedMin = 0
@@ -223,12 +227,17 @@ func (t Tracking) View(nowUnix int64, frame int, spin string) string {
 			b.WriteString("  " + theme.DimStyle.Render("rate the delivery in the Swiggy app — thank you!") + "\n\n")
 		}
 	} else {
-		// ETA line: ts.ETAText; when !Estimated also show verbatim liveStatus.
-		etaLine := ts.ETAText
+		// Live status → a friendly phrase plus a real ETA when we have one (e.g.
+		// "Arrived at location" reads as "rider's outside …", with no "N/A"); with
+		// no live status yet, the time-based estimate.
+		label, line := "ETA", ts.ETAText
 		if !ts.Estimated && t.liveStatus != "" {
-			etaLine = t.liveStatus + " · " + ts.ETAText
+			label, line = "status", StatusDisplay(t.liveStatus)
+			if e := cleanETA(ts.ETAText); e != "" {
+				line += " · " + e
+			}
 		}
-		b.WriteString("  " + theme.DimStyle.Render(padTo("ETA", 7)) + theme.GreenStyle.Render(etaLine) + "\n")
+		b.WriteString("  " + theme.DimStyle.Render(padTo(label, 7)) + theme.GreenStyle.Render(line) + "\n")
 		b.WriteString("  " + theme.DimStyle.Render("rider contact & live map → open the Swiggy app") + "\n\n")
 	}
 
