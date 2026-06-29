@@ -29,6 +29,15 @@ $got = (Get-FileHash -Algorithm SHA256 $tmp).Hash.ToLower()
 if ($got -ne $sum.ToLower()) { Remove-Item $tmp; throw "checksum mismatch — refusing to install" }
 Move-Item -Force $tmp $out
 
+# Persist the channel marker so self-update tracks this channel — and, for alpha,
+# carries the access code (without it the alpha manifest fetch is 403 and updates
+# stop). Matches the path the binary reads (XDG_CONFIG_HOME or ~/.config).
+$cfgBase = if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME } else { Join-Path $env:USERPROFILE ".config" }
+$cfgDir = Join-Path $cfgBase "console-store"
+New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
+$marker = if ($channel -eq "alpha") { "{`"channel`":`"alpha`",`"alpha_code`":`"$code`"}" } else { "{`"channel`":`"$channel`"}" }
+Set-Content -Path (Join-Path $cfgDir "channel.json") -Value $marker -NoNewline
+
 # Add install dir to the user PATH if absent.
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$dir*") {

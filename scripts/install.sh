@@ -72,6 +72,18 @@ chmod +x "$TMP"
 mv "$TMP" "$BIN_DIR/store"
 printf "${c_grn}✓${c_rst} installed store → %s\n" "$BIN_DIR/store"
 
+# 4b. persist the channel marker so self-update tracks this channel — and, for
+# alpha, carries the access code (without it the alpha manifest fetch is 403 and
+# updates silently stop). The binary reads ~/.config/console-store/channel.json.
+CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/console-store"
+mkdir -p "$CFG_DIR"
+if [ "$CHANNEL" = "alpha" ]; then
+  printf '{"channel":"alpha","alpha_code":"%s"}' "$CODE" > "$CFG_DIR/channel.json"
+else
+  printf '{"channel":"%s"}' "$CHANNEL" > "$CFG_DIR/channel.json"
+fi
+chmod 600 "$CFG_DIR/channel.json"
+
 # 5. PATH check
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;

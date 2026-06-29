@@ -7,6 +7,7 @@ import (
 
 	"consolestore/internal/tui/render"
 	"consolestore/internal/tui/theme"
+	"consolestore/internal/version"
 )
 
 // HomeItems returns the ordered list of home menu items depending on whether an
@@ -185,10 +186,13 @@ func storeBlock(caps render.Caps, consoleW int) []string {
 	return rows
 }
 
-// sshLine is the top prompt — the command the user just "ran" to arrive here.
+// sshLine is the top prompt — the command the user just "ran" to arrive here,
+// with the running build's version as a trailing shell comment so it's visible
+// on the start screen (e.g. "~ % ssh consolestore.in   # v0.1.0-alpha.3 · alpha").
 func sshLine() string {
 	return strings.Repeat(" ", promptIndent) +
-		theme.DimStyle.Render("~ % ssh ") + theme.TextStyle.Render("consolestore.in")
+		theme.DimStyle.Render("~ % ssh ") + theme.TextStyle.Render("consolestore.in") +
+		theme.FaintStyle.Render("   # "+version.Version+" · "+version.Channel)
 }
 
 // tagline is the banner's one-line descriptor, inset under the wordmark.
