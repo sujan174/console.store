@@ -99,25 +99,72 @@ func TestOrderSoldOutAborts(t *testing.T) {
 	}
 }
 
-func TestOrderMultiPresetPicks(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+func seedTwoBreakfasts(t *testing.T) {
+	t.Helper()
 	p1 := basePreset("breakfast")
 	p1.RestaurantName = "Blue Tokai"
 	p2 := basePreset("breakfast")
 	p2.RestaurantName = "Truffles"
 	seedPreset(t, p1)
 	seedPreset(t, p2)
+}
+
+// `store order breakfast` (no number) with several same-named presets LISTS them
+// and places nothing — the user re-runs with a number.
+func TestOrderMultiPresetListsWithoutIndex(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedTwoBreakfasts(t)
 	var out bytes.Buffer
 	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
-	// pick "2", then Enter to confirm.
 	code := Dispatch([]string{"order", "breakfast"}, Deps{
-		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("2\n\n"), Backend: be,
+		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
 	})
 	if code != 0 {
-		t.Fatalf("multi-preset order exit = %d:\n%s", code, out.String())
+		t.Fatalf("listing exit = %d:\n%s", code, out.String())
+	}
+	if be.placeN != 0 {
+		t.Fatal("listing presets must not place an order")
+	}
+	s := out.String()
+	if !strings.Contains(s, "1) Blue Tokai") || !strings.Contains(s, "2) Truffles") {
+		t.Fatalf("should list numbered presets:\n%s", s)
+	}
+	if !strings.Contains(s, "store order breakfast") {
+		t.Fatalf("should hint the numbered form:\n%s", s)
+	}
+}
+
+// `store order breakfast 2` orders the 2nd preset directly (bill + confirm).
+func TestOrderIndexPicksDirectly(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedTwoBreakfasts(t)
+	var out bytes.Buffer
+	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
+	code := Dispatch([]string{"order", "breakfast", "2"}, Deps{
+		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+	})
+	if code != 0 {
+		t.Fatalf("indexed order exit = %d:\n%s", code, out.String())
+	}
+	if be.placeN != 1 {
+		t.Fatalf("index 2 should place exactly once, placed %d", be.placeN)
 	}
 	if !strings.Contains(out.String(), "Truffles") {
-		t.Fatalf("pick=2 should select the Truffles preset:\n%s", out.String())
+		t.Fatalf("index 2 should be the Truffles preset:\n%s", out.String())
+	}
+}
+
+// An out-of-range number is rejected and lists the real options.
+func TestOrderIndexOutOfRange(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedTwoBreakfasts(t)
+	var out bytes.Buffer
+	be := &fakeBackend{cart: availCart()}
+	code := Dispatch([]string{"order", "breakfast", "5"}, Deps{
+		SignedIn: true, Armed: true, Out: &out, Backend: be,
+	})
+	if code == 0 || be.placeN != 0 {
+		t.Fatalf("out-of-range index must not place; exit=%d placeN=%d", code, be.placeN)
 	}
 }
 

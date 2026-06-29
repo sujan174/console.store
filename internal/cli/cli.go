@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"console.store/internal/broker/api"
@@ -51,10 +52,19 @@ func Dispatch(args []string, d Deps) int {
 			return requireAuth(d, func() int { return runStatus(d) })
 		}
 		if len(args) < 2 {
-			fmt.Fprintln(d.Out, "usage: store order <name>")
+			fmt.Fprintln(d.Out, "usage: store order <name> [number]")
 			return 2
 		}
-		return requireAuth(d, func() int { return runOrder(d, args[1]) })
+		idx := 0 // optional preset number: `store order coffee 2`
+		if len(args) >= 3 {
+			n, err := strconv.Atoi(args[2])
+			if err != nil || n < 1 {
+				fmt.Fprintln(d.Out, "usage: store order <name> [number]   (number picks among same-named presets)")
+				return 2
+			}
+			idx = n
+		}
+		return requireAuth(d, func() int { return runOrder(d, args[1], idx) })
 	case "alias":
 		return runAlias(d, args[1:]) // alias list/rm need no backend
 	default:

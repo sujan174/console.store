@@ -3,35 +3,74 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"console.store/internal/broker/api"
 )
 
-// renderCart prints the cart + full bill breakdown (item total, delivery, taxes,
-// to-pay) as plain text — the headless mirror of the checkout page.
-func renderCart(out io.Writer, addrLine, restaurant string, c api.Cart) {
-	fmt.Fprintf(out, "delivering to: %s\n", addrLine)
-	fmt.Fprintf(out, "from:          %s\n\n", restaurant)
-	for _, l := range c.Lines {
-		mark := ""
-		if !l.Available {
-			mark = "  · UNAVAILABLE"
-		}
-		fmt.Fprintf(out, "  %d × %-28s ₹%d%s\n", l.Quantity, l.Name, l.Price*max1(l.Quantity), mark)
+// billWidth is the column the ₹ amounts are right-aligned to.
+const billWidth = 40
+
+// shortAddr keeps just the recognizable first line of a saved address — dropping
+// a leading "Name: " label and the trailing locality/city/state/pincode — to
+// match how the TUI shows it. "Sujan: FD 46 …, Vishwa Vihar, … India" → "FD 46 …".
+func shortAddr(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.Index(s, ": "); i >= 0 && i < 24 {
+		s = s[i+2:]
 	}
-	fmt.Fprintln(out, "  "+dash(40))
-	fmt.Fprintf(out, "  %-30s ₹%d\n", "item total", c.ItemTotal)
-	fmt.Fprintf(out, "  %-30s ₹%d\n", "delivery", c.Delivery)
-	fmt.Fprintf(out, "  %-30s ₹%d\n", "taxes & charges", c.Taxes)
-	fmt.Fprintf(out, "  %-30s ₹%d\n", "to pay", c.Total)
+	if i := strings.IndexByte(s, ','); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
 }
 
-func dash(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = '-'
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
 	}
-	return string(b)
+	return string(r[:n-1]) + "…"
+}
+
+// billRow prints "left … amount" with the amount right-aligned to billWidth.
+func billRow(out io.Writer, left, amount string) {
+	pad := billWidth - len([]rune(left)) - len([]rune(amount))
+	if pad < 1 {
+		pad = 1
+	}
+	fmt.Fprintf(out, "  %s%s%s\n", left, strings.Repeat(" ", pad), amount)
+}
+
+func billRule(out io.Writer) {
+	fmt.Fprintf(out, "  %s\n", strings.Repeat("─", billWidth))
+}
+
+// renderCart prints a clean, compact cart + bill breakdown — the headless mirror
+// of the checkout page (restaurant → short address, lines, then the bill).
+func renderCart(out io.Writer, addrLine, restaurant string, c api.Cart) {
+	if a := shortAddr(addrLine); a != "" {
+		fmt.Fprintf(out, "  %s  →  %s\n\n", restaurant, a)
+	} else {
+		fmt.Fprintf(out, "  %s\n\n", restaurant)
+	}
+	for _, l := range c.Lines {
+		amt := fmt.Sprintf("₹%d", l.Price*max1(l.Quantity))
+		if !l.Available {
+			amt = "sold out"
+		}
+		billRow(out, fmt.Sprintf("%d × %s", l.Quantity, truncate(l.Name, 28)), amt)
+	}
+	billRule(out)
+	billRow(out, "item total", fmt.Sprintf("₹%d", c.ItemTotal))
+	if c.Delivery != 0 {
+		billRow(out, "delivery", fmt.Sprintf("₹%d", c.Delivery))
+	}
+	if c.Taxes != 0 {
+		billRow(out, "taxes & charges", fmt.Sprintf("₹%d", c.Taxes))
+	}
+	billRule(out)
+	billRow(out, "to pay", fmt.Sprintf("₹%d", c.Total))
 }
 
 func max1(n int) int {

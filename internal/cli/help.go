@@ -11,7 +11,8 @@ func printUsage(out io.Writer) {
 usage:
   store                       open the interactive app (TUI)
   store status                show your live order status (or none)
-  store order <name>          order a saved preset by name
+  store order <name>          order a saved preset (lists them if several share the name)
+  store order <name> <n>      order the nth same-named preset directly
   store alias list            list your saved presets
   store alias rm <name> [n]   remove preset <name> (the nth, if several share it)
   store help                  show this help

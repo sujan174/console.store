@@ -2,42 +2,50 @@ package cli
 
 import (
 	"fmt"
-	"strconv"
+	"io"
 	"time"
 
 	"console.store/internal/broker/api"
 	"console.store/internal/localstore"
 )
 
-// runOrder resolves preset(s) named `name`, pushes the chosen one into the cart
-// (overriding any existing cart), shows the live bill, confirms, and places
-// (armed) or no-ops (disarmed/safestore).
-func runOrder(d Deps, name string) int {
+// runOrder resolves preset(s) named `name` and orders one. idx (1-based, 0 =
+// none given) selects directly when several share the name (`store order coffee
+// 2`). With no index and several matches it lists them — no interactive prompt —
+// so the user re-runs with a number; a single match runs straight through to the
+// bill + confirm.
+func runOrder(d Deps, name string, idx int) int {
 	ps, err := localstore.LoadPresets()
 	if err != nil {
 		fmt.Fprintf(d.Out, "store: %v\n", err)
 		return 1
 	}
 	matches := ps.ByName(name)
-	switch len(matches) {
-	case 0:
+	if len(matches) == 0 {
 		fmt.Fprintf(d.Out, "no preset %q.\ncreate one in the app: open store, build a cart, then `:alias set %s`\n", name, name)
 		return 1
-	case 1:
-		return placePreset(d, matches[0])
-	default:
-		fmt.Fprintf(d.Out, "%d presets named %q:\n", len(matches), name)
-		for i, p := range matches {
-			fmt.Fprintf(d.Out, "  %d) %s · %s · %s\n", i+1, p.RestaurantName, p.AddrLine, summarize(p))
-		}
-		fmt.Fprintf(d.Out, "pick 1-%d: ", len(matches))
-		sel := prompt(d)
-		n, perr := strconv.Atoi(sel)
-		if perr != nil || n < 1 || n > len(matches) {
-			fmt.Fprintln(d.Out, "store: invalid choice — aborted.")
+	}
+	if idx > 0 {
+		if idx > len(matches) {
+			fmt.Fprintf(d.Out, "no preset %q #%d.\n", name, idx)
+			listPresets(d.Out, name, matches)
 			return 1
 		}
-		return placePreset(d, matches[n-1])
+		return placePreset(d, matches[idx-1])
+	}
+	if len(matches) == 1 {
+		return placePreset(d, matches[0])
+	}
+	listPresets(d.Out, name, matches)
+	fmt.Fprintf(d.Out, "\nrun  store order %s <number>  to order one.\n", name)
+	return 0
+}
+
+// listPresets prints the numbered presets sharing a name (short address).
+func listPresets(out io.Writer, name string, matches []localstore.Preset) {
+	fmt.Fprintf(out, "%d presets named %q:\n", len(matches), name)
+	for i, p := range matches {
+		fmt.Fprintf(out, "  %d) %s · %s · %s\n", i+1, p.RestaurantName, shortAddr(p.AddrLine), summarize(p))
 	}
 }
 
