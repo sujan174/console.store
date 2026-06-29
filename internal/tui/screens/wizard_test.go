@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/catalog"
+	"consolestore/internal/catalog"
 )
 
 func variantItem() catalog.Item {

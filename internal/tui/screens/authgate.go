@@ -1,7 +1,7 @@
 package screens
 
 import (
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/theme"
 )
 
 // AuthGate is the connect-your-Swiggy-account screen shown when there is no
@@ -26,7 +26,7 @@ func (a AuthGate) View() string {
 	spin := authSpin[(a.frame/3)%len(authSpin)]
 
 	body := []string{
-		theme.TextStyle.Render("console.store places real orders through your"),
+		theme.TextStyle.Render("consolestore places real orders through your"),
 		theme.TextStyle.Render("Swiggy account. Connect it once to get going."),
 		"",
 	}

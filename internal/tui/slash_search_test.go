@@ -5,10 +5,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	swiggysnap "console.store/internal/catalog/swiggy"
-	"console.store/internal/config"
-	"console.store/internal/tui/render"
-	"console.store/internal/tui/screens"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/config"
+	"consolestore/internal/tui/render"
+	"consolestore/internal/tui/screens"
 )
 
 // `/` jumps straight into search from the browse screen.

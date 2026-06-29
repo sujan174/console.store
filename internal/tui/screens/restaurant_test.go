@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/catalog"
-	"console.store/internal/catalog/mem"
+	"consolestore/internal/catalog"
+	"consolestore/internal/catalog/mem"
 )
 
 // despace strips spaces so assertions survive the list's letter-spacing.

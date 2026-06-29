@@ -5,8 +5,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"console.store/internal/tui/components"
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/components"
+	"consolestore/internal/tui/theme"
 )
 
 // streak mirrors the design's this.state.streak (script line 712).

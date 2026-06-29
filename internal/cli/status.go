@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"console.store/internal/broker/api"
+	"consolestore/internal/broker/api"
 )
 
 // runStatus prints the account's live orders with their richest available status

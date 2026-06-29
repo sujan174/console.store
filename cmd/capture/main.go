@@ -23,10 +23,10 @@ import (
 	"syscall"
 	"time"
 
-	"console.store/internal/auth"
-	"console.store/internal/broker"
-	"console.store/internal/localstore"
-	"console.store/internal/swiggy"
+	"consolestore/internal/auth"
+	"consolestore/internal/broker"
+	"consolestore/internal/localstore"
+	"consolestore/internal/swiggy"
 )
 
 type refresher struct {

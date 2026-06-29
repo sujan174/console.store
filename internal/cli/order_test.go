@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/broker/api"
-	"console.store/internal/localstore"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/localstore"
 )
 
 func seedPreset(t *testing.T, p localstore.Preset) {

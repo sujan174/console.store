@@ -3,7 +3,7 @@ package swiggy
 import (
 	"testing"
 
-	"console.store/internal/catalog"
+	"consolestore/internal/catalog"
 )
 
 func TestSnapshotPlacesByQueryKey(t *testing.T) {

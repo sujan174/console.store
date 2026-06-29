@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/broker/api"
+	"consolestore/internal/broker/api"
 )
 
 func TestStatusNoLiveOrders(t *testing.T) {

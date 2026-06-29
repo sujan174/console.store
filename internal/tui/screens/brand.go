@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/theme"
 )
 
 // BrandHeaderLines is the rendered height of BrandBanner (brand line + gold

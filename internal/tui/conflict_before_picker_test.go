@@ -3,12 +3,12 @@ package tui
 import (
 	"testing"
 
-	swiggysnap "console.store/internal/catalog/swiggy"
+	swiggysnap "consolestore/internal/catalog/swiggy"
 
-	"console.store/internal/catalog"
-	"console.store/internal/tui/datasource"
-	"console.store/internal/tui/render"
-	"console.store/internal/tui/screens"
+	"consolestore/internal/catalog"
+	"consolestore/internal/tui/datasource"
+	"consolestore/internal/tui/render"
+	"consolestore/internal/tui/screens"
 )
 
 // Adding a customizable item from a DIFFERENT restaurant must raise the

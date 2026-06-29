@@ -3,7 +3,7 @@ package components
 import (
 	"fmt"
 
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/theme"
 )
 
 // Header renders the two-line top bar: brand + cart chip, then address + [a].

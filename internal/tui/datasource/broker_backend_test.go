@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"console.store/internal/broker/api"
-	"console.store/internal/catalog"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/catalog"
 )
 
 type fakeRPC struct {

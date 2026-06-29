@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"console.store/internal/broker/api"
-	"console.store/internal/catalog"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/catalog"
 )
 
 // cleanAddrLine strips a short, digit-free "<name>: " prefix that Swiggy prepends

@@ -1,4 +1,4 @@
-// Package cli implements console.store's headless shell commands (status, order,
+// Package cli implements consolestore's headless shell commands (status, order,
 // alias, help). It drives the account-pinned broker backend and prints plain
 // text — it never opens the TUI and never imports internal/tui.
 package cli
@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"console.store/internal/broker/api"
+	"consolestore/internal/broker/api"
 )
 
 type Backend interface {

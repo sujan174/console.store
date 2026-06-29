@@ -5,9 +5,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	swiggysnap "console.store/internal/catalog/swiggy"
+	swiggysnap "consolestore/internal/catalog/swiggy"
 
-	"console.store/internal/tui/render"
+	"consolestore/internal/tui/render"
 )
 
 // The `:` command palette must accept spaces (so `alias set <name>` is typable)

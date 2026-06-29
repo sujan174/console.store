@@ -1,4 +1,4 @@
-module console.store
+module consolestore
 
 go 1.26.4
 

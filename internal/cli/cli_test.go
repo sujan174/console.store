@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/broker/api"
+	"consolestore/internal/broker/api"
 )
 
 // fakeBackend implements cli.Backend for tests. No network, no real orders.

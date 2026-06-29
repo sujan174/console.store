@@ -3,9 +3,9 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	swiggysnap "console.store/internal/catalog/swiggy"
-	"console.store/internal/config"
-	"console.store/internal/tui/datasource"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/config"
+	"consolestore/internal/tui/datasource"
 )
 
 // Option configures a Model at construction (functional-options so the existing

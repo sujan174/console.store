@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/theme"
 )
 
 var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")

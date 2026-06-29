@@ -9,9 +9,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/broker/api"
-	"console.store/internal/catalog"
-	swiggysnap "console.store/internal/catalog/swiggy"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/catalog"
+	swiggysnap "consolestore/internal/catalog/swiggy"
 )
 
 // ErrNeedsAuth signals the account has no usable token; the Model shows the

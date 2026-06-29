@@ -3,7 +3,7 @@ package broker
 import (
 	"testing"
 
-	"console.store/internal/swiggy"
+	"consolestore/internal/swiggy"
 )
 
 func TestUnavailableStatus(t *testing.T) {

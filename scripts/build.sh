@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild the two console.store binaries into your PATH.
+# Rebuild the two consolestore binaries into your PATH.
 #
 #   store      ARMED     — can place REAL Swiggy orders (CONSOLE_LIVE_ORDERS baked on)
 #   safestore  disarmed  — browse + cart only; "place order" is blocked
@@ -14,7 +14,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="${BIN:-$HOME/.local/bin}"
-ARM_FLAG='-X console.store/internal/swiggy.liveOrdersDefault=1'
+ARM_FLAG='-X consolestore/internal/swiggy.liveOrdersDefault=1'
 
 mkdir -p "$BIN"
 cd "$ROOT"

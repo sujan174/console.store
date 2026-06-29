@@ -5,8 +5,8 @@ import (
 	"io"
 	"time"
 
-	"console.store/internal/broker/api"
-	"console.store/internal/localstore"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/localstore"
 )
 
 // runOrder resolves preset(s) named `name` and orders one. idx (1-based, 0 =

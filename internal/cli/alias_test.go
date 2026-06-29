@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/localstore"
+	"consolestore/internal/localstore"
 )
 
 func TestAliasListEmpty(t *testing.T) {

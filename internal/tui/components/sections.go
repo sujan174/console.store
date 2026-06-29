@@ -3,8 +3,8 @@ package components
 import (
 	"strings"
 
-	"console.store/internal/catalog"
-	"console.store/internal/tui/theme"
+	"consolestore/internal/catalog"
+	"consolestore/internal/tui/theme"
 )
 
 // SectionTabs renders "coffee   food   snacks   instamart ↗" with the active

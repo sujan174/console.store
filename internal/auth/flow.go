@@ -99,7 +99,7 @@ func (m *Manager) HandleCallback(ctx context.Context, state, code string) error 
 	id, err := IdentityFromAccessToken(tok.AccessToken)
 	if err != nil || id.Phone == "" {
 		// Fallback: key the account on the subject when no phone claim exists.
-		// (Open item: a production fallback would trigger a console.store OTP.)
+		// (Open item: a production fallback would trigger a consolestore OTP.)
 		if id.Subject == "" {
 			return fmt.Errorf("auth: token has neither phone nor sub claim: %w", err)
 		}
@@ -134,16 +134,16 @@ func (m *Manager) CallbackHandler() http.HandlerFunc {
 		if err := m.HandleCallback(r.Context(), q.Get("state"), q.Get("code")); err != nil {
 			// Log the real reason (swallowing it makes "authorization failed"
 			// impossible to diagnose). A CSRF/state failure almost always means the
-			// callback hit a DIFFERENT console.store process than the one that
+			// callback hit a DIFFERENT consolestore process than the one that
 			// opened the link — i.e. a second instance is holding this port.
 			log.Printf("auth: callback rejected: %v", err)
 			http.Error(w, "authorization failed: "+err.Error()+
-				"\n\nIf another console.store is running, close it (it's holding this port) and try again.",
+				"\n\nIf another consolestore is running, close it (it's holding this port) and try again.",
 				http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write([]byte("console.store authorized. Return to your terminal."))
+		_, _ = w.Write([]byte("consolestore authorized. Return to your terminal."))
 	}
 }
 

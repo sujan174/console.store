@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/theme"
 )
 
 // InnerWidth is the default content column width used before a window size

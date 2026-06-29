@@ -3,7 +3,7 @@ package datasource
 import (
 	"context"
 
-	"console.store/internal/broker/api"
+	"consolestore/internal/broker/api"
 )
 
 // inprocService is the subset of *broker.Service that the in-process backend

@@ -7,10 +7,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/catalog"
-	swiggysnap "console.store/internal/catalog/swiggy"
-	"console.store/internal/tui/render"
-	"console.store/internal/tui/screens"
+	"consolestore/internal/catalog"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/tui/render"
+	"consolestore/internal/tui/screens"
 )
 
 // despace strips spaces so assertions survive the list's letter-spacing

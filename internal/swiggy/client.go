@@ -179,7 +179,7 @@ func (c *Client) ensureSession(ctx context.Context, bearer string) (string, erro
 		"params": map[string]any{
 			"protocolVersion": "2025-06-18",
 			"capabilities":    map[string]any{},
-			"clientInfo":      map[string]any{"name": "console.store", "version": "1.0"},
+			"clientInfo":      map[string]any{"name": "consolestore", "version": "1.0"},
 		},
 	})
 	if err != nil {

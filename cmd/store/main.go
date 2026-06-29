@@ -1,4 +1,4 @@
-// Command store is console.store's native CLI. It runs the TUI in-process
+// Command store is consolestore's native CLI. It runs the TUI in-process
 // against broker.Service, stores the Swiggy token in the OS keyring, and
 // completes a one-time loopback browser authorize on first run.
 //
@@ -24,18 +24,18 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/auth"
-	"console.store/internal/broker"
-	"console.store/internal/catalog"
-	swiggysnap "console.store/internal/catalog/swiggy"
-	"console.store/internal/cli"
-	"console.store/internal/config"
-	"console.store/internal/localstore"
-	"console.store/internal/swiggy"
-	consoletui "console.store/internal/tui"
-	"console.store/internal/tui/datasource"
-	"console.store/internal/tui/render"
-	"console.store/internal/tui/theme"
+	"consolestore/internal/auth"
+	"consolestore/internal/broker"
+	"consolestore/internal/catalog"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/cli"
+	"consolestore/internal/config"
+	"consolestore/internal/localstore"
+	"consolestore/internal/swiggy"
+	consoletui "consolestore/internal/tui"
+	"consolestore/internal/tui/datasource"
+	"consolestore/internal/tui/render"
+	"consolestore/internal/tui/theme"
 )
 
 func main() {
@@ -66,7 +66,7 @@ func run(args []string) error {
 		defer f.Close()
 		log.SetOutput(f)
 		log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-		log.Printf("=== console.store debug log opened ===")
+		log.Printf("=== consolestore debug log opened ===")
 	}
 
 	be, signedIn, launchTUI, err := bootstrap(ctx)
@@ -157,13 +157,13 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 		// Loopback callback server (browser redirects here after authorize).
 		// Only needed for the TUI auth gate; not started for headless paths.
 		// Bind the port HERE (before the alt-screen hides stderr) so a conflict —
-		// another console.store already holding it — is reported loudly instead of
+		// another consolestore already holding it — is reported loudly instead of
 		// silently breaking auth (the browser callback would hit the other
 		// instance, whose session never started this login → "authorization failed").
 		addr := callbackAddr(redirect)
 		if ln, lerr := net.Listen("tcp", addr); lerr != nil {
 			fmt.Fprintf(os.Stderr,
-				"\n⚠  console.store: sign-in port %s is already in use — another console.store is\n"+
+				"\n⚠  consolestore: sign-in port %s is already in use — another consolestore is\n"+
 					"   running. Close it before signing in, or authorization will fail.\n\n", addr)
 		} else {
 			go serveCallback(ctx, authMgr, ln)
