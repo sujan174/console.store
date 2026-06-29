@@ -129,8 +129,8 @@ func TestOrderMultiPresetListsWithoutIndex(t *testing.T) {
 	if !strings.Contains(s, "1) Blue Tokai") || !strings.Contains(s, "2) Truffles") {
 		t.Fatalf("should list numbered presets:\n%s", s)
 	}
-	if !strings.Contains(s, "store order breakfast") {
-		t.Fatalf("should hint the numbered form:\n%s", s)
+	if !strings.Contains(s, "pick 1-2") {
+		t.Fatalf("should prompt for a number:\n%s", s)
 	}
 }
 

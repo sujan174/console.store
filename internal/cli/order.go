@@ -40,7 +40,7 @@ func runOrder(d Deps, name string, idx int) int {
 	}
 
 	listPresets(d.Out, name, matches, st)
-	fmt.Fprintf(d.Out, "\n%s ", st.dim(fmt.Sprintf("pick 1-%d (or run  store order %s <n>):", len(matches), name)))
+	fmt.Fprintf(d.Out, "\n%s ", st.dim(fmt.Sprintf("pick 1-%d:", len(matches))))
 	sel := prompt(d)
 	if sel == "" {
 		return 0 // listed only (e.g. non-interactive / no choice)
