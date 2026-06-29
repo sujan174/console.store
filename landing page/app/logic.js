@@ -31,8 +31,37 @@ export function mount(root) {
     toast: root.querySelector('[data-ref="toast"]'),
   };
 
-  // ---- toast / install ping ----
+  // ---- OS-aware install command ----
+  // Pick the right one-liner for the visitor's platform: curl|sh on macOS/Linux,
+  // irm|iex (PowerShell) on Windows, and on phones/tablets show the curl line
+  // with a "run it on your computer" nudge (you can't install on mobile).
+  const detectOS = () => {
+    const ua = navigator.userAgent || "";
+    const plat = navigator.platform || "";
+    const touch = (navigator.maxTouchPoints || 0) > 1;
+    if (/Android/i.test(ua) || /iPhone|iPad|iPod/i.test(ua)) return "mobile";
+    if (/Win/i.test(plat) || /Windows/i.test(ua)) return "windows";
+    // iPadOS 13+ reports "MacIntel" with touch — treat touch Macs as mobile.
+    if (/Mac/i.test(plat) || /Macintosh/i.test(ua)) return touch ? "mobile" : "unix";
+    if (/Linux/i.test(plat) || /Linux/i.test(ua)) return touch ? "mobile" : "unix";
+    return "unix";
+  };
+  const INSTALL = {
+    unix: { cmd: "curl -fsSL consolestore.in/install | sh", prompt: "$", hint: "macOS & Linux · armed builds place real orders, the default stays safe.", toast: "copied — paste it into your terminal" },
+    windows: { cmd: "irm consolestore.in/install.ps1 | iex", prompt: "PS>", hint: "Windows PowerShell · armed builds place real orders, the default stays safe.", toast: "copied — paste it into PowerShell" },
+    mobile: { cmd: "curl -fsSL consolestore.in/install | sh", prompt: "$", hint: "run this on your computer — macOS, Linux, or Windows (PowerShell).", toast: "copied — run it on your computer" },
+  }[detectOS()];
+  root.querySelectorAll("[data-install-cmd]").forEach((e) => (e.textContent = INSTALL.cmd));
+  root.querySelectorAll("[data-install-prompt]").forEach((e) => (e.textContent = INSTALL.prompt));
+  root.querySelectorAll("[data-install-hint]").forEach((e) => (e.textContent = INSTALL.hint));
+
+  // ---- copy on click + toast ----
   const pingInstall = () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(INSTALL.cmd).catch(() => {});
+    }
+    const msg = root.querySelector("[data-toast-msg]");
+    if (msg) msg.textContent = INSTALL.toast;
     if (!refs.toast) return;
     refs.toast.style.display = "flex";
     S.timers.push(
