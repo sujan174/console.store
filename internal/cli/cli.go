@@ -27,6 +27,7 @@ type Deps struct {
 	Backend  Backend
 	Armed    bool
 	SignedIn bool
+	Color    bool // emit ANSI colour (set when Out is a terminal; off in tests/pipes)
 	In       io.Reader
 	Out      io.Writer
 }

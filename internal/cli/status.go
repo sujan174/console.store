@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"console.store/internal/broker/api"
 )
@@ -9,6 +10,7 @@ import (
 // runStatus prints the account's live orders with their richest available status
 // (active list + per-order tracking line), or "no live orders".
 func runStatus(d Deps) int {
+	st := newStyle(d.Color)
 	addrID, err := firstAddressID(d)
 	if err != nil {
 		fmt.Fprintf(d.Out, "store: %v\n", err)
@@ -20,7 +22,7 @@ func runStatus(d Deps) int {
 		return 1
 	}
 	if len(orders) == 0 {
-		fmt.Fprintln(d.Out, "no live orders.")
+		fmt.Fprintf(d.Out, "%s\n", st.dim("no live orders."))
 		return 0
 	}
 	for _, o := range orders {
@@ -32,18 +34,18 @@ func runStatus(d Deps) int {
 			}
 			eta = t.ETA
 		}
-		printOrderStatus(d, o, status, eta)
+		printOrderStatus(d, st, o, status, eta)
 	}
 	return 0
 }
 
-func printOrderStatus(d Deps, o api.Order, status, eta string) {
-	fmt.Fprintf(d.Out, "order %s — %s\n", o.ID, o.Restaurant)
-	fmt.Fprintf(d.Out, "  status: %s\n", status)
-	if eta != "" {
-		fmt.Fprintf(d.Out, "  eta:    %s\n", eta)
+func printOrderStatus(d Deps, st style, o api.Order, status, eta string) {
+	fmt.Fprintf(d.Out, "%s %s  %s\n", st.dim("order"), st.num(o.ID), st.head(o.Restaurant))
+	fmt.Fprintf(d.Out, "  %s  %s\n", st.dim("status"), st.ok(status))
+	if eta != "" && !strings.EqualFold(strings.TrimSpace(eta), "N/A") {
+		fmt.Fprintf(d.Out, "  %s     %s\n", st.dim("eta"), st.money(eta))
 	}
 	if o.Total > 0 {
-		fmt.Fprintf(d.Out, "  total:  ₹%d\n", o.Total)
+		fmt.Fprintf(d.Out, "  %s   %s\n", st.dim("total"), st.money(fmt.Sprintf("₹%d", o.Total)))
 	}
 }

@@ -134,6 +134,27 @@ func TestOrderMultiPresetListsWithoutIndex(t *testing.T) {
 	}
 }
 
+// `store order breakfast`, then the user presses a number → orders that preset.
+func TestOrderInteractivePick(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedTwoBreakfasts(t)
+	var out bytes.Buffer
+	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
+	// type "2" to pick, then Enter to confirm the order.
+	code := Dispatch([]string{"order", "breakfast"}, Deps{
+		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("2\n\n"), Backend: be,
+	})
+	if code != 0 {
+		t.Fatalf("interactive pick exit = %d:\n%s", code, out.String())
+	}
+	if be.placeN != 1 {
+		t.Fatalf("pressing 2 should place once, placed %d", be.placeN)
+	}
+	if !strings.Contains(out.String(), "Truffles") {
+		t.Fatalf("pick=2 should select Truffles:\n%s", out.String())
+	}
+}
+
 // `store order breakfast 2` orders the 2nd preset directly (bill + confirm).
 func TestOrderIndexPicksDirectly(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

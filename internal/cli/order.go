@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"console.store/internal/broker/api"
@@ -10,11 +11,11 @@ import (
 )
 
 // runOrder resolves preset(s) named `name` and orders one. idx (1-based, 0 =
-// none given) selects directly when several share the name (`store order coffee
-// 2`). With no index and several matches it lists them — no interactive prompt —
-// so the user re-runs with a number; a single match runs straight through to the
-// bill + confirm.
+// none given) selects directly: `store order coffee 2`. With no index and
+// several matches it lists them and, when stdin is interactive, lets the user
+// press a number; a single match runs straight through to the bill + confirm.
 func runOrder(d Deps, name string, idx int) int {
+	st := newStyle(d.Color)
 	ps, err := localstore.LoadPresets()
 	if err != nil {
 		fmt.Fprintf(d.Out, "store: %v\n", err)
@@ -22,67 +23,83 @@ func runOrder(d Deps, name string, idx int) int {
 	}
 	matches := ps.ByName(name)
 	if len(matches) == 0 {
-		fmt.Fprintf(d.Out, "no preset %q.\ncreate one in the app: open store, build a cart, then `:alias set %s`\n", name, name)
+		fmt.Fprintf(d.Out, "%s %s\n%s\n", st.warn("no preset"), st.head(name),
+			st.dim(fmt.Sprintf("create one in the app: open store, build a cart, then `:alias set %s`", name)))
 		return 1
 	}
 	if idx > 0 {
 		if idx > len(matches) {
-			fmt.Fprintf(d.Out, "no preset %q #%d.\n", name, idx)
-			listPresets(d.Out, name, matches)
+			fmt.Fprintf(d.Out, "%s\n", st.warn(fmt.Sprintf("no preset %q #%d.", name, idx)))
+			listPresets(d.Out, name, matches, st)
 			return 1
 		}
-		return placePreset(d, matches[idx-1])
+		return placePreset(d, matches[idx-1], st)
 	}
 	if len(matches) == 1 {
-		return placePreset(d, matches[0])
+		return placePreset(d, matches[0], st)
 	}
-	listPresets(d.Out, name, matches)
-	fmt.Fprintf(d.Out, "\nrun  store order %s <number>  to order one.\n", name)
-	return 0
+
+	listPresets(d.Out, name, matches, st)
+	fmt.Fprintf(d.Out, "\n%s ", st.dim(fmt.Sprintf("pick 1-%d (or run  store order %s <n>):", len(matches), name)))
+	sel := prompt(d)
+	if sel == "" {
+		return 0 // listed only (e.g. non-interactive / no choice)
+	}
+	n, perr := strconv.Atoi(sel)
+	if perr != nil || n < 1 || n > len(matches) {
+		fmt.Fprintf(d.Out, "%s\n", st.warn("not a valid choice — aborted."))
+		return 1
+	}
+	return placePreset(d, matches[n-1], st)
 }
 
 // listPresets prints the numbered presets sharing a name (short address).
-func listPresets(out io.Writer, name string, matches []localstore.Preset) {
-	fmt.Fprintf(out, "%d presets named %q:\n", len(matches), name)
+func listPresets(out io.Writer, name string, matches []localstore.Preset, st style) {
+	fmt.Fprintf(out, "%s\n", st.dim(fmt.Sprintf("%d presets named %q:", len(matches), name)))
 	for i, p := range matches {
-		fmt.Fprintf(out, "  %d) %s · %s · %s\n", i+1, p.RestaurantName, shortAddr(p.AddrLine), summarize(p))
+		fmt.Fprintf(out, "  %s %s  %s %s %s %s\n",
+			st.num(fmt.Sprintf("%d)", i+1)), st.head(p.RestaurantName),
+			st.dim("·"), st.dim(shortAddr(p.AddrLine)),
+			st.dim("·"), st.dim(summarize(p)))
 	}
 }
 
-func placePreset(d Deps, p localstore.Preset) int {
+func placePreset(d Deps, p localstore.Preset, st style) int {
+	adjust := st.dim("open `store` to adjust.")
 	items := presetToCartItems(p)
 	// Push (override any existing cart), then pull the authoritative cart/bill.
 	if _, err := d.Backend.UpdateCart(p.AddrID, p.RestaurantID, p.RestaurantName, items); err != nil {
-		fmt.Fprintf(d.Out, "store: %q isn't available right now (%v).\nopen `store` to adjust.\n", p.Name, err)
+		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn(fmt.Sprintf("%q isn't available right now (%v).", p.Name, err)), adjust)
 		return 1
 	}
 	cart, err := d.Backend.GetCart(p.AddrID, p.RestaurantName)
 	if err != nil {
-		fmt.Fprintf(d.Out, "store: couldn't read the cart (%v).\nopen `store` to adjust.\n", err)
+		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn(fmt.Sprintf("couldn't read the cart (%v).", err)), adjust)
 		return 1
 	}
 	if unavailable := unavailableNames(cart); len(unavailable) > 0 {
-		fmt.Fprintf(d.Out, "store: %q can't be ordered now — unavailable: %s.\nopen `store` to adjust.\n", p.Name, joinNames(unavailable))
+		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn(fmt.Sprintf("%q can't be ordered now — unavailable: %s.", p.Name, joinNames(unavailable))), adjust)
 		return 1
 	}
 	if len(cart.Lines) == 0 {
-		fmt.Fprintf(d.Out, "store: %q produced an empty cart (items may no longer exist).\nopen `store` to adjust.\n", p.Name)
+		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn(fmt.Sprintf("%q produced an empty cart (items may no longer exist).", p.Name)), adjust)
 		return 1
 	}
 
-	renderCart(d.Out, p.AddrLine, p.RestaurantName, cart)
+	renderCart(d.Out, p.AddrLine, p.RestaurantName, cart, st)
 
 	if !d.Armed {
-		fmt.Fprintln(d.Out, "\nbrowse-only build — order NOT placed.\nrun the armed `store` to place, or open `store` to adjust the cart.")
+		fmt.Fprintf(d.Out, "\n%s\n%s\n", st.warn("browse-only build — order NOT placed."),
+			st.dim("run the armed `store` to place, or open `store` to adjust the cart."))
 		return 0
 	}
 
-	fmt.Fprint(d.Out, "\npress Enter to place this order · Ctrl-C to cancel ")
+	fmt.Fprintf(d.Out, "\n%s %s\n", st.ok("press Enter to place this order"), st.dim("· Ctrl-C to cancel"))
 	_ = prompt(d)                                // any line (incl. empty Enter) confirms; Ctrl-C kills the process
 	order, err := d.Backend.PlaceOrder(p.AddrID) // never retried
 	if err != nil {
-		fmt.Fprintf(d.Out, "store: order failed: %v\n", err)
-		fmt.Fprintln(d.Out, "if you may have been charged, run `store status` before retrying.")
+		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn(fmt.Sprintf("order failed: %v", err)),
+			st.dim("if you may have been charged, run `store status` before retrying."))
 		return 1
 	}
 	etaLo, etaHi := localstore.ParseETAMinutes(order.ETA)
@@ -90,11 +107,11 @@ func placePreset(d Deps, p localstore.Preset) int {
 		OrderID: order.ID, Restaurant: p.RestaurantName, AddrLine: p.AddrLine,
 		ETALoMin: etaLo, ETAHiMin: etaHi, Total: order.Total, PlacedAt: time.Now().Unix(),
 	})
-	fmt.Fprintf(d.Out, "\n✓ order placed — %s", order.ID)
+	line := "✓ order placed — " + order.ID
 	if order.ETA != "" {
-		fmt.Fprintf(d.Out, " · eta %s", order.ETA)
+		line += " · eta " + order.ETA
 	}
-	fmt.Fprintln(d.Out)
+	fmt.Fprintf(d.Out, "\n%s\n", st.ok(line))
 	return 0
 }
 

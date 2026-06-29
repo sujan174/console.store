@@ -41,7 +41,7 @@ func main() {
 	args := os.Args[1:]
 	// help/--help/-h need no auth and no network at all — short-circuit early.
 	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
-		os.Exit(cli.Dispatch(args, cli.Deps{Out: os.Stdout}))
+		os.Exit(cli.Dispatch(args, cli.Deps{Out: os.Stdout, Color: colorEnabled()}))
 	}
 	if err := run(args); err != nil {
 		log.Fatalf("store: %v", err)
@@ -83,11 +83,22 @@ func run(args []string) error {
 		Backend:  be,
 		Armed:    swiggy.LiveOrdersEnabled(),
 		SignedIn: signedIn,
+		Color:    colorEnabled(),
 		In:       os.Stdin,
 		Out:      os.Stdout,
 	})
 	os.Exit(code)
 	return nil
+}
+
+// colorEnabled reports whether headless output should use ANSI colour: only when
+// stdout is a real terminal (not piped/redirected) and NO_COLOR is unset.
+func colorEnabled() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	fi, err := os.Stdout.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
 // bootstrap builds the shared auth + broker + backend stack. It returns the

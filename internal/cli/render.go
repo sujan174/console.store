@@ -33,44 +33,36 @@ func truncate(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
-// billRow prints "left … amount" with the amount right-aligned to billWidth.
-func billRow(out io.Writer, left, amount string) {
-	pad := billWidth - len([]rune(left)) - len([]rune(amount))
-	if pad < 1 {
-		pad = 1
-	}
-	fmt.Fprintf(out, "  %s%s%s\n", left, strings.Repeat(" ", pad), amount)
-}
-
-func billRule(out io.Writer) {
-	fmt.Fprintf(out, "  %s\n", strings.Repeat("─", billWidth))
-}
-
 // renderCart prints a clean, compact cart + bill breakdown — the headless mirror
 // of the checkout page (restaurant → short address, lines, then the bill).
-func renderCart(out io.Writer, addrLine, restaurant string, c api.Cart) {
+func renderCart(out io.Writer, addrLine, restaurant string, c api.Cart, st style) {
 	if a := shortAddr(addrLine); a != "" {
-		fmt.Fprintf(out, "  %s  →  %s\n\n", restaurant, a)
+		fmt.Fprintf(out, "  %s  %s  %s\n\n", st.head(restaurant), st.dim("→"), st.dim(a))
 	} else {
-		fmt.Fprintf(out, "  %s\n\n", restaurant)
+		fmt.Fprintf(out, "  %s\n\n", st.head(restaurant))
 	}
 	for _, l := range c.Lines {
-		amt := fmt.Sprintf("₹%d", l.Price*max1(l.Quantity))
+		left := fmt.Sprintf("%d × %s", l.Quantity, truncate(l.Name, 28))
 		if !l.Available {
-			amt = "sold out"
+			pad := billWidth - len([]rune(left)) - len("sold out")
+			if pad < 1 {
+				pad = 1
+			}
+			fmt.Fprintf(out, "  %s%s%s\n", left, strings.Repeat(" ", pad), st.warn("sold out"))
+			continue
 		}
-		billRow(out, fmt.Sprintf("%d × %s", l.Quantity, truncate(l.Name, 28)), amt)
+		st.row(out, left, fmt.Sprintf("₹%d", l.Price*max1(l.Quantity)), false)
 	}
-	billRule(out)
-	billRow(out, "item total", fmt.Sprintf("₹%d", c.ItemTotal))
+	st.rule(out)
+	st.row(out, "item total", fmt.Sprintf("₹%d", c.ItemTotal), false)
 	if c.Delivery != 0 {
-		billRow(out, "delivery", fmt.Sprintf("₹%d", c.Delivery))
+		st.row(out, "delivery", fmt.Sprintf("₹%d", c.Delivery), false)
 	}
 	if c.Taxes != 0 {
-		billRow(out, "taxes & charges", fmt.Sprintf("₹%d", c.Taxes))
+		st.row(out, "taxes & charges", fmt.Sprintf("₹%d", c.Taxes), false)
 	}
-	billRule(out)
-	billRow(out, "to pay", fmt.Sprintf("₹%d", c.Total))
+	st.rule(out)
+	st.row(out, "to pay", fmt.Sprintf("₹%d", c.Total), true)
 }
 
 func max1(n int) int {
