@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
-// Brand favicon (terminal-prompt mark), rendered to PNG so Google's favicon
-// crawler reliably picks it up.
+// Favicon — the consolestore bowl+steam mark (solid, no neon glow so it stays
+// crisp at small sizes) on a dark tile. PNG for Google's favicon crawler.
 export const size = { width: 64, height: 64 };
 export const contentType = "image/png";
 
@@ -15,16 +15,23 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: 5,
-          background: "#0e0f18",
-          borderRadius: 16,
-          border: "2px solid #2a2e47"
+          background: "#0b0b13",
+          borderRadius: 14,
         }}
       >
-        <span style={{ color: "#c0caf5", fontSize: 40, fontWeight: 700, marginTop: -4 }}>
-          {">"}
-        </span>
-        <div style={{ width: 14, height: 6, borderRadius: 3, background: "#7aa2f7", marginTop: 14 }} />
+        <svg width="46" height="46" viewBox="0 0 64 64" fill="none">
+          <path
+            d="M15 25 L26 34 L15 43"
+            stroke="#7aa2f7"
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <rect x="30" y="41" width="20" height="4.4" rx="2.2" fill="#7aa2f7" />
+          <path d="M34 31 a6 6 0 0 0 12 0 Z" fill="#ffffff" />
+          <path d="M38 28 Q40 25 38 22" stroke="#ffffff" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+          <path d="M43 28 Q45 25 43 22" stroke="#ffffff" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        </svg>
       </div>
     ),
     { ...size }

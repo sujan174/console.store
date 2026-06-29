@@ -20,10 +20,14 @@ export const MARKUP = String.raw`
   <!-- NAV -->
   <nav class="site-nav" style="position:relative;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:20px;max-width:1180px;margin:0 auto;padding:26px 28px;animation:introFade .8s ease both">
     <a href="#top" style="display:inline-flex;align-items:center;gap:11px">
-      <svg width="30" height="30" viewBox="0 0 64 64" fill="none" style="display:block;flex:none">
-        <rect x="2" y="2" width="60" height="60" rx="16" fill="#0e0f18" stroke="#2a2e47" stroke-width="2"></rect>
-        <path d="M19 21 L31 32 L19 43" stroke="#c0caf5" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
-        <rect x="34.5" y="37" width="15" height="6" rx="3" fill="#7aa2f7"></rect>
+      <svg width="34" height="34" viewBox="0 0 64 64" fill="none" style="display:block;flex:none">
+        <g style="filter:drop-shadow(0 0 4px #7aa2f7) drop-shadow(0 0 9px #4f7fd6)">
+          <path d="M15 25 L26 34 L15 43" stroke="#a9c4ff" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round"></path>
+          <rect x="30" y="41" width="20" height="4.4" rx="2.2" fill="#a9c4ff"></rect>
+        </g>
+        <path d="M34 31 a6 6 0 0 0 12 0 Z" fill="#ffffff"></path>
+        <path d="M38 28 Q40 25 38 22" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"></path>
+        <path d="M43 28 Q45 25 43 22" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"></path>
       </svg>
       <span style="color:#c0caf5;font-weight:600;letter-spacing:.4px">consolestore<span style="color:var(--accent)">.in</span></span>
     </a>
