@@ -36,19 +36,10 @@ func pickPreset(d Deps, name string, matches []localstore.Preset, st style) (int
 	return n - 1, true
 }
 
-// pickRow renders one preset row for the arrow picker. The selected row gets a
-// ❯ marker + highlighted name.
-func pickRow(i int, p localstore.Preset, st style, selected bool) string {
-	num := strconv.Itoa(i+1) + ")"
-	tail := st.dim("· " + shortAddr(p.AddrLine) + " · " + summarize(p))
-	if selected {
-		return st.num("❯ "+num) + " " + st.ok(p.RestaurantName) + " " + tail
-	}
-	return "  " + st.dim(num) + " " + st.head(p.RestaurantName) + " " + tail
-}
-
 // rawPick runs the in-place arrow-key picker in raw terminal mode. handled is
-// false when raw mode can't be entered (the caller then falls back).
+// false when raw mode can't be entered (the caller then falls back). Rows are
+// truncated to the terminal width so they never soft-wrap — a wrapped line would
+// break the cursor-up redraw math and the list would stack/glitch.
 func rawPick(in *os.File, out io.Writer, name string, matches []localstore.Preset, st style) (idx int, picked, handled bool) {
 	old, err := xterm.MakeRaw(in.Fd())
 	if err != nil {
@@ -56,15 +47,31 @@ func rawPick(in *os.File, out io.Writer, name string, matches []localstore.Prese
 	}
 	defer xterm.Restore(in.Fd(), old)
 
+	fmt.Fprint(out, "\x1b[?25l")           // hide cursor (no flicker on redraw)
+	defer fmt.Fprint(out, "\x1b[?25h\r\n") // show cursor + drop to a fresh line on exit
+
+	width, _, werr := xterm.GetSize(in.Fd())
+	if werr != nil || width < 20 {
+		width = 80
+	}
+	maxRow := width - 1
+
 	cur := 0
 	rows := len(matches) + 1 // header + N rows, redrawn in place
 	draw := func(first bool) {
 		if !first {
 			fmt.Fprintf(out, "\x1b[%dA", rows) // cursor up to the header
 		}
-		fmt.Fprintf(out, "\r\x1b[K%s\r\n", st.dim(fmt.Sprintf("%d presets named %q  ·  ↑/↓ then ↵, or a number:", len(matches), name)))
+		header := truncate(fmt.Sprintf("%d presets named %q  ·  ↑/↓ then ↵, or a number", len(matches), name), maxRow)
+		fmt.Fprintf(out, "\r\x1b[K%s\r\n", st.dim(header))
 		for i, p := range matches {
-			fmt.Fprintf(out, "\r\x1b[K%s\r\n", pickRow(i, p, st, i == cur))
+			// number + restaurant + items (no address — it's in the bill after).
+			text := truncate(fmt.Sprintf("%d) %s  ·  %s", i+1, p.RestaurantName, summarize(p)), maxRow-2)
+			if i == cur {
+				fmt.Fprintf(out, "\r\x1b[K%s%s\r\n", st.num("❯ "), st.ok(text))
+			} else {
+				fmt.Fprintf(out, "\r\x1b[K  %s\r\n", st.head(text))
+			}
 		}
 	}
 	draw(true)
