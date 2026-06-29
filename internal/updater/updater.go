@@ -83,6 +83,9 @@ func Run(ctx context.Context, o Options) {
 	if err != nil {
 		return // unsigned/forged manifest — refuse
 	}
+	if pl.Channel != o.Mark.Channel {
+		return // signed manifest is for a different channel — refuse
+	}
 	if !Newer(o.Current, pl.Version) {
 		return
 	}
@@ -94,6 +97,7 @@ func Run(ctx context.Context, o Options) {
 	fmt.Fprintf(o.Out, "console.store ↑ updating %s → %s\n", o.Current, pl.Version)
 	bin, err := o.download(ctx)
 	if err != nil {
+		fmt.Fprintf(o.Out, "console.store: update failed, staying on %s\n", o.Current)
 		return
 	}
 	got := sha256.Sum256(bin)
@@ -102,6 +106,7 @@ func Run(ctx context.Context, o Options) {
 		return
 	}
 	if err := o.swap(o.ExePath, bin, 0o755); err != nil {
+		fmt.Fprintf(o.Out, "console.store: update failed, staying on %s\n", o.Current)
 		return
 	}
 	_ = o.reexec(o.ExePath)

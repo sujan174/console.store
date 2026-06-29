@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const runtime = "nodejs";
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 // scripts/install.sh is the source of truth, committed at the repo root. The
 // landing app reads it at build/start time (one dir up from "landing page").

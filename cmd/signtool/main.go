@@ -6,9 +6,7 @@ package main
 import (
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -70,7 +68,7 @@ func signCmd(args []string) error {
 	}
 	priv := ed25519.PrivateKey(keyB)
 
-	assets, err := scanAssets(flags["dir"])
+	assets, err := readAssets(flags["dir"])
 	if err != nil {
 		return err
 	}
@@ -81,28 +79,42 @@ func signCmd(args []string) error {
 	return os.WriteFile(flags["out"], env, 0o644)
 }
 
-// scanAssets sha256s every store_<os>_<arch>[.exe] file in dir into the asset map.
-func scanAssets(dir string) (map[string]string, error) {
-	entries, err := os.ReadDir(dir)
+// readAssets reads dist/SHA256SUMS and returns the asset map from it.
+// This is robust to goreleaser's per-build subdirectory layout (store_linux_amd64_v1/store)
+// because the flat published names and their hashes live in SHA256SUMS, not as top-level files.
+func readAssets(dir string) (map[string]string, error) {
+	path := filepath.Join(dir, "SHA256SUMS")
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
+	return assetsFromChecksums(data)
+}
+
+// assetsFromChecksums parses SHA256SUMS file bytes and returns a map of
+// asset key → hex sha256. Asset keys are derived by stripping the "store_"
+// prefix and ".exe" suffix from each asset name. Lines not starting with
+// "store_" are skipped.
+func assetsFromChecksums(data []byte) (map[string]string, error) {
 	out := map[string]string{}
-	for _, e := range entries {
-		name := e.Name()
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		hash, name := fields[0], fields[1]
 		if !strings.HasPrefix(name, "store_") {
 			continue
 		}
 		key := strings.TrimSuffix(strings.TrimPrefix(name, "store_"), ".exe")
-		b, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil {
-			return nil, err
-		}
-		sum := sha256.Sum256(b)
-		out[key] = hex.EncodeToString(sum[:])
+		out[key] = hash
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("no store_* assets in %s", dir)
+		return nil, fmt.Errorf("no store_* entries in SHA256SUMS")
 	}
 	return out, nil
 }
