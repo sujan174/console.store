@@ -1601,6 +1601,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case datasource.ItemOptionsLoadedMsg:
+		// Drop a stale options response: if the user tapped a different
+		// customizable item before this landed, m.pendingItem has moved on and
+		// applying these groups would open the picker for the wrong item. (The
+		// start-fresh re-fetch re-fires with the same pendingItem, so it passes.)
+		if dm.ItemID != "" && dm.ItemID != m.pendingItem.SwiggyID {
+			return m, nil
+		}
 		if dm.Err != nil {
 			m.cartSyncErr = "options: " + dm.Err.Error()
 			return m, nil

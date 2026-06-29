@@ -80,12 +80,13 @@ func run(args []string) error {
 
 	// Headless subcommand: plain text output, no TUI, no OSC escapes.
 	code := cli.Dispatch(args, cli.Deps{
-		Backend:  be,
-		Armed:    swiggy.LiveOrdersEnabled(),
-		SignedIn: signedIn,
-		Color:    colorEnabled(),
-		In:       os.Stdin,
-		Out:      os.Stdout,
+		Backend:     be,
+		Armed:       swiggy.LiveOrdersEnabled(),
+		SignedIn:    signedIn,
+		Color:       colorEnabled(),
+		Interactive: isTerminal(os.Stdin),
+		In:          os.Stdin,
+		Out:         os.Stdout,
 	})
 	os.Exit(code)
 	return nil
@@ -97,7 +98,13 @@ func colorEnabled() bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}
-	fi, err := os.Stdout.Stat()
+	return isTerminal(os.Stdout)
+}
+
+// isTerminal reports whether f is a character device (a real terminal), so we
+// don't auto-confirm a real order on piped/redirected stdin or colourize a pipe.
+func isTerminal(f *os.File) bool {
+	fi, err := f.Stat()
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 

@@ -25,12 +25,13 @@ type Backend interface {
 // Deps carries everything a command needs. In/Out default to os.Stdin/os.Stdout
 // in main; tests inject buffers. Armed mirrors swiggy.LiveOrdersEnabled().
 type Deps struct {
-	Backend  Backend
-	Armed    bool
-	SignedIn bool
-	Color    bool // emit ANSI colour (set when Out is a terminal; off in tests/pipes)
-	In       io.Reader
-	Out      io.Writer
+	Backend     Backend
+	Armed       bool
+	SignedIn    bool
+	Color       bool // emit ANSI colour (set when Out is a terminal; off in tests/pipes)
+	Interactive bool // stdin is a terminal — required to confirm a real order placement
+	In          io.Reader
+	Out         io.Writer
 }
 
 // Dispatch routes a headless command and returns a process exit code.

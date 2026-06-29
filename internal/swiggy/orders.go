@@ -51,11 +51,23 @@ func (c *Client) UsualRestaurants(ctx context.Context, addressID string) ([]Rest
 	ranks := rankUsuals(orders, 5)
 	var out []Restaurant
 	for _, r := range ranks {
-		matches, err := c.SearchRestaurants(ctx, addressID, r.name, 0)
-		if err != nil || len(matches) == 0 {
+		// Single page only: we just need the first matching restaurant. A full
+		// searchFill (up to 6 pages) per usual, ~5 usuals fired concurrently with
+		// other launch loads, was a 429 burst (see swiggy-perf memory) — one page
+		// each caps it at ~5 search_restaurants calls.
+		page, err := c.searchRestaurantsPage(ctx, addressID, r.name, 0)
+		if err != nil {
 			continue // unresolvable → drop
 		}
-		out = append(out, matches[0])
+		rests := onlyRestaurants(page)
+		if len(rests) == 0 {
+			continue
+		}
+		r0 := rests[0]
+		if isAd(r0.Name) {
+			r0.Name = stripAd(r0.Name)
+		}
+		out = append(out, r0)
 	}
 	return out, nil
 }

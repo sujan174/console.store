@@ -114,12 +114,33 @@ func WithRetry(maxRetries int, base time.Duration, sleep func(time.Duration)) Op
 // nonIdempotentTools must never be auto-retried — a transient failure may have
 // actually succeeded server-side, so a retry risks a duplicate side effect. Cart
 // writes (update_food_cart) are safe: they SET the cart to a value, so a repeat
-// is idempotent. Reads are always safe. Only order placement is dangerous.
+// is idempotent. Reads are always safe. Order placement is dangerous:
+// place_food_order (Food) and checkout (Instamart) both create a real order.
 var nonIdempotentTools = map[string]bool{
 	"place_food_order": true,
+	"checkout":         true,
 }
 
 func retryableTool(name string) bool { return !nonIdempotentTools[name] }
+
+// backoffWait sleeps `delay` before a retry, honoring ctx cancellation so a
+// quit/superseded request doesn't stall up to the backoff cap. c.sleep stays
+// injectable (tests pass a no-op so they never actually wait); to keep that seam
+// AND interrupt a real time.Sleep, the sleep runs in a goroutine we select on
+// against ctx.Done. A cancelled real sleep finishes on its own (≤ cap) — benign.
+func (c *Client) backoffWait(ctx context.Context, delay time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	done := make(chan struct{})
+	go func() { c.sleep(delay); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 // backoffDelay returns the wait before retry attempt n (0-based): the server's
 // Retry-After when given, else retryBase * 2^n plus up to 50% jitter, capped at
@@ -231,12 +252,9 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 			if swiggyDebugOn() {
 				log.Printf("SWIGGY-DEBUG ↻ tool=%s status=%d retry %d/%d in %s", name, res.Status, attempt+1, c.maxRetries, delay)
 			}
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			default:
+			if err := c.backoffWait(ctx, delay); err != nil {
+				return nil, err // ctx cancelled mid-backoff — don't stall
 			}
-			c.sleep(delay)
 			continue
 		}
 		return nil, e

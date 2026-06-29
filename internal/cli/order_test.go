@@ -48,7 +48,7 @@ func TestOrderArmedPlacesAfterConfirm(t *testing.T) {
 	var out bytes.Buffer
 	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999", ETA: "30-40 mins"}}
 	code := Dispatch([]string{"order", "breakfast"}, Deps{
-		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
 	})
 	if code != 0 {
 		t.Fatalf("order exit = %d:\n%s", code, out.String())
@@ -58,6 +58,28 @@ func TestOrderArmedPlacesAfterConfirm(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "999") {
 		t.Fatalf("should print the placed order id:\n%s", out.String())
+	}
+}
+
+// SAFETY: an armed order with NON-interactive stdin (piped/EOF, e.g.
+// `echo | store order x`) must NOT auto-place — prompt() returns "" on EOF and
+// would otherwise look like a confirming Enter.
+func TestOrderArmedNonInteractiveDoesNotPlace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, basePreset("breakfast"))
+	var out bytes.Buffer
+	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
+	code := Dispatch([]string{"order", "breakfast"}, Deps{
+		SignedIn: true, Armed: true, Interactive: false, Out: &out, In: strings.NewReader(""), Backend: be,
+	})
+	if be.placeN != 0 {
+		t.Fatalf("non-interactive armed order must NOT place; placed %d", be.placeN)
+	}
+	if code == 0 {
+		t.Fatal("non-interactive armed order should return non-zero")
+	}
+	if !strings.Contains(strings.ToLower(out.String()), "interactive terminal") {
+		t.Fatalf("should explain why it didn't place:\n%s", out.String())
 	}
 }
 
@@ -86,7 +108,7 @@ func TestOrderSoldOutAborts(t *testing.T) {
 	soldOut.Lines[0].Available = false
 	be := &fakeBackend{cart: soldOut}
 	code := Dispatch([]string{"order", "breakfast"}, Deps{
-		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
 	})
 	if code == 0 {
 		t.Fatal("a sold-out line must abort the order")
@@ -117,7 +139,7 @@ func TestOrderMultiPresetListsWithoutIndex(t *testing.T) {
 	var out bytes.Buffer
 	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
 	code := Dispatch([]string{"order", "breakfast"}, Deps{
-		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
 	})
 	if code != 0 {
 		t.Fatalf("listing exit = %d:\n%s", code, out.String())
@@ -142,7 +164,7 @@ func TestOrderInteractivePick(t *testing.T) {
 	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
 	// type "2" to pick, then Enter to confirm the order.
 	code := Dispatch([]string{"order", "breakfast"}, Deps{
-		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("2\n\n"), Backend: be,
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("2\n\n"), Backend: be,
 	})
 	if code != 0 {
 		t.Fatalf("interactive pick exit = %d:\n%s", code, out.String())
@@ -162,7 +184,7 @@ func TestOrderIndexPicksDirectly(t *testing.T) {
 	var out bytes.Buffer
 	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
 	code := Dispatch([]string{"order", "breakfast", "2"}, Deps{
-		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
 	})
 	if code != 0 {
 		t.Fatalf("indexed order exit = %d:\n%s", code, out.String())
@@ -182,7 +204,7 @@ func TestOrderIndexOutOfRange(t *testing.T) {
 	var out bytes.Buffer
 	be := &fakeBackend{cart: availCart()}
 	code := Dispatch([]string{"order", "breakfast", "5"}, Deps{
-		SignedIn: true, Armed: true, Out: &out, Backend: be,
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, Backend: be,
 	})
 	if code == 0 || be.placeN != 0 {
 		t.Fatalf("out-of-range index must not place; exit=%d placeN=%d", code, be.placeN)
@@ -197,7 +219,7 @@ func TestOrderArmedWritesActiveOrder(t *testing.T) {
 	var out bytes.Buffer
 	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "777", ETA: "35-45 mins", Total: 300}}
 	code := Dispatch([]string{"order", "breakfast"}, Deps{
-		SignedIn: true, Armed: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
 	})
 	if code != 0 {
 		t.Fatalf("order exit = %d:\n%s", code, out.String())

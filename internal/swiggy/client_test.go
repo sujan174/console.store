@@ -123,3 +123,19 @@ func TestCallToolNeverRetriesOrderPlacement(t *testing.T) {
 		t.Fatalf("place_food_order must be attempted exactly once, got %d", got)
 	}
 }
+
+// checkout (Instamart order placement) must also never auto-retry — same
+// duplicate-order risk as place_food_order.
+func TestCallToolNeverRetriesCheckout(t *testing.T) {
+	if retryableTool("checkout") || retryableTool("place_food_order") {
+		t.Fatal("checkout and place_food_order must be non-retryable")
+	}
+	srv, count := rateLimitServer(t, 99) // always 429
+	c := NewClient(srv.URL, StaticToken("tok"),
+		WithHTTPClient(srv.Client()),
+		WithRetry(4, time.Millisecond, func(time.Duration) {}))
+	_, _ = c.CallTool(context.Background(), "checkout", nil)
+	if got := count(); got != 1 {
+		t.Fatalf("checkout must be attempted exactly once, got %d", got)
+	}
+}

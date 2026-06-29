@@ -94,6 +94,15 @@ func placePreset(d Deps, p localstore.Preset, st style) int {
 		return 0
 	}
 
+	if !d.Interactive {
+		// stdin isn't a terminal (piped/redirected/EOF). prompt() would return ""
+		// immediately and look like a confirming Enter, so we'd place a REAL order
+		// with no human in the loop. Refuse instead.
+		fmt.Fprintf(d.Out, "\n%s\n%s\n", st.warn("not placed — placing an order needs an interactive terminal."),
+			st.dim(fmt.Sprintf("run  store order %s  directly in your shell to confirm and place.", p.Name)))
+		return 1
+	}
+
 	fmt.Fprintf(d.Out, "\n%s %s\n", st.ok("press Enter to place this order"), st.dim("· Ctrl-C to cancel"))
 	_ = prompt(d)                                // any line (incl. empty Enter) confirms; Ctrl-C kills the process
 	order, err := d.Backend.PlaceOrder(p.AddrID) // never retried
