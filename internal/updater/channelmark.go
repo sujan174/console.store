@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"console.store/internal/version"
+	"consolestore/internal/version"
 )
 
 // Mark records the channel the user opted into and (for alpha) their access

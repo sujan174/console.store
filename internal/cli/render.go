@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"console.store/internal/broker/api"
+	"consolestore/internal/broker/api"
 )
 
 // billWidth is the column the ₹ amounts are right-aligned to.

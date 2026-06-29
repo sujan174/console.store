@@ -23,19 +23,19 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/auth"
-	"console.store/internal/broker"
-	"console.store/internal/catalog"
-	swiggysnap "console.store/internal/catalog/swiggy"
-	"console.store/internal/cli"
-	"console.store/internal/config"
-	"console.store/internal/localstore"
-	"console.store/internal/swiggy"
-	consoletui "console.store/internal/tui"
-	"console.store/internal/tui/datasource"
-	"console.store/internal/tui/render"
-	"console.store/internal/tui/theme"
-	"console.store/internal/updater"
+	"consolestore/internal/auth"
+	"consolestore/internal/broker"
+	"consolestore/internal/catalog"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/cli"
+	"consolestore/internal/config"
+	"consolestore/internal/localstore"
+	"consolestore/internal/swiggy"
+	consoletui "consolestore/internal/tui"
+	"consolestore/internal/tui/datasource"
+	"consolestore/internal/tui/render"
+	"consolestore/internal/tui/theme"
+	"consolestore/internal/updater"
 )
 
 func main() {

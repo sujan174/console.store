@@ -4,13 +4,13 @@ import (
 	"errors"
 	"testing"
 
-	swiggysnap "console.store/internal/catalog/swiggy"
+	swiggysnap "consolestore/internal/catalog/swiggy"
 
-	"console.store/internal/broker/api"
-	"console.store/internal/catalog"
-	"console.store/internal/tui/datasource"
-	"console.store/internal/tui/render"
-	"console.store/internal/tui/screens"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/catalog"
+	"consolestore/internal/tui/datasource"
+	"consolestore/internal/tui/render"
+	"consolestore/internal/tui/screens"
 )
 
 // liveModel builds a live Model with a seeded (confirmed) one-item cart.

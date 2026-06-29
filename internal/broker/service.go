@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"console.store/internal/auth"
-	"console.store/internal/broker/api"
-	"console.store/internal/swiggy"
+	"consolestore/internal/auth"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/swiggy"
 )
 
 type TokenStore interface {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/tui/screens"
+	"consolestore/internal/tui/screens"
 )
 
 func TestSplashDecodePhase(t *testing.T) {

@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/catalog"
-	"console.store/internal/tui/render"
-	"console.store/internal/tui/screens"
+	"consolestore/internal/catalog"
+	"consolestore/internal/tui/render"
+	"consolestore/internal/tui/screens"
 )
 
 func variant() catalog.OptionGroup {

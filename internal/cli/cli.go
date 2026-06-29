@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"console.store/internal/broker/api"
+	"consolestore/internal/broker/api"
 )
 
 type Backend interface {

@@ -5,9 +5,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	swiggysnap "console.store/internal/catalog/swiggy"
-	"console.store/internal/config"
-	"console.store/internal/tui/render"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/config"
+	"consolestore/internal/tui/render"
 )
 
 // searchModel returns a live Model parked in search mode with the given query

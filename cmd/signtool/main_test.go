@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"console.store/internal/updater"
+	"consolestore/internal/updater"
 )
 
 func TestAssetsFromChecksums(t *testing.T) {

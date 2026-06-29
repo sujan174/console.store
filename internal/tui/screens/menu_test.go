@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/catalog"
-	"console.store/internal/catalog/mem"
+	"consolestore/internal/catalog"
+	"consolestore/internal/catalog/mem"
 )
 
 func TestMenuHeaderShowsAddressAndCart(t *testing.T) {

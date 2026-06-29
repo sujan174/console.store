@@ -3,8 +3,8 @@ package datasource
 import "testing"
 
 import (
-	"console.store/internal/broker/api"
-	"console.store/internal/catalog"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/catalog"
 )
 
 // toPlaces drops restaurants Swiggy flags as unavailable (closed/unserviceable)

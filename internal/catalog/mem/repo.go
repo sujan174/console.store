@@ -3,7 +3,7 @@ package mem
 import (
 	"fmt"
 
-	"console.store/internal/catalog"
+	"consolestore/internal/catalog"
 )
 
 // Repo is the in-memory curated catalogue. It implements catalog.Repository.

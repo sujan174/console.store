@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"console.store/internal/auth"
-	"console.store/internal/broker/api"
+	"consolestore/internal/auth"
+	"consolestore/internal/broker/api"
 )
 
 type fakeStore struct {

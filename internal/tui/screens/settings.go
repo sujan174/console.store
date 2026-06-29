@@ -1,6 +1,6 @@
 package screens
 
-import "console.store/internal/tui/theme"
+import "consolestore/internal/tui/theme"
 
 // settingsItems are the rows in the Settings modal. Only Disconnect today; the
 // slice is the seam for future settings.

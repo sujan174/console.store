@@ -10,10 +10,10 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
-      - -X console.store/internal/swiggy.liveOrdersDefault=1
-      - -X console.store/internal/version.Version={{ .Tag }}
-      - -X console.store/internal/version.Channel={{ if .Prerelease }}{{ if contains .Prerelease "alpha" }}alpha{{ else }}beta{{ end }}{{ else }}stable{{ end }}
-      - -X console.store/internal/version.Commit={{ .ShortCommit }}
+      - -X consolestore/internal/swiggy.liveOrdersDefault=1
+      - -X consolestore/internal/version.Version={{ .Tag }}
+      - -X consolestore/internal/version.Channel={{ if .Prerelease }}{{ if contains .Prerelease "alpha" }}alpha{{ else }}beta{{ end }}{{ else }}stable{{ end }}
+      - -X consolestore/internal/version.Commit={{ .ShortCommit }}
 
 # Flat, predictable asset names: store_<os>_<arch>[.exe] — matches updater.assetName().
 archives:

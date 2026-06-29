@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"console.store/internal/broker/api"
-	"console.store/internal/catalog"
-	swiggysnap "console.store/internal/catalog/swiggy"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/catalog"
+	swiggysnap "consolestore/internal/catalog/swiggy"
 )
 
 type fakeBackend struct {

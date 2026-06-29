@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"console.store/internal/broker/api"
+	"consolestore/internal/broker/api"
 )
 
 // fakeService records the accountID it was called with and returns canned data.

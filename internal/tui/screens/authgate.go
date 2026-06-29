@@ -1,7 +1,7 @@
 package screens
 
 import (
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/theme"
 )
 
 // AuthGate is the connect-your-Swiggy-account screen shown when there is no

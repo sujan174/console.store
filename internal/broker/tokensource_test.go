@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"console.store/internal/auth"
-	"console.store/internal/swiggy"
+	"consolestore/internal/auth"
+	"consolestore/internal/swiggy"
 )
 
 type fakeTokStore struct {

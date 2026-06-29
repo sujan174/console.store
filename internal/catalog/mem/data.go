@@ -1,6 +1,6 @@
 package mem
 
-import "console.store/internal/catalog"
+import "consolestore/internal/catalog"
 
 // coffeeAddOns / foodAddOns are reusable customization sets shared across items
 // (read-only; the selection state lives per-order, not on the catalog). Items

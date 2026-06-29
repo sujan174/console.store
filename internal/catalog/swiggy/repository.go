@@ -1,6 +1,6 @@
 package swiggy
 
-import "console.store/internal/catalog"
+import "consolestore/internal/catalog"
 
 // Repository implements catalog.Repository over a Snapshot. Reads are sync and
 // never do I/O; a cache miss returns the zero value (empty list / ok=false),

@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"console.store/internal/updater"
+	"consolestore/internal/updater"
 )
 
 func main() {

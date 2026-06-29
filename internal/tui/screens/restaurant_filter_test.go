@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/catalog"
-	"console.store/internal/tui/screens"
+	"consolestore/internal/catalog"
+	"consolestore/internal/tui/screens"
 )
 
 // manyCatMenu builds a restaurant with many categories so the top-nav bar must

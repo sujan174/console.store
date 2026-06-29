@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/catalog"
-	"console.store/internal/tui/screens"
+	"consolestore/internal/catalog"
+	"consolestore/internal/tui/screens"
 )
 
 func custItem() catalog.Item {

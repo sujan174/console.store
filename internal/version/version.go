@@ -7,9 +7,9 @@ import "fmt"
 
 // Stamped by GoReleaser / scripts/build.sh:
 //
-//	-X console.store/internal/version.Version=v0.1.0
-//	-X console.store/internal/version.Channel=stable
-//	-X console.store/internal/version.Commit=<sha>
+//	-X consolestore/internal/version.Version=v0.1.0
+//	-X consolestore/internal/version.Channel=stable
+//	-X consolestore/internal/version.Commit=<sha>
 var (
 	Version = "dev"
 	Channel = "stable"
@@ -21,7 +21,7 @@ func IsDev() bool { return Version == "dev" }
 
 // String renders a one-line build identity for `store version`.
 func String() string {
-	s := fmt.Sprintf("console.store %s (%s)", Version, Channel)
+	s := fmt.Sprintf("consolestore %s (%s)", Version, Channel)
 	if Commit != "" {
 		s += " " + Commit
 	}

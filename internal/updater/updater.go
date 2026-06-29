@@ -12,7 +12,7 @@ import (
 	"runtime"
 	"time"
 
-	"console.store/internal/version"
+	"consolestore/internal/version"
 )
 
 const defaultBase = "https://consolestore.in"
@@ -94,19 +94,19 @@ func Run(ctx context.Context, o Options) {
 		return // no build for this platform
 	}
 
-	fmt.Fprintf(o.Out, "console.store ↑ updating %s → %s\n", o.Current, pl.Version)
+	fmt.Fprintf(o.Out, "consolestore ↑ updating %s → %s\n", o.Current, pl.Version)
 	bin, err := o.download(ctx)
 	if err != nil {
-		fmt.Fprintf(o.Out, "console.store: update failed, staying on %s\n", o.Current)
+		fmt.Fprintf(o.Out, "consolestore: update failed, staying on %s\n", o.Current)
 		return
 	}
 	got := sha256.Sum256(bin)
 	if hex.EncodeToString(got[:]) != wantSum {
-		fmt.Fprintln(o.Out, "console.store: update checksum mismatch — skipping")
+		fmt.Fprintln(o.Out, "consolestore: update checksum mismatch — skipping")
 		return
 	}
 	if err := o.swap(o.ExePath, bin, 0o755); err != nil {
-		fmt.Fprintf(o.Out, "console.store: update failed, staying on %s\n", o.Current)
+		fmt.Fprintf(o.Out, "consolestore: update failed, staying on %s\n", o.Current)
 		return
 	}
 	_ = o.reexec(o.ExePath)

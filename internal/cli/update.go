@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"console.store/internal/updater"
-	"console.store/internal/version"
+	"consolestore/internal/updater"
+	"consolestore/internal/version"
 )
 
 func runVersion(d Deps) int {

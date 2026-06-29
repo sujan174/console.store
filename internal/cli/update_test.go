@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"console.store/internal/updater"
+	"consolestore/internal/updater"
 )
 
 func TestVersionCommand(t *testing.T) {
@@ -14,7 +14,7 @@ func TestVersionCommand(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
-	if !strings.Contains(out.String(), "console.store") {
+	if !strings.Contains(out.String(), "consolestore") {
 		t.Fatalf("version output = %q", out.String())
 	}
 }

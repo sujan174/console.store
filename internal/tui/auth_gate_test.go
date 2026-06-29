@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	swiggysnap "console.store/internal/catalog/swiggy"
-	"console.store/internal/tui/render"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/tui/render"
 )
 
 type fakePoller struct{ ok bool }

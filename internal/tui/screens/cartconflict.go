@@ -1,7 +1,7 @@
 package screens
 
 import (
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/theme"
 )
 
 // CartConflict is the modal shown when the user tries to add an item from a

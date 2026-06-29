@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/catalog"
-	"console.store/internal/tui/components"
-	"console.store/internal/tui/theme"
+	"consolestore/internal/catalog"
+	"consolestore/internal/tui/components"
+	"consolestore/internal/tui/theme"
 )
 
 // Bill constants mirror the design (script line 606: toPay = item + 29 − 50).

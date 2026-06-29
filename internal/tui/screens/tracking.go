@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	"console.store/internal/tui/components"
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/components"
+	"consolestore/internal/tui/theme"
 )
 
 // Tracking is the live order-tracking screen: an animated route map, a step

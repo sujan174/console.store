@@ -8,7 +8,7 @@ import (
 
 	xterm "github.com/charmbracelet/x/term"
 
-	"console.store/internal/localstore"
+	"consolestore/internal/localstore"
 )
 
 // pickPreset lets the user choose among same-named presets. On a real terminal

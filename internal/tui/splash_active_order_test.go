@@ -6,11 +6,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/broker/api"
-	"console.store/internal/catalog"
-	swiggysnap "console.store/internal/catalog/swiggy"
-	"console.store/internal/tui/datasource"
-	"console.store/internal/tui/render"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/catalog"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/tui/datasource"
+	"consolestore/internal/tui/render"
 )
 
 // Entering the Start Screen fires a fresh active-order check so the delivery

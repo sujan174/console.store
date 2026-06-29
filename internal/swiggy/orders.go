@@ -73,7 +73,7 @@ func (c *Client) UsualRestaurants(ctx context.Context, addressID string) ([]Rest
 }
 
 // liveOrdersDefault is the build-time arming default, stamped to "1" in release
-// builds via -ldflags "-X console.store/internal/swiggy.liveOrdersDefault=1".
+// builds via -ldflags "-X consolestore/internal/swiggy.liveOrdersDefault=1".
 // Dev builds leave it "0", so no real order can fire without CONSOLE_LIVE_ORDERS=1.
 var liveOrdersDefault = "0"
 

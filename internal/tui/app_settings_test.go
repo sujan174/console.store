@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	swiggysnap "console.store/internal/catalog/swiggy"
-	"console.store/internal/tui/render"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/tui/render"
 )
 
 // From the splash, navigating to "settings" + Enter opens the settings modal;

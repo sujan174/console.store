@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	swiggysnap "console.store/internal/catalog/swiggy"
+	swiggysnap "consolestore/internal/catalog/swiggy"
 
-	"console.store/internal/catalog"
-	"console.store/internal/localstore"
-	"console.store/internal/tui/render"
-	"console.store/internal/tui/screens"
+	"consolestore/internal/catalog"
+	"consolestore/internal/localstore"
+	"consolestore/internal/tui/render"
+	"consolestore/internal/tui/screens"
 )
 
 // Regression: a foreign cart that was later emptied leaves cartForeign stuck

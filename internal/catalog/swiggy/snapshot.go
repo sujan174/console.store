@@ -7,7 +7,7 @@ package swiggy
 import (
 	"sync"
 
-	"console.store/internal/catalog"
+	"consolestore/internal/catalog"
 )
 
 type placeKey struct {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/theme"
 )
 
 // Rail is the left navigation column on the live Restaurants browse: a 🔍 Search

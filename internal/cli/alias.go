@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"console.store/internal/localstore"
+	"consolestore/internal/localstore"
 )
 
 // runAlias handles `store alias list` and `store alias rm <name> [n]`. (Preset

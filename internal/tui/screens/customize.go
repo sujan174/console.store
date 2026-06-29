@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"console.store/internal/catalog"
-	"console.store/internal/tui/theme"
+	"consolestore/internal/catalog"
+	"consolestore/internal/tui/theme"
 )
 
 // Customize is the modal shown when adding an item that has add-ons. It has two

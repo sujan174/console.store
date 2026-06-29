@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"console.store/internal/swiggy"
+	"consolestore/internal/swiggy"
 )
 
 // refreshSkew refreshes the access token a minute before it actually expires,

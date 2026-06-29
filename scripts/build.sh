@@ -21,8 +21,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="${BIN:-$HOME/.local/bin}"
 COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-VER_FLAGS="-X console.store/internal/version.Version=dev -X console.store/internal/version.Channel=stable -X console.store/internal/version.Commit=$COMMIT"
-ARM_FLAG="-X console.store/internal/swiggy.liveOrdersDefault=1 $VER_FLAGS"
+VER_FLAGS="-X consolestore/internal/version.Version=dev -X consolestore/internal/version.Channel=stable -X consolestore/internal/version.Commit=$COMMIT"
+ARM_FLAG="-X consolestore/internal/swiggy.liveOrdersDefault=1 $VER_FLAGS"
 
 mkdir -p "$BIN"
 cd "$ROOT"

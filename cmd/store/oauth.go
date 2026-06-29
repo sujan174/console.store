@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"console.store/internal/auth"
-	"console.store/internal/localstore"
+	"consolestore/internal/auth"
+	"consolestore/internal/localstore"
 )
 
 const oauthScope = "mcp:tools"

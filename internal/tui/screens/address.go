@@ -4,9 +4,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"console.store/internal/catalog"
-	"console.store/internal/tui/components"
-	"console.store/internal/tui/theme"
+	"consolestore/internal/catalog"
+	"consolestore/internal/tui/components"
+	"consolestore/internal/tui/theme"
 )
 
 type Address struct {

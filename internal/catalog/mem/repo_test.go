@@ -3,7 +3,7 @@ package mem
 import (
 	"testing"
 
-	"console.store/internal/catalog"
+	"consolestore/internal/catalog"
 )
 
 func addrByID(t *testing.T, r *Repo, id string) catalog.Address {

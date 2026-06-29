@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
 
-	"console.store/internal/tui/render"
+	"consolestore/internal/tui/render"
 )
 
 func TestFlowMenuToCart(t *testing.T) {

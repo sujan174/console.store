@@ -8,14 +8,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"console.store/internal/broker/api"
-	"console.store/internal/catalog"
-	swiggysnap "console.store/internal/catalog/swiggy"
-	"console.store/internal/config"
-	"console.store/internal/localstore"
-	"console.store/internal/tui/datasource"
-	"console.store/internal/tui/render"
-	"console.store/internal/tui/screens"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/catalog"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/config"
+	"consolestore/internal/localstore"
+	"consolestore/internal/tui/datasource"
+	"consolestore/internal/tui/render"
+	"consolestore/internal/tui/screens"
 )
 
 type liveFake struct {

@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"console.store/internal/catalog"
-	"console.store/internal/tui/theme"
+	"consolestore/internal/catalog"
+	"consolestore/internal/tui/theme"
 )
 
 // Wizard is the live, multi-step customize flow for items whose add-on groups

@@ -5,8 +5,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"console.store/internal/tui/render"
-	"console.store/internal/tui/theme"
+	"consolestore/internal/tui/render"
+	"consolestore/internal/tui/theme"
 )
 
 // HomeItems returns the ordered list of home menu items depending on whether an

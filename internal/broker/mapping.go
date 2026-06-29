@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"console.store/internal/broker/api"
-	"console.store/internal/swiggy"
+	"consolestore/internal/broker/api"
+	"consolestore/internal/swiggy"
 )
 
 func mapAddresses(in []swiggy.Address) []api.Address {
