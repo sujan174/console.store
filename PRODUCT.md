@@ -102,7 +102,7 @@ A real little prompt with full line editing: type freely (spaces included), move
 ## Safety
 
 Ordering places **real money orders**, so it's gated:
-- The shipped **`store`** binary is armed and will place real orders on confirm. **`safestore`** is a browse-and-cart-only build that can never place an order — it'll show you the preset and bill, then stop.
+- The shipped **`store`** binary (installed via `consolestore.in/install`, auto-updating) is armed and will place real orders on confirm. The local dev build **`localsafestore`** is a browse-and-cart-only build that can never place an order — it'll show you the preset and bill, then stop (`localstore` is the armed local build).
 - Even the armed build respects `CONSOLE_LIVE_ORDERS`; plain `go run`/`go build` stays disarmed.
 - The place step always needs an explicit Enter — there's no fire-and-forget. Order placement is never silently retried (a network blip could otherwise double-order).
 - Your Swiggy token never leaves the OS keyring.

@@ -92,7 +92,7 @@ func TestOrderDisarmedNeverPlaces(t *testing.T) {
 		SignedIn: true, Armed: false, Out: &out, In: strings.NewReader("\n"), Backend: be,
 	})
 	if be.placeN != 0 {
-		t.Fatal("disarmed (safestore) must NEVER place an order")
+		t.Fatal("disarmed (localsafestore) must NEVER place an order")
 	}
 	if !strings.Contains(strings.ToLower(out.String()), "browse-only") {
 		t.Fatalf("disarmed should explain it didn't place:\n%s", out.String())

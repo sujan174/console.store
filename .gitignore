@@ -40,6 +40,8 @@ Thumbs.db
 # build artifacts (native binaries)
 /store
 /safestore
+/localstore
+/localsafestore
 
 # runtime + debug-capture logs — never publish (may contain addresses/order data)
 *.log

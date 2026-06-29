@@ -490,7 +490,7 @@ func TestPlaceSavesActiveOrderAndConfirms(t *testing.T) {
 }
 
 // TestTrackingPollSkippedWhenBackendNil verifies that the onTick auto-advance
-// from scrConfirm to scrTracking still happens when backend is nil (mock/safestore),
+// from scrConfirm to scrTracking still happens when backend is nil (mock/localsafestore),
 // but does NOT call PollTrackingCmd (which would nil-pointer panic).
 func TestTrackingPollSkippedWhenBackendNil(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
