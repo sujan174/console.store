@@ -44,6 +44,42 @@ func TestActiveOrderDiscoveredOnSplashEntry(t *testing.T) {
 	}
 }
 
+// The splash track-order button's ETA must reflect the LIVE ETA from
+// track_food_order, not the static placement estimate. Discovery on splash entry
+// fires a tracking poll; the poll updates the button label.
+func TestSplashTrackButtonShowsLiveETA(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	snap := swiggysnap.NewSnapshot()
+	be := &liveFake{orders: []api.Order{
+		{ID: "555", Restaurant: "Blue Tokai", Status: "Out for delivery", ETA: "30-40 mins", Total: 386},
+	}}
+	m := New(render.Caps{}, WithLiveBackend(be, snap, "local", ""))
+	m.addr = catalog.Address{ID: "a1", Line: "Home"}
+
+	out, cmd := m.Update(datasource.ActiveOrdersLoadedMsg{Orders: be.orders})
+	m = out.(Model)
+	if !m.hasActiveOrder {
+		t.Fatal("order should be discovered on splash entry")
+	}
+	if cmd == nil {
+		t.Fatal("discovery should fire a tracking poll to fetch the live ETA")
+	}
+
+	// The live tracking poll lands with a fresher ETA than the placement estimate.
+	out, _ = m.Update(datasource.TrackingPolledMsg{Tracking: api.Tracking{
+		OrderID: "555", Status: "Out for delivery", ETA: "11 mins", Active: true,
+	}})
+	m = out.(Model)
+
+	v := m.splash.WithDecode(99).View()
+	if !strings.Contains(v, "11 mins") {
+		t.Fatalf("splash track button should show the live ETA:\n%s", v)
+	}
+	if strings.Contains(v, "~40 min") {
+		t.Fatalf("splash should show the live ETA, not the static estimate:\n%s", v)
+	}
+}
+
 // No live order on the account → the splash stays clean (no track button), and
 // we don't fabricate one.
 func TestNoActiveOrderKeepsSplashClean(t *testing.T) {
