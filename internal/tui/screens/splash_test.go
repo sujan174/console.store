@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"consolestore/internal/tui/screens"
+	"consolestore/internal/version"
 )
 
 func TestSplashDecodePhase(t *testing.T) {
@@ -24,8 +25,11 @@ func TestSplashLogoPhase(t *testing.T) {
 	if !strings.Contains(v, "enter store") {
 		t.Errorf("settled splash should show the enter prompt:\n%s", v)
 	}
-	if !strings.Contains(v, "ssh ") || !strings.Contains(v, "consolestore.in") {
-		t.Errorf("settled splash should show the ssh prompt line:\n%s", v)
+	if !strings.Contains(v, "~ % ") || !strings.Contains(v, version.Version) {
+		t.Errorf("settled splash should show the prompt line with version:\n%s", v)
+	}
+	if strings.Contains(v, "ssh") {
+		t.Errorf("splash must not mention ssh (feature dropped):\n%s", v)
 	}
 	if !strings.Contains(v, "coffee · food · quick snacks") {
 		t.Errorf("settled splash should show the section subtitle:\n%s", v)

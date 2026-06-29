@@ -2897,7 +2897,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // statusHints rotate in the status bar (design line 925).
-var statusHints = []string{"type : for commands", "247 devs online", "DEVFRIDAY −₹50", "esc esc · home", "ssh consolestore.in"}
+var statusHints = []string{"type : for commands", "247 devs online", "DEVFRIDAY −₹50", "esc esc · home", "consolestore.in"}
 
 // screenLabel maps the current screen to the status-bar label (design line 836).
 func (m Model) screenLabel() string {

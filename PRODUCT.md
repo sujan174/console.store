@@ -1,6 +1,6 @@
 # consolestore — Product
 
-A **terminal-native food ordering shop**. You run one binary, `store`, and order real food through Swiggy — without leaving your shell. It looks and feels like a remote dev session (Tokyo Night, an `ssh consolestore.in` prompt, a `:` command palette), but every order is a real Swiggy order delivered to your door.
+A **terminal-native food ordering shop**. You run one binary, `store`, and order real food through Swiggy — without leaving your shell. It looks and feels like a terminal session (Tokyo Night, a `~ % store` shell prompt, a `:` command palette), but every order is a real Swiggy order delivered to your door.
 
 Two ways to use it:
 - **`store`** (no args) → a full interactive TUI for browsing, customizing, and ordering.

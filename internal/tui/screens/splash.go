@@ -186,12 +186,12 @@ func storeBlock(caps render.Caps, consoleW int) []string {
 	return rows
 }
 
-// sshLine is the top prompt — the command the user just "ran" to arrive here,
+// promptLine is the top prompt — the command the user just "ran" to arrive here,
 // with the running build's version as a trailing shell comment so it's visible
-// on the start screen (e.g. "~ % ssh consolestore.in   # v0.1.0-alpha.3 · alpha").
-func sshLine() string {
+// on the start screen (e.g. "~ % store   # v0.1.0-alpha.3 · alpha").
+func promptLine() string {
 	return strings.Repeat(" ", promptIndent) +
-		theme.DimStyle.Render("~ % ssh ") + theme.TextStyle.Render("consolestore.in") +
+		theme.DimStyle.Render("~ % ") + theme.TextStyle.Render("store") +
 		theme.FaintStyle.Render("   # "+version.Version+" · "+version.Channel)
 }
 
@@ -269,7 +269,7 @@ func (s Splash) view() string {
 	if s.decodeStep < render.DecodeSteps && !(s.caps.KittyGraphics && render.KittyFlag) {
 		art := render.DecodeWordmark(s.caps, s.decodeStep, s.frame)
 		artLines := strings.Split(strings.TrimRight(art, "\n"), "\n")
-		lines := []string{sshLine(), "", ""}
+		lines := []string{promptLine(), "", ""}
 		for _, l := range artLines {
 			lines = append(lines, ind+l)
 		}
@@ -312,7 +312,7 @@ func (s Splash) view() string {
 	// it keeps it clear of CONSOLE.
 	box := phraseBox(s.phrase, s.frame, blockWidth(logoLines))
 
-	lines := []string{sshLine(), ""}
+	lines := []string{promptLine(), ""}
 	if len(box) > 0 {
 		lines = append(lines, box...)
 	}

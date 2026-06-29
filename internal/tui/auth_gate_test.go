@@ -26,9 +26,9 @@ func TestAuthGateViewNative(t *testing.T) {
 	m.w, m.h = 80, 24
 	m.decodeStep = render.DecodeSteps // settle the boot banner so the button shows
 	v := m.View()
-	// The login gate IS the start screen: same ssh banner, but a single
-	// "connect swiggy" button over a waiting spinner — no menu, no raw URL.
-	for _, want := range []string{"consolestore.in", "connect swiggy", "waiting for sign-in"} {
+	// The login gate IS the start screen: same boot banner (the ~ % store
+	// prompt), but a single "connect swiggy" button over a waiting spinner.
+	for _, want := range []string{"~ % store", "connect swiggy", "waiting for sign-in"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("gate view missing %q\n%s", want, v)
 		}

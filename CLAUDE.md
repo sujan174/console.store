@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `consolestore` — a **terminal-native** food/snack ordering shop, Tokyo Night themed. Run the `store` binary with no args and you get a `bubbletea` TUI that brokers real orders through **Swiggy's Food MCP API**. Run it with a subcommand (`store status`, `store order <name>`, `store alias …`, `store help`) and it acts as a **headless CLI** — plain text, no TUI. First run does a one-time browser authorize (loopback OAuth); the token lives in the OS keyring. The whole app runs **in-process** — there is no server and no database.
 
-> The "ssh consolestore.in" wordmark on the splash is a deliberate aesthetic (the app reads like a remote shell session). It is NOT a real SSH server — don't add one, a socket broker, or a database. Everything runs in one process.
+> The splash reads like a terminal session (a `~ % store` shell prompt, Tokyo Night). There is NO ssh feature — it was dropped; don't reintroduce an "ssh" prompt/wordmark, and don't add a real SSH server, a socket broker, or a database. Everything runs in one process.
 
 ## Commands
 
