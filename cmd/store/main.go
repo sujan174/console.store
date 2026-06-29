@@ -35,6 +35,7 @@ import (
 	"console.store/internal/tui/datasource"
 	"console.store/internal/tui/render"
 	"console.store/internal/tui/theme"
+	"console.store/internal/updater"
 )
 
 func main() {
@@ -67,6 +68,14 @@ func run(args []string) error {
 		log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 		log.Printf("=== console.store debug log opened ===")
 	}
+
+	// Self-update: on a stamped (release) build this checks the channel manifest,
+	// and if newer, swaps the binary and re-execs into it — so this very run lands
+	// on the latest version. No-ops on dev builds, when CONSOLE_NO_UPDATE=1, after
+	// a re-exec (CONSOLE_UPDATED=1), or on any network/verify failure. The keyring
+	// token is untouched, so auth survives the swap. `help` already returned above,
+	// so usage stays instant and offline.
+	updater.RunDefault(ctx)
 
 	be, signedIn, launchTUI, err := bootstrap(ctx)
 	if err != nil {
