@@ -64,8 +64,9 @@ func TestVerifyNilKeyReturnsError(t *testing.T) {
 	}
 }
 
-func TestPublicKeyEmptyBeforeKeygen(t *testing.T) {
-	if PublicKey() != nil {
-		t.Fatal("PublicKey() should be nil while signingPubKeyB64 is empty")
+func TestPublicKeyEmbedded(t *testing.T) {
+	pk := PublicKey()
+	if len(pk) != ed25519.PublicKeySize {
+		t.Fatalf("PublicKey() must be a %d-byte ed25519 key, got %d", ed25519.PublicKeySize, len(pk))
 	}
 }
