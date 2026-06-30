@@ -39,6 +39,9 @@ type Config struct {
 	FoodBaseURL string
 	ImBaseURL   string
 	HTTPClient  *http.Client
+	// MinInterval throttles outbound Swiggy calls (one per interval, serialized)
+	// so a launch/nav burst can't trip Swiggy's anomaly detection. 0 = no throttle.
+	MinInterval time.Duration
 }
 
 type Service struct {
@@ -63,7 +66,8 @@ func (s *Service) foodClient(accountID string) *swiggy.Client {
 	}
 	c := swiggy.NewClient(s.cfg.FoodBaseURL,
 		newStoreTokenSource(s.cfg.Store, s.cfg.Refresher, accountID),
-		swiggy.WithHTTPClient(s.cfg.HTTPClient))
+		swiggy.WithHTTPClient(s.cfg.HTTPClient),
+		swiggy.WithMinInterval(s.cfg.MinInterval))
 	s.food[accountID] = c
 	return c
 }

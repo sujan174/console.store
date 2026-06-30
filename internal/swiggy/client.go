@@ -85,6 +85,11 @@ type Client struct {
 	retryBase  time.Duration
 	sleep      func(time.Duration)
 
+	// limiter spaces outbound tool calls so a launch/nav burst can't trip
+	// Swiggy's anomaly detection. nil / interval<=0 = no throttle (the default;
+	// production enables it via WithMinInterval).
+	limiter *rateLimiter
+
 	mu      sync.Mutex
 	session string // cached Mcp-Session-Id; "" until initialized
 }
@@ -107,6 +112,18 @@ func WithRetry(maxRetries int, base time.Duration, sleep func(time.Duration)) Op
 		c.retryBase = base
 		if sleep != nil {
 			c.sleep = sleep
+		}
+	}
+}
+
+// WithMinInterval throttles outbound tool calls to at most one per `d`,
+// serializing concurrent callers so a launch/nav burst can't trip Swiggy's
+// anomaly detection. d<=0 disables it (the default). Production sets this; tests
+// leave it off so they don't sleep.
+func WithMinInterval(d time.Duration) Option {
+	return func(c *Client) {
+		if d > 0 {
+			c.limiter = newRateLimiter(d)
 		}
 	}
 }
@@ -231,6 +248,12 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 	}
 	var res rpcResult
 	for attempt := 0; ; attempt++ {
+		// Throttle: hold this send until the limiter's spaced slot, so a burst of
+		// concurrent calls drains smoothly instead of hammering Swiggy. ctx-aware,
+		// so a quit/superseded request never stalls. No-op unless WithMinInterval.
+		if err := c.limiter.wait(ctx); err != nil {
+			return nil, err
+		}
 		var err error
 		res, err = rpc(ctx, c.http, c.base, bearer, sid, map[string]any{
 			"jsonrpc": "2.0", "id": 2, "method": "tools/call",
