@@ -159,10 +159,25 @@ func TestLiveCartSyncFires(t *testing.T) {
 	m.screen = scrRestaurant
 	m.rest = screens.NewRestaurant(place, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
 
-	// Add an item — in live mode with SwiggyID set, must return a SyncCart cmd.
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("adding item in live mode must return a SyncCart cmd")
+	// Add an item — the sync is debounced, so the add itself returns no cmd but
+	// arms a pending sync. Ticking past the settle window then fires the SyncCart.
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+	if cmd != nil {
+		t.Fatal("adding item must debounce the sync, not fire it immediately")
+	}
+	if !m.cartSyncPending {
+		t.Fatal("adding item in live mode must arm a pending SyncCart")
+	}
+	var synced tea.Cmd
+	for i := 0; i < cartSettleFrames+2 && synced == nil; i++ {
+		m.frame++
+		var c tea.Cmd
+		m, c = m.onTick()
+		synced = c
+	}
+	if synced == nil {
+		t.Fatal("settled debounce must fire the SyncCart cmd in live mode")
 	}
 }
 
@@ -352,8 +367,14 @@ func TestCheckoutIncrementOptimistic(t *testing.T) {
 	if m.cartMutating {
 		t.Fatal("+ is optimistic and must NOT freeze input")
 	}
-	if cmd == nil {
-		t.Fatal("+ must return a sync cmd")
+	// + is optimistic locally but the live sync is DEBOUNCED — it must NOT fire an
+	// update_food_cart per keystroke (that would spray write-tool calls past
+	// Swiggy's rate limit). The sync is armed and fires later, on settle.
+	if cmd != nil {
+		t.Fatal("+ must debounce the sync, not return a cmd immediately")
+	}
+	if !m.cartSyncPending {
+		t.Fatal("+ must arm a pending (debounced) cart sync")
 	}
 }
 

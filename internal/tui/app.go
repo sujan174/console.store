@@ -236,14 +236,22 @@ type Model struct {
 	// settles (railSettleFrames). Enter still loads immediately.
 	railSettlePending bool
 	railSettleFrame   int
-	restInfoOpen      bool // restaurant-info modal ('i' on the browse list) is open
-	addrOpen          bool // address switcher modal ('a') is open
-	settingsOpen      bool // settings modal (from the splash) is open
-	settingsSel       int  // selected row in the settings modal
-	helpOpen          bool // help & controls modal (? / H / :help) is open
-	helpScroll        int  // scroll offset within the help modal
-	homePending       bool // Home's "popular near you" load is in flight (shows "loading…")
-	usualsLoaded      bool // true once LoadUsuals has been fired for the current addr
+	// Cart-sync debounce: rapid qty +/− mutations update the cart optimistically
+	// and arm a pending sync instead of firing an update_food_cart per keystroke,
+	// so mashing +/− can't spray write-tool calls past Swiggy's rate limit. onTick
+	// fires ONE sync once the keys settle (cartSettleFrames). SyncCart sends the
+	// full cart snapshot (idempotent SET), so collapsing many edits into one
+	// trailing sync is correct.
+	cartSyncPending bool
+	cartSyncFrame   int
+	restInfoOpen    bool // restaurant-info modal ('i' on the browse list) is open
+	addrOpen        bool // address switcher modal ('a') is open
+	settingsOpen    bool // settings modal (from the splash) is open
+	settingsSel     int  // selected row in the settings modal
+	helpOpen        bool // help & controls modal (? / H / :help) is open
+	helpScroll      int  // scroll offset within the help modal
+	homePending     bool // Home's "popular near you" load is in flight (shows "loading…")
+	usualsLoaded    bool // true once LoadUsuals has been fired for the current addr
 }
 
 func New(caps render.Caps, opts ...Option) Model {
@@ -500,6 +508,34 @@ func (m *Model) settledRailLoad() tea.Cmd {
 	cmd := m.loadForRail(m.railFromChips())
 	m.menu = m.buildMenu()
 	return cmd
+}
+
+// cartSettleFrames is how long (in 60ms ticks ≈ 360ms) the cart waits after the
+// last qty edit before firing a single live sync — long enough to collapse a
+// burst of +/− mashes into one update_food_cart.
+const cartSettleFrames = 6
+
+// armCartSync defers the cart's live sync until qty edits settle, so mashing
+// +/− collapses to a single update_food_cart instead of one write per keystroke
+// (which would spray calls past Swiggy's 30/min write-tool cap).
+func (m *Model) armCartSync() {
+	m.cartSyncPending = true
+	m.cartSyncFrame = m.frame
+}
+
+// settledCartSync fires the debounced cart sync once the qty edits have rested
+// long enough, then clears the pending flag. It skips firing when a freeze-path
+// reduce is already in flight (cartMutating) — that path serializes and
+// reconciles on its own. liveCartCmd is a no-op in mock mode.
+func (m *Model) settledCartSync() tea.Cmd {
+	if !m.cartSyncPending || m.frame-m.cartSyncFrame < cartSettleFrames {
+		return nil
+	}
+	m.cartSyncPending = false
+	if m.cartMutating {
+		return nil
+	}
+	return m.liveCartCmd()
 }
 
 // homeNearbyQuery is the keyword used to populate Home's "popular near you"
@@ -1276,7 +1312,8 @@ func (m Model) restIncSelected() (tea.Model, tea.Cmd) {
 		return m, nil // a modal will finish the add
 	}
 	m = m.refreshAfterAdd()
-	return m, m.liveCartCmd()
+	m.armCartSync() // debounced: mashing + collapses to one update_food_cart
+	return m, nil
 }
 
 // restDecSelected removes one unit of the focused dish (−), releasing the
@@ -1292,7 +1329,8 @@ func (m Model) restDecSelected() (tea.Model, tea.Cmd) {
 		m.cartSection = ""
 	}
 	m = m.refreshAfterAdd()
-	return m, m.liveCartCmd()
+	m.armCartSync() // debounced: mashing − collapses to one update_food_cart
+	return m, nil
 }
 
 // qtyMap returns current cart quantities keyed by item ID.
@@ -1371,6 +1409,10 @@ func (m Model) onTick() (Model, tea.Cmd) {
 	}
 	// Fire the debounced rail-category load once the cursor has settled.
 	if cmd := m.settledRailLoad(); cmd != nil {
+		return m, cmd
+	}
+	// Fire the debounced cart sync once qty edits have settled.
+	if cmd := m.settledCartSync(); cmd != nil {
 		return m, cmd
 	}
 	return m, nil
@@ -2824,7 +2866,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.lines[i].Qty++
 					m.menu = m.menu.WithCartChip(m.cartChip())
 					m.checkout = m.buildCheckout()
-					return m, m.liveCartCmd()
+					m.armCartSync() // debounced: mashing + collapses to one update_food_cart
+					return m, nil
 				}
 				return m, nil
 			case "-", "_", "left", "h":
@@ -2865,6 +2908,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.live && !m.placingOrder {
 					m.placingOrder = true
 					m.orderErr = ""
+					m.cartSyncPending = false // the Sequence syncs final lines; no trailing debounce after placing
 					return m, tea.Sequence(m.liveSyncCart(), datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID))
 				}
 				if !m.live {

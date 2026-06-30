@@ -299,8 +299,10 @@ func envOr(key, def string) string {
 }
 
 // swiggyMinInterval is the minimum spacing between outbound Swiggy calls.
-// Default 200ms (≈5/s, serialized) — gentle enough to stay under Swiggy's
-// anomaly detection while keeping the UI responsive. Override with
+// Default 500ms (≈2/s, serialized) — matches Swiggy's documented steady-state
+// ceiling of 120 requests/minute per user (Builders Club: Operate → Rate
+// limits), so even a sustained nav stream stays under the limit and clear of
+// anomaly detection, while keeping the UI responsive. Override with
 // CONSOLE_SWIGGY_MIN_INTERVAL_MS (set 0 to disable the throttle).
 func swiggyMinInterval() time.Duration {
 	if v := os.Getenv("CONSOLE_SWIGGY_MIN_INTERVAL_MS"); v != "" {
@@ -308,7 +310,7 @@ func swiggyMinInterval() time.Duration {
 			return time.Duration(ms) * time.Millisecond
 		}
 	}
-	return 200 * time.Millisecond
+	return 500 * time.Millisecond
 }
 
 // seedSnapshot pre-populates snap with the config's restaurant + curated items
