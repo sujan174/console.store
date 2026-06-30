@@ -64,6 +64,10 @@ func TestLiveAddressesMsgAdoptsAddress(t *testing.T) {
 		t.Fatal("expected live model")
 	}
 	snap.SetAddresses([]catalog.Address{{ID: "live-1", Label: "home"}})
+	// With the address gate, AddressesLoadedMsg no longer auto-picks when the gate is
+	// pending. Transition to scrMenu first so maybeOpenAddrGate can fire the single-
+	// address auto-use path (which sets m.addr without showing the picker).
+	m.screen = scrMenu
 	updated, _ := m.Update(datasource.AddressesLoadedMsg{})
 	if updated.(Model).addr.ID != "live-1" {
 		t.Fatalf("model did not adopt live address: %+v", updated.(Model).addr)
