@@ -128,3 +128,10 @@ if [ "$on_path" -eq 0 ]; then
   printf "    ${B}export PATH=\"%s:\$PATH\"${R}\n" "$BIN_DIR"
 fi
 printf "\n"
+
+# Wire console into the user's local AI agents (Claude Desktop/Code, Cursor,
+# Codex): register the MCP server + drop skills. Best-effort and idempotent; an
+# opt-out is honored inside the binary (CONSOLE_NO_AGENT_SETUP=1).
+if [ -x "$BIN_DIR/console" ]; then
+  "$BIN_DIR/console" agents install --quiet || true
+fi

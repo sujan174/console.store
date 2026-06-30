@@ -59,3 +59,6 @@ if ($pathWasAdded) {
   Write-Host "added $dir to your PATH — usable now in this window; open a NEW terminal for future sessions." -ForegroundColor DarkGray
 }
 Write-Host "run: console"
+# Wire console into local AI agents (MCP + skills). Best-effort + idempotent;
+# CONSOLE_NO_AGENT_SETUP=1 opts out (handled inside the binary).
+try { & $out agents install --quiet } catch { }
