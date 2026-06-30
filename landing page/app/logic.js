@@ -45,25 +45,45 @@ export function mount(root) {
     if (/Linux/i.test(plat) || /Linux/i.test(ua)) return touch ? "mobile" : "unix";
     return "unix";
   };
+  // Beta channel install commands, auto-picked per OS. Unix/macOS pass --beta to
+  // the install script; Windows sets the channel env before the PowerShell installer.
   const INSTALL = {
-    unix: { cmd: "curl -fsSL consolestore.in/install | sh", prompt: "$", hint: "macOS & Linux · armed builds place real orders, the default stays safe." },
-    windows: { cmd: "irm consolestore.in/install.ps1 | iex", prompt: "PS>", hint: "Windows PowerShell · armed builds place real orders, the default stays safe." },
-    mobile: { cmd: "curl -fsSL consolestore.in/install | sh", prompt: "$", hint: "run this on your computer — macOS, Linux, or Windows (PowerShell)." },
+    unix: { cmd: "curl -fsSL consolestore.in/install | sh -s -- --beta", prompt: "$", hint: "macOS & Linux · beta channel · armed builds place real orders, the default stays safe." },
+    windows: { cmd: '$env:CONSOLE_CHANNEL="beta"; irm consolestore.in/install.ps1 | iex', prompt: "PS>", hint: "Windows PowerShell · beta channel · armed builds place real orders, the default stays safe." },
+    mobile: { cmd: "curl -fsSL consolestore.in/install | sh -s -- --beta", prompt: "$", hint: "beta channel · run this on your computer — macOS, Linux, or Windows (PowerShell)." },
   }[detectOS()];
   root.querySelectorAll("[data-install-cmd]").forEach((e) => (e.textContent = INSTALL.cmd));
   root.querySelectorAll("[data-install-prompt]").forEach((e) => (e.textContent = INSTALL.prompt));
   root.querySelectorAll("[data-install-hint]").forEach((e) => (e.textContent = INSTALL.hint));
 
-  // install toast
-  const pingInstall = () => {
+  // Copy the OS-picked install command to the clipboard, with a toast + a brief
+  // "copied" flip on the button label.
+  const copyInstall = async () => {
+    try {
+      await navigator.clipboard.writeText(INSTALL.cmd);
+    } catch (e) {
+      // Fallback for non-secure contexts / older browsers.
+      const ta = document.createElement("textarea");
+      ta.value = INSTALL.cmd;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch (e2) {}
+      ta.remove();
+    }
     const msg = root.querySelector("[data-toast-msg]");
-    if (msg) msg.textContent = "coming soon — the install isn't live yet.";
-    if (!refs.toast) return;
-    refs.toast.style.display = "flex";
-    S.timers.push(setTimeout(() => { if (!S.dead && refs.toast) refs.toast.style.display = "none"; }, 2200));
+    if (msg) msg.textContent = "copied — paste into your terminal.";
+    if (refs.toast) {
+      refs.toast.style.display = "flex";
+      S.timers.push(setTimeout(() => { if (!S.dead && refs.toast) refs.toast.style.display = "none"; }, 1800));
+    }
+    const labels = Array.from(root.querySelectorAll("[data-copy-label]"));
+    labels.forEach((e) => (e.textContent = "copied ✓"));
+    S.timers.push(setTimeout(() => { if (!S.dead) labels.forEach((e) => (e.textContent = "copy")); }, 1800));
   };
-  const installEls = Array.from(root.querySelectorAll('[data-action="install"]'));
-  installEls.forEach((el) => el.addEventListener("click", pingInstall));
+  const copyEls = Array.from(root.querySelectorAll('[data-action="copy"]'));
+  copyEls.forEach((el) => el.addEventListener("click", copyInstall));
 
   // ===== SCRAMBLE REVEAL =====
   const GLYPHS = "abcdefghijklmnopqrstuvwxyz0123456789·:>_/".split("");

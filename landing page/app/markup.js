@@ -69,16 +69,17 @@ export const MARKUP = String.raw`
 
       <!-- install command (OS-aware text set in logic.js; live stats live in the right drawer) -->
       <div style="margin-top:28px;display:flex;flex-direction:column;align-items:center;gap:11px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .8s">
-        <div data-action="install" title="coming soon" class="install-hero" style="display:inline-flex;align-items:stretch;border:1px solid rgba(147,168,255,.15);border-radius:10px;background:#09090f;box-shadow:0 0 48px rgba(147,168,255,.05),0 24px 64px rgba(0,0,0,.55);cursor:not-allowed;overflow:hidden;font-size:13.5px">
+        <div data-action="copy" title="click to copy" class="install-hero" style="display:inline-flex;align-items:stretch;border:1px solid rgba(147,168,255,.15);border-radius:10px;background:#09090f;box-shadow:0 0 48px rgba(147,168,255,.05),0 24px 64px rgba(0,0,0,.55);cursor:pointer;overflow:hidden;font-size:13.5px">
           <div style="display:flex;align-items:center;gap:11px;padding:14px 20px">
             <span data-install-prompt style="color:#2d2f48">$</span>
-            <span data-ref="install" data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh</span>
+            <span data-ref="install" data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh -s -- --beta</span>
+            <span style="margin-left:3px;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7fe0ff;border:1px solid rgba(127,224,255,.32);border-radius:99px;padding:2px 8px;flex:none">beta</span>
           </div>
-          <div style="display:flex;align-items:center;gap:7px;padding:0 16px;background:rgba(234,181,96,.07);border-left:1px solid rgba(234,181,96,.2);color:#eab560;font-size:11.5px;cursor:not-allowed;flex:none">
-            <span style="width:5px;height:5px;border-radius:99px;background:#eab560;animation:pulseDot 2.2s ease-in-out infinite;flex:none"></span>coming soon
+          <div style="display:flex;align-items:center;gap:7px;padding:0 16px;background:rgba(147,168,255,.08);border-left:1px solid rgba(147,168,255,.2);color:#93a8ff;font-size:11.5px;flex:none">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.8"/></svg><span data-copy-label>copy</span>
           </div>
         </div>
-        <div data-install-hint style="font-size:11.5px;color:#2d2f48">armed builds place real orders. the default stays safe.</div>
+        <div data-install-hint style="font-size:11.5px;color:#2d2f48">beta channel · armed builds place real orders, the default stays safe.</div>
       </div>
     </div>
 
@@ -364,10 +365,11 @@ export const MARKUP = String.raw`
             <span data-wm-console style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 50%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">console</span><span data-wm-store style="color:#eab560;font-size:.58em;align-self:flex-end;margin:0 0 .14em .05em">store</span>
           </div>
           <div style="font-size:13px;color:#565b80;margin-bottom:20px"><span style="color:#3a3d5c">&gt;</span> see you in the shell <span style="display:inline-block;width:7px;height:13px;background:#93a8ff;vertical-align:middle;animation:blink 1.05s step-end infinite"></span></div>
-          <div data-action="install" title="coming soon" class="install-foot" style="display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(147,168,255,.12);border-radius:8px;background:#0a0a12;padding:12px 16px;font-size:12.5px;cursor:not-allowed;margin-bottom:16px">
+          <div data-action="copy" title="click to copy" class="install-foot" style="display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(147,168,255,.12);border-radius:8px;background:#0a0a12;padding:12px 16px;font-size:12.5px;cursor:pointer;margin-bottom:16px">
             <span data-install-prompt style="color:#2d2f48">$</span>
-            <span data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh</span>
-            <span style="color:#eab560;font-size:11px;border-left:1px solid rgba(234,181,96,.2);padding-left:11px;flex:none">coming soon</span>
+            <span data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh -s -- --beta</span>
+            <span style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7fe0ff;border:1px solid rgba(127,224,255,.32);border-radius:99px;padding:2px 8px;flex:none">beta</span>
+            <span style="display:flex;align-items:center;gap:6px;color:#93a8ff;font-size:11px;border-left:1px solid rgba(147,168,255,.18);padding-left:11px;flex:none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.8"/></svg><span data-copy-label>copy</span></span>
           </div>
           <div style="font-size:11.5px;color:#2d2f48">// not affiliated with swiggy. preview build, no warranty, no real orders on this page.</div>
         </div>
