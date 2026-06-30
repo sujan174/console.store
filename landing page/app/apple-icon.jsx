@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og";
 
+// Apple touch icon — same pixel chevron prompt as the favicon, full-bleed black
+// (iOS applies its own corner mask), scaled up via the shared 64-unit viewBox.
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
@@ -16,18 +18,18 @@ export default function AppleIcon() {
           background: "#000000",
         }}
       >
-        <svg width="150" height="150" viewBox="10 13 42 42" fill="none">
-          <path
-            d="M16 26 L25 34 L16 42"
-            stroke="#ffffff"
-            strokeWidth="5.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <rect x="30" y="41" width="20" height="5" rx="2.5" fill="#ffffff" />
-          <path d="M34 31 a6 6 0 0 0 12 0 Z" fill="#ffffff" />
-          <path d="M38 28 Q40 25 38 22" stroke="#ffffff" strokeWidth="2" fill="none" strokeLinecap="round" />
-          <path d="M43 28 Q45 25 43 22" stroke="#ffffff" strokeWidth="2" fill="none" strokeLinecap="round" />
+        <svg width="132" height="132" viewBox="0 0 64 64" fill="none" shapeRendering="crispEdges">
+          <rect x="20" y="18" width="6" height="6" fill="#93a8ff" />
+          <rect x="26" y="18" width="6" height="6" fill="#93a8ff" />
+          <rect x="26" y="24" width="6" height="6" fill="#9c9af4" />
+          <rect x="32" y="24" width="6" height="6" fill="#9c9af4" />
+          <rect x="32" y="30" width="6" height="6" fill="#b08cf5" />
+          <rect x="38" y="30" width="6" height="6" fill="#b08cf5" />
+          <rect x="26" y="36" width="6" height="6" fill="#b08cf5" />
+          <rect x="32" y="36" width="6" height="6" fill="#b08cf5" />
+          <rect x="20" y="42" width="6" height="6" fill="#b08cf5" />
+          <rect x="26" y="42" width="6" height="6" fill="#b08cf5" />
+          <rect x="30" y="48" width="18" height="5" fill="#eab560" />
         </svg>
       </div>
     ),

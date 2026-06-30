@@ -1,7 +1,9 @@
 import { ImageResponse } from "next/og";
 
-// Favicon — pure black circle, large white bowl+steam mark, no glow, centered.
-// Tight viewBox crops to the mark so it fills the circle.
+// Favicon — pixel-art chevron prompt drawn from the 8-bit logo: a ">" that
+// fades blue→violet (the CONSOLE gradient) over a gold "_" prompt (STORE),
+// on a black rounded square, with a small gold sparkle glint. Discrete colour
+// bands (no gradient defs) so Satori renders it crisply at any size.
 export const size = { width: 64, height: 64 };
 export const contentType = "image/png";
 
@@ -19,18 +21,20 @@ export default function Icon() {
           borderRadius: 14,
         }}
       >
-        <svg width="56" height="56" viewBox="10 13 42 42" fill="none">
-          <path
-            d="M16 26 L25 34 L16 42"
-            stroke="#ffffff"
-            strokeWidth="5.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <rect x="30" y="41" width="20" height="5" rx="2.5" fill="#ffffff" />
-          <path d="M34 31 a6 6 0 0 0 12 0 Z" fill="#ffffff" />
-          <path d="M38 28 Q40 25 38 22" stroke="#ffffff" strokeWidth="2" fill="none" strokeLinecap="round" />
-          <path d="M43 28 Q45 25 43 22" stroke="#ffffff" strokeWidth="2" fill="none" strokeLinecap="round" />
+        <svg width="50" height="50" viewBox="0 0 64 64" fill="none" shapeRendering="crispEdges">
+          {/* chevron — top rows blue → violet (the CONSOLE gradient) */}
+          <rect x="20" y="18" width="6" height="6" fill="#93a8ff" />
+          <rect x="26" y="18" width="6" height="6" fill="#93a8ff" />
+          <rect x="26" y="24" width="6" height="6" fill="#9c9af4" />
+          <rect x="32" y="24" width="6" height="6" fill="#9c9af4" />
+          <rect x="32" y="30" width="6" height="6" fill="#b08cf5" />
+          <rect x="38" y="30" width="6" height="6" fill="#b08cf5" />
+          <rect x="26" y="36" width="6" height="6" fill="#b08cf5" />
+          <rect x="32" y="36" width="6" height="6" fill="#b08cf5" />
+          <rect x="20" y="42" width="6" height="6" fill="#b08cf5" />
+          <rect x="26" y="42" width="6" height="6" fill="#b08cf5" />
+          {/* gold prompt underscore (STORE) */}
+          <rect x="30" y="48" width="18" height="5" fill="#eab560" />
         </svg>
       </div>
     ),
