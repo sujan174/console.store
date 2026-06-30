@@ -230,14 +230,20 @@ type Model struct {
 	searchAtLeftEdge bool   // last key was ← at caret 0 (a second ← exits to the rail)
 	catPending       bool   // a category load is in flight (shows "loading…")
 	catPendingQuery  string // the category query catPending is waiting on
-	restInfoOpen     bool   // restaurant-info modal ('i' on the browse list) is open
-	addrOpen         bool   // address switcher modal ('a') is open
-	settingsOpen     bool   // settings modal (from the splash) is open
-	settingsSel      int    // selected row in the settings modal
-	helpOpen         bool   // help & controls modal (? / H / :help) is open
-	helpScroll       int    // scroll offset within the help modal
-	homePending      bool   // Home's "popular near you" load is in flight (shows "loading…")
-	usualsLoaded     bool   // true once LoadUsuals has been fired for the current addr
+	// Rail-load debounce: arrowing through rail categories arms a pending load
+	// instead of firing one per step, so fast-scrolling the rail doesn't spray a
+	// search_restaurants per category. onTick fires the load once the cursor
+	// settles (railSettleFrames). Enter still loads immediately.
+	railSettlePending bool
+	railSettleFrame   int
+	restInfoOpen      bool // restaurant-info modal ('i' on the browse list) is open
+	addrOpen          bool // address switcher modal ('a') is open
+	settingsOpen      bool // settings modal (from the splash) is open
+	settingsSel       int  // selected row in the settings modal
+	helpOpen          bool // help & controls modal (? / H / :help) is open
+	helpScroll        int  // scroll offset within the help modal
+	homePending       bool // Home's "popular near you" load is in flight (shows "loading…")
+	usualsLoaded      bool // true once LoadUsuals has been fired for the current addr
 }
 
 func New(caps render.Caps, opts ...Option) Model {
@@ -457,6 +463,43 @@ func (m *Model) loadForRail(rail screens.Rail) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// railSettleFrames is how long (in 60ms ticks ≈ 0.3s) the rail cursor must rest
+// on an entry before its load fires — collapses fast scrolling into one request.
+const railSettleFrames = 5
+
+// armRailLoad defers the active rail entry's load until the cursor settles, so
+// arrowing through categories doesn't fire a search_restaurants per step.
+func (m *Model) armRailLoad() {
+	m.railSettlePending = true
+	m.railSettleFrame = m.frame
+}
+
+// railFromChips rebuilds the rail descriptor (for IsCategory mapping) from the
+// current cuisine chips.
+func (m Model) railFromChips() screens.Rail {
+	cats := make([]string, len(m.chips))
+	for i, c := range m.chips {
+		cats[i] = c.Label
+	}
+	return screens.NewRail(cats).WithActive(m.railActive)
+}
+
+// settledRailLoad fires the debounced rail load once the cursor has rested long
+// enough (and is still on the focused rail), then re-renders so a "loading…" cue
+// shows. Clears the pending flag either way.
+func (m *Model) settledRailLoad() tea.Cmd {
+	if !m.railSettlePending || m.frame-m.railSettleFrame < railSettleFrames {
+		return nil
+	}
+	m.railSettlePending = false
+	if !(m.screen == scrMenu && m.live && m.railFocus) {
+		return nil // user opened a category / left the rail — don't load
+	}
+	cmd := m.loadForRail(m.railFromChips())
+	m.menu = m.buildMenu()
+	return cmd
 }
 
 // homeNearbyQuery is the keyword used to populate Home's "popular near you"
@@ -1325,6 +1368,10 @@ func (m Model) onTick() (Model, tea.Cmd) {
 		if m.trackTick%500 == 0 && m.activeOrder.OrderID != "" && m.backend != nil {
 			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
 		}
+	}
+	// Fire the debounced rail-category load once the cursor has settled.
+	if cmd := m.settledRailLoad(); cmd != nil {
+		return m, cmd
 	}
 	return m, nil
 }
@@ -2535,18 +2582,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.railActive--
 					}
 					m.syncSearchEntry()
-					cmd := m.loadForRail(rail)
+					m.armRailLoad() // debounced — onTick loads once the cursor settles
 					m.menu = m.buildMenu()
-					return m, cmd
+					return m, nil
 				case "down", "j":
 					if m.railActive < rail.Len()-1 {
 						m.railActive++
 					}
 					m.syncSearchEntry()
-					cmd := m.loadForRail(rail)
+					m.armRailLoad() // debounced — onTick loads once the cursor settles
 					m.menu = m.buildMenu()
-					return m, cmd
+					return m, nil
 				case "enter":
+					m.railSettlePending = false // explicit pick → load now, not on settle
 					m.railFocus = false
 					switch m.railActive {
 					case screens.RailSearch:

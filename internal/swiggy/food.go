@@ -50,8 +50,11 @@ func (c *Client) SearchOrganic(ctx context.Context, addressID, query string) ([]
 // (when dropAds), de-duplicating, until it has ~searchWant or results run out.
 func (c *Client) searchFill(ctx context.Context, addressID, query string, offset int, dropAds bool) ([]Restaurant, error) {
 	const (
-		searchWant     = 12
-		searchMaxPages = 6
+		searchWant = 12
+		// Cap any single query at 2 pages (~20-30 restaurants — ample for a terminal
+		// list). Keeps our request volume gentle so we don't look like a scraper to
+		// Swiggy's anomaly detection; sparse categories just show fewer results.
+		searchMaxPages = 2
 	)
 	var out []Restaurant
 	seen := map[string]bool{}
