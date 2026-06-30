@@ -3286,8 +3286,10 @@ func (m Model) screenKeybinds() string {
 		return "↑↓ move · ↵ open · / search · : cmd · ? help"
 	case scrRestaurant:
 		return "↑↓ move · ↵/+ add · − remove · c cart · : cmd · ? help"
+	case scrCheckout:
+		return "↑↓ pick · + − qty · ⌫ remove · ↵ place · : cmd · ? help"
 	default:
-		return ""
+		return "? help"
 	}
 }
 

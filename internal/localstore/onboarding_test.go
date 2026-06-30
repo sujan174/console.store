@@ -19,8 +19,8 @@ func configDir(t *testing.T) string {
 
 func TestShouldOnboard_FreshDir(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if !ShouldOnboard() {
-		t.Error("fresh dir: ShouldOnboard() should be true")
+	if !ShouldOnboard(false) {
+		t.Error("fresh dir: ShouldOnboard(false) should be true")
 	}
 }
 
@@ -36,8 +36,8 @@ func TestMarkOnboarded_And_Onboarded(t *testing.T) {
 	if !Onboarded() {
 		t.Error("Onboarded() should be true after MarkOnboarded()")
 	}
-	if ShouldOnboard() {
-		t.Error("ShouldOnboard() should be false after MarkOnboarded()")
+	if ShouldOnboard(false) {
+		t.Error("ShouldOnboard(false) should be false after MarkOnboarded()")
 	}
 }
 
@@ -52,15 +52,18 @@ func TestShouldOnboard_Grandfather_Presets(t *testing.T) {
 		t.Fatalf("WriteFile presets.json: %v", err)
 	}
 
-	if ShouldOnboard() {
-		t.Error("grandfather (presets.json): ShouldOnboard() should be false")
+	if ShouldOnboard(false) {
+		t.Error("grandfather (presets.json): ShouldOnboard(false) should be false")
 	}
 	if !Onboarded() {
-		t.Error("grandfather (presets.json): marker should be written after ShouldOnboard()")
+		t.Error("grandfather (presets.json): marker should be written after ShouldOnboard(false)")
 	}
 }
 
-func TestShouldOnboard_Grandfather_ClientJSON(t *testing.T) {
+// Regression: client.json is written by the OAuth DCR on the first launch, BEFORE
+// the onboarding check, so it must NOT grandfather — a fresh install (not signed
+// in) with only a client.json present must still onboard.
+func TestShouldOnboard_ClientJSONDoesNotGrandfather(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := configDir(t)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -70,11 +73,23 @@ func TestShouldOnboard_Grandfather_ClientJSON(t *testing.T) {
 		t.Fatalf("WriteFile client.json: %v", err)
 	}
 
-	if ShouldOnboard() {
-		t.Error("grandfather (client.json): ShouldOnboard() should be false")
+	if !ShouldOnboard(false) {
+		t.Error("client.json alone (not signed in) must NOT suppress onboarding")
+	}
+	if Onboarded() {
+		t.Error("client.json must not cause the marker to be written")
+	}
+}
+
+// An already-signed-in user (token present) is an existing user: skip onboarding
+// and record the marker.
+func TestShouldOnboard_SignedInGrandfathers(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if ShouldOnboard(true) {
+		t.Error("signed-in user: ShouldOnboard(true) should be false")
 	}
 	if !Onboarded() {
-		t.Error("grandfather (client.json): marker should be written after ShouldOnboard()")
+		t.Error("signed-in grandfather: marker should be written")
 	}
 }
 
@@ -88,11 +103,11 @@ func TestShouldOnboard_Grandfather_ActiveOrder(t *testing.T) {
 		t.Fatalf("WriteFile active-order.json: %v", err)
 	}
 
-	if ShouldOnboard() {
-		t.Error("grandfather (active-order.json): ShouldOnboard() should be false")
+	if ShouldOnboard(false) {
+		t.Error("grandfather (active-order.json): ShouldOnboard(false) should be false")
 	}
 	if !Onboarded() {
-		t.Error("grandfather (active-order.json): marker should be written after ShouldOnboard()")
+		t.Error("grandfather (active-order.json): marker should be written after ShouldOnboard(false)")
 	}
 }
 
@@ -100,8 +115,8 @@ func TestShouldOnboard_NoOnboardingEnv(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("CONSOLE_NO_ONBOARDING", "1")
 
-	if ShouldOnboard() {
-		t.Error("CONSOLE_NO_ONBOARDING=1: ShouldOnboard() should be false even on fresh dir")
+	if ShouldOnboard(false) {
+		t.Error("CONSOLE_NO_ONBOARDING=1: ShouldOnboard(false) should be false even on fresh dir")
 	}
 }
 
@@ -113,7 +128,7 @@ func TestShouldOnboard_ForceOnboardingEnv(t *testing.T) {
 	if err := MarkOnboarded(); err != nil {
 		t.Fatalf("MarkOnboarded: %v", err)
 	}
-	if !ShouldOnboard() {
-		t.Error("CONSOLE_FORCE_ONBOARDING=1: ShouldOnboard() should be true even after MarkOnboarded()")
+	if !ShouldOnboard(false) {
+		t.Error("CONSOLE_FORCE_ONBOARDING=1: ShouldOnboard(false) should be true even after MarkOnboarded()")
 	}
 }
