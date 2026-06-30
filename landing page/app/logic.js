@@ -360,6 +360,11 @@ export function mount(root) {
       if (lastFocus && lastFocus.focus) lastFocus.focus();
     };
 
+    // Expose so the keyboard controller (Tab) can drive the drawer.
+    S.openStats = openDrawer;
+    S.closeStats = closeDrawer;
+    S.statsIsOpen = () => !!(drawer && drawer.classList.contains("open"));
+
     if (tab) { tab.addEventListener("click", openDrawer); statsHandlers.push([tab, "click", openDrawer]); }
     if (back) { back.addEventListener("click", closeDrawer); statsHandlers.push([back, "click", closeDrawer]); }
     if (refs.statsclose) { refs.statsclose.addEventListener("click", closeDrawer); statsHandlers.push([refs.statsclose, "click", closeDrawer]); }
@@ -397,6 +402,86 @@ export function mount(root) {
     S.statsCleanup = () => statsHandlers.forEach(([el, ev, h]) => el.removeEventListener(ev, h));
   };
   const statsState = { data: null };
+
+  // ---- keyboard navigation: terminal-style section paging. ↑/↓ (or PageUp/Down)
+  // step between sections; ↵ / Space advances; Tab toggles the live-stats drawer;
+  // Home/End jump to ends. Reinforces the keyboard-driven product. The "press ↵"
+  // cue + the bottom legend teach it; both fade once the visitor starts driving. ----
+  const navHandlers = [];
+  const initKeyboardNav = () => {
+    const sections = Array.from(
+      root.querySelectorAll("#top, #pitch, #run, #keys, #features, #why, #faq, footer")
+    );
+    if (!sections.length) return;
+    const cue = root.querySelector('[data-ref="enterCue"]');
+    const legend = root.querySelector('[data-ref="keyhint"]');
+    let used = false;
+    const markUsed = () => {
+      if (used || S.dead) return;
+      used = true;
+      if (cue) cue.classList.add("spent");
+      if (legend) legend.classList.add("dim");
+    };
+    const indexNow = () => {
+      const probe = window.innerHeight * 0.34;
+      let idx = 0;
+      sections.forEach((s, i) => {
+        if (s.getBoundingClientRect().top - 2 <= probe) idx = i;
+      });
+      return idx;
+    };
+    const go = (i) => {
+      i = Math.max(0, Math.min(sections.length - 1, i));
+      const top = sections[i].getBoundingClientRect().top + window.scrollY;
+      window.scrollTo({ top: Math.max(0, top), behavior: reduce ? "auto" : "smooth" });
+    };
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target || {};
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
+      if (e.key === "Tab") {
+        e.preventDefault();
+        if (S.statsIsOpen && S.statsIsOpen()) S.closeStats && S.closeStats();
+        else S.openStats && S.openStats();
+        markUsed();
+        return;
+      }
+      if (S.statsIsOpen && S.statsIsOpen()) return; // drawer owns keys while open (Esc closes)
+      switch (e.key) {
+        case "ArrowDown":
+        case "PageDown":
+        case "Enter":
+        case " ":
+          e.preventDefault(); go(indexNow() + 1); markUsed(); break;
+        case "ArrowUp":
+        case "PageUp":
+          e.preventDefault(); go(indexNow() - 1); markUsed(); break;
+        case "Home":
+          e.preventDefault(); go(0); markUsed(); break;
+        case "End":
+          e.preventDefault(); go(sections.length - 1); markUsed(); break;
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    navHandlers.push([document, "keydown", onKey]);
+    // Mouse/touch affordances: the cue advances, the legend's stats chip opens it.
+    if (cue) {
+      const h = () => { go(indexNow() + 1); markUsed(); };
+      cue.addEventListener("click", h);
+      navHandlers.push([cue, "click", h]);
+    }
+    const statBtn = legend && legend.querySelector("[data-open-stats]");
+    if (statBtn) {
+      const h = () => { if (S.openStats) S.openStats(); markUsed(); };
+      statBtn.addEventListener("click", h);
+      navHandlers.push([statBtn, "click", h]);
+    }
+    // fade the cue + legend in once the hero has settled (transition-driven so the
+    // later .spent/.dim class swaps aren't fighting a held keyframe).
+    if (cue) S.timers.push(setTimeout(() => { if (!S.dead) cue.classList.add("show"); }, reduce ? 200 : 1700));
+    if (legend) S.timers.push(setTimeout(() => { if (!S.dead) legend.classList.add("show"); }, reduce ? 250 : 2100));
+    S.navCleanup = () => navHandlers.forEach(([el, ev, h]) => el.removeEventListener(ev, h));
+  };
 
   // ambient particle field
   const startAmbient = () => {
@@ -791,6 +876,7 @@ export function mount(root) {
   initFaq();
   initCmdClicks();
   initStats();
+  initKeyboardNav();
 
   if (!reduce) {
     initFooterWordmark();
@@ -843,6 +929,7 @@ export function mount(root) {
     if (S.heroCleanup) S.heroCleanup();
     if (S.nudgeCleanup) S.nudgeCleanup();
     if (S.statsCleanup) S.statsCleanup();
+    if (S.navCleanup) S.navCleanup();
     cleanupKeys();
   };
 }

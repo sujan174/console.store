@@ -82,13 +82,14 @@ export const MARKUP = String.raw`
       </div>
     </div>
 
-    <!-- scroll nudge -->
-    <a href="#pitch" data-scroll-nudge class="scroll-nudge" aria-label="scroll to read more">
-      <span class="scroll-nudge-label">scroll</span>
-      <span class="scroll-nudge-arrow" aria-hidden="true">
+    <!-- keyboard cue: press ↵ to begin (teaches the nav; fades once used). on
+         touch it collapses to a tappable scroll chevron. -->
+    <button data-ref="enterCue" class="enter-cue" type="button" aria-label="press Enter to explore">
+      <span class="enter-cue-keys"><span class="kbd kbd-wide">↵</span><span class="enter-cue-text">press <b>enter</b> to explore</span></span>
+      <span class="enter-cue-arrow" aria-hidden="true">
         <svg width="15" height="22" viewBox="0 0 15 22" fill="none"><path d="M7.5 1 V20 M1.5 14 L7.5 20 L13.5 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
       </span>
-    </a>
+    </button>
   </header>
 
   <!-- PITCH — one full screen: what it is + install (rises up on scroll) -->
@@ -109,10 +110,21 @@ export const MARKUP = String.raw`
        The tab is always shown (revealed by logic.js after the wordmark settles);
        the drawer holds totals + the per-channel breakdown. -->
   <button data-ref="statstab" class="stats-tab" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="open live stats" hidden>
+    <span class="stats-tab-arrow" aria-hidden="true">‹</span>
     <span class="stats-tab-dot"></span>
     <span class="stats-tab-label">live stats</span>
-    <span class="stats-tab-arrow" aria-hidden="true">‹</span>
+    <span class="stats-tab-key" aria-hidden="true">⇥</span>
   </button>
+
+  <!-- keyboard legend (desktop): always-visible controls so the nav + the live
+       drawer are discoverable. The stats chip is also a mouse affordance. -->
+  <div data-ref="keyhint" class="key-legend" aria-hidden="true">
+    <span class="key-legend-item"><span class="kbd">↑</span><span class="kbd">↓</span>&nbsp;sections</span>
+    <span class="key-legend-sep">·</span>
+    <span class="key-legend-item"><span class="kbd">↵</span>&nbsp;next</span>
+    <span class="key-legend-sep">·</span>
+    <button data-open-stats class="key-legend-item key-legend-btn" type="button"><span class="kbd">⇥</span>&nbsp;live stats</button>
+  </div>
 
   <div data-ref="statsback" class="stats-backdrop"></div>
 
@@ -302,7 +314,7 @@ export const MARKUP = String.raw`
   </section>
 
   <!-- MANIFESTO -->
-  <section style="position:relative;z-index:2;max-width:820px;margin:0 auto;padding:64px clamp(24px,6vw,56px)" data-reveal>
+  <section id="why" style="position:relative;z-index:2;max-width:820px;margin:0 auto;padding:64px clamp(24px,6vw,56px)" data-reveal>
     <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:24px;text-align:center">// why terminal-native</div>
     <p style="font-weight:800;font-size:clamp(24px,3.8vw,46px);line-height:1.18;letter-spacing:-.02em;text-align:center;margin:0">
       <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">your terminal is already open.</span><br>
