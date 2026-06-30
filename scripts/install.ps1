@@ -61,4 +61,4 @@ if ($pathWasAdded) {
 Write-Host "run: console"
 # Wire console into local AI agents (MCP + skills). Best-effort + idempotent;
 # CONSOLE_NO_AGENT_SETUP=1 opts out (handled inside the binary).
-try { & $out agents install --quiet } catch { }
+try { if (Test-Path $out) { & $out agents install --quiet } } catch { }
