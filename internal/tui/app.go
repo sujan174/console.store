@@ -230,12 +230,20 @@ type Model struct {
 	searchAtLeftEdge bool   // last key was ← at caret 0 (a second ← exits to the rail)
 	catPending       bool   // a category load is in flight (shows "loading…")
 	catPendingQuery  string // the category query catPending is waiting on
-	restInfoOpen     bool   // restaurant-info modal ('i' on the browse list) is open
-	addrOpen         bool   // address switcher modal ('a') is open
-	settingsOpen     bool   // settings modal (from the splash) is open
-	settingsSel      int    // selected row in the settings modal
-	homePending      bool   // Home's "popular near you" load is in flight (shows "loading…")
-	usualsLoaded     bool   // true once LoadUsuals has been fired for the current addr
+	// Rail-load debounce: arrowing through rail categories arms a pending load
+	// instead of firing one per step, so fast-scrolling the rail doesn't spray a
+	// search_restaurants per category. onTick fires the load once the cursor
+	// settles (railSettleFrames). Enter still loads immediately.
+	railSettlePending bool
+	railSettleFrame   int
+	restInfoOpen      bool // restaurant-info modal ('i' on the browse list) is open
+	addrOpen          bool // address switcher modal ('a') is open
+	settingsOpen      bool // settings modal (from the splash) is open
+	settingsSel       int  // selected row in the settings modal
+	helpOpen          bool // help & controls modal (? / H / :help) is open
+	helpScroll        int  // scroll offset within the help modal
+	homePending       bool // Home's "popular near you" load is in flight (shows "loading…")
+	usualsLoaded      bool // true once LoadUsuals has been fired for the current addr
 }
 
 func New(caps render.Caps, opts ...Option) Model {
@@ -455,6 +463,43 @@ func (m *Model) loadForRail(rail screens.Rail) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// railSettleFrames is how long (in 60ms ticks ≈ 0.3s) the rail cursor must rest
+// on an entry before its load fires — collapses fast scrolling into one request.
+const railSettleFrames = 5
+
+// armRailLoad defers the active rail entry's load until the cursor settles, so
+// arrowing through categories doesn't fire a search_restaurants per step.
+func (m *Model) armRailLoad() {
+	m.railSettlePending = true
+	m.railSettleFrame = m.frame
+}
+
+// railFromChips rebuilds the rail descriptor (for IsCategory mapping) from the
+// current cuisine chips.
+func (m Model) railFromChips() screens.Rail {
+	cats := make([]string, len(m.chips))
+	for i, c := range m.chips {
+		cats[i] = c.Label
+	}
+	return screens.NewRail(cats).WithActive(m.railActive)
+}
+
+// settledRailLoad fires the debounced rail load once the cursor has rested long
+// enough (and is still on the focused rail), then re-renders so a "loading…" cue
+// shows. Clears the pending flag either way.
+func (m *Model) settledRailLoad() tea.Cmd {
+	if !m.railSettlePending || m.frame-m.railSettleFrame < railSettleFrames {
+		return nil
+	}
+	m.railSettlePending = false
+	if !(m.screen == scrMenu && m.live && m.railFocus) {
+		return nil // user opened a category / left the rail — don't load
+	}
+	cmd := m.loadForRail(m.railFromChips())
+	m.menu = m.buildMenu()
+	return cmd
 }
 
 // homeNearbyQuery is the keyword used to populate Home's "popular near you"
@@ -1324,6 +1369,10 @@ func (m Model) onTick() (Model, tea.Cmd) {
 			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
 		}
 	}
+	// Fire the debounced rail-category load once the cursor has settled.
+	if cmd := m.settledRailLoad(); cmd != nil {
+		return m, cmd
+	}
 	return m, nil
 }
 
@@ -1989,6 +2038,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
+		// Help modal captures keys while open: scroll with ↑/↓ (or j/k), close on
+		// esc / q / ? / H / enter. It overlays whatever screen is behind it.
+		if m.helpOpen {
+			switch k.String() {
+			case "up", "k":
+				if m.helpScroll > 0 {
+					m.helpScroll--
+				}
+			case "down", "j":
+				if m.helpScroll < screens.HelpMaxScroll(m.h) {
+					m.helpScroll++
+				}
+			case "esc", "q", "?", "H", "enter", " ":
+				m.helpOpen = false
+			}
+			return m, nil
+		}
 		// Command palette captures all keys while open, so letters like `q`
 		// type into the prompt instead of quitting (design lines 743-751).
 		if m.cmdOpen {
@@ -2006,6 +2072,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// out already cleared in Run; stay open
 				case action == "close":
 					m.cmdOpen = false
+				case action == "help":
+					// :help opens the full help & controls modal.
+					m.cmdOpen = false
+					m.cmd = m.cmd.ClearText()
+					m.helpOpen = true
+					m.helpScroll = 0
 				case strings.HasPrefix(action, "alias"):
 					rest := strings.TrimSpace(strings.TrimPrefix(action, "alias"))
 					m.cmd = m.cmd.AppendOut(m.runAliasCommand(rest))
@@ -2221,35 +2293,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
-		// Double-Esc returns to the splash and replays the loading animation. It
-		// is a deliberate "home" gesture, recognised only on the menu root where
-		// Esc is otherwise a no-op. On every sub-screen Esc means "back one
-		// level", so the timer is cleared there — walking back up the stack with
-		// repeated Esc must never teleport home. Cart/address are preserved.
-		if k.String() == "esc" {
-			// Esc closes the restaurant-info modal first (before the rail/home gestures).
+		// Double-Esc (two quick taps) returns to the splash and replays the loading
+		// animation — a deliberate "home" gesture recognised from ANY screen.
+		// Checked before the per-screen single-Esc back, so two quick taps always
+		// teleport home; a single Esc still steps back one level. Cart/address
+		// are preserved. (Splash handles its own keys below.)
+		if k.String() == "esc" && m.screen != scrSplash {
+			// Esc closes the restaurant-info modal first (the browse-list 'i' card).
 			if m.screen == scrMenu && m.restInfoOpen {
 				m.restInfoOpen = false
 				return m, nil
 			}
+			if m.frame-m.lastEscFrame <= escDoubleWindow {
+				m = m.toSplash()
+				m.lastEscFrame = -escDoubleWindow - 1
+				return m, m.activeOrderCheckCmd()
+			}
+			m.lastEscFrame = m.frame // first Esc: arm the double-tap window
+
+			// Browse root: a single Esc unfocuses the live rail but never navigates
+			// away (the second tap homes). While searching, fall through so the
+			// search handler exits search.
 			if m.screen == scrMenu && !m.menu.Searching() && !m.searchMode {
-				// In live rail mode, Esc when rail is focused unfocuses the rail
-				// (not a home gesture); in search mode Esc exits search.
 				if m.live && m.railFocus {
 					m.railFocus = false
 					m.menu = m.buildMenu()
-					return m, nil
 				}
-				if m.frame-m.lastEscFrame <= escDoubleWindow {
-					m = m.toSplash()
-					m.lastEscFrame = -escDoubleWindow - 1
-					return m, m.activeOrderCheckCmd()
-				}
-				m.lastEscFrame = m.frame
 				return m, nil
 			}
-			m.lastEscFrame = -escDoubleWindow - 1
-			// fall through to per-screen single-Esc handling
+			// fall through to per-screen single-Esc (restaurant/checkout/tracking/…)
+		}
+		// ? or H opens the help & controls modal from anywhere — except while
+		// typing (search / palette) or with a blocking modal already up, where the
+		// key means something else or would be swallowed.
+		if (k.String() == "?" || k.String() == "H") && m.helpTriggerable() {
+			m.helpOpen = true
+			m.helpScroll = 0
+			return m, nil
 		}
 		if m.screen == scrSplash {
 			// Settings modal (opened from the splash) captures keys while open.
@@ -2502,18 +2582,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.railActive--
 					}
 					m.syncSearchEntry()
-					cmd := m.loadForRail(rail)
+					m.armRailLoad() // debounced — onTick loads once the cursor settles
 					m.menu = m.buildMenu()
-					return m, cmd
+					return m, nil
 				case "down", "j":
 					if m.railActive < rail.Len()-1 {
 						m.railActive++
 					}
 					m.syncSearchEntry()
-					cmd := m.loadForRail(rail)
+					m.armRailLoad() // debounced — onTick loads once the cursor settles
 					m.menu = m.buildMenu()
-					return m, cmd
+					return m, nil
 				case "enter":
+					m.railSettlePending = false // explicit pick → load now, not on settle
 					m.railFocus = false
 					switch m.railActive {
 					case screens.RailSearch:
@@ -2932,9 +3013,9 @@ func (m Model) screenKeybinds() string {
 		if m.searchMode {
 			return "↑↓ move · ↵ open · esc home · : cmd"
 		}
-		return "↑↓ move · ↵ open · / search · : cmd"
+		return "↑↓ move · ↵ open · / search · : cmd · ? help"
 	case scrRestaurant:
-		return "↑↓ move · ↵/+ add · − remove · c cart · i info · : cmd"
+		return "↑↓ move · ↵/+ add · − remove · c cart · : cmd · ? help"
 	default:
 		return ""
 	}
@@ -2968,6 +3049,22 @@ func (m Model) listRows(chrome int) int {
 	return 3
 }
 
+// helpTriggerable reports whether ? / H should open the help modal: not while a
+// blocking modal is already up, and not while typing into a search box or the
+// command palette (where the key is real input).
+func (m Model) helpTriggerable() bool {
+	if m.helpOpen || m.cmdOpen || m.settingsOpen || m.addrOpen || m.conflictOpen || m.customizeOpen || m.wizardOpen || m.restInfoOpen {
+		return false
+	}
+	if m.searchMode || m.menu.Searching() {
+		return false
+	}
+	if m.screen == scrRestaurant && (m.rest.Searching() || m.rest.InfoOpen()) {
+		return false
+	}
+	return true
+}
+
 func (m Model) View() string {
 	if m.needsAuth {
 		// The login gate IS the start screen — same boot banner, but the home menu
@@ -2978,6 +3075,16 @@ func (m Model) View() string {
 			return gate
 		}
 		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, gate)
+	}
+
+	// Help & controls modal (? / H / :help) — a centered, scrollable overlay over
+	// any screen.
+	if m.helpOpen {
+		card := screens.NewHelp().WithViewport(m.h).WithScroll(m.helpScroll).View()
+		if m.w == 0 || m.h == 0 {
+			return card
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card)
 	}
 
 	// Settings modal (opened from the splash) — a centered overlay matching the
@@ -3057,12 +3164,15 @@ func (m Model) View() string {
 	var body string
 	switch m.screen {
 	case scrRestaurant:
-		chrome := 14 + screens.BrandHeaderLines
+		// chrome above the list: name + meta + category bar + their blanks + the
+		// footer; the list windows to the rest so it fills the viewport (the old
+		// 14 left a ~5-row blank gap above the footer).
+		chrome := 10 + screens.BrandHeaderLines
 		body = m.rest.WithMaxRows(m.listRows(chrome)).View()
 	case scrCheckout, scrConfirm:
-		body = m.checkout.WithPlacing(m.placingOrder).View(m.frame)
+		body = m.checkout.WithPlacing(m.placingOrder).WithViewport(m.h).View(m.frame)
 	case scrTracking:
-		body = m.track.View(m.nowUnix, m.frame, m.spin())
+		body = m.track.WithViewport(m.h).View(m.nowUnix, m.frame, m.spin())
 	case scrInstamart:
 		if m.live {
 			// Live vertical: show "coming soon" placeholder until Instamart is built.
@@ -3075,9 +3185,10 @@ func (m Model) View() string {
 	case scrImCart:
 		body = m.imCart.View()
 	default: // scrMenu
-		// reserves the store switcher (2) + the detail strip (name/stats + blank)
-		// + the trailing key-hint line (lifted to the footer).
-		body = m.menu.WithMaxRows(m.listRows(19 + screens.BrandHeaderLines)).View()
+		// chrome above the list: store switcher (2) + detail strip + a section
+		// header + the footer; the list windows to whatever rows remain so the
+		// brand header stays pinned and the page fills the viewport (no big gap).
+		body = m.menu.WithMaxRows(m.listRows(8 + screens.BrandHeaderLines)).View()
 	}
 
 	// The footer — the screen's hint line + optional command palette + status

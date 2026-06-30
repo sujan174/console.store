@@ -2,12 +2,80 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
 	"consolestore/internal/broker/api"
 	"consolestore/internal/localstore"
 )
+
+// SAFETY REGRESSION: the confirm must be REAL. An interactive armed order where
+// the user does NOT press Enter (EOF / Ctrl-D, or Ctrl-C which cancels the ctx)
+// must NOT place. The bug: placePreset discarded prompt()'s result and called
+// PlaceOrder unconditionally, so a cancel still placed a real COD order.
+func TestOrderInteractiveEOFDoesNotPlace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, basePreset("breakfast"))
+	var out bytes.Buffer
+	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
+	code := Dispatch([]string{"order", "breakfast"}, Deps{
+		SignedIn: true, Armed: true, Interactive: true, Out: &out,
+		In: strings.NewReader(""), Backend: be, // EOF, no newline = the user never confirmed
+	})
+	_ = code
+	if be.placeN != 0 {
+		t.Fatalf("EOF / no-Enter must NOT place a real order; placed %d", be.placeN)
+	}
+	if !strings.Contains(strings.ToLower(out.String()), "cancel") {
+		t.Fatalf("should report it cancelled:\n%s", out.String())
+	}
+}
+
+// blockingReader never returns from Read — models a terminal sitting at the
+// confirm prompt with no input, so only a canceled ctx can resolve confirm().
+type blockingReader struct{}
+
+func (blockingReader) Read([]byte) (int, error) { select {} }
+
+// Ctrl-C / SIGTERM cancel Deps.Ctx. Because main traps SIGINT, Ctrl-C does NOT
+// kill the process — confirm() must treat a canceled ctx as "do not place",
+// even while stdin is still blocking.
+func TestOrderCanceledCtxDoesNotPlace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, basePreset("breakfast"))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Ctrl-C already delivered
+	var out bytes.Buffer
+	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
+	code := Dispatch([]string{"order", "breakfast"}, Deps{
+		Ctx: ctx, SignedIn: true, Armed: true, Interactive: true, Out: &out,
+		In: blockingReader{}, Backend: be,
+	})
+	if be.placeN != 0 {
+		t.Fatalf("canceled ctx (Ctrl-C) must NOT place; placed %d", be.placeN)
+	}
+	if !strings.Contains(strings.ToLower(out.String()), "cancel") {
+		t.Fatalf("should report it cancelled:\n%s", out.String())
+	}
+	_ = code
+}
+
+// An explicit "n" must cancel, never place.
+func TestOrderInteractiveNoAnswerDoesNotPlace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, basePreset("breakfast"))
+	var out bytes.Buffer
+	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
+	code := Dispatch([]string{"order", "breakfast"}, Deps{
+		SignedIn: true, Armed: true, Interactive: true, Out: &out,
+		In: strings.NewReader("n\n"), Backend: be,
+	})
+	if be.placeN != 0 {
+		t.Fatalf(`"n" must NOT place; placed %d`, be.placeN)
+	}
+	_ = code
+}
 
 func seedPreset(t *testing.T, p localstore.Preset) {
 	t.Helper()

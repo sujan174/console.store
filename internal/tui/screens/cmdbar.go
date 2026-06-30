@@ -148,19 +148,9 @@ func (c CmdBar) Run() (CmdBar, string) {
 	var out []CmdLine
 	switch cmd {
 	case "help", "?":
-		out = []CmdLine{
-			{"commands —", A},
-			{"  neofetch   system info", D},
-			{"  coffee     brew one", D},
-			{"  whoami     who you are", D},
-			{"  streak     your morning run", D},
-			{"  uptime     server uptime", D},
-			{"  sl         choo choo", D},
-			{"  sudo …     go on, try it", D},
-			{"  vim        enter (you can leave)", D},
-			{"  42         the answer", D},
-			{"  clear      wipe screen · exit  close", D},
-		}
+		// The root opens the full help & controls modal on this action.
+		c.text = ""
+		return c, "help"
 	case "neofetch":
 		out = []CmdLine{
 			{"      ▟▙       guest@consolestore.in", B},

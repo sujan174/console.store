@@ -26,6 +26,7 @@ type Checkout struct {
 	syncErr    string
 	orderErr   string // last place-order failure / blocked-order reason
 	mutating   bool
+	viewportH  int // terminal height; windows the item list so the page never overflows
 }
 
 func NewCheckout(restaurant string, addr catalog.Address, lines []CartLine, eta string) Checkout {
@@ -48,6 +49,33 @@ func (c Checkout) WithPlacing(placing bool) Checkout {
 	c.placing = placing
 	return c
 }
+
+// WithViewport sets the terminal height so the item list windows to fit (the
+// bill + place bar + COD line are fixed chrome; the cart rows scroll within
+// whatever height remains, keeping the brand header and footer on screen).
+func (c Checkout) WithViewport(h int) Checkout { c.viewportH = h; return c }
+
+// lineRows is the item-list viewport: the height minus checkout's fixed chrome
+// (header, delivery meta, the 4-line bill, place bar, COD line, hints, brand,
+// footer). 0 when the height is unknown (show all).
+func (c Checkout) lineRows() int {
+	if c.viewportH == 0 {
+		return 0
+	}
+	chrome := 22 // measured: everything on the page that isn't an item row
+	if c.compactBill() {
+		chrome = 16 // compact bill drops the itemized split + COD line
+	}
+	if n := c.viewportH - chrome; n >= 2 {
+		return n
+	}
+	return 2
+}
+
+// compactBill reports whether the page should collapse the itemized bill to a
+// single "to pay" line and drop the COD reminder, so a short terminal still fits
+// the header, a couple of items, the total, and the place-order bar on screen.
+func (c Checkout) compactBill() bool { return c.viewportH > 0 && c.viewportH < 24 }
 
 // WithCursor sets the focused line index (clamped in View).
 func (c Checkout) WithCursor(i int) Checkout { c.cursor = i; return c }
@@ -208,7 +236,7 @@ func (c Checkout) summaryView() string {
 	cur := c.clampCursor()
 	stepW := lipgloss.Width("−  ×99  +")
 	priceW := lipgloss.Width("₹9999")
-	list := components.List{Cursor: cur}
+	list := components.List{Cursor: cur, MaxRows: c.lineRows()}
 	for i, l := range c.lines {
 		// Sold-out line: dim it, tag it, and keep the stepper so the user can
 		// remove it (the only way to unblock checkout).
@@ -254,8 +282,18 @@ func (c Checkout) summaryView() string {
 	b.WriteString("\n")
 
 	// Bill split — Swiggy's real numbers when synced; a syncing/error state in
-	// live mode before they arrive; design math in mock mode.
+	// live mode before they arrive; design math in mock mode. On a short terminal
+	// the itemized split collapses to a single "to pay" line so the CTA still fits.
+	compact := c.compactBill()
 	switch {
+	case compact && c.bill.Live:
+		b.WriteString(components.DashRule())
+		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
+			theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.bill.ToPay)), w) + "\n")
+	case compact && !c.liveMode:
+		b.WriteString(components.DashRule())
+		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
+			theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
 	case c.bill.Live:
 		b.WriteString(renderBill(w, c.bill))
 	case c.liveMode:
@@ -321,9 +359,12 @@ func (c Checkout) summaryView() string {
 	bar := barBar + barBg.Render(padTo(barLabel, components.FrameWidth()-1))
 	b.WriteString(bar + "\n\n")
 
-	// One tidy COD line instead of two stacked notices.
-	b.WriteString("  " + theme.GoldStyle.Render("pay the rider — cash / UPI") +
-		theme.FaintStyle.Render("   ·   ") + theme.DimStyle.Render("can't cancel once placed") + "\n\n")
+	// One tidy COD line instead of two stacked notices — dropped on a short
+	// terminal where every row counts (the bar already says "place order").
+	if !compact {
+		b.WriteString("  " + theme.GoldStyle.Render("pay the rider — cash / UPI") +
+			theme.FaintStyle.Render("   ·   ") + theme.DimStyle.Render("can't cancel once placed") + "\n\n")
+	}
 	b.WriteString(components.Hint("↑↓", "move", "←→", "qty", "⌫", "remove", "↵", "place order", "esc", "back"))
 	return b.String()
 }
@@ -331,30 +372,37 @@ func (c Checkout) summaryView() string {
 func (c Checkout) confirmView(frame int) string {
 	var b strings.Builder
 
-	// A steaming coffee cup marks the placed order. The steam wisps waver each
-	// frame; the mug has a clear C-handle on the right and a saucer beneath, so
-	// it reads as a cup (not a battery).
-	steam := []string{"     ( (", "      ) )"}
-	if (frame/8)%2 == 1 {
-		steam = []string{"      ) )", "     ( ("}
-	}
-	for _, s := range steam {
-		b.WriteString("  " + theme.DimStyle.Render(s) + "\n")
-	}
+	// The full celebration (steam + cup + speed receipt) is ~25 rows tall. On a
+	// short terminal that overflows and scrolls the order box off-screen, so below
+	// a threshold we drop the decorative art and keep the essentials. 0 = unknown.
+	compact := c.viewportH > 0 && c.viewportH < 28
 
-	cup := []string{
-		"   ╭───────╮",
-		"   │~~~~~~~│╮",
-		"   │▒▒▒▒▒▒▒│ )",
-		"   │▒▒▒▒▒▒▒│ )",
-		"   │▒▒▒▒▒▒▒│╯",
-		"   ╰───────╯",
-		"  ╰─────────╯",
+	if !compact {
+		// A steaming coffee cup marks the placed order. The steam wisps waver each
+		// frame; the mug has a clear C-handle on the right and a saucer beneath, so
+		// it reads as a cup (not a battery).
+		steam := []string{"     ( (", "      ) )"}
+		if (frame/8)%2 == 1 {
+			steam = []string{"      ) )", "     ( ("}
+		}
+		for _, s := range steam {
+			b.WriteString("  " + theme.DimStyle.Render(s) + "\n")
+		}
+
+		cup := []string{
+			"   ╭───────╮",
+			"   │~~~~~~~│╮",
+			"   │▒▒▒▒▒▒▒│ )",
+			"   │▒▒▒▒▒▒▒│ )",
+			"   │▒▒▒▒▒▒▒│╯",
+			"   ╰───────╯",
+			"  ╰─────────╯",
+		}
+		for _, line := range cup {
+			b.WriteString("  " + theme.GoldStyle.Render(line) + "\n")
+		}
+		b.WriteString("\n")
 	}
-	for _, line := range cup {
-		b.WriteString("  " + theme.GoldStyle.Render(line) + "\n")
-	}
-	b.WriteString("\n")
 
 	// order-placed box (reference 375-377)
 	box := []string{
@@ -372,7 +420,9 @@ func (c Checkout) confirmView(frame int) string {
 	b.WriteString("  " + theme.DimStyle.Render(fmt.Sprintf("pay ₹%d to rider (cash/UPI)", c.payAmount())) + "\n")
 	b.WriteString("  " + theme.FavStyle.Render("can't be cancelled now") + "\n\n")
 
-	b.WriteString(c.speedReceipt())
+	if !compact {
+		b.WriteString(c.speedReceipt())
+	}
 
 	b.WriteString("  " + theme.GreenStyle.Render("↵") + " " + theme.FaintStyle.Render("track") +
 		"     " + theme.CursorStyle.Render("esc") + " " + theme.FaintStyle.Render("back to menu"))

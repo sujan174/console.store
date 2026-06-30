@@ -307,45 +307,102 @@ func railTrunc2(s string, max int) string {
 	return string(r[:max-1]) + "…"
 }
 
-// sectionedListView renders the Home main pane: optional usuals block (omitted
-// when empty) + always-present nearby block. Section header labels are dim
-// hairlines drawn between the restaurant rows; the cursor list spans both.
-func (m Menu) sectionedListView() string {
-	var b strings.Builder
+// windowRange computes the visible [start,end) slice of n items that keeps the
+// cursor on screen within `budget` rows, reserving a line for each ↑/↓ "N more"
+// indicator that is off-screen. Mirrors components.List's viewport math so the
+// two-pane browse list scrolls identically to every other list in the app.
+// budget <= 0 (size unknown) shows everything.
+func windowRange(cursor, n, budget int) (start, end, above, below int) {
+	start, end = 0, n
+	if budget > 0 && n > budget {
+		start = cursor - budget/2
+		if start < 0 {
+			start = 0
+		}
+		if start > n-budget {
+			start = n - budget
+		}
+		end = start + budget
+		above, below = start, n-end
+		if above > 0 {
+			start++
+			above = start
+		}
+		if below > 0 {
+			end--
+			below = n - end
+		}
+		if cursor < start {
+			start = cursor
+		}
+		if cursor >= end {
+			end = cursor + 1
+		}
+	}
+	return start, end, above, below
+}
 
-	// Build a cursor list over mainPlaces() for selection highlighting.
+// mainSectionLabel returns the section-header label for the place at flat index i
+// in the current browse view (Home: usuals/nearby; category: catHeader; else "").
+func (m Menu) mainSectionLabel(i int) string {
+	if m.hasSections {
+		if len(m.usuals) > 0 && i < len(m.usuals) {
+			return "your usuals"
+		}
+		return "popular near you"
+	}
+	return m.catHeader
+}
+
+// sectionHeaderCount is how many section headers the current view shows, so the
+// row window can reserve their lines and the page fits the viewport.
+func (m Menu) sectionHeaderCount() int {
+	if m.hasSections {
+		if len(m.usuals) > 0 {
+			return 2
+		}
+		return 1
+	}
+	if m.catHeader != "" {
+		return 1
+	}
+	return 0
+}
+
+// browseRows renders the windowed main-pane restaurant rows with section headers
+// and ↑/↓ "N more" indicators, capping visible rows to `budget` so the page never
+// overflows the viewport (overflow scrolls the brand header off the top). Spans
+// usuals + nearby (Home) or a flat category list as one cursor list.
+func (m Menu) browseRows(budget int) string {
 	places := m.mainPlaces()
-	cursor := m.list.Cursor
-
-	renderRow := func(p catalog.Place, idx int) {
-		b.WriteString(m.placeRow(p, idx == cursor) + "\n")
-	}
-
-	renderHeader := func(label string) { b.WriteString(sectionRule(label)) }
-
-	idx := 0
-	if len(m.usuals) > 0 {
-		renderHeader("your usuals")
-		for _, p := range m.usuals {
-			renderRow(p, idx)
-			idx++
-		}
-	}
-
-	if len(m.nearby) > 0 || len(m.usuals) == 0 {
-		renderHeader("popular near you")
-		for _, p := range m.nearby {
-			renderRow(p, idx)
-			idx++
-		}
-	}
-
 	if len(places) == 0 {
 		if m.loading {
-			b.WriteString("  " + theme.GoldStyle.Render("loading restaurants…") + "\n")
-		} else {
-			b.WriteString("  " + theme.DimStyle.Render("no restaurants nearby") + "\n")
+			return "  " + theme.GoldStyle.Render("loading restaurants…") + "\n"
 		}
+		return "  " + theme.DimStyle.Render("no restaurants nearby") + "\n"
+	}
+	rowBudget := budget
+	if rowBudget > 0 {
+		if rowBudget -= m.sectionHeaderCount(); rowBudget < 3 {
+			rowBudget = 3
+		}
+	}
+	start, end, above, below := windowRange(m.list.Cursor, len(places), rowBudget)
+
+	var b strings.Builder
+	if above > 0 {
+		b.WriteString("  " + theme.FaintStyle.Render(fmt.Sprintf("↑ %d more", above)) + "\n")
+	}
+	prev := ""
+	for i := start; i < end; i++ {
+		if lbl := m.mainSectionLabel(i); lbl != "" && lbl != prev {
+			b.WriteString(sectionRule(lbl))
+			prev = lbl
+		}
+		b.WriteString(m.placeRow(places[i], i == m.list.Cursor) + "\n")
+	}
+	if below > 0 {
+		b.WriteString("  " + theme.FaintStyle.Render(fmt.Sprintf("↓ %d more", below)) + "\n")
 	}
 	return b.String()
 }
@@ -419,11 +476,11 @@ func (m Menu) verticalSwitcher() string {
 }
 
 func (m Menu) twoPaneView() string {
-	railH := m.list.MaxRows + 6
-	if railH < m.rail.Len()+1 {
-		railH = m.rail.Len() + 1
-	}
-	left := m.rail.WithFocus(m.railFocus).WithActive(m.rail.Active()).WithHeight(railH).View()
+	// budget = rows available for the main list (set by the root via WithMaxRows).
+	// 0 = size unknown → show all.
+	// budget = rows available for the main list (set by the root via WithMaxRows).
+	// 0 = size unknown → show all.
+	budget := m.list.MaxRows
 
 	var main strings.Builder
 
@@ -445,33 +502,51 @@ func (m Menu) twoPaneView() string {
 			main.WriteString(theme.DimStyle.Render(plural(m.resultCount, "result", "results")) + "\n\n")
 		}
 		if !m.searchPending && len(m.results) > 0 {
-			for i, p := range m.results {
-				main.WriteString(m.placeRow(p, i == m.list.Cursor) + "\n")
+			// Window the results too — the input + status line above eat ~2 rows.
+			rb := budget
+			if rb > 0 {
+				if rb -= 2; rb < 3 {
+					rb = 3
+				}
+			}
+			start, end, above, below := windowRange(m.list.Cursor, len(m.results), rb)
+			if above > 0 {
+				main.WriteString("  " + theme.FaintStyle.Render(fmt.Sprintf("↑ %d more", above)) + "\n")
+			}
+			for i := start; i < end; i++ {
+				main.WriteString(m.placeRow(m.results[i], i == m.list.Cursor) + "\n")
+			}
+			if below > 0 {
+				main.WriteString("  " + theme.FaintStyle.Render(fmt.Sprintf("↓ %d more", below)) + "\n")
 			}
 		}
 	default:
 		// Non-search browse: the focused restaurant's stats (rating · ETA ·
 		// location) sit in a detail strip above the list, so the rows stay clean.
+		// The detail strip eats one row from the list budget.
+		rb := budget
 		if d := m.focusedDetail(); d != "" {
 			main.WriteString(d + "\n\n")
-		}
-		if m.hasSections {
-			main.WriteString(m.sectionedListView())
-		} else {
-			// flat category list — header matches Home's dividers.
-			if m.catHeader != "" {
-				main.WriteString(sectionRule(m.catHeader))
-			}
-			if len(m.places) == 0 && m.loading {
-				main.WriteString(theme.GoldStyle.Render("loading restaurants…") + "\n")
-			}
-			for i, p := range m.places {
-				main.WriteString(m.placeRow(p, i == m.list.Cursor) + "\n")
+			if rb > 0 {
+				if rb -= 2; rb < 3 {
+					rb = 3
+				}
 			}
 		}
+		main.WriteString(m.browseRows(rb))
 	}
 
 	mainStr := main.String()
+
+	// Size the rail to the main pane's ACTUAL height so the divider ends with the
+	// list — no blank rows padded under either column. Floor at the rail's own
+	// entry count so every category stays visible when the list is short.
+	railH := lipgloss.Height(mainStr)
+	if railH < m.rail.Len()+1 {
+		railH = m.rail.Len() + 1
+	}
+	left := m.rail.WithFocus(m.railFocus).WithActive(m.rail.Active()).WithHeight(railH).View()
+
 	// No extra indent before the main pane — each row already leads with a
 	// 4-cell cursor column, which is enough gap from the rail divider.
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, mainStr)

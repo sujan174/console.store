@@ -40,14 +40,11 @@ func TestCmdBarSpaceAndCaretEditing(t *testing.T) {
 	}
 }
 
-func TestCmdHelpLists(t *testing.T) {
+func TestCmdHelpOpensModal(t *testing.T) {
 	c := screens.NewCmdBar().WithText("help")
-	c, action := c.Run()
-	if action != "" {
-		t.Errorf("help action=%q", action)
-	}
-	if !strings.Contains(c.View(false), "neofetch") {
-		t.Errorf("help should list commands:\n%s", c.View(false))
+	_, action := c.Run()
+	if action != "help" {
+		t.Errorf(":help should return the \"help\" action (root opens the modal), got %q", action)
 	}
 }
 

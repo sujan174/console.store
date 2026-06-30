@@ -44,11 +44,18 @@ type Config struct {
 func DefaultCategories() []Category {
 	return []Category{
 		{Label: "Coffee", Query: "coffee"},
-		{Label: "Pizza", Query: "pizza"},
-		{Label: "Biryani", Query: "biryani"},
 		{Label: "Burgers", Query: "burger"},
+		{Label: "Pizza", Query: "pizza"},
+		{Label: "Sandwich", Query: "sandwich"},
 		{Label: "Rolls", Query: "rolls"},
-		{Label: "Desserts", Query: "dessert"},
+		{Label: "Momos", Query: "momos"},
+		{Label: "North Indian", Query: "north indian"},
+		{Label: "South Indian", Query: "south indian"},
+		{Label: "Chinese", Query: "chinese"},
+		{Label: "Biryani", Query: "biryani"},
+		{Label: "Shawarma", Query: "shawarma"},
+		{Label: "Cake", Query: "cake"},
+		{Label: "Shakes", Query: "shakes"},
 	}
 }
 

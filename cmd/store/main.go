@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -104,6 +105,7 @@ func run(args []string) error {
 		SignedIn:    signedIn,
 		Color:       colorEnabled(),
 		Interactive: isTerminal(os.Stdin),
+		Ctx:         ctx, // canceled on Ctrl-C/SIGTERM → order confirm treats it as cancel
 		In:          os.Stdin,
 		Out:         os.Stdout,
 	})
@@ -161,6 +163,10 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 		FoodBaseURL: swiggy.FoodBaseURL,
 		ImBaseURL:   swiggy.InstamartBaseURL,
 		HTTPClient:  httpc,
+		// Throttle outbound Swiggy calls so a launch/nav burst can't trip their
+		// anomaly detection (the cause of the account-restriction we hit).
+		// Tunable via CONSOLE_SWIGGY_MIN_INTERVAL_MS without a release.
+		MinInterval: swiggyMinInterval(),
 	})
 	be = datasource.NewBrokerBackend(datasource.NewInProc(svc), localstore.LocalAccountID)
 
@@ -290,6 +296,19 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// swiggyMinInterval is the minimum spacing between outbound Swiggy calls.
+// Default 200ms (≈5/s, serialized) — gentle enough to stay under Swiggy's
+// anomaly detection while keeping the UI responsive. Override with
+// CONSOLE_SWIGGY_MIN_INTERVAL_MS (set 0 to disable the throttle).
+func swiggyMinInterval() time.Duration {
+	if v := os.Getenv("CONSOLE_SWIGGY_MIN_INTERVAL_MS"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms >= 0 {
+			return time.Duration(ms) * time.Millisecond
+		}
+	}
+	return 200 * time.Millisecond
 }
 
 // seedSnapshot pre-populates snap with the config's restaurant + curated items
