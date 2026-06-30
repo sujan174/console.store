@@ -117,6 +117,27 @@ Card:
   a human TUI/CLI action. Once authorized, the keyring token (and refresh) serve the MCP
   transparently.
 
+## Auto-update on the `mcp` path
+
+`console mcp` is the same binary on the same channel, so it self-updates exactly like the
+TUI/CLI — `updater.RunDefault(ctx)` already runs in `run()` (main.go:85) *before* dispatch.
+We route `mcp` through `run()` so the updater fires at **process startup, before the MCP
+handshake**: it checks the channel manifest, and if newer, swaps the binary and re-execs
+into it, *then* starts serving. The keyring token is untouched, so auth survives the swap.
+
+The important nuance — **cadence is per server-spawn, not per tool call**:
+
+- An MCP server is long-lived; the agent spawns `console mcp` once and keeps it alive across
+  many tool calls. So an update lands when the **server process (re)starts** (typically each
+  new agent session), not on every order.
+- We deliberately do **not** update mid-session. A re-exec would sever the live stdio
+  JSON-RPC pipe and break the agent's connection. Update-on-spawn only; a server kept running
+  for days lags the channel until it respawns.
+- `Version=dev` local builds (`localconsole`/`localsafeconsole mcp`) never update, as today.
+- A headless/"cloud" box gets the update (file write + release fetch still work), but its
+  keyring is usually empty → tools return the *"not signed in"* error. Remote/multi-tenant
+  is out of scope; the MCP is single-machine, single-account like the rest of the app.
+
 ## Rate limiting (must persist — verified)
 
 All Swiggy traffic for an account flows through one cached `swiggy.Client`
