@@ -848,8 +848,12 @@ export function mount(root) {
       const data = o.getImageData(0, 0, W, H).data;
 
       // ---- sample into a grid of character cells ----
-      cellSz = clamp(fsC * 0.07, 8, 15);
-      glyphPx = cellSz * 1.42;
+      // Denser grid = higher-resolution wordmark: smaller cells pack more
+      // character glyphs into each letter so the strokes read solid instead of
+      // scattered. Glyph slightly larger than the cell so neighbours overlap
+      // and close the gaps between samples.
+      cellSz = clamp(fsC * 0.05, 6, 10);
+      glyphPx = cellSz * 1.55;
       cells = [];
       let minX = Infinity, maxX = -Infinity;
       const off2 = Math.floor(cellSz / 2);
@@ -861,7 +865,7 @@ export function mount(root) {
           const gy = Math.round(off2 + ry * cellSz);
           if (gx >= W || gy >= H) continue;
           const i = (gy * W + gx) * 4;
-          if (data[i + 3] > 110) {
+          if (data[i + 3] > 90) {
             const br = 1.18;
             const r = Math.min(255, data[i] * br) | 0;
             const g = Math.min(255, data[i + 1] * br) | 0;
