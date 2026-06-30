@@ -32,5 +32,12 @@ release:
   prerelease: auto   # -alpha./-beta. tags marked prerelease automatically
   # The signed manifest is attached by the workflow (Task 13) via `extra_files`.
 
+# Do NOT auto-generate a commit-list changelog into the release body. The body is
+# the USER-FACING release notes you author per tag (left empty until you write it);
+# the landing proxies it verbatim at /<channel>/notes/<tag> for the in-app
+# "what's new" reader. See RELEASING.md → "Writing release notes".
+changelog:
+  disable: true
+
 snapshot:
   version_template: "{{ .Tag }}-next"

@@ -42,3 +42,14 @@ export function logAlphaGrant({ label, asset, version, ip, ua }) {
     `alpha-grant who=${label} asset=${asset || "-"} version=${version || "-"} ip=${ip || "-"} ua=${JSON.stringify(ua || "-")}`,
   );
 }
+
+export async function ghReleaseBody(tag) {
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${tag}`, {
+    headers: { "User-Agent": "consolestore-landing" },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const body = data.body;
+  if (!body || !body.trim()) return null;
+  return body;
+}

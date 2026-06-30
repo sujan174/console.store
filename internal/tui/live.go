@@ -76,6 +76,19 @@ func WithOnboarding(show bool) Option {
 	return func(m *Model) { m.wantOnboarding = show }
 }
 
+// WithReleaseNotes arranges for the what's-new modal to auto-open once after
+// the splash→menu transition when the user has updated to a new version.
+// The fetch fires at session start; the modal opens only when notes arrive
+// (and onboarding is not active — the two paths are mutually exclusive).
+func WithReleaseNotes(version, channel, code string) Option {
+	return func(m *Model) {
+		m.notesVersion = version
+		m.notesChannel = channel
+		m.notesCode = code
+		m.wantNotes = true
+	}
+}
+
 // liveInitCmds returns the initial fetches for a live session. When seeded,
 // the snapshot already has data; skip live loads so the TUI is instantly usable.
 // When the session is pending authorization (no linked account yet), skip the
