@@ -660,7 +660,8 @@ func TestRestaurantArrowsNavigateCategoryNotAdd(t *testing.T) {
 // Instamart is no longer a menu lane in the approved 3-tab design; it is reached
 // only via the `:instamart` command. These tests drive that entry path.
 
-func TestCmdPaletteHelpStaysOpen(t *testing.T) {
+// :help closes the palette and opens the full help & controls modal.
+func TestCmdPaletteHelpOpensModal(t *testing.T) {
 	m := newAtMenu()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(":")})
 	m = updated.(Model)
@@ -670,8 +671,11 @@ func TestCmdPaletteHelpStaysOpen(t *testing.T) {
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
-	if !m.cmdOpen {
-		t.Error("help should keep the palette open")
+	if m.cmdOpen {
+		t.Error(":help should close the palette")
+	}
+	if !m.helpOpen {
+		t.Error(":help should open the help modal")
 	}
 }
 

@@ -234,6 +234,8 @@ type Model struct {
 	addrOpen         bool   // address switcher modal ('a') is open
 	settingsOpen     bool   // settings modal (from the splash) is open
 	settingsSel      int    // selected row in the settings modal
+	helpOpen         bool   // help & controls modal (? / H / :help) is open
+	helpScroll       int    // scroll offset within the help modal
 	homePending      bool   // Home's "popular near you" load is in flight (shows "loading…")
 	usualsLoaded     bool   // true once LoadUsuals has been fired for the current addr
 }
@@ -1989,6 +1991,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
+		// Help modal captures keys while open: scroll with ↑/↓ (or j/k), close on
+		// esc / q / ? / H / enter. It overlays whatever screen is behind it.
+		if m.helpOpen {
+			switch k.String() {
+			case "up", "k":
+				if m.helpScroll > 0 {
+					m.helpScroll--
+				}
+			case "down", "j":
+				if m.helpScroll < screens.HelpMaxScroll(m.h) {
+					m.helpScroll++
+				}
+			case "esc", "q", "?", "H", "enter", " ":
+				m.helpOpen = false
+			}
+			return m, nil
+		}
 		// Command palette captures all keys while open, so letters like `q`
 		// type into the prompt instead of quitting (design lines 743-751).
 		if m.cmdOpen {
@@ -2006,6 +2025,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// out already cleared in Run; stay open
 				case action == "close":
 					m.cmdOpen = false
+				case action == "help":
+					// :help opens the full help & controls modal.
+					m.cmdOpen = false
+					m.cmd = m.cmd.ClearText()
+					m.helpOpen = true
+					m.helpScroll = 0
 				case strings.HasPrefix(action, "alias"):
 					rest := strings.TrimSpace(strings.TrimPrefix(action, "alias"))
 					m.cmd = m.cmd.AppendOut(m.runAliasCommand(rest))
@@ -2250,6 +2275,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.lastEscFrame = -escDoubleWindow - 1
 			// fall through to per-screen single-Esc handling
+		}
+		// ? or H opens the help & controls modal from anywhere — except while
+		// typing (search / palette) or with a blocking modal already up, where the
+		// key means something else or would be swallowed.
+		if (k.String() == "?" || k.String() == "H") && m.helpTriggerable() {
+			m.helpOpen = true
+			m.helpScroll = 0
+			return m, nil
 		}
 		if m.screen == scrSplash {
 			// Settings modal (opened from the splash) captures keys while open.
@@ -2932,9 +2965,9 @@ func (m Model) screenKeybinds() string {
 		if m.searchMode {
 			return "↑↓ move · ↵ open · esc home · : cmd"
 		}
-		return "↑↓ move · ↵ open · / search · : cmd"
+		return "↑↓ move · ↵ open · / search · : cmd · ? help"
 	case scrRestaurant:
-		return "↑↓ move · ↵/+ add · − remove · c cart · i info · : cmd"
+		return "↑↓ move · ↵/+ add · − remove · c cart · : cmd · ? help"
 	default:
 		return ""
 	}
@@ -2968,6 +3001,22 @@ func (m Model) listRows(chrome int) int {
 	return 3
 }
 
+// helpTriggerable reports whether ? / H should open the help modal: not while a
+// blocking modal is already up, and not while typing into a search box or the
+// command palette (where the key is real input).
+func (m Model) helpTriggerable() bool {
+	if m.helpOpen || m.cmdOpen || m.settingsOpen || m.addrOpen || m.conflictOpen || m.customizeOpen || m.wizardOpen || m.restInfoOpen {
+		return false
+	}
+	if m.searchMode || m.menu.Searching() {
+		return false
+	}
+	if m.screen == scrRestaurant && (m.rest.Searching() || m.rest.InfoOpen()) {
+		return false
+	}
+	return true
+}
+
 func (m Model) View() string {
 	if m.needsAuth {
 		// The login gate IS the start screen — same boot banner, but the home menu
@@ -2978,6 +3027,16 @@ func (m Model) View() string {
 			return gate
 		}
 		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, gate)
+	}
+
+	// Help & controls modal (? / H / :help) — a centered, scrollable overlay over
+	// any screen.
+	if m.helpOpen {
+		card := screens.NewHelp().WithViewport(m.h).WithScroll(m.helpScroll).View()
+		if m.w == 0 || m.h == 0 {
+			return card
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card)
 	}
 
 	// Settings modal (opened from the splash) — a centered overlay matching the
