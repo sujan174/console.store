@@ -10,8 +10,9 @@ import (
 )
 
 type Address struct {
-	addrs []catalog.Address
-	list  components.List
+	addrs  []catalog.Address
+	list   components.List
+	forced bool // true when rendered as the entry gate (esc is a no-op)
 }
 
 // NewAddress builds the switcher with the cursor on currentID.
@@ -32,6 +33,13 @@ func (s Address) Selected() catalog.Address {
 		return catalog.Address{}
 	}
 	return s.addrs[s.list.Cursor]
+}
+
+// WithForced returns a copy of the Address screen configured as the forced
+// entry gate (esc is a no-op, so the footer must not advertise "esc cancel").
+func (s Address) WithForced(b bool) Address {
+	s.forced = b
+	return s
 }
 
 func (s Address) Init() tea.Cmd { return nil }
@@ -89,5 +97,9 @@ func (s Address) ModalView() string {
 	if len(lines) == 0 {
 		lines = append(lines, theme.DimStyle.Render("no saved addresses"))
 	}
-	return modalCard("deliver to", lines, "↑↓ select  ·  ↵ choose  ·  esc cancel", cardW)
+	footer := "↑↓ select  ·  ↵ choose  ·  esc cancel"
+	if s.forced {
+		footer = "↑↓ select  ·  ↵ choose your address"
+	}
+	return modalCard("deliver to", lines, footer, cardW)
 }

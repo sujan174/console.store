@@ -246,6 +246,9 @@ type Model struct {
 	cartSyncFrame     int
 	restInfoOpen      bool // restaurant-info modal ('i' on the browse list) is open
 	addrOpen          bool // address switcher modal ('a') is open
+	addrForced        bool // true while addrOpen is the forced entry gate (non-dismissible)
+	addrGatePending   bool // true from launch until the forced pick is satisfied
+	addressesLoaded   bool // true once AddressesLoadedMsg has been handled
 	settingsOpen      bool // settings modal (from the splash) is open
 	settingsSel       int  // selected row in the settings modal
 	helpOpen          bool // help & controls modal (? / H / :help) is open
@@ -274,7 +277,7 @@ type Model struct {
 func New(caps render.Caps, opts ...Option) Model {
 	repo := mem.New()
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome, railFocus: true}
+	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome, railFocus: true, addrGatePending: true}
 	for _, o := range opts {
 		o(&m)
 	}
@@ -582,6 +585,46 @@ func (m *Model) ensureHomeLoaded() tea.Cmd {
 		return nil
 	}
 	return tea.Batch(cmds...)
+}
+
+// loadHomeForCurrentAddr fires the Home-load trio for the currently-adopted
+// address. It resets usualsLoaded so the new address's usuals are re-fetched,
+// then returns the batch of ensureHomeLoaded + PullCart + activeOrderCheckCmd.
+// Callers must have already set m.addr before calling.
+func (m *Model) loadHomeForCurrentAddr() tea.Cmd {
+	m.usualsLoaded = false
+	return tea.Batch(m.ensureHomeLoaded(), datasource.PullCart(m.backend, m.addr.ID), m.activeOrderCheckCmd())
+}
+
+// maybeOpenAddrGate opens the forced address gate when all conditions hold:
+//   - addrGatePending (gate not yet satisfied this session)
+//   - we are on scrMenu (past the splash)
+//   - addresses have been loaded (AddressesLoadedMsg received)
+//   - no entry overlay is open (helpOpen or whatsnewOpen would obscure the gate)
+//
+// By address count:
+//   - 0  → clears the pending flag and returns nil (leave empty-state as-is).
+//   - 1  → auto-selects the single address and loads Home; no picker.
+//   - 2+ → builds the address-picker modal in forced mode; waits for Enter.
+func (m *Model) maybeOpenAddrGate() tea.Cmd {
+	if !m.addrGatePending || m.screen != scrMenu || !m.addressesLoaded || m.helpOpen || m.whatsnewOpen {
+		return nil
+	}
+	addrs := m.repo.Addresses()
+	switch len(addrs) {
+	case 0:
+		m.addrGatePending = false
+		return nil
+	case 1:
+		m.addr = addrs[0]
+		m.addrGatePending = false
+		return m.loadHomeForCurrentAddr()
+	default:
+		m.addrScreen = screens.NewAddress(addrs, "").WithForced(true)
+		m.addrOpen = true
+		m.addrForced = true
+		return nil
+	}
 }
 
 var menuTabs = []catalog.Section{catalog.SectionCoffee, catalog.SectionFood, catalog.SectionSnacks}
@@ -1643,10 +1686,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.needsAuth = true
 			return m, nil
 		}
+		m.addressesLoaded = true
+		m.menu = m.buildMenu()
+		if m.addrGatePending {
+			// Gate is still pending: do NOT auto-pick addrs[0] or load Home.
+			// maybeOpenAddrGate will open the picker (or auto-use the single address)
+			// once we are on scrMenu with no overlay open.
+			return m, m.maybeOpenAddrGate()
+		}
+		// Gate already satisfied (defensive / non-live paths): keep old behavior.
 		if addrs := m.repo.Addresses(); len(addrs) > 0 {
 			m.addr = addrs[0]
 		}
-		m.menu = m.buildMenu()
 		if m.live {
 			// Address just adopted → load Home (usuals + the popular list) for it,
 			// and pull the account cart once to detect a pre-existing foreign cart.
@@ -2156,10 +2207,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.helpOpen = false
 				if m.onboardingPending {
 					m.onboardingPending = false
-					return m, func() tea.Msg {
+					markerCmd := func() tea.Msg {
 						_ = localstore.MarkOnboarded()
 						return nil
 					}
+					if m.addrGatePending {
+						return m, tea.Batch(markerCmd, m.maybeOpenAddrGate())
+					}
+					return m, markerCmd
+				}
+				if m.addrGatePending {
+					return m, m.maybeOpenAddrGate()
 				}
 			}
 			return m, nil
@@ -2201,10 +2259,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc", "q", "?", "enter", " ":
 				m.whatsnewOpen = false
 				nv := m.notesVersion
-				return m, func() tea.Msg {
+				versionCmd := func() tea.Msg {
 					_ = localstore.SetLastSeenVersion(nv)
 					return nil
 				}
+				if m.addrGatePending {
+					return m, tea.Batch(versionCmd, m.maybeOpenAddrGate())
+				}
+				return m, versionCmd
 			}
 			return m, nil
 		}
@@ -2281,6 +2343,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// no-op so a stray press can neither dismiss the modal nor wipe the cart.
 		// Default focus is "keep current", so a reflexive Enter is always safe.
 		if m.addrOpen {
+			if m.addrForced {
+				// Forced entry gate: non-dismissible. Only ctrl+c quits, enter picks,
+				// esc/a are ignored, everything else moves the cursor.
+				switch k.String() {
+				case "ctrl+c":
+					return m, tea.Quit
+				case "esc", "a":
+					// Hard gate — do nothing; keep modal open.
+					return m, nil
+				case "enter":
+					m.addr = m.addrScreen.Selected()
+					m.addrOpen = false
+					m.addrForced = false
+					m.addrGatePending = false
+					if !m.cartRestaurantServes(m.addr) {
+						m.lines = nil
+						m.cartRestaurant = ""
+						m.cartSection = ""
+					}
+					m.screen = scrMenu
+					m.railActive = screens.RailHome
+					m.railFocus = true
+					m.searchMode = false
+					m.homePending = false
+					m.menu = m.buildMenu()
+					return m, m.loadHomeForCurrentAddr()
+				default:
+					na, _ := m.addrScreen.Update(msg)
+					m.addrScreen = na.(screens.Address)
+					return m, nil
+				}
+			}
+			// Normal (dismissible) address switcher.
 			switch k.String() {
 			case "ctrl+c":
 				return m, tea.Quit
@@ -2549,12 +2644,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.helpScroll = 0
 						m.onboardingPending = true
 						m.wantOnboarding = false
+						// Gate waits until the overlay closes.
 					} else if m.notesReady {
 						// What's-new auto-open: mutually exclusive with onboarding.
 						m.whatsnewOpen = true
 						m.whatsnewPage = 0
 						m.whatsnewScroll = 0
 						m.notesReady = false
+						// Gate waits until the overlay closes.
+					} else {
+						// No entry overlay — open the gate now (or wait for addresses).
+						return m, m.maybeOpenAddrGate()
 					}
 				}
 			}
