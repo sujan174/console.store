@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"consolestore/internal/broker/api"
 )
 
 const MaxPresetsPerName = 5
@@ -124,6 +126,27 @@ func (ps *Presets) Add(p Preset) error {
 	}
 	ps.Items = append(ps.Items, p)
 	return nil
+}
+
+// PresetCartItems maps a preset's lines to api.CartItem, replaying the exact
+// channel routing the TUI uses (variantsV2 / variantsLegacy / addons).
+func PresetCartItems(p Preset) []api.CartItem {
+	out := make([]api.CartItem, 0, len(p.Lines))
+	for _, l := range p.Lines {
+		ci := api.CartItem{ItemID: l.ItemID, Quantity: l.Qty}
+		for _, s := range l.Sels {
+			switch {
+			case s.Variant && s.Absolute:
+				ci.VariantsV2 = append(ci.VariantsV2, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
+			case s.Variant:
+				ci.VariantsLegacy = append(ci.VariantsLegacy, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
+			default:
+				ci.Addons = append(ci.Addons, api.CartAddonSel{GroupID: s.GroupID, ChoiceID: s.ChoiceID})
+			}
+		}
+		out = append(out, ci)
+	}
+	return out
 }
 
 // Remove deletes the idx-th preset (0-based) among those sharing name. Returns

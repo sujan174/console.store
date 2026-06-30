@@ -81,4 +81,7 @@ func (s *Server) register(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "get_cart", Description: "the current cart with the authoritative Swiggy bill"}, s.handleGetCart)
 	mcp.AddTool(srv, &mcp.Tool{Name: "update_cart", Description: "set the cart lines for a restaurant (replaces the cart)"}, s.handleUpdateCart)
 	mcp.AddTool(srv, &mcp.Tool{Name: "clear_cart", Description: "empty the cart"}, s.handleClearCart)
+	mcp.AddTool(srv, &mcp.Tool{Name: "prepare_order", Description: "sync the cart and return the real bill + a confirmation_id (does NOT place)"}, s.handlePrepareOrder)
+	mcp.AddTool(srv, &mcp.Tool{Name: "place_order", Description: "place the order for a confirmation_id from prepare_order (real, charges COD; never call without user confirmation)"}, s.handlePlaceOrder)
+	mcp.AddTool(srv, &mcp.Tool{Name: "order_preset", Description: "load a saved preset into the cart and return a bill + confirmation_id (does NOT place)"}, s.handleOrderPreset)
 }
