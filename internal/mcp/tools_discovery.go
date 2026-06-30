@@ -38,7 +38,7 @@ type MenuItemDTO struct {
 	Name         string `json:"name"`
 	Price        int    `json:"price"`
 	Veg          bool   `json:"veg"`
-	InStock      bool   `json:"inStock"`
+	InStock      bool   `json:"in_stock"`
 	Customizable bool   `json:"customizable"`
 }
 
@@ -162,7 +162,7 @@ type OptionChoiceDTO struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Price   int    `json:"price"`
-	InStock bool   `json:"inStock"`
+	InStock bool   `json:"in_stock"`
 }
 type OptionGroupDTO struct {
 	ID       string            `json:"id"`
