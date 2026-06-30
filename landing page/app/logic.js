@@ -422,18 +422,55 @@ export function mount(root) {
       if (cue) cue.classList.add("spent");
       if (legend) legend.classList.add("dim");
     };
-    const indexNow = () => {
-      const probe = window.innerHeight * 0.34;
-      let idx = 0;
-      sections.forEach((s, i) => {
-        if (s.getBoundingClientRect().top - 2 <= probe) idx = i;
-      });
-      return idx;
+    // Stops = the Y positions ↑/↓ snap to. A short section is CENTERED in the
+    // viewport; a full-height / tall one is top-aligned; the #keys scrolly gets
+    // TWO stops (TUI at 16% through it, CLI at 82%) so arrows step through its
+    // transition instead of skipping it. Rebuilt on resize / after layout settles.
+    // Absolute document top from layout (offsetTop chain) — unaffected by the
+    // `data-reveal` scroll-timeline transforms, unlike getBoundingClientRect.
+    const docTop = (el) => {
+      let y = 0, n = el;
+      while (n) { y += n.offsetTop; n = n.offsetParent; }
+      return y;
     };
-    const go = (i) => {
-      i = Math.max(0, Math.min(sections.length - 1, i));
-      const top = sections[i].getBoundingClientRect().top + window.scrollY;
-      window.scrollTo({ top: Math.max(0, top), behavior: reduce ? "auto" : "smooth" });
+    const buildStops = () => {
+      const vh = window.innerHeight;
+      const maxY = Math.max(0, document.documentElement.scrollHeight - vh);
+      const clampY = (y) => Math.max(0, Math.min(maxY, Math.round(y)));
+      const raw = [];
+      sections.forEach((s, idx) => {
+        const topY = docTop(s);
+        const h = s.offsetHeight;
+        if (idx === 0) {
+          raw.push(0); // hero → the very top, so the nav stays in frame
+        } else if (s.id === "keys") {
+          const total = Math.max(1, h - vh);
+          raw.push(clampY(topY + total * 0.16)); // TUI view
+          raw.push(clampY(topY + total * 0.82)); // CLI view
+        } else if (h >= vh * 0.82) {
+          raw.push(clampY(topY)); // near-full / tall section → align top
+        } else {
+          raw.push(clampY(topY - (vh - h) / 2)); // short section → center it
+        }
+      });
+      raw.sort((a, b) => a - b);
+      const stops = [];
+      raw.forEach((y) => { if (!stops.length || y - stops[stops.length - 1] > 6) stops.push(y); });
+      return stops;
+    };
+    let stops = buildStops();
+    const rebuild = () => { stops = buildStops(); };
+    const goY = (y) => window.scrollTo({ top: y, behavior: reduce ? "auto" : "smooth" });
+    const nextStop = () => {
+      const y = window.scrollY + 6;
+      const t = stops.find((s) => s > y);
+      goY(t != null ? t : stops[stops.length - 1]);
+    };
+    const prevStop = () => {
+      const y = window.scrollY - 6;
+      let t = stops[0];
+      for (const s of stops) { if (s < y) t = s; }
+      goY(t);
     };
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -452,21 +489,28 @@ export function mount(root) {
         case "PageDown":
         case "Enter":
         case " ":
-          e.preventDefault(); go(indexNow() + 1); markUsed(); break;
+          e.preventDefault(); nextStop(); markUsed(); break;
         case "ArrowUp":
         case "PageUp":
-          e.preventDefault(); go(indexNow() - 1); markUsed(); break;
+          e.preventDefault(); prevStop(); markUsed(); break;
         case "Home":
-          e.preventDefault(); go(0); markUsed(); break;
+          e.preventDefault(); goY(stops[0]); markUsed(); break;
         case "End":
-          e.preventDefault(); go(sections.length - 1); markUsed(); break;
+          e.preventDefault(); goY(stops[stops.length - 1]); markUsed(); break;
       }
     };
     document.addEventListener("keydown", onKey);
     navHandlers.push([document, "keydown", onKey]);
+    // Recompute stops when layout changes (resize) and once more after the hero /
+    // fonts settle, since section offsets shift during the opening animation.
+    const onResize = () => rebuild();
+    window.addEventListener("resize", onResize);
+    navHandlers.push([window, "resize", onResize]);
+    S.timers.push(setTimeout(rebuild, 1200));
+    S.timers.push(setTimeout(rebuild, 3200));
     // Mouse/touch affordances: the cue advances, the legend's stats chip opens it.
     if (cue) {
-      const h = () => { go(indexNow() + 1); markUsed(); };
+      const h = () => { nextStop(); markUsed(); };
       cue.addEventListener("click", h);
       navHandlers.push([cue, "click", h]);
     }
