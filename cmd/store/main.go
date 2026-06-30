@@ -35,6 +35,7 @@ import (
 	"consolestore/internal/cli"
 	"consolestore/internal/config"
 	"consolestore/internal/localstore"
+	consolemcp "consolestore/internal/mcp"
 	"consolestore/internal/swiggy"
 	"consolestore/internal/telemetry"
 	consoletui "consolestore/internal/tui"
@@ -92,6 +93,15 @@ func run(args []string) error {
 	be, signedIn, launchTUI, err := bootstrap(ctx)
 	if err != nil {
 		return err
+	}
+
+	if len(args) > 0 && args[0] == "mcp" {
+		// Agent surface: stdio MCP server over the same broker. Updater already
+		// ran above (run() → updater.RunDefault), so this serves the latest build.
+		if err := consolemcp.Serve(ctx, consolemcp.NewServer(be, nil)); err != nil {
+			return fmt.Errorf("mcp server: %w", err)
+		}
+		return nil
 	}
 
 	if len(args) == 0 {
