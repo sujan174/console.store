@@ -89,4 +89,6 @@ func (s *Server) register(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "order_preset", Description: "load a saved preset into the cart and return a bill + confirmation_id (does NOT place)"}, s.handleOrderPreset)
 	mcp.AddTool(srv, &mcp.Tool{Name: "sign_in", Description: "start Swiggy sign-in; returns a browser URL (opened automatically when possible)"}, s.handleSignIn)
 	mcp.AddTool(srv, &mcp.Tool{Name: "auth_status", Description: "whether the user is signed in"}, s.handleAuthStatus)
+	mcp.AddTool(srv, &mcp.Tool{Name: "get_card", Description: "the user's local taste card (default address, favorites, prefs) + staleness warnings"}, s.handleGetCard)
+	mcp.AddTool(srv, &mcp.Tool{Name: "update_card", Description: "record explicit prefs or a default address on the taste card"}, s.handleUpdateCard)
 }
