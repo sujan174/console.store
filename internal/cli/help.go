@@ -20,6 +20,7 @@ usage:
   console version               print version + channel
   console update [--channel stable|beta|alpha [--code X]]
                               switch channel, or check for updates now
+  console agents [install|list|remove]   wire console into your AI agents (MCP + skills)
   console help                  show this help
 
 presets are created inside the app: build a cart, press : and run

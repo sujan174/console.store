@@ -28,6 +28,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"consolestore/internal/agents"
 	"consolestore/internal/auth"
 	"consolestore/internal/broker"
 	"consolestore/internal/catalog"
@@ -51,6 +52,10 @@ func main() {
 	// help/--help/-h need no auth and no network at all — short-circuit early.
 	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
 		os.Exit(cli.Dispatch(args, cli.Deps{Out: os.Stdout, Color: colorEnabled()}))
+	}
+	// agents provisioning needs no auth/network/keyring — short-circuit early.
+	if len(args) > 0 && args[0] == "agents" {
+		os.Exit(agents.Dispatch(args[1:], os.Stdout))
 	}
 	if err := run(args); err != nil {
 		log.Fatalf("store: %v", err)
