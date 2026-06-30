@@ -68,6 +68,14 @@ func WithChips(cats []config.Category) Option {
 	return func(m *Model) { m.chips = cats }
 }
 
+// WithOnboarding arranges for the help modal to auto-open once, over the start
+// screen after the splash settles, when show is true. The modal is flagged with
+// onboardingPending so closing it writes the first-run marker via MarkOnboarded.
+// Pass localstore.ShouldOnboard() at the call site in main.go.
+func WithOnboarding(show bool) Option {
+	return func(m *Model) { m.wantOnboarding = show }
+}
+
 // liveInitCmds returns the initial fetches for a live session. When seeded,
 // the snapshot already has data; skip live loads so the TUI is instantly usable.
 // When the session is pending authorization (no linked account yet), skip the

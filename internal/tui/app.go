@@ -242,16 +242,19 @@ type Model struct {
 	// fires ONE sync once the keys settle (cartSettleFrames). SyncCart sends the
 	// full cart snapshot (idempotent SET), so collapsing many edits into one
 	// trailing sync is correct.
-	cartSyncPending bool
-	cartSyncFrame   int
-	restInfoOpen    bool // restaurant-info modal ('i' on the browse list) is open
-	addrOpen        bool // address switcher modal ('a') is open
-	settingsOpen    bool // settings modal (from the splash) is open
-	settingsSel     int  // selected row in the settings modal
-	helpOpen        bool // help & controls modal (? / H / :help) is open
-	helpScroll      int  // scroll offset within the help modal
-	homePending     bool // Home's "popular near you" load is in flight (shows "loading…")
-	usualsLoaded    bool // true once LoadUsuals has been fired for the current addr
+	cartSyncPending   bool
+	cartSyncFrame     int
+	restInfoOpen      bool // restaurant-info modal ('i' on the browse list) is open
+	addrOpen          bool // address switcher modal ('a') is open
+	settingsOpen      bool // settings modal (from the splash) is open
+	settingsSel       int  // selected row in the settings modal
+	helpOpen          bool // help & controls modal (? / H / :help) is open
+	helpScroll        int  // scroll offset within the help modal
+	helpPage          int  // current page in the paginated help modal (0-indexed)
+	onboardingPending bool // true once auto-opened on first run, until the first close writes the marker
+	wantOnboarding    bool // set by WithOnboarding(true); defers auto-open until the start screen
+	homePending       bool // Home's "popular near you" load is in flight (shows "loading…")
+	usualsLoaded      bool // true once LoadUsuals has been fired for the current addr
 }
 
 func New(caps render.Caps, opts ...Option) Model {
@@ -2092,8 +2095,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.helpScroll < screens.HelpMaxScroll(m.h) {
 					m.helpScroll++
 				}
+			case "left", "h":
+				if m.helpPage > 0 {
+					m.helpPage--
+					m.helpScroll = 0
+				}
+			case "right", "l":
+				if m.helpPage < screens.HelpPageCount()-1 {
+					m.helpPage++
+					m.helpScroll = 0
+				}
+			case "1", "2", "3", "4", "5":
+				pg := int(k.Runes[0] - '1')
+				if pg < 0 {
+					pg = 0
+				}
+				if pg >= screens.HelpPageCount() {
+					pg = screens.HelpPageCount() - 1
+				}
+				m.helpPage = pg
+				m.helpScroll = 0
 			case "esc", "q", "?", "H", "enter", " ":
 				m.helpOpen = false
+				if m.onboardingPending {
+					m.onboardingPending = false
+					return m, func() tea.Msg {
+						_ = localstore.MarkOnboarded()
+						return nil
+					}
+				}
 			}
 			return m, nil
 		}
@@ -2119,6 +2149,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cmdOpen = false
 					m.cmd = m.cmd.ClearText()
 					m.helpOpen = true
+					m.helpPage = 0
 					m.helpScroll = 0
 				case strings.HasPrefix(action, "alias"):
 					rest := strings.TrimSpace(strings.TrimPrefix(action, "alias"))
@@ -2370,6 +2401,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// key means something else or would be swallowed.
 		if (k.String() == "?" || k.String() == "H") && m.helpTriggerable() {
 			m.helpOpen = true
+			m.helpPage = 0
 			m.helpScroll = 0
 			return m, nil
 		}
@@ -2430,6 +2462,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, pollCmd
 				} else {
 					m.screen = scrMenu
+					if m.wantOnboarding {
+						m.helpOpen = true
+						m.helpPage = 0
+						m.helpScroll = 0
+						m.onboardingPending = true
+						m.wantOnboarding = false
+					}
 				}
 			}
 			return m, nil
@@ -3124,7 +3163,7 @@ func (m Model) View() string {
 	// Help & controls modal (? / H / :help) — a centered, scrollable overlay over
 	// any screen.
 	if m.helpOpen {
-		card := screens.NewHelp().WithViewport(m.h).WithScroll(m.helpScroll).View()
+		card := screens.NewHelp().WithViewport(m.h).WithPage(m.helpPage).WithScroll(m.helpScroll).View()
 		if m.w == 0 || m.h == 0 {
 			return card
 		}

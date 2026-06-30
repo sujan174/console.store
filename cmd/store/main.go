@@ -235,6 +235,7 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 			opts = append(opts, consoletui.WithSeededSnapshot())
 		}
 		opts = append(opts, consoletui.WithChips(cfg.ChipCategories()))
+		opts = append(opts, consoletui.WithOnboarding(localstore.ShouldOnboard()))
 
 		// Canvas background (OSC 11) on start; reset (OSC 111) on exit.
 		// These are TUI-only: headless subcommands must output clean plain text.
