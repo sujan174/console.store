@@ -96,6 +96,15 @@ Order — **two-tool commit gate** (the only money path):
 - `order_preset(name)` → pushes the named preset to the cart, then runs the same
   `prepare_order` → `place_order` gate (returns a `confirmation_id`; does not place in one shot).
 
+Auth (first-run sign-in, agent-driven):
+- `sign_in` → starts the OAuth flow (cached DCR client + PKCE), binds the loopback callback
+  (127.0.0.1:8765/cb), **returns the authorize URL**, and **best-effort opens the local
+  browser** (`open`/`xdg-open`/`start`). Non-blocking: returns immediately with the URL so the
+  agent can present/click it. The token is **never** returned to the agent (PKCE front-channel
+  only; code→token exchange + keyring write happen in-process).
+- `auth_status` → `{ signed_in: bool }`. The agent polls this after `sign_in` until the
+  loopback callback completes and the token is stored.
+
 Card:
 - `get_card` → returns the local taste card **plus a `warnings[]` field** populated by
   reconciling against live `list_addresses` (see Taste card).
@@ -111,11 +120,15 @@ Card:
   gated by `CONSOLE_LIVE_ORDERS` / build arming exactly as the CLI/TUI are.
 - **No GPS.** Every order requires an explicit `address_id`; the agent obtains it from the
   card's default or from `list_addresses`. The terminal can't know location.
-- **Auth.** The MCP does **not** trigger browser OAuth (a loopback browser dance inside an
-  agent is hostile UX). If there's no keyring token, every tool returns a structured error:
-  *"not signed in — run `console` once on this machine to authorize."* First-run auth stays
-  a human TUI/CLI action. Once authorized, the keyring token (and refresh) serve the MCP
-  transparently.
+- **Auth (agent-driven first run).** If there's no keyring token, data/order tools return a
+  structured error telling the agent to call **`sign_in`**. `sign_in` starts the existing
+  loopback OAuth flow, returns the authorize URL, and best-effort opens the user's browser —
+  so the user authorizes with a click, never dropping to a terminal. The agent polls
+  `auth_status` until done, then retries the original tool. The **token is never exposed to
+  the agent** (PKCE front channel only; exchange + keyring write are in-process). Once stored,
+  the keyring token (and refresh) serve the MCP transparently. On a headless box with no
+  display, `sign_in` still returns the URL to open manually; auth simply can't complete without
+  a browser reachable on that machine's loopback (single-machine boundary).
 
 ## Auto-update on the `mcp` path
 
@@ -196,6 +209,9 @@ Both bundles are embedded and installed into each agent's skills dir. Format is 
 
 1. **`console-order`** — the daily driver. Teaches the ordering workflow and the
    hassle-free fast paths:
+   - First-run / not signed in: if a tool reports not-signed-in, call `sign_in`, present the
+     returned URL (the browser usually opens automatically), wait while polling `auth_status`,
+     then retry — the user never touches a terminal.
    - Start by calling `get_card`. If it has data, tell the user what's remembered
      ("usual address Home; you often order McDonald's") and let them go with it or change —
      this is the "there's already something, override?" behavior, done at the skill level.
