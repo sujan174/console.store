@@ -90,7 +90,7 @@ func run(args []string) error {
 	// only a random install id + channel + version; never the token or any data.
 	telemetry.Launch()
 
-	be, signedIn, launchTUI, err := bootstrap(ctx)
+	be, signedIn, launchTUI, authMgr, ls, redirect, err := bootstrap(ctx)
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,8 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "mcp" {
 		// Agent surface: stdio MCP server over the same broker. Updater already
 		// ran above (run() → updater.RunDefault), so this serves the latest build.
-		if err := consolemcp.Serve(ctx, consolemcp.NewServer(be, nil)); err != nil {
+		authn := newMCPAuth(ctx, authMgr, ls, redirect)
+		if err := consolemcp.Serve(ctx, consolemcp.NewServer(be, authn)); err != nil {
 			return fmt.Errorf("mcp server: %w", err)
 		}
 		return nil
@@ -147,22 +148,22 @@ func isTerminal(f *os.File) bool {
 //
 // Both the TUI path and the headless path call bootstrap; only the TUI path
 // calls the returned launchTUI closure.
-func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool, launchTUI func() error, err error) {
+func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool, launchTUI func() error, authMgr *auth.Manager, ls *localstore.Store, redirect string, err error) {
 	metaURL := envOr("CONSOLE_SWIGGY_METADATA", "https://mcp.swiggy.com/.well-known/oauth-authorization-server")
-	redirect := envOr("CONSOLE_REDIRECT_URI", "http://127.0.0.1:8765/cb")
+	redirect = envOr("CONSOLE_REDIRECT_URI", "http://127.0.0.1:8765/cb")
 	httpc := &http.Client{Timeout: 30 * time.Second}
 
-	ls := localstore.New()
+	ls = localstore.New()
 
 	reg, err := resolveRegistration(ctx, httpc, metaURL, redirect)
 	if err != nil {
-		return nil, false, nil, fmt.Errorf("oauth registration: %w", err)
+		return nil, false, nil, nil, nil, "", fmt.Errorf("oauth registration: %w", err)
 	}
 	meta := auth.Metadata{
 		AuthorizationEndpoint: reg.AuthorizationEndpoint,
 		TokenEndpoint:         reg.TokenEndpoint,
 	}
-	authMgr := auth.NewManager(auth.Config{
+	authMgr = auth.NewManager(auth.Config{
 		HTTPClient: httpc, Metadata: meta, ClientID: reg.ClientID,
 		RedirectURI: redirect, Scope: oauthScope, Store: ls,
 	})
@@ -184,7 +185,7 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 	// Token check: present → straight in; absent → auth gate.
 	_, _, _, ok, kerr := ls.GetTokenFull(ctx, localstore.LocalAccountID)
 	if kerr != nil {
-		return nil, false, nil, fmt.Errorf("read keyring: %w", kerr)
+		return nil, false, nil, nil, nil, "", fmt.Errorf("read keyring: %w", kerr)
 	}
 	signedIn = ok
 
@@ -275,7 +276,7 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 		return err
 	}
 
-	return be, signedIn, launchTUI, nil
+	return be, signedIn, launchTUI, authMgr, ls, redirect, nil
 }
 
 // truecolor reports whether the terminal supports 24-bit color. COLORTERM,
@@ -318,6 +319,13 @@ func callbackAddr(redirect string) string {
 		s = s[:i]
 	}
 	return s
+}
+
+// netListenCallback binds the loopback TCP port derived from redirect. Used by
+// both launchTUI (inline) and mcpAuth.Start so both paths share the same binding
+// logic without duplicating callbackAddr.
+func netListenCallback(redirect string) (net.Listener, error) {
+	return net.Listen("tcp", callbackAddr(redirect))
 }
 
 func envOr(key, def string) string {

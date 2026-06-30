@@ -5,12 +5,15 @@ package mcp
 
 import (
 	"context"
+	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"consolestore/internal/broker/api"
 	"consolestore/internal/version"
 )
+
+var errAuthUnavailable = errors.New("sign-in is unavailable in this build")
 
 // Backend is the account-pinned slice of broker capability the tools need.
 // *datasource.BrokerBackend satisfies it.
@@ -84,4 +87,6 @@ func (s *Server) register(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "prepare_order", Description: "sync the cart and return the real bill + a confirmation_id (does NOT place)"}, s.handlePrepareOrder)
 	mcp.AddTool(srv, &mcp.Tool{Name: "place_order", Description: "place the order for a confirmation_id from prepare_order (real, charges COD; never call without user confirmation)"}, s.handlePlaceOrder)
 	mcp.AddTool(srv, &mcp.Tool{Name: "order_preset", Description: "load a saved preset into the cart and return a bill + confirmation_id (does NOT place)"}, s.handleOrderPreset)
+	mcp.AddTool(srv, &mcp.Tool{Name: "sign_in", Description: "start Swiggy sign-in; returns a browser URL (opened automatically when possible)"}, s.handleSignIn)
+	mcp.AddTool(srv, &mcp.Tool{Name: "auth_status", Description: "whether the user is signed in"}, s.handleAuthStatus)
 }
