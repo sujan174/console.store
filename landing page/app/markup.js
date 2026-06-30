@@ -67,15 +67,18 @@ export const MARKUP = String.raw`
         <span style="color:#e9ebf7">just&nbsp;<span style="color:#93a8ff">↵</span></span>
       </div>
 
-      <!-- live stats — hidden until /stats has real data, then rolls in + counts up after the wordmark assembles (see logic.js initStats) -->
-      <div data-ref="stats" class="hero-stats" aria-hidden="true">
-        <span class="hero-stats-live"><span class="hero-stats-dot"></span>live</span>
-        <span class="hero-stats-div"></span>
-        <span class="hero-stat"><b class="gold" data-stat="orders">0</b><span class="hero-stat-l">orders placed</span></span>
-        <span class="hero-stats-sep">·</span>
-        <span class="hero-stat"><b data-stat="installs">0</b><span class="hero-stat-l">installs</span></span>
-        <span class="hero-stats-sep">·</span>
-        <span class="hero-stat"><b data-stat="active">0</b><span class="hero-stat-l">active this week</span></span>
+      <!-- install command (OS-aware text set in logic.js; live stats live in the right drawer) -->
+      <div style="margin-top:28px;display:flex;flex-direction:column;align-items:center;gap:11px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .8s">
+        <div data-action="install" title="coming soon" class="install-hero" style="display:inline-flex;align-items:stretch;border:1px solid rgba(147,168,255,.15);border-radius:10px;background:#09090f;box-shadow:0 0 48px rgba(147,168,255,.05),0 24px 64px rgba(0,0,0,.55);cursor:not-allowed;overflow:hidden;font-size:13.5px">
+          <div style="display:flex;align-items:center;gap:11px;padding:14px 20px">
+            <span data-install-prompt style="color:#2d2f48">$</span>
+            <span data-ref="install" data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;padding:0 16px;background:rgba(234,181,96,.07);border-left:1px solid rgba(234,181,96,.2);color:#eab560;font-size:11.5px;cursor:not-allowed;flex:none">
+            <span style="width:5px;height:5px;border-radius:99px;background:#eab560;animation:pulseDot 2.2s ease-in-out infinite;flex:none"></span>coming soon
+          </div>
+        </div>
+        <div data-install-hint style="font-size:11.5px;color:#2d2f48">armed builds place real orders. the default stays safe.</div>
       </div>
     </div>
 
@@ -94,19 +97,6 @@ export const MARKUP = String.raw`
       <div data-pitch-item style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:6px">// what it is</div>
       <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:18ch">dinner, piped through your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">terminal</span>.</h1>
       <p data-pitch-item style="max-width:56ch;color:#8a8fb4;font-size:15px;line-height:1.8;margin:22px 0 0">a CLI and a full TUI for ordering real food through Swiggy — without leaving your shell. authorize once, then browse, reorder a saved favourite, and track delivery straight from the terminal.</p>
-
-      <div data-pitch-item style="margin:34px 0 0;display:flex;flex-direction:column;align-items:center;gap:11px">
-        <div data-action="install" title="coming soon" class="install-hero" style="display:inline-flex;align-items:stretch;border:1px solid rgba(147,168,255,.15);border-radius:10px;background:#09090f;box-shadow:0 0 48px rgba(147,168,255,.05),0 24px 64px rgba(0,0,0,.55);cursor:not-allowed;overflow:hidden;font-size:13.5px">
-          <div style="display:flex;align-items:center;gap:11px;padding:14px 20px">
-            <span data-install-prompt style="color:#2d2f48">$</span>
-            <span data-ref="install" data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:7px;padding:0 16px;background:rgba(234,181,96,.07);border-left:1px solid rgba(234,181,96,.2);color:#eab560;font-size:11.5px;cursor:not-allowed;flex:none">
-            <span style="width:5px;height:5px;border-radius:99px;background:#eab560;animation:pulseDot 2.2s ease-in-out infinite;flex:none"></span>coming soon
-          </div>
-        </div>
-        <div data-install-hint style="font-size:11.5px;color:#2d2f48">armed builds place real orders. the default stays safe.</div>
-      </div>
     </div>
   </section>
 
@@ -115,9 +105,9 @@ export const MARKUP = String.raw`
     <span style="color:#eab560">●</span><span data-toast-msg>coming soon — the install isn't live yet.</span>
   </div>
 
-  <!-- LIVE-STATS right tab + pop-out drawer. The tab + the hero strip are both
-       revealed by logic.js only once /stats has real data; the drawer adds the
-       per-channel breakdown the inline strip doesn't show. -->
+  <!-- LIVE-STATS right tab + pop-out drawer — the single home for live stats.
+       The tab is always shown (revealed by logic.js after the wordmark settles);
+       the drawer holds totals + the per-channel breakdown. -->
   <button data-ref="statstab" class="stats-tab" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="open live stats" hidden>
     <span class="stats-tab-dot"></span>
     <span class="stats-tab-label">live stats</span>

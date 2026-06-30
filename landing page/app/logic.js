@@ -27,7 +27,6 @@ export function mount(root) {
     palette: root.querySelector('[data-ref="palette"]'),
     cli: root.querySelector('[data-ref="cli"]'),
     toast: root.querySelector('[data-ref="toast"]'),
-    stats: root.querySelector('[data-ref="stats"]'),
     statstab: root.querySelector('[data-ref="statstab"]'),
     statsback: root.querySelector('[data-ref="statsback"]'),
     statsdrawer: root.querySelector('[data-ref="statsdrawer"]'),
@@ -275,13 +274,12 @@ export function mount(root) {
     });
   };
 
-  // ---- live stats: one /stats fetch drives both the hero strip and the
-  // right-edge tab → pop-out drawer. Strip + tab reveal only once there's real
-  // data (never a hollow "0 orders"); the drawer adds the per-channel breakdown.
-  // A failed/empty fetch just leaves everything hidden. ----
+  // ---- live stats: one /stats fetch feeds the right-edge tab → pop-out drawer
+  // (the single home for live stats). The tab is always shown; the drawer holds
+  // totals + the per-channel breakdown. A failed/empty fetch leaves the drawer's
+  // numbers at zero with a "no channel data yet" note. ----
   const statsHandlers = [];
   const initStats = () => {
-    const strip = refs.stats;
     const fmt = (n) => Math.round(n).toLocaleString("en-US");
     const countUp = (el, to, dur) => {
       if (!el) return;
@@ -295,27 +293,6 @@ export function mount(root) {
         else el.textContent = fmt(to);
       };
       requestAnimationFrame(step);
-    };
-
-    // ----- hero strip -----
-    const stripEls = {};
-    ["orders", "installs", "active"].forEach(
-      (k) => (stripEls[k] = strip && strip.querySelector('[data-stat="' + k + '"]'))
-    );
-    const revealStrip = (vals) => {
-      if (!strip) return;
-      const show = () => {
-        if (S.dead) return;
-        strip.classList.add("is-in");
-        strip.setAttribute("aria-hidden", "false");
-        ["orders", "installs", "active"].forEach((k) => {
-          if (!stripEls[k]) return;
-          if (reduce) stripEls[k].textContent = fmt(vals[k]);
-          else countUp(stripEls[k], vals[k], 1100);
-        });
-      };
-      // hold until the hero wordmark has assembled (~2.1s) before rolling in
-      S.timers.push(setTimeout(show, reduce ? 200 : 2300));
     };
 
     // ----- right tab + drawer -----
@@ -400,24 +377,20 @@ export function mount(root) {
       S.timers.push(setTimeout(show, reduce ? 250 : 2600));
     };
 
-    // ----- one fetch feeds both -----
-    // The right-edge tab is a persistent affordance — always revealed, even with
-    // no data (the drawer shows its empty state at zero). The inline hero strip
-    // still stays hidden until there's something real to show.
+    // ----- fetch feeds the drawer -----
+    // The right-edge tab is always revealed (persistent affordance). The fetched
+    // data populates the drawer on open; an empty/failed fetch just shows zeros.
     revealTab();
     fetch("/stats", { headers: { accept: "application/json" } })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (S.dead || !d) return;
-        const vals = {
+        statsState.data = {
           orders: +d.orders || 0,
           installs: +d.installs || 0,
           active: +d.active_installs || 0,
           by_channel: d.by_channel || {},
         };
-        statsState.data = vals;
-        if (vals.orders + vals.installs <= 0) return; // strip stays hidden until real data
-        revealStrip(vals);
       })
       .catch(() => {});
 
@@ -783,7 +756,7 @@ export function mount(root) {
       if (needRebuild) { needRebuild = false; build(); ctx.textAlign = "center"; ctx.textBaseline = "middle"; }
       const T = performance.now() - t0;
       paint(T);
-      if (T >= DONE && !needRebuild) { assembled = true; paint(DONE); if (S.onHeroAssembled) S.onHeroAssembled(); return; }
+      if (T >= DONE && !needRebuild) { assembled = true; paint(DONE); return; }
       hraf = requestAnimationFrame(tick);
     };
     tick();
@@ -798,7 +771,7 @@ export function mount(root) {
     // the tab was backgrounded and rAF was throttled, or the loop stalled),
     // fall back to the static styled wordmark so visitors always see the brand.
     const watchdog = setTimeout(() => {
-      if (!S.dead && !assembled) { showWordmarkFallback(); startWordmark(); if (S.onHeroAssembled) S.onHeroAssembled(); }
+      if (!S.dead && !assembled) { showWordmarkFallback(); startWordmark(); }
     }, 3500);
     S.timers.push(watchdog);
 
@@ -818,29 +791,6 @@ export function mount(root) {
   initFaq();
   initCmdClicks();
   initStats();
-  // ---- auto-scroll to the pitch once the wordmark animation has settled ----
-  // Gentle one-shot: only if the visitor is still at the very top and hasn't
-  // tried to scroll themselves (we never hijack an intent to move).
-  if (!reduce) {
-    let autoScrolled = false;
-    S.onHeroAssembled = () => {
-      if (autoScrolled || S.dead) return;
-      autoScrolled = true;
-      // small beat after the assembly so it doesn't yank the instant it locks.
-      // Only the live scroll position gates it: if the visitor has already
-      // scrolled themselves we never override that intent.
-      S.timers.push(setTimeout(() => {
-        if (S.dead || window.scrollY > 12) return;
-        const sec = root.querySelector("#pitch");
-        if (!sec) return;
-        const top = sec.getBoundingClientRect().top + window.scrollY;
-        window.scrollTo({ top, behavior: "smooth" });
-      }, 600));
-    };
-    // Guaranteed trigger: however the hero resolves (assembled, watchdog
-    // fallback, or an early bail), fire the one-shot auto-scroll by ~4.2s.
-    S.timers.push(setTimeout(() => { if (S.onHeroAssembled) S.onHeroAssembled(); }, 4200));
-  }
 
   if (!reduce) {
     initFooterWordmark();
@@ -892,7 +842,6 @@ export function mount(root) {
     scrambleObservers.forEach((io) => io.disconnect());
     if (S.heroCleanup) S.heroCleanup();
     if (S.nudgeCleanup) S.nudgeCleanup();
-    if (S.autoScrollCleanup) S.autoScrollCleanup();
     if (S.statsCleanup) S.statsCleanup();
     cleanupKeys();
   };
