@@ -9,6 +9,7 @@ import (
 	"consolestore/internal/auth"
 	"consolestore/internal/broker/api"
 	"consolestore/internal/swiggy"
+	"consolestore/internal/telemetry"
 )
 
 type TokenStore interface {
@@ -160,12 +161,23 @@ func (s *Service) GetCart(ctx context.Context, accountID, addressID, restaurantN
 	return mapCart(c), nil
 }
 
+// shouldPingOrder reports whether a placement is a real, successful order worth
+// counting. The disarmed no-op returns an error (ErrOrdersDisabled), so gating
+// on err==nil && ID!="" excludes both failures and disarmed builds.
+func shouldPingOrder(o api.Order, err error) bool {
+	return err == nil && o.ID != ""
+}
+
 func (s *Service) PlaceOrder(ctx context.Context, accountID, addressID string) (api.Order, error) {
 	o, err := s.foodClient(accountID).PlaceFoodOrder(ctx, swiggy.PlaceFoodOrderRequest{AddressID: addressID})
 	if err != nil {
 		return api.Order{}, err
 	}
-	return mapOrder(o), nil
+	mapped := mapOrder(o)
+	if shouldPingOrder(mapped, nil) {
+		telemetry.OrderPlaced() // anonymous count; fire-and-forget, gated
+	}
+	return mapped, nil
 }
 
 // TrackOrder returns the live status + ETA for an order (read-only; not gated

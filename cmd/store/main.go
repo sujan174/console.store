@@ -35,6 +35,7 @@ import (
 	"consolestore/internal/config"
 	"consolestore/internal/localstore"
 	"consolestore/internal/swiggy"
+	"consolestore/internal/telemetry"
 	consoletui "consolestore/internal/tui"
 	"consolestore/internal/tui/datasource"
 	"consolestore/internal/tui/render"
@@ -80,6 +81,11 @@ func run(args []string) error {
 	// token is untouched, so auth survives the swap. `help` already returned above,
 	// so usage stays instant and offline.
 	updater.RunDefault(ctx)
+
+	// Anonymous launch heartbeat (counts installs). Fire-and-forget, gated, and
+	// independent of the updater so it fires even when updates are disabled. Sends
+	// only a random install id + channel + version; never the token or any data.
+	telemetry.Launch()
 
 	be, signedIn, launchTUI, err := bootstrap(ctx)
 	if err != nil {
