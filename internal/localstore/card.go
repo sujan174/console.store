@@ -126,7 +126,9 @@ func ReconcileCard(c Card, addrs []api.Address) (Card, []string) {
 		}
 		if !found {
 			warns = append(warns, fmt.Sprintf("saved default address %q no longer exists — pick a new one on your next order", c.AddrLabel))
+			// Clear both so we never surface a dangling label with an empty id.
 			c.DefaultAddrID = ""
+			c.AddrLabel = ""
 		}
 	}
 	return c, warns

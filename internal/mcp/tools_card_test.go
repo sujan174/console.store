@@ -35,3 +35,22 @@ func TestUpdateCardSetsPrefs(t *testing.T) {
 		t.Fatalf("card = %+v", c)
 	}
 }
+
+// Omitting prefs must leave existing prefs untouched (nil != empty-replace).
+func TestUpdateCardPrefsOmittedLeavesThem(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	_ = localstore.SaveCard(localstore.Card{Version: 1, Prefs: []string{"no onion"}})
+	s := NewServer(&fakeBackend{}, &fakeAuth{token: true})
+
+	_, _, err := s.handleUpdateCard(context.Background(), nil, UpdateCardIn{DefaultAddressID: "a9"})
+	if err != nil {
+		t.Fatalf("update_card: %v", err)
+	}
+	c, _ := localstore.LoadCard()
+	if len(c.Prefs) != 1 || c.Prefs[0] != "no onion" {
+		t.Fatalf("prefs should be untouched, got %+v", c.Prefs)
+	}
+	if c.DefaultAddrID != "a9" {
+		t.Fatalf("default not set: %q", c.DefaultAddrID)
+	}
+}

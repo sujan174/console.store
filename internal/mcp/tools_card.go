@@ -21,7 +21,16 @@ type CardDTO struct {
 }
 
 func cardToDTO(c localstore.Card) CardDTO {
-	d := CardDTO{DefaultAddressID: c.DefaultAddrID, AddressLabel: c.AddrLabel, Prefs: c.Prefs}
+	// Initialize slices so empty cards marshal as [] (not null) for agent clients.
+	d := CardDTO{
+		DefaultAddressID: c.DefaultAddrID,
+		AddressLabel:     c.AddrLabel,
+		Favorites:        []CardFavoriteDTO{},
+		Prefs:            []string{},
+	}
+	if len(c.Prefs) > 0 {
+		d.Prefs = c.Prefs
+	}
 	for _, f := range c.Favorites {
 		d.Favorites = append(d.Favorites, CardFavoriteDTO{RestaurantID: f.RestaurantID, RestaurantName: f.RestaurantName, Count: f.Count})
 	}
