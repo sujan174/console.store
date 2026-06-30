@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"runtime"
+	"sync"
 
 	"consolestore/internal/auth"
 	"consolestore/internal/localstore"
@@ -15,7 +16,7 @@ type mcpAuth struct {
 	mgr      *auth.Manager
 	ls       *localstore.Store
 	redirect string
-	started  bool
+	bindOnce sync.Once // the loopback callback server is bound at most once
 }
 
 func newMCPAuth(ctx context.Context, mgr *auth.Manager, ls *localstore.Store, redirect string) *mcpAuth {
@@ -28,14 +29,13 @@ func (a *mcpAuth) TokenPresent(ctx context.Context) bool {
 }
 
 func (a *mcpAuth) Start(ctx context.Context) (string, string, error) {
-	if !a.started {
+	a.bindOnce.Do(func() {
 		if ln, lerr := netListenCallback(a.redirect); lerr == nil {
 			go serveCallback(a.ctx, a.mgr, ln)
-			a.started = true
 		}
 		// If the port is busy, another consolestore holds it; the user can still
 		// authorize via that instance, or close it and retry.
-	}
+	})
 	start, err := a.mgr.Start(localstore.LocalAccountID)
 	if err != nil {
 		return "", "", err
@@ -58,5 +58,5 @@ func openBrowser(url string) {
 	default:
 		cmd = exec.Command("xdg-open", url)
 	}
-	_ = cmd.Start()
+	go func() { _ = cmd.Run() }() // fire-and-forget; Run reaps the child (no zombie)
 }
