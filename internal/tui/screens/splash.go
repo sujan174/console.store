@@ -226,7 +226,7 @@ func (s Splash) connectPrompt() string {
 		"",
 		ind + "  " + theme.GreenStyle.Render(spin) + theme.DimStyle.Render("  waiting for sign-in…"),
 		"",
-		strings.Repeat(" ", promptIndent+2) + theme.FaintStyle.Render("↵ open browser   ·   q quit"),
+		strings.Repeat(" ", promptIndent+2) + theme.FaintStyle.Render("↵ open browser   ·   ? help   ·   q quit"),
 	}
 	return strings.Join(lines, "\n")
 }
@@ -251,8 +251,8 @@ func (s Splash) prompt() string {
 		lines = append(lines, ind+splashBtn(label, s.sel == i))
 	}
 
-	// A faint quit hint sits one blank line below all the buttons.
-	lines = append(lines, "", strings.Repeat(" ", promptIndent+2)+theme.FaintStyle.Render("q quit"))
+	// A faint hint sits one blank line below all the buttons.
+	lines = append(lines, "", strings.Repeat(" ", promptIndent+2)+theme.FaintStyle.Render("? help   ·   q quit"))
 
 	return strings.Join(lines, "\n")
 }

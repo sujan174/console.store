@@ -46,15 +46,25 @@ func MarkOnboarded() error {
 	return os.WriteFile(p, []byte(content), 0o600)
 }
 
-// ShouldOnboard returns true when the onboarding help modal should auto-open.
+// ShouldOnboard reports whether the first-run onboarding manual should auto-open.
+//
+// signedIn is whether a Swiggy token is already stored — the authoritative
+// "existing user" signal. It is absent on a genuinely fresh install (the token is
+// only written after the in-app authorize) and present for any returning user.
+//
 // Decision order:
 //  1. CONSOLE_NO_ONBOARDING=1  → false
 //  2. CONSOLE_FORCE_ONBOARDING=1 → true
-//  3. Onboarded() → false
-//  4. Grandfather: if client.json, presets.json, or active-order.json exists →
-//     silently mark onboarded and return false (existing user, fresh binary)
+//  3. Onboarded() (marker present) → false
+//  4. Grandfather an existing user — already signed in, OR has presets.json /
+//     active-order.json (created only by real prior use) → mark + false.
 //  5. otherwise → true (genuinely fresh install)
-func ShouldOnboard() bool {
+//
+// NOTE: client.json is deliberately NOT a grandfather signal. The OAuth DCR
+// registration writes it on the very first launch, BEFORE this check runs, so
+// using it would misclassify every fresh install as an existing user and suppress
+// onboarding entirely (the bug this fixes).
+func ShouldOnboard(signedIn bool) bool {
 	if os.Getenv("CONSOLE_NO_ONBOARDING") == "1" {
 		return false
 	}
@@ -64,10 +74,7 @@ func ShouldOnboard() bool {
 	if Onboarded() {
 		return false
 	}
-
-	// Grandfather check: any prior state files in the config dir?
-	clientP, err := configPath()
-	if err == nil && fileExists(clientP) {
+	if signedIn {
 		_ = MarkOnboarded()
 		return false
 	}

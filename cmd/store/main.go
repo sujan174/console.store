@@ -239,7 +239,7 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 
 		// Trigger logic: fresh install → onboarding; updated build → release notes;
 		// dev build → nothing. The two auto-open paths are mutually exclusive.
-		fresh := localstore.ShouldOnboard()
+		fresh := localstore.ShouldOnboard(signedIn)
 		cur := version.Version
 		if fresh {
 			opts = append(opts, consoletui.WithOnboarding(true))
