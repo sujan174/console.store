@@ -76,6 +76,25 @@ point (its gate is the local `build.sh` run). Promotion = re-tag the same commit
 **Do NOT** delete/move a published tag to "redo" a release — cut a new counter
 (`-alpha.4`) instead. A tag that's already been downloaded must stay immutable.
 
+## 3b. Writing release notes (the in-app "what's new")
+
+After a user updates, the TUI shows a one-time **"what's new"** modal with the
+release's notes. The notes are the **GitHub Release body** for that tag — the landing
+proxies it at `consolestore.in/<channel>/notes/<tag>`, and `console` fetches it on the
+first launch after an update. GoReleaser's auto-changelog is disabled
+(`.goreleaser.yaml` → `changelog.disable`), so the body is **only what you write**.
+
+- **Write user-facing notes in the GitHub Release body** for the tag (a few bullet
+  lines — what changed, in plain language; light markdown: `#` headers, `- ` bullets).
+  Do it after CI publishes the release (the body starts empty), or pre-stage them.
+- **No notes?** Leave the body empty → the endpoint 404s → the app shows nothing and
+  silently records the version. Notes are optional per release.
+- Notes show **once per version** (the app records the last-seen version; updates never
+  re-show, fresh installs get the onboarding manual instead, dev builds skip). They
+  degrade gracefully — offline/slow fetch shows nothing and never blocks launch.
+- Verify a tag's notes endpoint: `curl -s consolestore.in/stable/notes/<tag>`
+  (alpha needs `?code=<CODE>`).
+
 ## 4. What CI does on a tag (so you can debug it)
 
 `.github/workflows/release.yml`, triggered by `push: tags: ['v*']`:

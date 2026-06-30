@@ -242,16 +242,33 @@ type Model struct {
 	// fires ONE sync once the keys settle (cartSettleFrames). SyncCart sends the
 	// full cart snapshot (idempotent SET), so collapsing many edits into one
 	// trailing sync is correct.
-	cartSyncPending bool
-	cartSyncFrame   int
-	restInfoOpen    bool // restaurant-info modal ('i' on the browse list) is open
-	addrOpen        bool // address switcher modal ('a') is open
-	settingsOpen    bool // settings modal (from the splash) is open
-	settingsSel     int  // selected row in the settings modal
-	helpOpen        bool // help & controls modal (? / H / :help) is open
-	helpScroll      int  // scroll offset within the help modal
-	homePending     bool // Home's "popular near you" load is in flight (shows "loading…")
-	usualsLoaded    bool // true once LoadUsuals has been fired for the current addr
+	cartSyncPending   bool
+	cartSyncFrame     int
+	restInfoOpen      bool // restaurant-info modal ('i' on the browse list) is open
+	addrOpen          bool // address switcher modal ('a') is open
+	settingsOpen      bool // settings modal (from the splash) is open
+	settingsSel       int  // selected row in the settings modal
+	helpOpen          bool // help & controls modal (? / H / :help) is open
+	helpScroll        int  // scroll offset within the help modal
+	helpPage          int  // current page in the paginated help modal (0-indexed)
+	onboardingPending bool // true once auto-opened on first run, until the first close writes the marker
+	wantOnboarding    bool // set by WithOnboarding(true); defers auto-open until the start screen
+
+	// what's-new modal: shows release notes after an update.
+	whatsnewOpen   bool     // true while the what's-new modal is showing
+	whatsnewPage   int      // current page in the paginated modal (0-indexed)
+	whatsnewScroll int      // scroll offset within the current page
+	whatsnewLines  []string // pre-rendered lines from renderNotesMarkdown
+
+	// release-notes fetch params (set by WithReleaseNotes).
+	notesVersion string // the version whose notes to fetch and display
+	notesChannel string // channel (stable / beta / alpha)
+	notesCode    string // alpha access code (may be "")
+	wantNotes    bool   // true when WithReleaseNotes was called
+	notesReady   bool   // true once notes are fetched and waiting for splash→menu transition
+
+	homePending  bool // Home's "popular near you" load is in flight (shows "loading…")
+	usualsLoaded bool // true once LoadUsuals has been fired for the current addr
 }
 
 func New(caps render.Caps, opts ...Option) Model {
@@ -1374,6 +1391,11 @@ func (m Model) Init() tea.Cmd {
 	if m.live && m.hasActiveOrder && m.backend != nil && m.addr.ID != "" {
 		cmds = append(cmds, datasource.LoadActiveOrdersCmd(m.backend, m.addr.ID))
 	}
+	// Fire the release-notes fetch in the background (result handled in Update).
+	// Do not open the modal yet — it opens at the splash→scrMenu transition.
+	if m.wantNotes {
+		cmds = append(cmds, datasource.FetchReleaseNotesCmd(m.notesChannel, m.notesVersion, m.notesCode))
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -2078,6 +2100,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
 		}
 		return m, nil
+	case datasource.ReleaseNotesMsg:
+		switch {
+		case dm.Err != nil:
+			// Network/server error: do nothing. LastSeenVersion is NOT advanced so
+			// the notes will be retried on next launch.
+		case dm.NotFound:
+			// No notes for this version (404): silently advance LastSeenVersion.
+			nv := m.notesVersion
+			return m, func() tea.Msg {
+				_ = localstore.SetLastSeenVersion(nv)
+				return nil
+			}
+		case dm.Markdown != "":
+			// Notes received: pre-render and arm the auto-open at splash→scrMenu.
+			m.whatsnewLines = screens.RenderNotesMarkdown(dm.Markdown)
+			m.notesReady = true
+		}
+		return m, nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
 		// Help modal captures keys while open: scroll with ↑/↓ (or j/k), close on
@@ -2092,8 +2132,79 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.helpScroll < screens.HelpMaxScroll(m.h) {
 					m.helpScroll++
 				}
+			case "left", "h":
+				if m.helpPage > 0 {
+					m.helpPage--
+					m.helpScroll = 0
+				}
+			case "right", "l":
+				if m.helpPage < screens.HelpPageCount()-1 {
+					m.helpPage++
+					m.helpScroll = 0
+				}
+			case "1", "2", "3", "4", "5":
+				pg := int(k.Runes[0] - '1')
+				if pg < 0 {
+					pg = 0
+				}
+				if pg >= screens.HelpPageCount() {
+					pg = screens.HelpPageCount() - 1
+				}
+				m.helpPage = pg
+				m.helpScroll = 0
 			case "esc", "q", "?", "H", "enter", " ":
 				m.helpOpen = false
+				if m.onboardingPending {
+					m.onboardingPending = false
+					return m, func() tea.Msg {
+						_ = localstore.MarkOnboarded()
+						return nil
+					}
+				}
+			}
+			return m, nil
+		}
+		// What's-new modal: captures all keys while open. Mirrors the help
+		// block above. On close, advance LastSeenVersion so notes show once.
+		if m.whatsnewOpen {
+			wn := screens.NewWhatsNew(m.notesVersion, m.whatsnewLines).WithViewport(m.h)
+			pageCount := wn.PageCount()
+			switch k.String() {
+			case "up", "k":
+				if m.whatsnewScroll > 0 {
+					m.whatsnewScroll--
+				}
+			case "down", "j":
+				if m.whatsnewScroll < screens.HelpMaxScroll(m.h) {
+					m.whatsnewScroll++
+				}
+			case "left", "h":
+				if m.whatsnewPage > 0 {
+					m.whatsnewPage--
+					m.whatsnewScroll = 0
+				}
+			case "right", "l":
+				if m.whatsnewPage < pageCount-1 {
+					m.whatsnewPage++
+					m.whatsnewScroll = 0
+				}
+			case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+				pg := int(k.Runes[0] - '1')
+				if pg < 0 {
+					pg = 0
+				}
+				if pg >= pageCount {
+					pg = pageCount - 1
+				}
+				m.whatsnewPage = pg
+				m.whatsnewScroll = 0
+			case "esc", "q", "?", "enter", " ":
+				m.whatsnewOpen = false
+				nv := m.notesVersion
+				return m, func() tea.Msg {
+					_ = localstore.SetLastSeenVersion(nv)
+					return nil
+				}
 			}
 			return m, nil
 		}
@@ -2119,6 +2230,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cmdOpen = false
 					m.cmd = m.cmd.ClearText()
 					m.helpOpen = true
+					m.helpPage = 0
 					m.helpScroll = 0
 				case strings.HasPrefix(action, "alias"):
 					rest := strings.TrimSpace(strings.TrimPrefix(action, "alias"))
@@ -2370,6 +2482,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// key means something else or would be swallowed.
 		if (k.String() == "?" || k.String() == "H") && m.helpTriggerable() {
 			m.helpOpen = true
+			m.helpPage = 0
 			m.helpScroll = 0
 			return m, nil
 		}
@@ -2430,6 +2543,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, pollCmd
 				} else {
 					m.screen = scrMenu
+					if m.wantOnboarding {
+						m.helpOpen = true
+						m.helpPage = 0
+						m.helpScroll = 0
+						m.onboardingPending = true
+						m.wantOnboarding = false
+					} else if m.notesReady {
+						// What's-new auto-open: mutually exclusive with onboarding.
+						m.whatsnewOpen = true
+						m.whatsnewPage = 0
+						m.whatsnewScroll = 0
+						m.notesReady = false
+					}
 				}
 			}
 			return m, nil
@@ -3124,7 +3250,18 @@ func (m Model) View() string {
 	// Help & controls modal (? / H / :help) — a centered, scrollable overlay over
 	// any screen.
 	if m.helpOpen {
-		card := screens.NewHelp().WithViewport(m.h).WithScroll(m.helpScroll).View()
+		card := screens.NewHelp().WithViewport(m.h).WithPage(m.helpPage).WithScroll(m.helpScroll).View()
+		if m.w == 0 || m.h == 0 {
+			return card
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card)
+	}
+
+	// What's-new modal — a centered overlay showing release notes for the
+	// current version, displayed once after an update.
+	if m.whatsnewOpen {
+		card := screens.NewWhatsNew(m.notesVersion, m.whatsnewLines).
+			WithViewport(m.h).WithPage(m.whatsnewPage).WithScroll(m.whatsnewScroll).View()
 		if m.w == 0 || m.h == 0 {
 			return card
 		}

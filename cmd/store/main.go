@@ -42,6 +42,7 @@ import (
 	"consolestore/internal/tui/render"
 	"consolestore/internal/tui/theme"
 	"consolestore/internal/updater"
+	"consolestore/internal/version"
 )
 
 func main() {
@@ -235,6 +236,24 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 			opts = append(opts, consoletui.WithSeededSnapshot())
 		}
 		opts = append(opts, consoletui.WithChips(cfg.ChipCategories()))
+
+		// Trigger logic: fresh install → onboarding; updated build → release notes;
+		// dev build → nothing. The two auto-open paths are mutually exclusive.
+		fresh := localstore.ShouldOnboard()
+		cur := version.Version
+		if fresh {
+			opts = append(opts, consoletui.WithOnboarding(true))
+			_ = localstore.SetLastSeenVersion(cur)
+		} else if !version.IsDev() {
+			last := localstore.LastSeenVersion()
+			if last == "" {
+				// Grandfather: first launch with this feature — record silently, no notes.
+				_ = localstore.SetLastSeenVersion(cur)
+			} else if last != cur {
+				mark := updater.LoadMark()
+				opts = append(opts, consoletui.WithReleaseNotes(cur, mark.Channel, mark.AlphaCode))
+			}
+		}
 
 		// Canvas background (OSC 11) on start; reset (OSC 111) on exit.
 		// These are TUI-only: headless subcommands must output clean plain text.
