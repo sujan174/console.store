@@ -69,3 +69,19 @@ func TestRemoveJSONServer(t *testing.T) {
 		t.Fatalf("console not removed: %+v", servers)
 	}
 }
+
+// A malformed existing config must error, never get silently overwritten.
+func TestWriteJSONServerUnparseableRefusesToClobber(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bad.json")
+	const corrupt = "{not valid json"
+	if err := os.WriteFile(path, []byte(corrupt), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeJSONServer(path, "console", "/c", []string{"mcp"}); err == nil {
+		t.Fatal("expected error on unparseable config, got nil")
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != corrupt {
+		t.Fatalf("unparseable config was overwritten: %q", got)
+	}
+}
