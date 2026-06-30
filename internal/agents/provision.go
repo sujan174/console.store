@@ -106,7 +106,9 @@ func Remove(out io.Writer) error {
 			status = "removed"
 		}
 		if a.SkillsDir != "" {
-			_, _ = removeSkills(a.SkillsDir)
+			if _, serr := removeSkills(a.SkillsDir); serr != nil {
+				fmt.Fprintf(out, "  %-16s skills: error: %v\n", a.Title, serr)
+			}
 		}
 		fmt.Fprintf(out, "  %-16s mcp: %s\n", a.Title, status)
 	}
