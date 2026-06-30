@@ -4,11 +4,14 @@ import { Pool } from "pg";
 let _pool;
 function pool() {
   if (!_pool) {
+    const url = process.env.DATABASE_URL || "";
+    // Railway's internal network (*.railway.internal) speaks plain TCP — forcing
+    // SSL there fails ("server does not support SSL"). The public proxy host does
+    // require SSL (self-signed → rejectUnauthorized:false).
+    const needsSSL = url !== "" && !url.includes(".railway.internal");
     _pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL?.includes("railway")
-        ? { rejectUnauthorized: false }
-        : undefined,
+      connectionString: url,
+      ssl: needsSSL ? { rejectUnauthorized: false } : undefined,
       max: 4,
     });
   }
