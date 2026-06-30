@@ -41,11 +41,21 @@ New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
 $marker = if ($channel -eq "alpha") { "{`"channel`":`"alpha`",`"alpha_code`":`"$code`"}" } else { "{`"channel`":`"$channel`"}" }
 Set-Content -Path (Join-Path $cfgDir "channel.json") -Value $marker -NoNewline
 
-# Add install dir to the user PATH if absent.
+# Add install dir to the persisted user PATH if absent (for future terminals).
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$pathWasAdded = $false
 if ($userPath -notlike "*$dir*") {
   [Environment]::SetEnvironmentVariable("Path", "$userPath;$dir", "User")
-  Write-Host "added $dir to your PATH (restart the terminal)" -ForegroundColor DarkGray
+  $pathWasAdded = $true
+}
+# Also update THIS session's PATH so `console` runs immediately — without it the
+# new dir only reaches terminals opened AFTER the install (the #1 "command not
+# found" confusion).
+if (";$env:Path;" -notlike "*;$dir;*") {
+  $env:Path = "$env:Path;$dir"
 }
 Write-Host "OK installed console -> $out" -ForegroundColor Green
+if ($pathWasAdded) {
+  Write-Host "added $dir to your PATH — usable now in this window; open a NEW terminal for future sessions." -ForegroundColor DarkGray
+}
 Write-Host "run: console"
