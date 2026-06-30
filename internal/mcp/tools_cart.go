@@ -16,6 +16,7 @@ type CartLineDTO struct {
 	Available bool   `json:"available"`
 }
 type CartDTO struct {
+	CartID     string        `json:"cart_id,omitempty"`
 	Restaurant string        `json:"restaurant"`
 	ItemTotal  int           `json:"item_total"`
 	Delivery   int           `json:"delivery"`
@@ -24,8 +25,10 @@ type CartDTO struct {
 	Lines      []CartLineDTO `json:"lines"`
 }
 
+// cartToDTO projects the agent-facing cart. api.Cart.ValidAddons is intentionally
+// omitted — it's an internal TUI customize-wizard field, not order-relevant.
 func cartToDTO(c api.Cart) CartDTO {
-	d := CartDTO{Restaurant: c.Restaurant, ItemTotal: c.ItemTotal, Delivery: c.Delivery, Taxes: c.Taxes, Total: c.Total}
+	d := CartDTO{CartID: c.CartID, Restaurant: c.Restaurant, ItemTotal: c.ItemTotal, Delivery: c.Delivery, Taxes: c.Taxes, Total: c.Total}
 	for _, l := range c.Lines {
 		d.Lines = append(d.Lines, CartLineDTO{ItemID: l.ItemID, Name: l.Name, Quantity: l.Quantity, Price: l.Price, Available: l.Available})
 	}
