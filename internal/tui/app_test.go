@@ -690,21 +690,17 @@ func TestDoubleEscReturnsToSplash(t *testing.T) {
 	if m.cartTotal() == 0 {
 		t.Fatal("expected an item in the cart")
 	}
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // restaurant -> menu (walks back)
+	// Double-Esc now homes from ANY screen: the first Esc walks restaurant→browse
+	// (and arms the gesture), the quick second Esc teleports to the splash.
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // restaurant -> menu (arms)
 	m = updated.(Model)
 	if m.screen != scrMenu {
 		t.Fatalf("esc should walk back to menu, got screen %d", m.screen)
 	}
-	// now on the menu root: two quick escs are the deliberate home gesture
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // arm
-	m = updated.(Model)
-	if m.screen != scrMenu {
-		t.Fatalf("first esc on menu should stay (arm only), got screen %d", m.screen)
-	}
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // fire -> splash
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // quick second esc -> splash
 	m = updated.(Model)
 	if m.screen != scrSplash {
-		t.Fatalf("double esc on menu should return to splash, got screen %d", m.screen)
+		t.Fatalf("double esc from a sub-screen should return to splash, got screen %d", m.screen)
 	}
 	if m.decodeStep != 0 {
 		t.Errorf("decode should replay from 0, got decodeStep=%d", m.decodeStep)
@@ -714,22 +710,34 @@ func TestDoubleEscReturnsToSplash(t *testing.T) {
 	}
 }
 
-// TestEscWalkBackDoesNotTeleportHome is the reported glitch: from a sub-screen,
-// Esc (back to menu) immediately followed by another Esc must NOT jump to the
-// splash — the back-step Esc must not arm the home gesture.
-func TestEscWalkBackDoesNotTeleportHome(t *testing.T) {
+// A SINGLE Esc still steps back one level — it must never teleport home on its
+// own (only a quick second Esc does).
+func TestSingleEscStepsBackNotHome(t *testing.T) {
 	m := newAtMenu()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open restaurant
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // restaurant -> menu
 	m = updated.(Model)
 	if m.screen != scrMenu {
-		t.Fatalf("esc should walk back to menu, got screen %d", m.screen)
+		t.Fatalf("single esc should step back to menu, got screen %d", m.screen)
 	}
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // must stay on menu, not teleport
+}
+
+// Double-Esc homes from a deep screen too (tracking), confirming the gesture is
+// global, not browse-only.
+func TestDoubleEscFromTrackingHomes(t *testing.T) {
+	m := newAtMenu()
+	m.screen = scrTracking
+	m.track = screens.NewTracking("R", "A", "X1", 1, 0, 0)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // tracking -> menu (arms)
 	m = updated.(Model)
 	if m.screen != scrMenu {
-		t.Errorf("esc after walking back must NOT jump home, got screen %d", m.screen)
+		t.Fatalf("esc from tracking should step back to menu, got screen %d", m.screen)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // quick second esc -> splash
+	m = updated.(Model)
+	if m.screen != scrSplash {
+		t.Fatalf("double esc from tracking should home to splash, got screen %d", m.screen)
 	}
 }
 

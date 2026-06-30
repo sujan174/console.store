@@ -2246,35 +2246,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
-		// Double-Esc returns to the splash and replays the loading animation. It
-		// is a deliberate "home" gesture, recognised only on the menu root where
-		// Esc is otherwise a no-op. On every sub-screen Esc means "back one
-		// level", so the timer is cleared there — walking back up the stack with
-		// repeated Esc must never teleport home. Cart/address are preserved.
-		if k.String() == "esc" {
-			// Esc closes the restaurant-info modal first (before the rail/home gestures).
+		// Double-Esc (two quick taps) returns to the splash and replays the loading
+		// animation — a deliberate "home" gesture recognised from ANY screen.
+		// Checked before the per-screen single-Esc back, so two quick taps always
+		// teleport home; a single Esc still steps back one level. Cart/address
+		// are preserved. (Splash handles its own keys below.)
+		if k.String() == "esc" && m.screen != scrSplash {
+			// Esc closes the restaurant-info modal first (the browse-list 'i' card).
 			if m.screen == scrMenu && m.restInfoOpen {
 				m.restInfoOpen = false
 				return m, nil
 			}
+			if m.frame-m.lastEscFrame <= escDoubleWindow {
+				m = m.toSplash()
+				m.lastEscFrame = -escDoubleWindow - 1
+				return m, m.activeOrderCheckCmd()
+			}
+			m.lastEscFrame = m.frame // first Esc: arm the double-tap window
+
+			// Browse root: a single Esc unfocuses the live rail but never navigates
+			// away (the second tap homes). While searching, fall through so the
+			// search handler exits search.
 			if m.screen == scrMenu && !m.menu.Searching() && !m.searchMode {
-				// In live rail mode, Esc when rail is focused unfocuses the rail
-				// (not a home gesture); in search mode Esc exits search.
 				if m.live && m.railFocus {
 					m.railFocus = false
 					m.menu = m.buildMenu()
-					return m, nil
 				}
-				if m.frame-m.lastEscFrame <= escDoubleWindow {
-					m = m.toSplash()
-					m.lastEscFrame = -escDoubleWindow - 1
-					return m, m.activeOrderCheckCmd()
-				}
-				m.lastEscFrame = m.frame
 				return m, nil
 			}
-			m.lastEscFrame = -escDoubleWindow - 1
-			// fall through to per-screen single-Esc handling
+			// fall through to per-screen single-Esc (restaurant/checkout/tracking/…)
 		}
 		// ? or H opens the help & controls modal from anywhere — except while
 		// typing (search / palette) or with a blocking modal already up, where the
