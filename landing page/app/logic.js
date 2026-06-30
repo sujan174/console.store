@@ -460,7 +460,16 @@ export function mount(root) {
     };
     let stops = buildStops();
     const rebuild = () => { stops = buildStops(); };
-    const goY = (y) => window.scrollTo({ top: y, behavior: reduce ? "auto" : "smooth" });
+    // goY drives every programmatic jump (keys + scroll-snap settle). It marks a
+    // short suppression window so the wheel/touch scroll-snap doesn't fire on the
+    // smooth-scroll churn it itself produces. Exposed on S so initScrollSnap reuses
+    // the exact same stop model (centered short / top-aligned tall / two #keys stops).
+    const goY = (y) => {
+      S.suppressSnapUntil = performance.now() + 700;
+      window.scrollTo({ top: y, behavior: reduce ? "auto" : "smooth" });
+    };
+    S.navStops = () => stops;
+    S.navGoY = goY;
     const nextStop = () => {
       const y = window.scrollY + 6;
       const t = stops.find((s) => s > y);
@@ -525,6 +534,40 @@ export function mount(root) {
     if (cue) S.timers.push(setTimeout(() => { if (!S.dead) cue.classList.add("show"); }, reduce ? 200 : 1700));
     if (legend) S.timers.push(setTimeout(() => { if (!S.dead) legend.classList.add("show"); }, reduce ? 250 : 2100));
     S.navCleanup = () => navHandlers.forEach(([el, ev, h]) => el.removeEventListener(ev, h));
+  };
+
+  // ---- gentle scroll-snap: free-scroll settles onto the SAME section stops the
+  // keyboard nav uses. We never preventDefault the wheel/touch (that's the janky
+  // path) — native momentum runs, then ~150ms after the gesture stops we ease to
+  // the nearest stop *only if it's within ~0.62vh* (proximity, not mandatory: you
+  // can still rest mid-way through tall content without being yanked). The #keys
+  // 180vh scrolly is handled for free — its TUI/CLI stops are part of the model,
+  // so a scroll there settles onto one phase instead of stranding mid-transition.
+  // Disabled under reduced-motion. ----
+  const initScrollSnap = () => {
+    if (reduce) return;
+    let idleTimer = 0;
+    const proximity = () => window.innerHeight * 0.62;
+    const snap = () => {
+      if (S.dead) return;
+      if (performance.now() < (S.suppressSnapUntil || 0)) return;
+      if (S.statsIsOpen && S.statsIsOpen()) return; // drawer open → leave the page alone
+      const stops = S.navStops ? S.navStops() : null;
+      if (!stops || !stops.length) return;
+      const y = window.scrollY;
+      let best = stops[0], bd = Math.abs(stops[0] - y);
+      for (const s of stops) { const d = Math.abs(s - y); if (d < bd) { bd = d; best = s; } }
+      if (bd <= 3) return;            // already parked on a stop
+      if (bd > proximity()) return;   // mid long-content → don't yank
+      (S.navGoY || ((t) => window.scrollTo({ top: t, behavior: "smooth" })))(best);
+    };
+    const onScroll = () => {
+      if (performance.now() < (S.suppressSnapUntil || 0)) return; // our own smooth-scroll
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(snap, 150); // settle once the gesture stops
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    S.snapCleanup = () => { window.removeEventListener("scroll", onScroll); clearTimeout(idleTimer); };
   };
 
   // ambient particle field
@@ -921,6 +964,7 @@ export function mount(root) {
   initCmdClicks();
   initStats();
   initKeyboardNav();
+  initScrollSnap();
 
   if (!reduce) {
     initFooterWordmark();
@@ -974,6 +1018,7 @@ export function mount(root) {
     if (S.nudgeCleanup) S.nudgeCleanup();
     if (S.statsCleanup) S.statsCleanup();
     if (S.navCleanup) S.navCleanup();
+    if (S.snapCleanup) S.snapCleanup();
     cleanupKeys();
   };
 }
