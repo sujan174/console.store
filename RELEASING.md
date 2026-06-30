@@ -132,6 +132,13 @@ For alpha logging, check Railway logs for an `alpha-grant who=…` line after a 
   forge a binary (signature still required).
 - Re-tagging the same commit is how you promote; **rebuilding to promote is wrong**
   (it produces different bytes than the channel below validated).
+- **Telemetry is anonymous + fire-and-forget and NEVER touches the keyring/token or
+  blocks an order.** Each ping carries only a random install id (not linked to the
+  Swiggy account), the channel, and the version — never the token, address, items,
+  price, or restaurant. `CONSOLE_NO_TELEMETRY=1` disables it; dev builds never send.
+  Counts: launch heartbeat → installs, `broker.Service.PlaceOrder` success →
+  orders. Aggregate at `GET consolestore.in/stats`; raw rows in the Railway Postgres
+  `installs`/`orders` tables. Reported channel = the build's `version.Channel`.
 
 ## 8. Recovery runbook (a bad release is never unrecoverable)
 

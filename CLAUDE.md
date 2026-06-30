@@ -54,6 +54,10 @@ internal/broker/      broker.Service — composition root tying auth + keyring +
 internal/cli/         the headless CLI: command router (Dispatch), `status`, `order <name>`,
                       `alias list|rm`, `help`, plain-text bill rendering. Imports broker/api
                       + localstore only — NEVER internal/tui.
+internal/telemetry/   anonymous fire-and-forget install + order pings (stdlib only, no
+                      keyring/auth import). Launch() heartbeat (main.go) + OrderPlaced()
+                      (broker.Service.PlaceOrder success). Opt-out CONSOLE_NO_TELEMETRY=1;
+                      dev no-op. Landing aggregates at GET /stats (Railway Postgres).
 internal/tui/         the whole TUI app (root model + screens + components + render + theme).
 internal/tui/datasource/  the seam between the TUI and the broker: InProc adapter +
                       Backend interface + tea.Cmds (LoadAddresses/Places/Menu/Cart…).
