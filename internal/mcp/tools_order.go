@@ -16,7 +16,7 @@ func nowUnix() int64 { return time.Now().Unix() }
 
 // prepare syncs the cart, validates availability, stores a confirmation bound to
 // the bill, and returns both. Shared by prepare_order and order_preset.
-func (s *Server) prepare(addressID string, c api.Cart) (string, CartDTO, error) {
+func (s *Server) prepare(addressID string, c api.Cart, ident orderIdentity) (string, CartDTO, error) {
 	if len(c.Lines) == 0 {
 		return "", CartDTO{}, errors.New("cart is empty — add items before preparing an order")
 	}
@@ -25,7 +25,7 @@ func (s *Server) prepare(addressID string, c api.Cart) (string, CartDTO, error) 
 			return "", CartDTO{}, fmt.Errorf("%q is sold out — remove it before ordering", l.Name)
 		}
 	}
-	id := s.pending.put(addressID, c, nowUnix())
+	id := s.pending.put(addressID, c, ident, nowUnix())
 	return id, cartToDTO(c), nil
 }
 
@@ -46,7 +46,9 @@ func (s *Server) handlePrepareOrder(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return nil, PrepareOrderOut{}, err
 	}
-	id, bill, err := s.prepare(in.AddressID, c)
+	// Ad-hoc order: the cart carries only a restaurant name, no Swiggy id, so
+	// restaurantID stays empty (bumpFavorite will skip — no name-keyed favorite).
+	id, bill, err := s.prepare(in.AddressID, c, orderIdentity{restaurantName: c.Restaurant})
 	if err != nil {
 		return nil, PrepareOrderOut{}, err
 	}
@@ -89,7 +91,9 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 		OrderID: order.ID, Restaurant: order.Restaurant, ETALoMin: etaLo, ETAHiMin: etaHi,
 		Total: order.Total, PlacedAt: nowUnix(),
 	})
-	_ = localstore.RecordOrder(p.addressID, "", order.Restaurant, p.restaurant, nowUnix())
+	// Record real identity: restaurantID is a Swiggy id for presets, "" for ad-hoc
+	// orders (then bumpFavorite skips). Never a name in the id slot.
+	_ = localstore.RecordOrder(p.addressID, p.addrLabel, p.restaurantID, p.restaurantName, nowUnix())
 	return nil, PlaceOrderOut{Order: toOrderDTO(order)}, nil
 }
 
@@ -123,7 +127,10 @@ func (s *Server) handleOrderPreset(ctx context.Context, _ *mcp.CallToolRequest, 
 	if err != nil {
 		return nil, OrderPresetOut{}, err
 	}
-	id, bill, err := s.prepare(p.AddrID, c)
+	// Preset carries the real Swiggy restaurant id + saved address label.
+	id, bill, err := s.prepare(p.AddrID, c, orderIdentity{
+		restaurantID: p.RestaurantID, restaurantName: p.RestaurantName, addrLabel: p.AddrLine,
+	})
 	if err != nil {
 		return nil, OrderPresetOut{}, err
 	}

@@ -2067,6 +2067,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			PlacedAt:   placedAt,
 		}
 		_ = localstore.SaveActiveOrder(ao)
+		// Accrete the taste card's default address from app orders. The TUI only
+		// has the restaurant NAME here (not a Swiggy id), so restaurantID is left
+		// empty — bumpFavorite skips, and we never key a favorite by a name.
+		_ = localstore.RecordOrder(m.addr.ID, m.addr.Label, "", restaurant, placedAt)
 		m.activeOrder = ao
 		m.hasActiveOrder = true
 		m.confirmTick = 0

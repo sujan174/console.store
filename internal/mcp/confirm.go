@@ -14,11 +14,22 @@ import (
 const confirmTTLSeconds = 600 // 10 minutes
 
 type pendingOrder struct {
-	addressID  string
-	restaurant string
-	total      int
-	hash       string
-	createdAt  int64
+	addressID      string
+	restaurantID   string // "" when no Swiggy id is known (ad-hoc prepare_order)
+	restaurantName string
+	addrLabel      string
+	total          int
+	hash           string
+	createdAt      int64
+}
+
+// orderIdentity carries the real Swiggy identity a placement should record on the
+// taste card. restaurantID is empty for ad-hoc orders (cart carries only a name),
+// which makes bumpFavorite correctly skip — we never key a favorite by a name.
+type orderIdentity struct {
+	restaurantID   string
+	restaurantName string
+	addrLabel      string
 }
 
 type confirmStore struct {
@@ -47,13 +58,14 @@ func cartHash(addressID string, c api.Cart) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (s *confirmStore) put(addressID string, c api.Cart, nowUnix int64) string {
+func (s *confirmStore) put(addressID string, c api.Cart, ident orderIdentity, nowUnix int64) string {
 	var b [12]byte
 	_, _ = rand.Read(b[:])
 	id := hex.EncodeToString(b[:])
 	s.mu.Lock()
 	s.m[id] = pendingOrder{
-		addressID: addressID, restaurant: c.Restaurant, total: c.Total,
+		addressID: addressID, total: c.Total,
+		restaurantID: ident.restaurantID, restaurantName: ident.restaurantName, addrLabel: ident.addrLabel,
 		hash: cartHash(addressID, c), createdAt: nowUnix,
 	}
 	s.mu.Unlock()

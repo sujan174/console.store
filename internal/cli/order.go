@@ -136,6 +136,8 @@ func placePreset(d Deps, p localstore.Preset, st style) int {
 		OrderID: order.ID, Restaurant: p.RestaurantName, AddrLine: p.AddrLine,
 		ETALoMin: etaLo, ETAHiMin: etaHi, Total: order.Total, PlacedAt: time.Now().Unix(),
 	})
+	// Accrete the taste card: a preset carries the real restaurant id + saved address.
+	_ = localstore.RecordOrder(p.AddrID, p.AddrLine, p.RestaurantID, p.RestaurantName, time.Now().Unix())
 	line := "✓ order placed — " + order.ID
 	if order.ETA != "" {
 		line += " · eta " + order.ETA

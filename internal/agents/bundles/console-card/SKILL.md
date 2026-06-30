@@ -30,6 +30,7 @@ you can read or adjust it with two tools.
 
 ## How it fills in over time
 
-- Every placed order (from this agent, the consolestore app, or its CLI) bumps the
-  ordered restaurant in `favorites` and refreshes the default address. So the more
+- Every placed order — from this agent, the consolestore app, or its CLI — refreshes
+  the default address. Orders placed through an agent or from a saved preset also bump
+  the ordered restaurant in `favorites` (those carry a real restaurant id). So the more
   the user orders, the better the card's suggestions — no manual upkeep needed.
