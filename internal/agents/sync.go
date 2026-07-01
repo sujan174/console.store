@@ -1,11 +1,26 @@
 package agents
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// provisionRev bumps whenever the provisioning logic changes in a way that
+// existing installs should re-apply on next launch even though the skill bundles
+// didn't change — e.g. adding a new agent to the candidate list. Fold it into
+// the sync hash so SyncIfChanged re-runs Install after such a release.
+const provisionRev = "2" // 2: added Windsurf, OpenClaw, Zed, VS Code, Hermes
+
+// syncHash is the marker value: the bundle content hash combined with the
+// provisioning revision.
+func syncHash() string {
+	h := sha256.Sum256([]byte(bundlesHash() + "|" + provisionRev))
+	return hex.EncodeToString(h[:])
+}
 
 // markerPath is where the last-synced bundle hash is stored:
 // ~/.config/console-store/agents-sync.hash (honoring XDG_CONFIG_HOME). It sits
@@ -48,7 +63,7 @@ func SyncIfChanged(out io.Writer) {
 	if optedOut() {
 		return
 	}
-	want := bundlesHash()
+	want := syncHash()
 	if want == "" || readMarker() == want {
 		return
 	}

@@ -31,8 +31,8 @@ func TestSyncIfChanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marker not written on first sync: %v", err)
 	}
-	if strings.TrimSpace(string(got)) != bundlesHash() {
-		t.Fatalf("marker = %q, want %q", strings.TrimSpace(string(got)), bundlesHash())
+	if strings.TrimSpace(string(got)) != syncHash() {
+		t.Fatalf("marker = %q, want %q", strings.TrimSpace(string(got)), syncHash())
 	}
 
 	// Stale marker → resync must rewrite it to the current hash.
@@ -41,8 +41,8 @@ func TestSyncIfChanged(t *testing.T) {
 	}
 	SyncIfChanged(io.Discard)
 	got2, _ := os.ReadFile(markerPath())
-	if strings.TrimSpace(string(got2)) != bundlesHash() {
-		t.Fatalf("after resync marker = %q, want %q", strings.TrimSpace(string(got2)), bundlesHash())
+	if strings.TrimSpace(string(got2)) != syncHash() {
+		t.Fatalf("after resync marker = %q, want %q", strings.TrimSpace(string(got2)), syncHash())
 	}
 }
 

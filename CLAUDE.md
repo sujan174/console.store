@@ -65,9 +65,13 @@ internal/catalog/     data-seam types + Repository interface. mem/ = in-memory m
                       swiggy/ = live Snapshot + Repository filled from broker results.
 internal/config/      optional seed config (instant first paint) + cuisine chips.
 internal/agents/      provisions local agents: registers `console mcp` in each
-                      detected agent (Claude Desktop/Code JSON, Cursor JSON,
-                      Codex TOML) + installs SKILL.md bundles. Run by the
-                      installer (`console agents install`) and `console agents`.
+                      detected agent + installs SKILL.md bundles. Config writers
+                      by Kind: JSON (Claude Desktop/Code, Cursor, Windsurf,
+                      OpenClaw [mcp.servers], Zed [context_servers], VS Code
+                      [servers, type:stdio]), TOML (Codex), YAML (Hermes,
+                      hand-rolled ~/.hermes/config.yaml). Only Claude-family +
+                      Codex get SKILL.md bundles; the rest are MCP-only. Run by
+                      the installer (`console agents install`) and `console agents`.
                       SyncIfChanged() self-heals at launch (TUI + `console mcp`):
                       a content hash of the embedded bundles is stamped in
                       ~/.config/console-store/agents-sync.hash; when it differs

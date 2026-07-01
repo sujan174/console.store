@@ -9,13 +9,16 @@ import (
 
 func optedOut() bool { return os.Getenv("CONSOLE_NO_AGENT_SETUP") == "1" }
 
-// wireMCP writes our server entry into one agent's config (JSON or TOML).
+// wireMCP writes our server entry into one agent's config (JSON, TOML, or YAML).
 func wireMCP(a Agent, bin string) (bool, error) {
 	switch a.Kind {
 	case KindTOML:
 		return writeTOMLServer(a.ConfigPath, ServerName, bin, []string{"mcp"})
+	case KindYAML:
+		return writeYAMLServer(a.ConfigPath, ServerName, bin, []string{"mcp"})
 	default:
-		return writeJSONServer(a.ConfigPath, ServerName, bin, []string{"mcp"})
+		entry := serverEntryTyped(bin, []string{"mcp"}, a.EntryType)
+		return writeJSONServerAt(a.ConfigPath, a.jsonKey(), ServerName, entry)
 	}
 }
 
@@ -23,8 +26,10 @@ func unwireMCP(a Agent) (bool, error) {
 	switch a.Kind {
 	case KindTOML:
 		return removeTOMLServer(a.ConfigPath, ServerName)
+	case KindYAML:
+		return removeYAMLServer(a.ConfigPath, ServerName)
 	default:
-		return removeJSONServer(a.ConfigPath, ServerName)
+		return removeJSONServerAt(a.ConfigPath, a.jsonKey(), ServerName)
 	}
 }
 
@@ -39,7 +44,7 @@ func Install(out io.Writer) error {
 	agents := Detect()
 	if len(agents) == 0 {
 		fmt.Fprintln(out, "no local agents detected — nothing to set up.")
-		writeMarker(bundlesHash())
+		writeMarker(syncHash())
 		return nil
 	}
 	bin := consoleBinary()
@@ -64,7 +69,7 @@ func Install(out io.Writer) error {
 		fmt.Fprintf(out, "  %-16s mcp: %s%s\n", a.Title, status, skillNote)
 	}
 	fmt.Fprintln(out, "done. (Claude Desktop must be restarted to load the new MCP server.)")
-	writeMarker(bundlesHash())
+	writeMarker(syncHash())
 	return nil
 }
 
@@ -88,10 +93,14 @@ func List(out io.Writer) error {
 }
 
 func containsServer(content string, kind Kind) bool {
-	if kind == KindTOML {
+	switch kind {
+	case KindTOML:
 		return strings.Contains(content, tomlHeader(ServerName))
+	case KindYAML:
+		return strings.Contains(content, ServerName+":")
+	default:
+		return strings.Contains(content, "\""+ServerName+"\"")
 	}
-	return strings.Contains(content, "\""+ServerName+"\"")
 }
 
 // Remove unwires the server + skills from every detected agent.

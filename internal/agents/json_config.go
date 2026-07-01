@@ -12,6 +12,32 @@ func serverEntry(command string, args []string) map[string]any {
 	return map[string]any{"command": command, "args": toAnySlice(args)}
 }
 
+// serverEntryTyped is serverEntry plus a "type" field (VS Code requires
+// "type": "stdio" on stdio servers).
+func serverEntryTyped(command string, args []string, typ string) map[string]any {
+	e := serverEntry(command, args)
+	if typ != "" {
+		e["type"] = typ
+	}
+	return e
+}
+
+// nestedMap walks/creates the object at keyPath under m and returns it. Any
+// existing non-object value along the path is replaced with an object (we never
+// expect a scalar where a server map belongs).
+func nestedMap(m map[string]any, keyPath []string) map[string]any {
+	cur := m
+	for _, k := range keyPath {
+		child, ok := cur[k].(map[string]any)
+		if !ok || child == nil {
+			child = map[string]any{}
+			cur[k] = child
+		}
+		cur = child
+	}
+	return cur
+}
+
 func toAnySlice(ss []string) []any {
 	out := make([]any, len(ss))
 	for i, s := range ss {
@@ -54,41 +80,52 @@ func saveJSONObject(path string, m map[string]any) error {
 	return os.WriteFile(path, append(raw, '\n'), 0o644)
 }
 
-// writeJSONServer merges our server entry under "mcpServers"[name], preserving
-// every other key. Returns changed=false when the file already has the exact
-// entry (idempotent).
-func writeJSONServer(path, name, command string, args []string) (bool, error) {
+// writeJSONServerAt merges entry under keyPath[name], preserving every other
+// key. keyPath is the nested path to the servers map — ["mcpServers"] for
+// Claude/Cursor/Windsurf, ["mcp","servers"] for OpenClaw, ["context_servers"]
+// for Zed, ["servers"] for VS Code. Idempotent: changed=false when the exact
+// entry already exists.
+func writeJSONServerAt(path string, keyPath []string, name string, entry map[string]any) (bool, error) {
 	m, err := loadJSONObject(path)
 	if err != nil {
 		return false, err
 	}
-	servers, _ := m["mcpServers"].(map[string]any)
-	if servers == nil {
-		servers = map[string]any{}
-	}
-	entry := serverEntry(command, args)
+	servers := nestedMap(m, keyPath)
 	if existing, ok := servers[name]; ok && reflect.DeepEqual(existing, any(entry)) {
 		return false, nil
 	}
 	servers[name] = entry
-	m["mcpServers"] = servers
 	return true, saveJSONObject(path, m)
 }
 
-// removeJSONServer deletes "mcpServers"[name] if present.
-func removeJSONServer(path, name string) (bool, error) {
+// removeJSONServerAt deletes keyPath[name] if present.
+func removeJSONServerAt(path string, keyPath []string, name string) (bool, error) {
 	m, err := loadJSONObject(path)
 	if err != nil {
 		return false, err
 	}
-	servers, _ := m["mcpServers"].(map[string]any)
-	if servers == nil {
+	// Walk (without creating) to the servers map.
+	cur := m
+	for _, k := range keyPath {
+		child, ok := cur[k].(map[string]any)
+		if !ok || child == nil {
+			return false, nil
+		}
+		cur = child
+	}
+	if _, ok := cur[name]; !ok {
 		return false, nil
 	}
-	if _, ok := servers[name]; !ok {
-		return false, nil
-	}
-	delete(servers, name)
-	m["mcpServers"] = servers
+	delete(cur, name)
 	return true, saveJSONObject(path, m)
+}
+
+// writeJSONServer / removeJSONServer keep the original ["mcpServers"] +
+// command/args shape for the agents that used them before generalization.
+func writeJSONServer(path, name, command string, args []string) (bool, error) {
+	return writeJSONServerAt(path, []string{"mcpServers"}, name, serverEntry(command, args))
+}
+
+func removeJSONServer(path, name string) (bool, error) {
+	return removeJSONServerAt(path, []string{"mcpServers"}, name)
 }
