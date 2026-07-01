@@ -29,6 +29,18 @@ type Card struct {
 	Favorites     []CardFavorite `json:"favorites"`
 	Prefs         []string       `json:"prefs"`
 	UpdatedAtUnix int64          `json:"updatedAt"`
+
+	// LastAddr* is the most-recently-used address, updated on every order —
+	// unlike DefaultAddrID, which only seeds once and then stays sticky.
+	LastAddrID    string `json:"lastAddressId,omitempty"`
+	LastAddrLabel string `json:"lastAddressLabel,omitempty"`
+	LastUsedUnix  int64  `json:"lastUsedAt,omitempty"`
+
+	// AddrCache is the last-seen address list (from list_addresses or an
+	// order), cached so reads can resolve default/last labels without a live
+	// call every turn.
+	AddrCache     []api.Address `json:"addrCache,omitempty"`
+	AddrCacheUnix int64         `json:"addrCacheAt,omitempty"`
 }
 
 func cardPath() (string, error) {
@@ -77,18 +89,51 @@ func SaveCard(c Card) error {
 }
 
 // RecordOrder updates the card after a successful placement: bump the
-// restaurant favorite and set the most-recent address as the default.
+// restaurant favorite and remember the just-used address. The default address
+// is now STICKY — it is only seeded the first time (when DefaultAddrID is
+// still empty); later orders update LastAddr* but never overwrite an existing
+// default. Use SetDefaultAddress to change the default explicitly.
 func RecordOrder(addrID, addrLabel, restID, restName string, nowUnix int64) error {
 	c, err := LoadCard()
 	if err != nil {
 		return err
 	}
 	if addrID != "" {
-		c.DefaultAddrID = addrID
-		c.AddrLabel = addrLabel
+		c.LastAddrID = addrID
+		c.LastAddrLabel = addrLabel
+		c.LastUsedUnix = nowUnix
+		if c.DefaultAddrID == "" {
+			c.DefaultAddrID = addrID
+			c.AddrLabel = addrLabel
+		}
 	}
 	c.bumpFavorite(restID, restName, nowUnix)
 	c.UpdatedAtUnix = nowUnix
+	return SaveCard(c)
+}
+
+// SetDefaultAddress explicitly sets the default address (used by the agent's
+// `remember` tool), overriding any existing default.
+func SetDefaultAddress(addrID, label string, nowUnix int64) error {
+	c, err := LoadCard()
+	if err != nil {
+		return err
+	}
+	c.DefaultAddrID = addrID
+	c.AddrLabel = label
+	c.UpdatedAtUnix = nowUnix
+	return SaveCard(c)
+}
+
+// CacheAddresses stores the last-seen address list (e.g. from list_addresses),
+// so reads can resolve labels without a live call every turn.
+func CacheAddresses(addrs []api.Address, nowUnix int64) error {
+	c, err := LoadCard()
+	if err != nil {
+		return err
+	}
+	c.AddrCache = addrs
+	c.AddrCacheUnix = nowUnix
 	return SaveCard(c)
 }
 
@@ -111,8 +156,9 @@ func (c *Card) bumpFavorite(restID, restName string, nowUnix int64) {
 	})
 }
 
-// ReconcileCard heals the card against live addresses. If the default address no
-// longer exists it is cleared and a warning is returned for the agent to surface.
+// ReconcileCard heals the card against live addresses. If the default address
+// (or the last-used address) no longer exists it is cleared and a warning is
+// returned for the agent to surface.
 func ReconcileCard(c Card, addrs []api.Address) (Card, []string) {
 	var warns []string
 	if c.DefaultAddrID != "" {
@@ -129,6 +175,21 @@ func ReconcileCard(c Card, addrs []api.Address) (Card, []string) {
 			// Clear both so we never surface a dangling label with an empty id.
 			c.DefaultAddrID = ""
 			c.AddrLabel = ""
+		}
+	}
+	if c.LastAddrID != "" {
+		found := false
+		for _, a := range addrs {
+			if a.ID == c.LastAddrID {
+				found = true
+				c.LastAddrLabel = a.Label
+				break
+			}
+		}
+		if !found {
+			warns = append(warns, fmt.Sprintf("last-used address %q no longer exists", c.LastAddrLabel))
+			c.LastAddrID = ""
+			c.LastAddrLabel = ""
 		}
 	}
 	return c, warns

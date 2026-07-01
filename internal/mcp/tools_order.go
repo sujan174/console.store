@@ -94,6 +94,25 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	// Record real identity: restaurantID is a Swiggy id for presets, "" for ad-hoc
 	// orders (then bumpFavorite skips). Never a name in the id slot.
 	_ = localstore.RecordOrder(p.addressID, p.addrLabel, p.restaurantID, p.restaurantName, nowUnix())
+	// Best-effort taste observation from the cart that was actually placed.
+	// Never blocks the order and is never allowed to duplicate it.
+	if cw, ok := s.cartWriteFor(p.addressID); ok && cw.RestaurantID != "" {
+		t, terr := localstore.LoadTaste()
+		if terr == nil {
+			changed := false
+			for _, ln := range cw.Lines {
+				picks := namedPicks(ln.Sels)
+				if len(picks) == 0 {
+					continue
+				}
+				t.Observe(cw.RestaurantID, cw.RestaurantName, ln.ItemName, ln.ItemID, picks, nowUnix())
+				changed = true
+			}
+			if changed {
+				_ = localstore.SaveTaste(t)
+			}
+		}
+	}
 	return nil, PlaceOrderOut{Order: toOrderDTO(order)}, nil
 }
 
@@ -127,6 +146,7 @@ func (s *Server) handleOrderPreset(ctx context.Context, _ *mcp.CallToolRequest, 
 	if err != nil {
 		return nil, OrderPresetOut{}, err
 	}
+	s.recordCartWrite(cartWriteFromPreset(s, p))
 	// Preset carries the real Swiggy restaurant id + saved address label.
 	id, bill, err := s.prepare(p.AddrID, c, orderIdentity{
 		restaurantID: p.RestaurantID, restaurantName: p.RestaurantName, addrLabel: p.AddrLine,
@@ -136,4 +156,22 @@ func (s *Server) handleOrderPreset(ctx context.Context, _ *mcp.CallToolRequest, 
 	}
 	return nil, OrderPresetOut{ConfirmationID: id, Bill: bill,
 		Note: "show this bill; call place_order with this confirmation_id ONLY after the user confirms."}, nil
+}
+
+// cartWriteFromPreset projects a preset into a cartWrite for the memory
+// caches. Selection names come from the preset's own saved names; GroupName is
+// left for the option-name cache to fill in via nameSel (it may still be
+// empty, e.g. if get_item_options was never called this session).
+func cartWriteFromPreset(s *Server, p localstore.Preset) *cartWrite {
+	cw := &cartWrite{AddressID: p.AddrID, RestaurantID: p.RestaurantID, RestaurantName: p.RestaurantName}
+	for _, pl := range p.Lines {
+		ln := memLine{ItemID: pl.ItemID, ItemName: pl.Name, Qty: pl.Qty}
+		for _, sel := range pl.Sels {
+			ms := memSel{GroupID: sel.GroupID, ChoiceID: sel.ChoiceID, Variant: sel.Variant, Absolute: sel.Absolute, ChoiceName: sel.Name}
+			s.nameSel(&ms)
+			ln.Sels = append(ln.Sels, ms)
+		}
+		cw.Lines = append(cw.Lines, ln)
+	}
+	return cw
 }

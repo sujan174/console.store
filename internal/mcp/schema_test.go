@@ -38,7 +38,7 @@ func TestSliceParamsAdvertisePlainArray(t *testing.T) {
 		field string
 	}{
 		{"update_cart.items", toolInputSchema[UpdateCartIn](), "items"},
-		{"update_card.prefs", toolInputSchema[UpdateCardIn](), "prefs"},
+		{"remember.picks", toolInputSchema[RememberIn](), "picks"},
 	}
 	for _, c := range cases {
 		p := c.sc.Properties[c.field]

@@ -185,6 +185,7 @@ func (s *Server) handleGetItemOptions(ctx context.Context, _ *mcp.CallToolReques
 	if err != nil {
 		return nil, GetItemOptionsOut{}, err
 	}
+	s.rememberOptions(groups)
 	out := GetItemOptionsOut{Groups: make([]OptionGroupDTO, 0, len(groups))}
 	for _, g := range groups {
 		dg := OptionGroupDTO{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Absolute: g.Absolute}

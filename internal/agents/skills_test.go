@@ -12,10 +12,10 @@ func TestInstallSkillsCopiesBundles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("installSkills: %v", err)
 	}
-	if len(installed) != 2 {
+	if len(installed) != 1 {
 		t.Fatalf("installed = %v", installed)
 	}
-	for _, name := range []string{"console-order", "console-card"} {
+	for _, name := range []string{"console-order"} {
 		p := filepath.Join(dir, name, "SKILL.md")
 		fi, err := os.Stat(p)
 		if err != nil || fi.Size() == 0 {
@@ -36,7 +36,7 @@ func TestRemoveSkillsDeletesOnlyOurs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("removeSkills: %v", err)
 	}
-	if len(removed) != 2 {
+	if len(removed) != 1 {
 		t.Fatalf("removed = %v", removed)
 	}
 	if _, err := os.Stat(other); err != nil {

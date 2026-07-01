@@ -6,6 +6,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -48,10 +49,17 @@ type Server struct {
 	be      Backend
 	auth    Authenticator
 	pending *confirmStore
+
+	// mu guards optNames and lastCart, the process-local memory caches that
+	// bridge get_item_options / update_cart / order_preset into a taste
+	// observation on place_order and into save_preset. See memcache.go.
+	mu       sync.Mutex
+	optNames map[string]namedChoice
+	lastCart *cartWrite
 }
 
 func NewServer(be Backend, auth Authenticator) *Server {
-	return &Server{be: be, auth: auth, pending: newConfirmStore()}
+	return &Server{be: be, auth: auth, pending: newConfirmStore(), optNames: map[string]namedChoice{}}
 }
 
 type ServerInfoIn struct{}
@@ -144,6 +152,9 @@ func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "order_preset", Description: "load a saved preset into the cart and return a bill + confirmation_id (does NOT place)"}, s.handleOrderPreset)
 	addTool(srv, &mcp.Tool{Name: "sign_in", Description: "start Swiggy sign-in; returns a browser URL (opened automatically when possible)"}, s.handleSignIn)
 	addTool(srv, &mcp.Tool{Name: "auth_status", Description: "whether the user is signed in"}, s.handleAuthStatus)
-	addTool(srv, &mcp.Tool{Name: "get_card", Description: "the user's local taste card (default address, favorites, prefs) + staleness warnings"}, s.handleGetCard)
-	addTool(srv, &mcp.Tool{Name: "update_card", Description: "record explicit prefs or a default address on the taste card"}, s.handleUpdateCard)
+	addTool(srv, &mcp.Tool{Name: "get_card", Description: "the user's saved personalization: default/last address, favorite restaurants, policies, per-item tastes, and pending suggestions"}, s.handleGetCard)
+	addTool(srv, &mcp.Tool{Name: "remember", Description: "save an explicit preference — a per-restaurant-item taste, a cross-restaurant policy, or the default address; or confirm a suggestion"}, s.handleRemember)
+	addTool(srv, &mcp.Tool{Name: "forget", Description: "remove a saved taste or policy"}, s.handleForget)
+	addTool(srv, &mcp.Tool{Name: "save_preset", Description: "save the current cart as a named preset the user can reorder"}, s.handleSavePreset)
+	addTool(srv, &mcp.Tool{Name: "forget_preset", Description: "delete a saved preset"}, s.handleForgetPreset)
 }

@@ -10,6 +10,7 @@ type fakeBackend struct {
 	addrs    []api.Address
 	search   []api.Restaurant
 	menu     api.Menu
+	itemOpts []api.OptionGroup
 	cart     api.Cart
 	order    api.Order
 	placeErr error
@@ -26,7 +27,7 @@ func (f *fakeBackend) PlacesQuery(addressID, query string) ([]api.Restaurant, er
 func (f *fakeBackend) Usuals(addressID string) ([]api.Restaurant, error)     { return f.search, nil }
 func (f *fakeBackend) Menu(addressID, restaurantID string) (api.Menu, error) { return f.menu, nil }
 func (f *fakeBackend) ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {
-	return nil, nil
+	return f.itemOpts, nil
 }
 func (f *fakeBackend) GetCart(addressID, restaurantName string) (api.Cart, error) { return f.cart, nil }
 func (f *fakeBackend) UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error) {

@@ -110,7 +110,40 @@ func (s *Server) handleUpdateCart(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return nil, UpdateCartOut{}, err
 	}
+	s.recordCartWrite(cartWriteFromUpdate(s, in, c))
 	return nil, UpdateCartOut{Cart: cartToDTO(c)}, nil
+}
+
+// cartWriteFromUpdate projects an update_cart call + its resulting cart into a
+// cartWrite for the memory caches: item names are resolved from the returned
+// cart lines (the input only carries ids), and selection ids are named via the
+// server's option-name cache when available.
+func cartWriteFromUpdate(s *Server, in UpdateCartIn, c api.Cart) *cartWrite {
+	names := make(map[string]string, len(c.Lines))
+	for _, l := range c.Lines {
+		names[l.ItemID] = l.Name
+	}
+	cw := &cartWrite{AddressID: in.AddressID, RestaurantID: in.RestaurantID, RestaurantName: in.RestaurantName}
+	for _, ci := range in.Items {
+		ln := memLine{ItemID: ci.ItemID, ItemName: names[ci.ItemID], Qty: ci.Quantity}
+		for _, v := range ci.VariantsV2 {
+			sel := memSel{GroupID: v.GroupID, ChoiceID: v.VariationID, Variant: true, Absolute: true}
+			s.nameSel(&sel)
+			ln.Sels = append(ln.Sels, sel)
+		}
+		for _, v := range ci.VariantsLegacy {
+			sel := memSel{GroupID: v.GroupID, ChoiceID: v.VariationID, Variant: true, Absolute: false}
+			s.nameSel(&sel)
+			ln.Sels = append(ln.Sels, sel)
+		}
+		for _, a := range ci.Addons {
+			sel := memSel{GroupID: a.GroupID, ChoiceID: a.ChoiceID, Variant: false, Absolute: false}
+			s.nameSel(&sel)
+			ln.Sels = append(ln.Sels, sel)
+		}
+		cw.Lines = append(cw.Lines, ln)
+	}
+	return cw
 }
 
 // --- clear_cart ---
