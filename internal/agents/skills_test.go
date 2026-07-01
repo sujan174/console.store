@@ -24,6 +24,32 @@ func TestInstallSkillsCopiesBundles(t *testing.T) {
 	}
 }
 
+// An install over a client that still has the retired console-card bundle must
+// prune it (its stale instructions reference removed tools), while leaving
+// console-order installed and any foreign skill untouched.
+func TestInstallPrunesRetiredBundle(t *testing.T) {
+	dir := t.TempDir()
+	card := filepath.Join(dir, "console-card")
+	_ = os.MkdirAll(card, 0o755)
+	_ = os.WriteFile(filepath.Join(card, "SKILL.md"), []byte("stale"), 0o644)
+	foreign := filepath.Join(dir, "someone-else")
+	_ = os.MkdirAll(foreign, 0o755)
+	_ = os.WriteFile(filepath.Join(foreign, "SKILL.md"), []byte("x"), 0o644)
+
+	if _, err := installSkills(dir); err != nil {
+		t.Fatalf("installSkills: %v", err)
+	}
+	if _, err := os.Stat(card); !os.IsNotExist(err) {
+		t.Fatalf("console-card not pruned")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "console-order", "SKILL.md")); err != nil {
+		t.Fatalf("console-order missing after install: %v", err)
+	}
+	if _, err := os.Stat(foreign); err != nil {
+		t.Fatalf("foreign skill was deleted")
+	}
+}
+
 func TestRemoveSkillsDeletesOnlyOurs(t *testing.T) {
 	dir := t.TempDir()
 	// A foreign skill must survive removal.

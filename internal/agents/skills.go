@@ -54,9 +54,32 @@ func bundleNames() []string {
 	return names
 }
 
+// retiredBundles are bundle dirs we shipped in the past but no longer embed.
+// Install prunes them from each agent's skills dir so an auto-updated client
+// doesn't keep a stale skill whose instructions reference removed MCP tools
+// (console-card was folded into console-order and its update_card tool dropped).
+var retiredBundles = []string{"console-card"}
+
+// pruneRetiredSkills deletes any retired bundle dir from skillsDir. Best-effort
+// per dir; returns the names actually removed.
+func pruneRetiredSkills(skillsDir string) []string {
+	var removed []string
+	for _, name := range retiredBundles {
+		dst := filepath.Join(skillsDir, name)
+		if _, err := os.Stat(dst); err == nil {
+			if err := os.RemoveAll(dst); err == nil {
+				removed = append(removed, name)
+			}
+		}
+	}
+	return removed
+}
+
 // installSkills copies each embedded bundle into skillsDir/<name>/. It overwrites
-// only our own bundle dirs. Returns the bundle names installed.
+// only our own bundle dirs, and first prunes any retired bundle left by an older
+// version. Returns the bundle names installed.
 func installSkills(skillsDir string) ([]string, error) {
+	pruneRetiredSkills(skillsDir)
 	var installed []string
 	for _, name := range bundleNames() {
 		srcDir := "bundles/" + name

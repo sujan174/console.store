@@ -13,7 +13,7 @@ import (
 // existing installs should re-apply on next launch even though the skill bundles
 // didn't change — e.g. adding a new agent to the candidate list. Fold it into
 // the sync hash so SyncIfChanged re-runs Install after such a release.
-const provisionRev = "2" // 2: added Windsurf, OpenClaw, Zed, VS Code, Hermes
+const provisionRev = "3" // 3: prune retired console-card bundle on existing installs
 
 // syncHash is the marker value: the bundle content hash combined with the
 // provisioning revision.
