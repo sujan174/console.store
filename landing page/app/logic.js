@@ -26,6 +26,7 @@ export function mount(root) {
     key: root.querySelector('[data-ref="key"]'),
     palette: root.querySelector('[data-ref="palette"]'),
     cli: root.querySelector('[data-ref="cli"]'),
+    agent: root.querySelector('[data-ref="agent"]'),
     toast: root.querySelector('[data-ref="toast"]'),
     statstab: root.querySelector('[data-ref="statstab"]'),
     statsback: root.querySelector('[data-ref="statsback"]'),
@@ -181,7 +182,7 @@ export function mount(root) {
       Object.keys(btn).forEach((k) => { if (!btn[k]) return; const h = () => show(k); btn[k].addEventListener("click", h); handlers.push([btn[k], h]); });
       show("tui");
       requestAnimationFrame(() => placeInd(0));
-      if (hint) hint.textContent = "tap to switch — the full interactive app, or two commands from your shell.";
+      if (hint) hint.textContent = "tap to switch — order it yourself at the prompt, or hand it to your agent.";
       cleanupKeys = () => handlers.forEach(([b, h]) => b.removeEventListener("click", h));
       return;
     }
@@ -658,24 +659,38 @@ export function mount(root) {
     const rowB = (l, r, rc) => '<div style="display:flex;justify-content:space-between"><span style="color:' + A + '">&nbsp;&nbsp;' + l + '</span><span style="color:' + rc + '">' + r + "</span></div>";
     const note = (c, t) => '<div style="color:' + c + '">&nbsp;&nbsp;' + t + "</div>";
     const set = (h) => { if (el) el.innerHTML = h; };
-    const orderCmd = "store order breakfast";
-    const colorOrder = (n) => { const head = orderCmd.slice(0, Math.min(n, 11)); const arg = n > 12 ? orderCmd.slice(12, n) : ""; return '<span style="color:' + B + '">' + head + "</span>" + (n > 11 ? " " : "") + (arg ? '<span style="color:' + Au + '">' + arg + "</span>" : ""); };
+    const prompt = '<span style="color:' + A + '">~ %</span> ';
+    const orderCmd = "console order dinner";
+    const colorOrder = (n) => { const head = orderCmd.slice(0, Math.min(n, 13)); const arg = n > 14 ? orderCmd.slice(14, n) : ""; return '<span style="color:' + B + '">' + head + "</span>" + (n > 13 ? " " : "") + (arg ? '<span style="color:' + Au + '">' + arg + "</span>" : ""); };
+    // A saved alias list, so the reorder command reads as "scripting your usuals".
+    const aliasCmd = "console alias list";
     while (!S.dead) {
-      for (let i = 0; i <= orderCmd.length; i++) { if (S.dead) return; set('<div><span style="color:' + A + '">$</span> ' + colorOrder(i) + cur + "</div>"); await wait(52); }
-      const head1 = '<div><span style="color:' + A + '">$</span> ' + colorOrder(orderCmd.length) + "</div>";
-      await wait(380);
-      const billLines = [rowB("delivering to", "Home · HSR Layout", V), rowB("from", "Blue Tokai", V), rowB("2 × Cold Coffee", "₹240", G), rowB("to pay", "₹300", Cy), note(A, "press ↵ to place · ⌃C to cancel")];
-      let acc = head1;
-      for (const ln of billLines) { if (S.dead) return; acc += ln; set(acc); await wait(300); }
-      await wait(680);
-      acc += note(G, "✓ order placed");
+      // 1) list saved aliases (presets)
+      for (let i = 0; i <= aliasCmd.length; i++) { if (S.dead) return; set("<div>" + prompt + '<span style="color:' + B + '">' + aliasCmd.slice(0, i) + "</span>" + cur + "</div>"); await wait(46); }
+      let acc = "<div>" + prompt + '<span style="color:' + B + '">' + aliasCmd + "</span></div>";
+      await wait(340);
+      acc += rowB("dinner", "Meghana Foods · 3 items", V);
+      acc += rowB("coffee", "Blue Tokai · 1 item", V);
+      set(acc);
+      await wait(1100);
+      acc += '<div style="height:12px"></div>';
+      // 2) order a saved alias
+      const head0 = acc;
+      for (let i = 0; i <= orderCmd.length; i++) { if (S.dead) return; set(head0 + "<div>" + prompt + colorOrder(i) + cur + "</div>"); await wait(50); }
+      acc = head0 + "<div>" + prompt + colorOrder(orderCmd.length) + "</div>";
+      await wait(360);
+      const billLines = [rowB("from", "Meghana Foods", V), rowB("2 × Chicken Biryani", "₹398", G), rowB("to pay", "₹438", Cy), note(A, "press ↵ to place · ⌃C to cancel")];
+      for (const ln of billLines) { if (S.dead) return; acc += ln; set(acc); await wait(280); }
+      await wait(720);
+      acc += note(G, "✓ order placed · arriving ~35 min");
       set(acc);
       await wait(1500);
-      acc += '<div style="height:14px"></div>';
-      const statusCmd = "store status";
-      for (let i = 0; i <= statusCmd.length; i++) { if (S.dead) return; set(acc + '<div><span style="color:' + A + '">$</span> <span style="color:' + B + '">' + statusCmd.slice(0, i) + "</span>" + cur + "</div>"); await wait(58); }
-      acc += '<div><span style="color:' + A + '">$</span> <span style="color:' + B + '">' + statusCmd + "</span></div>";
-      await wait(360);
+      acc += '<div style="height:12px"></div>';
+      // 3) check status
+      const statusCmd = "console status";
+      for (let i = 0; i <= statusCmd.length; i++) { if (S.dead) return; set(acc + "<div>" + prompt + '<span style="color:' + B + '">' + statusCmd.slice(0, i) + "</span>" + cur + "</div>"); await wait(52); }
+      acc += "<div>" + prompt + '<span style="color:' + B + '">' + statusCmd + "</span></div>";
+      await wait(340);
       acc += '<div><span style="color:' + Cy + '">&nbsp;&nbsp;◐ on the way to you</span><span style="color:' + V + '"> · 6 mins</span></div>';
       set(acc);
       await wait(2800);
@@ -688,12 +703,54 @@ export function mount(root) {
     if (!el) return;
     const { A, V, B, G, Cy, Au } = cliColors;
     el.innerHTML =
-      '<div><span style="color:' + A + '">$</span> <span style="color:' + B + '">store order</span> <span style="color:' + Au + '">breakfast</span></div>' +
-      '<div style="display:flex;justify-content:space-between"><span style="color:' + A + '">&nbsp;&nbsp;to pay</span><span style="color:' + Cy + '">₹300</span></div>' +
+      '<div><span style="color:' + A + '">~ %</span> <span style="color:' + B + '">console order</span> <span style="color:' + Au + '">dinner</span></div>' +
+      '<div style="display:flex;justify-content:space-between"><span style="color:' + A + '">&nbsp;&nbsp;to pay</span><span style="color:' + Cy + '">₹438</span></div>' +
       '<div style="color:' + G + '">&nbsp;&nbsp;✓ order placed</div>' +
       '<div style="height:14px"></div>' +
-      '<div><span style="color:' + A + '">$</span> <span style="color:' + B + '">store status</span></div>' +
+      '<div><span style="color:' + A + '">~ %</span> <span style="color:' + B + '">console status</span></div>' +
       '<div><span style="color:' + Cy + '">&nbsp;&nbsp;◐ on the way to you</span><span style="color:' + V + '"> · 6 mins</span></div>';
+  };
+
+  // Agent chat animator — a mock AI agent ordering food through the console MCP
+  // tools: user asks, agent calls tools, shows the real bill, places on approval.
+  const startAgent = async () => {
+    const el = refs.agent;
+    if (!el) return;
+    const { A, V, B, G, Cy, Au } = cliColors;
+    const P = "#b08cf5";
+    const set = (h) => { if (el) el.innerHTML = h; };
+    const cur = '<span style="display:inline-block;width:7px;height:13px;background:#93a8ff;vertical-align:middle;animation:blink 1s step-end infinite"></span>';
+    const you = (t) => '<div style="margin:0 0 14px;text-align:right"><span style="display:inline-block;background:#14162a;border:1px solid rgba(147,168,255,.16);border-radius:12px 12px 3px 12px;padding:8px 13px;color:#e9ebf7;font-size:12.5px;max-width:80%">' + t + "</span></div>";
+    const tool = (name, ok) => '<div style="margin:0 0 8px;color:' + A + ';font-size:11.5px"><span style="color:' + P + '">●</span> consolestore · <span style="color:' + V + '">' + name + "</span>" + (ok ? ' <span style="color:' + G + '">✓</span>' : "") + "</div>";
+    const toolBody = (h) => '<div style="margin:-4px 0 10px 14px;color:' + A + ';font-size:11.5px;line-height:1.7">' + h + "</div>";
+    const bot = (t) => '<div style="margin:0 0 14px;display:flex;gap:8px;align-items:flex-start"><span style="color:' + P + ';font-size:12px;flex:none;margin-top:1px">✳</span><span style="color:#cdd3f0;font-size:12.5px;line-height:1.6">' + t + "</span></div>";
+    const typeBot = async (acc, t) => {
+      for (let i = 0; i <= t.length; i++) { if (S.dead) return acc; set(acc + '<div style="margin:0 0 14px;display:flex;gap:8px;align-items:flex-start"><span style="color:' + P + ';font-size:12px;flex:none;margin-top:1px">✳</span><span style="color:#cdd3f0;font-size:12.5px;line-height:1.6">' + t.slice(0, i) + cur + "</span></div>"); await wait(16); }
+      return acc + bot(t);
+    };
+    while (!S.dead) {
+      let acc = "";
+      set(acc = you("order my usual dinner")); await wait(700);
+      acc += tool("search_restaurants"); set(acc); await wait(650);
+      acc += tool("prepare_order"); set(acc); await wait(300);
+      acc += toolBody('Meghana Foods · Chicken Biryani ×2, Butter Naan<br><span style="color:' + Cy + '">to pay ₹438</span> <span style="color:' + A + '">· to Home</span>'); set(acc); await wait(700);
+      acc = await typeBot(acc, "That’s ₹438 to Home — want me to place it?"); if (S.dead) return; set(acc); await wait(1100);
+      acc += you("yes, go ahead"); set(acc); await wait(650);
+      acc += tool("place_order", true); set(acc); await wait(500);
+      acc = await typeBot(acc, "Ordered — Meghana Foods, arriving in ~35 min. I’ll track it."); if (S.dead) return; set(acc);
+      await wait(3200);
+      set(""); await wait(520);
+    }
+  };
+  const staticAgent = () => {
+    const el = refs.agent;
+    if (!el) return;
+    const { A, V, Cy, G } = cliColors;
+    const P = "#b08cf5";
+    el.innerHTML =
+      '<div style="margin:0 0 14px;text-align:right"><span style="display:inline-block;background:#14162a;border:1px solid rgba(147,168,255,.16);border-radius:12px 12px 3px 12px;padding:8px 13px;color:#e9ebf7;font-size:12.5px">order my usual dinner</span></div>' +
+      '<div style="margin:0 0 8px;color:' + A + ';font-size:11.5px"><span style="color:' + P + '">●</span> consolestore · <span style="color:' + V + '">place_order</span> <span style="color:' + G + '">✓</span></div>' +
+      '<div style="margin:0 0 14px;display:flex;gap:8px"><span style="color:' + P + '">✳</span><span style="color:#cdd3f0;font-size:12.5px">Ordered — arriving in ~35 min.</span></div>';
   };
 
   // TUI screen factory
@@ -996,6 +1053,7 @@ export function mount(root) {
     startTerminal();
     startPalette();
     startCli();
+    startAgent();
     const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
     const bail = () => { showWordmarkFallback(); startWordmark(); };
     const tryHero = (n) => {
@@ -1024,6 +1082,7 @@ export function mount(root) {
     startWordmark();
     staticTerminal();
     staticCli();
+    staticAgent();
     if (refs.palette) refs.palette.textContent = "checkout";
   }
 
