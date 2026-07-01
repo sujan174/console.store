@@ -104,11 +104,9 @@ export const MARKUP = String.raw`
       <div data-pitch-item style="perspective:1200px">
         <a href="/features" data-action="features-zoom" class="feat-window" aria-label="open the full feature map">
           <div class="feat-window-bar">
-            <span style="width:10px;height:10px;border-radius:99px;background:#ff7d96"></span>
-            <span style="width:10px;height:10px;border-radius:99px;background:#eab560"></span>
-            <span style="width:10px;height:10px;border-radius:99px;background:#8ee08a"></span>
-            <span style="margin-left:8px;font-size:11px;color:#565b80">the feature map</span>
-            <span class="feat-window-hint" style="margin-left:auto;font-size:10px;color:#2d2f48">click to open →</span>
+            <span class="win-mark">❯</span>
+            <span style="font-size:11px;color:#8a8fb4">the feature map</span>
+            <span class="feat-window-hint" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#93a8ff"><span style="width:6px;height:6px;border-radius:99px;background:#93a8ff;box-shadow:0 0 8px #93a8ff"></span>click to explore</span>
           </div>
           <div style="padding:22px">
             <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:12px">// everything it does</div>
@@ -117,9 +115,8 @@ export const MARKUP = String.raw`
               <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#93a8ff;flex:none">◆</span><span style="color:#8a8fb4"><span style="color:#cdd3f0">the terminal</span> — browse, order, track, presets, the <span style="color:#b08cf5">:</span> palette</span></div>
               <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#b08cf5;flex:none">✳</span><span style="color:#8a8fb4"><span style="color:#cdd3f0">the agent</span> — chat, real bill, you approve, remembers you</span></div>
             </div>
-            <div style="margin-top:22px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(147,168,255,.09);padding-top:16px">
-              <span style="font-size:12.5px;color:#e9ebf7">open the full feature map</span>
-              <span class="feat-window-arrow" style="font-size:16px;color:#93a8ff">→</span>
+            <div style="margin-top:22px;border-top:1px solid rgba(147,168,255,.09);padding-top:18px">
+              <span class="feat-cta">open the full feature map <span class="feat-window-arrow" style="font-size:15px">→</span></span>
             </div>
           </div>
         </a>
@@ -186,15 +183,11 @@ export const MARKUP = String.raw`
           <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#eab560;border-radius:1px"></span>place &amp; track real orders</div>
         </div>
       </div>
-      <div style="position:relative;border:1px solid rgba(147,168,255,.12);border-radius:13px;background:linear-gradient(180deg,#0c0d18,#09090f);box-shadow:0 40px 120px rgba(0,0,0,.7),0 0 0 1px rgba(147,168,255,.04);overflow:hidden;animation:scaleIn both;animation-timeline:view();animation-range:entry 6% cover 26%">
+      <div class="demo-win" style="position:relative;border:1px solid rgba(147,168,255,.12);border-radius:13px;background:linear-gradient(180deg,#0c0d18,#09090f);box-shadow:0 40px 120px rgba(0,0,0,.7),0 0 0 1px rgba(147,168,255,.04);overflow:hidden;animation:scaleIn both;animation-timeline:view();animation-range:entry 6% cover 26%">
         <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(147,168,255,.05),transparent 16%);z-index:1"></div>
         <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid rgba(147,168,255,.08);background:#0d0e1c">
-          <div style="display:flex;gap:7px">
-            <span style="width:11px;height:11px;border-radius:99px;background:#ff7d96"></span>
-            <span style="width:11px;height:11px;border-radius:99px;background:#eab560"></span>
-            <span style="width:11px;height:11px;border-radius:99px;background:#8ee08a"></span>
-          </div>
-          <span style="font-size:12px;color:#565b80">consolestore.in — store</span>
+          <span class="win-mark">❯</span>
+          <span style="font-size:12px;color:#8a8fb4">consolestore.in ~ %</span>
           <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:#7fe0ff"><span style="width:5px;height:5px;border-radius:99px;background:#7fe0ff;animation:pulseDot 1.6s ease-in-out infinite;flex:none"></span>live preview</span>
         </div>
         <div style="position:relative;padding:20px 22px;min-height:380px">
@@ -235,12 +228,10 @@ export const MARKUP = String.raw`
                   <span style="font-size:12px;color:#8a8fb4;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">no app · no browser</span>
                 </div>
               </div>
-              <div style="border:1px solid rgba(147,168,255,.14);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
+              <div class="demo-win" style="border:1px solid rgba(147,168,255,.14);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
                 <div style="display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid rgba(147,168,255,.07);background:#0e0f1c">
-                  <span style="width:10px;height:10px;border-radius:99px;background:#ff7d96"></span>
-                  <span style="width:10px;height:10px;border-radius:99px;background:#eab560"></span>
-                  <span style="width:10px;height:10px;border-radius:99px;background:#8ee08a"></span>
-                  <span style="margin-left:8px;font-size:11px;color:#565b80">zsh — your saved usuals, one command</span>
+                  <span class="win-mark">❯</span>
+                  <span style="font-size:11px;color:#8a8fb4">zsh — your saved usuals, one command</span>
                 </div>
                 <div data-ref="cli" style="padding:18px;font-size:13px;line-height:1.95;min-height:280px"></div>
               </div>
@@ -262,7 +253,7 @@ export const MARKUP = String.raw`
                   <span style="font-size:12px;color:#8a8fb4;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">plain language</span>
                 </div>
               </div>
-              <div style="border:1px solid rgba(176,140,245,.2);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
+              <div class="demo-win" style="border:1px solid rgba(176,140,245,.2);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
                 <div style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid rgba(147,168,255,.07);background:#0e0f1c">
                   <span style="color:#b08cf5;font-size:13px">✳</span>
                   <span style="font-size:11px;color:#565b80">your agent · consolestore mcp</span>

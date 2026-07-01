@@ -731,3 +731,71 @@ a {
     transform: none;
   }
 }
+
+/* Distinctive window chrome — a gradient "spine" strip along the top edge
+   replaces the generic macOS traffic-light dots, plus a ❯ prompt mark. */
+.demo-win {
+  position: relative;
+}
+.demo-win::before,
+.feat-window::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #93a8ff, #b08cf5 55%, #eab560);
+  opacity: 0.9;
+  z-index: 4;
+  pointer-events: none;
+}
+.win-mark {
+  color: #93a8ff;
+  font-weight: 700;
+  font-size: 12px;
+  margin-right: 4px;
+  text-shadow: 0 0 8px rgba(147, 168, 255, 0.5);
+}
+
+/* Feature "window" → make it obviously a clickable button */
+.feat-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 9px;
+  background: rgba(147, 168, 255, 0.12);
+  border: 1px solid rgba(147, 168, 255, 0.4);
+  color: #e9ebf7;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+.feat-window:hover .feat-cta {
+  background: rgba(147, 168, 255, 0.22);
+  border-color: rgba(147, 168, 255, 0.75);
+}
+/* a slow breathing glow advertises that the whole card is interactive */
+@keyframes featPulse {
+  0%,
+  100% {
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(147, 168, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(147, 168, 255, 0.3), 0 0 30px rgba(147, 168, 255, 0.15);
+  }
+}
+.feat-window {
+  animation: featPulse 3.4s ease-in-out infinite;
+}
+.feat-window:hover {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .feat-window {
+    animation: none;
+  }
+}
