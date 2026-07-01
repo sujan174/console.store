@@ -38,7 +38,7 @@ export const MARKUP = String.raw`
     </a>
     <div style="display:flex;align-items:center;gap:26px;font-size:12.5px;color:#565b80">
       <a href="#run" class="lnk">run</a>
-      <a href="#keys" class="lnk">keys</a>
+      <a href="#keys" class="lnk">terminal &amp; agent</a>
       <a href="#features" class="lnk">features</a>
       <a href="#faq" class="lnk">faq</a>
     </div>
@@ -384,7 +384,7 @@ export const MARKUP = String.raw`
           </div>
           <div style="display:flex;flex-direction:column;gap:11px">
             <span style="color:#565b80;font-size:10.5px;letter-spacing:1px">STATUS</span>
-            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:99px;background:#eab560;animation:pulseDot 2.4s ease-in-out infinite;flex:none"></span>launching soon</span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:99px;background:#7fe0ff;animation:pulseDot 2.4s ease-in-out infinite;flex:none"></span>beta</span>
           </div>
         </div>
       </div>
