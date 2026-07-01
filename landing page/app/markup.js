@@ -57,7 +57,7 @@ export const MARKUP = String.raw`
         </div>
       </div>
 
-      <p style="margin:8px 0 0;font-size:14.5px;color:#8a8fb4;letter-spacing:.2px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">order real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — from your terminal, or your agent.</p>
+      <p style="margin:8px 0 0;font-size:14.5px;color:#8a8fb4;letter-spacing:.2px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">order real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — with a command you type, or a sentence to your agent.</p>
 
       <div style="margin-top:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;font-size:12px;color:#565b80;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .66s">
         <span>one binary</span><span style="color:#2d2f48">·</span>
@@ -271,13 +271,13 @@ export const MARKUP = String.raw`
 
   <!-- FEATURES -->
   <section id="features" style="position:relative;z-index:2;max-width:980px;margin:0 auto;padding:60px clamp(24px,6vw,56px) 48px" data-reveal>
-    <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:20px">// why it's faster</div>
+    <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:20px">// the same order, three ways</div>
     <h2 style="font-weight:800;font-size:clamp(26px,4vw,46px);letter-spacing:-.025em;line-height:1.1;margin:0">
       <span style="color:#3a3d5c">a browser order is a chore.</span><br>
-      <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">this is three keystrokes.</span>
+      <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">this is a command — or a sentence.</span>
     </h2>
 
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:36px 72px;margin-top:40px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:36px 56px;margin-top:40px">
       <div>
         <div style="font-size:10.5px;letter-spacing:1.5px;color:#ff7d96;margin-bottom:20px">THE BROWSER WAY</div>
         <div style="display:flex;flex-direction:column;gap:13px;font-size:13.5px;line-height:1.5;color:#4c4f6e;text-decoration:line-through;text-decoration-color:rgba(255,125,150,.4)">
@@ -286,28 +286,35 @@ export const MARKUP = String.raw`
           <span>scroll past the "sponsored" rows</span>
           <span>pay, then dismiss the pop-ups</span>
         </div>
-        <div style="margin-top:24px;font-size:11.5px;color:#565b80">~14 clicks · ~2 minutes · mouse</div>
+        <div style="margin-top:24px;font-size:11.5px;color:#565b80">~14 clicks · ~2 min · mouse</div>
       </div>
       <div>
-        <div style="font-size:10.5px;letter-spacing:1.5px;color:#8ee08a;margin-bottom:20px">CONSOLESTORE</div>
-        <div style="border-left:2px solid rgba(142,224,138,.45);padding-left:18px;display:flex;flex-direction:column;gap:12px;font-size:14px;line-height:1.45">
+        <div style="font-size:10.5px;letter-spacing:1.5px;color:#93a8ff;margin-bottom:20px">YOU, IN THE TERMINAL</div>
+        <div style="border-left:2px solid rgba(147,168,255,.45);padding-left:18px;display:flex;flex-direction:column;gap:12px;font-size:13.5px;line-height:1.45">
           <div><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console order</span> <span style="color:#eab560">dinner</span></div>
-          <div><span style="color:#93a8ff">↵</span> <span style="color:#8ee08a">order placed.</span></div>
-          <div><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console status</span> <span style="color:#7fe0ff">→ 6 min</span></div>
+          <div><span style="color:#93a8ff">↵</span> <span style="color:#8ee08a">order placed · 35 min</span></div>
         </div>
-        <div style="margin-top:24px;font-size:11.5px;color:#8ee08a">3 keystrokes · ~9 seconds</div>
+        <div style="margin-top:24px;font-size:11.5px;color:#93a8ff">3 keystrokes · ~9 seconds</div>
+      </div>
+      <div>
+        <div style="font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;margin-bottom:20px">YOUR AGENT, HANDS-FREE</div>
+        <div style="border-left:2px solid rgba(176,140,245,.45);padding-left:18px;display:flex;flex-direction:column;gap:12px;font-size:13.5px;line-height:1.45">
+          <div><span style="color:#565b80">you:</span> <span style="color:#e9ebf7">order my usual dinner</span></div>
+          <div><span style="color:#b08cf5">✳</span> <span style="color:#8ee08a">placed ✓ · on its way</span></div>
+        </div>
+        <div style="margin-top:24px;font-size:11.5px;color:#b08cf5">1 message · you approve</div>
       </div>
     </div>
   </section>
 
   <!-- MANIFESTO -->
   <section id="why" style="position:relative;z-index:2;max-width:820px;margin:0 auto;padding:64px clamp(24px,6vw,56px)" data-reveal>
-    <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:24px;text-align:center">// why terminal-native</div>
+    <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:24px;text-align:center">// why it's different</div>
     <p style="font-weight:800;font-size:clamp(24px,3.8vw,46px);line-height:1.18;letter-spacing:-.02em;text-align:center;margin:0">
-      <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">your terminal is already open.</span><br>
-      <span style="color:#3a3d5c">why leave it</span> <span style="color:#eab560">to get lunch?</span>
+      <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">your terminal is open. your agent is listening.</span><br>
+      <span style="color:#3a3d5c">why open a browser</span> <span style="color:#eab560">to get dinner?</span>
     </p>
-    <p style="max-width:52ch;margin:30px auto 0;text-align:center;color:#8a8fb4;font-size:13.5px;line-height:1.78">no tab-hunting, no cookie banners, no context switch. one command, a real Swiggy bill, and one ↵ — food is moving. the site can be loud because the product underneath is intentionally strict.</p>
+    <p style="max-width:54ch;margin:30px auto 0;text-align:center;color:#8a8fb4;font-size:13.5px;line-height:1.78">no tab-hunting, no cookie banners, no context switch — whether you type the command or your agent does. every order is a real Swiggy bill you approve before a rupee moves. the site can be loud because the product underneath is intentionally strict.</p>
   </section>
 
   <!-- FAQ -->
@@ -363,12 +370,17 @@ export const MARKUP = String.raw`
           </div>
           <div style="font-size:11.5px;color:#2d2f48">// not affiliated with swiggy. preview build, no warranty, no real orders on this page.</div>
         </div>
-        <div style="display:flex;gap:40px;font-size:12.5px;color:#8a8fb4">
+        <div style="display:flex;gap:40px;font-size:12.5px;color:#8a8fb4;flex-wrap:wrap">
           <div style="display:flex;flex-direction:column;gap:11px">
             <span style="color:#565b80;font-size:10.5px;letter-spacing:1px">PRODUCT</span>
             <a href="#run" class="lnk">run</a>
-            <a href="#keys" class="lnk">keyboard &amp; cli</a>
+            <a href="#keys" class="lnk">terminal &amp; agent</a>
             <a href="#features" class="lnk">features</a>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <span style="color:#565b80;font-size:10.5px;letter-spacing:1px">SUPPORT</span>
+            <a href="mailto:consolestore.in@gmail.com" class="lnk">consolestore.in@gmail.com</a>
+            <a href="#faq" class="lnk">faq</a>
           </div>
           <div style="display:flex;flex-direction:column;gap:11px">
             <span style="color:#565b80;font-size:10.5px;letter-spacing:1px">STATUS</span>
