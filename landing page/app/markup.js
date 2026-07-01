@@ -95,10 +95,35 @@ export const MARKUP = String.raw`
 
   <!-- PITCH — one full screen: what it is + install (rises up on scroll) -->
   <section id="pitch" data-pitch style="position:relative;z-index:2;min-height:calc(100vh - 40px);display:flex;align-items:center;justify-content:center;padding:48px clamp(24px,6vw,56px)">
-    <div style="display:flex;flex-direction:column;align-items:center;text-align:center;width:100%;max-width:1100px">
-      <div data-pitch-item style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:6px">// what it is</div>
-      <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:18ch">dinner, piped through your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">terminal</span> — or your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">agent</span>.</h1>
-      <p data-pitch-item style="max-width:56ch;color:#8a8fb4;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI and full TUI for ordering real food through Swiggy without leaving your shell — plus an MCP server that lets your AI agent do it for you. authorize once, then reorder a saved favourite with a keystroke, or just tell your agent <span style="color:#cdd3f0">“order my usual.”</span></p>
+    <div class="pitch-grid" data-pitch-grid style="display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(32px,5vw,64px);align-items:center;width:100%;max-width:1100px">
+      <div class="pitch-left" style="text-align:left">
+        <div data-pitch-item style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:6px">// what it is</div>
+        <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:16ch">dinner, piped through your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">terminal</span> — or your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">agent</span>.</h1>
+        <p data-pitch-item style="max-width:52ch;color:#8a8fb4;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI and full TUI for ordering real food through Swiggy without leaving your shell — plus an MCP server that lets your AI agent do it for you. authorize once, then reorder a saved favourite with a keystroke, or just tell your agent <span style="color:#cdd3f0">“order my usual.”</span></p>
+      </div>
+      <div data-pitch-item style="perspective:1200px">
+        <a href="/features" data-action="features-zoom" class="feat-window" aria-label="open the full feature map">
+          <div class="feat-window-bar">
+            <span style="width:10px;height:10px;border-radius:99px;background:#ff7d96"></span>
+            <span style="width:10px;height:10px;border-radius:99px;background:#eab560"></span>
+            <span style="width:10px;height:10px;border-radius:99px;background:#8ee08a"></span>
+            <span style="margin-left:8px;font-size:11px;color:#565b80">the feature map</span>
+            <span class="feat-window-hint" style="margin-left:auto;font-size:10px;color:#2d2f48">click to open →</span>
+          </div>
+          <div style="padding:22px">
+            <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:12px">// everything it does</div>
+            <div style="font-weight:800;font-size:clamp(22px,2.6vw,30px);line-height:1.12;letter-spacing:-.02em;color:#e9ebf7;margin-bottom:20px">18 features.<br><span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">terminal + agent.</span></div>
+            <div style="display:flex;flex-direction:column;gap:12px;font-size:12.5px;line-height:1.5">
+              <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#93a8ff;flex:none">◆</span><span style="color:#8a8fb4"><span style="color:#cdd3f0">the terminal</span> — browse, order, track, presets, the <span style="color:#b08cf5">:</span> palette</span></div>
+              <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#b08cf5;flex:none">✳</span><span style="color:#8a8fb4"><span style="color:#cdd3f0">the agent</span> — chat, real bill, you approve, remembers you</span></div>
+            </div>
+            <div style="margin-top:22px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(147,168,255,.09);padding-top:16px">
+              <span style="font-size:12.5px;color:#e9ebf7">open the full feature map</span>
+              <span class="feat-window-arrow" style="font-size:16px;color:#93a8ff">→</span>
+            </div>
+          </div>
+        </a>
+      </div>
     </div>
   </section>
 

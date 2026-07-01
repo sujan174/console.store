@@ -295,6 +295,25 @@ export function mount(root) {
     });
   };
 
+  // The pitch "feature map" window: clicking flies into it — the window scales
+  // up and the rest of the pitch fades to the starfield — then lands on
+  // /features. Reduced-motion (or missing element) just follows the link.
+  const initFeaturesZoom = () => {
+    const win = root.querySelector('[data-action="features-zoom"]');
+    if (!win) return;
+    const href = win.getAttribute("href") || "/features";
+    const h = (e) => {
+      if (reduce || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; // let the browser handle new-tab / reduced-motion
+      e.preventDefault();
+      const pitch = root.querySelector("#pitch");
+      if (pitch) pitch.classList.add("zooming");
+      win.classList.add("zooming");
+      S.timers.push(setTimeout(() => { if (!S.dead) window.location.assign(href); }, 560));
+    };
+    win.addEventListener("click", h);
+    cmdHandlers.push([win, h]);
+  };
+
   // ---- live stats: one /stats fetch feeds the right-edge tab → pop-out drawer
   // (the single home for live stats). The tab is always shown; the drawer holds
   // totals + the per-channel breakdown. A failed/empty fetch leaves the drawer's
@@ -1043,6 +1062,7 @@ export function mount(root) {
   initNudge();
   initFaq();
   initCmdClicks();
+  initFeaturesZoom();
   initStats();
   initKeyboardNav();
   initScrollSnap();
