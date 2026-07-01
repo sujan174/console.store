@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -98,6 +99,16 @@ func run(args []string) error {
 	be, signedIn, launchTUI, authMgr, ls, redirect, err := bootstrap(ctx)
 	if err != nil {
 		return err
+	}
+
+	// Launch-time self-heal for the local agents: if the embedded skill bundles
+	// changed since the last provision (e.g. this run just auto-updated to a build
+	// with new skills), quietly re-sync them into the detected agents. Background +
+	// silent + best-effort so it never delays or breaks startup; a no-op when
+	// nothing changed. Only for the interactive TUI and the `console mcp` agent
+	// surface — not one-shot headless subcommands.
+	if len(args) == 0 || (len(args) > 0 && args[0] == "mcp") {
+		go agents.SyncIfChanged(io.Discard)
 	}
 
 	if len(args) > 0 && args[0] == "mcp" {

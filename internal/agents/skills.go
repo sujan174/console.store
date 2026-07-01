@@ -1,14 +1,43 @@
 package agents
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 //go:embed bundles
 var bundlesFS embed.FS
+
+// bundlesHash is a content fingerprint of every embedded skill-bundle file
+// (paths + bytes, in sorted order). It changes whenever a bundle is edited, so
+// the launch-time auto-sync can tell whether the installed skills are stale.
+// Returns "" only if the embedded FS can't be walked (never in practice).
+func bundlesHash() string {
+	var paths []string
+	_ = fs.WalkDir(bundlesFS, "bundles", func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			paths = append(paths, p)
+		}
+		return nil
+	})
+	sort.Strings(paths)
+	h := sha256.New()
+	for _, p := range paths {
+		data, err := bundlesFS.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		h.Write([]byte(p))
+		h.Write([]byte{0})
+		h.Write(data)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
 
 // bundleNames are the skill bundle directory names under bundles/.
 func bundleNames() []string {

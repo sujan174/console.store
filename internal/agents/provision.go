@@ -39,6 +39,7 @@ func Install(out io.Writer) error {
 	agents := Detect()
 	if len(agents) == 0 {
 		fmt.Fprintln(out, "no local agents detected — nothing to set up.")
+		writeMarker(bundlesHash())
 		return nil
 	}
 	bin := consoleBinary()
@@ -63,6 +64,7 @@ func Install(out io.Writer) error {
 		fmt.Fprintf(out, "  %-16s mcp: %s%s\n", a.Title, status, skillNote)
 	}
 	fmt.Fprintln(out, "done. (Claude Desktop must be restarted to load the new MCP server.)")
+	writeMarker(bundlesHash())
 	return nil
 }
 

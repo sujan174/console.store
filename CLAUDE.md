@@ -68,6 +68,12 @@ internal/agents/      provisions local agents: registers `console mcp` in each
                       detected agent (Claude Desktop/Code JSON, Cursor JSON,
                       Codex TOML) + installs SKILL.md bundles. Run by the
                       installer (`console agents install`) and `console agents`.
+                      SyncIfChanged() self-heals at launch (TUI + `console mcp`):
+                      a content hash of the embedded bundles is stamped in
+                      ~/.config/console-store/agents-sync.hash; when it differs
+                      (e.g. after an auto-update to a build with new skills) it
+                      silently re-runs Install in the background. Opt-out
+                      CONSOLE_NO_AGENT_SETUP=1.
 cmd/capture/          read-only dev tool: polls the tracking tools for a live order and dumps
                       raw JSON (CONSOLE_DEBUG_SWIGGY). Never places an order.
 ```
