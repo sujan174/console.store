@@ -302,16 +302,23 @@ export function mount(root) {
     const win = root.querySelector('[data-action="features-zoom"]');
     if (!win) return;
     const href = win.getAttribute("href") || "/features";
+    const pitch = root.querySelector("#pitch");
+    // Clearing the zoom state is critical for the browser Back button: when the
+    // page is restored from the back-forward cache, its DOM comes back with the
+    // `.zooming` classes still applied — the window scaled away and the pitch at
+    // opacity 0 — leaving the whole section blank. pageshow fires on that restore.
+    const resetZoom = () => { win.classList.remove("zooming"); if (pitch) pitch.classList.remove("zooming"); };
     const h = (e) => {
       if (reduce || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; // let the browser handle new-tab / reduced-motion
       e.preventDefault();
-      const pitch = root.querySelector("#pitch");
       if (pitch) pitch.classList.add("zooming");
       win.classList.add("zooming");
       S.timers.push(setTimeout(() => { if (!S.dead) window.location.assign(href); }, 560));
     };
     win.addEventListener("click", h);
+    window.addEventListener("pageshow", resetZoom);
     cmdHandlers.push([win, h]);
+    S.featZoomCleanup = () => window.removeEventListener("pageshow", resetZoom);
   };
 
   // ---- live stats: one /stats fetch feeds the right-edge tab → pop-out drawer
@@ -1122,6 +1129,7 @@ export function mount(root) {
     if (S.statsCleanup) S.statsCleanup();
     if (S.navCleanup) S.navCleanup();
     if (S.snapCleanup) S.snapCleanup();
+    if (S.featZoomCleanup) S.featZoomCleanup();
     cleanupKeys();
   };
 }
