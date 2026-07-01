@@ -2,6 +2,7 @@ package localstore
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -24,6 +25,48 @@ func TestTokenRoundTrip(t *testing.T) {
 	exp := time.Unix(1_900_000_000, 0)
 	if err := s.PutToken(ctx, LocalAccountID, "acc", "ref", exp); err != nil {
 		t.Fatalf("PutToken: %v", err)
+	}
+
+	acc, ref, got, ok, err := s.GetTokenFull(ctx, LocalAccountID)
+	if err != nil || !ok {
+		t.Fatalf("GetTokenFull ok=%v err=%v", ok, err)
+	}
+	if acc != "acc" || ref != "ref" || !got.Equal(exp) {
+		t.Fatalf("round-trip mismatch: acc=%q ref=%q exp=%v", acc, ref, got)
+	}
+	if id, ok, _ := s.AccountForPubkey(ctx, "ignored"); !ok || id != LocalAccountID {
+		t.Fatalf("AccountForPubkey = %q,%v; want %q,true", id, ok, LocalAccountID)
+	}
+
+	if err := s.PurgeToken(ctx, LocalAccountID); err != nil {
+		t.Fatalf("PurgeToken: %v", err)
+	}
+	if _, _, _, ok, _ := s.GetTokenFull(ctx, LocalAccountID); ok {
+		t.Fatal("GetTokenFull ok should be false after purge")
+	}
+}
+
+// TestTokenRoundTripKeyringUnavailable mirrors the round-trip when the OS
+// keyring backend cannot be reached (the Linux "The name is not activatable"
+// case): every op must transparently fall back to token.json instead of
+// erroring out.
+func TestTokenRoundTripKeyringUnavailable(t *testing.T) {
+	keyring.MockInitWithError(errors.New("The name is not activatable"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	ctx := context.Background()
+	s := New()
+
+	// No token yet — must not surface the keyring backend error.
+	if _, ok, err := s.AccountForPubkey(ctx, "ignored"); ok || err != nil {
+		t.Fatalf("AccountForPubkey before PutToken = ok %v err %v; want false,nil", ok, err)
+	}
+	if _, _, _, ok, err := s.GetTokenFull(ctx, LocalAccountID); ok || err != nil {
+		t.Fatalf("GetTokenFull before PutToken = ok %v err %v; want false,nil", ok, err)
+	}
+
+	exp := time.Unix(1_900_000_000, 0)
+	if err := s.PutToken(ctx, LocalAccountID, "acc", "ref", exp); err != nil {
+		t.Fatalf("PutToken (file fallback): %v", err)
 	}
 
 	acc, ref, got, ok, err := s.GetTokenFull(ctx, LocalAccountID)

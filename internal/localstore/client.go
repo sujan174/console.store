@@ -17,9 +17,9 @@ type Registration struct {
 	TokenEndpoint         string `json:"token_endpoint"`
 }
 
-// configPath returns ~/.config/console-store/client.json, honoring
-// XDG_CONFIG_HOME.
-func configPath() (string, error) {
+// baseConfigDir returns ~/.config/console-store, honoring XDG_CONFIG_HOME. It is
+// the single per-user directory holding all of the binary's non-keyring state.
+func baseConfigDir() (string, error) {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
 		home, err := os.UserHomeDir()
@@ -28,7 +28,17 @@ func configPath() (string, error) {
 		}
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, "console-store", "client.json"), nil
+	return filepath.Join(base, "console-store"), nil
+}
+
+// configPath returns ~/.config/console-store/client.json, honoring
+// XDG_CONFIG_HOME.
+func configPath() (string, error) {
+	dir, err := baseConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "client.json"), nil
 }
 
 // LoadRegistration reads the cached registration. ok is false (nil error) when
