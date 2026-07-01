@@ -64,6 +64,10 @@ internal/tui/datasource/  the seam between the TUI and the broker: InProc adapte
 internal/catalog/     data-seam types + Repository interface. mem/ = in-memory mock;
                       swiggy/ = live Snapshot + Repository filled from broker results.
 internal/config/      optional seed config (instant first paint) + cuisine chips.
+internal/agents/      provisions local agents: registers `console mcp` in each
+                      detected agent (Claude Desktop/Code JSON, Cursor JSON,
+                      Codex TOML) + installs SKILL.md bundles. Run by the
+                      installer (`console agents install`) and `console agents`.
 cmd/capture/          read-only dev tool: polls the tracking tools for a live order and dumps
                       raw JSON (CONSOLE_DEBUG_SWIGGY). Never places an order.
 ```

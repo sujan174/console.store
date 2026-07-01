@@ -1,0 +1,94 @@
+package agents
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
+)
+
+// serverEntry is the MCP server shape Claude/Cursor expect.
+func serverEntry(command string, args []string) map[string]any {
+	return map[string]any{"command": command, "args": toAnySlice(args)}
+}
+
+func toAnySlice(ss []string) []any {
+	out := make([]any, len(ss))
+	for i, s := range ss {
+		out[i] = s
+	}
+	return out
+}
+
+// loadJSONObject reads path into a generic map. A missing file yields an empty
+// object; a present-but-unparseable file is an error (we refuse to clobber it).
+func loadJSONObject(path string) (map[string]any, error) {
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return map[string]any{}, nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, err
+	}
+	if m == nil {
+		m = map[string]any{}
+	}
+	return m, nil
+}
+
+func saveJSONObject(path string, m map[string]any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(raw, '\n'), 0o644)
+}
+
+// writeJSONServer merges our server entry under "mcpServers"[name], preserving
+// every other key. Returns changed=false when the file already has the exact
+// entry (idempotent).
+func writeJSONServer(path, name, command string, args []string) (bool, error) {
+	m, err := loadJSONObject(path)
+	if err != nil {
+		return false, err
+	}
+	servers, _ := m["mcpServers"].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+	entry := serverEntry(command, args)
+	if existing, ok := servers[name]; ok && reflect.DeepEqual(existing, any(entry)) {
+		return false, nil
+	}
+	servers[name] = entry
+	m["mcpServers"] = servers
+	return true, saveJSONObject(path, m)
+}
+
+// removeJSONServer deletes "mcpServers"[name] if present.
+func removeJSONServer(path, name string) (bool, error) {
+	m, err := loadJSONObject(path)
+	if err != nil {
+		return false, err
+	}
+	servers, _ := m["mcpServers"].(map[string]any)
+	if servers == nil {
+		return false, nil
+	}
+	if _, ok := servers[name]; !ok {
+		return false, nil
+	}
+	delete(servers, name)
+	m["mcpServers"] = servers
+	return true, saveJSONObject(path, m)
+}

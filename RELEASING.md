@@ -128,6 +128,7 @@ is gated by code and streamed server-side (+ logged).
   logs).
 - **Landing must be deployed** before the first tag, or
   `consolestore.in/<channel>/manifest.json` 404s and installs fail.
+- **`install.sh`/`install.ps1`** (served by the landing) now call `console agents install --quiet` post-install; any change to the agent-wiring logic in these scripts must be deployed to the landing alongside the binary release.
 
 ## 6. Confirming a release went out
 

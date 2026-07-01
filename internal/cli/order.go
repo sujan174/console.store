@@ -70,7 +70,7 @@ func listPresets(out io.Writer, name string, matches []localstore.Preset, st sty
 
 func placePreset(d Deps, p localstore.Preset, st style) int {
 	adjust := st.dim("open `console` to adjust.")
-	items := presetToCartItems(p)
+	items := localstore.PresetCartItems(p)
 	// Push (override any existing cart), then pull the authoritative cart/bill.
 	if _, err := d.Backend.UpdateCart(p.AddrID, p.RestaurantID, p.RestaurantName, items); err != nil {
 		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn(fmt.Sprintf("%q isn't available right now (%v).", p.Name, err)), adjust)
@@ -136,33 +136,14 @@ func placePreset(d Deps, p localstore.Preset, st style) int {
 		OrderID: order.ID, Restaurant: p.RestaurantName, AddrLine: p.AddrLine,
 		ETALoMin: etaLo, ETAHiMin: etaHi, Total: order.Total, PlacedAt: time.Now().Unix(),
 	})
+	// Accrete the taste card: a preset carries the real restaurant id + saved address.
+	_ = localstore.RecordOrder(p.AddrID, p.AddrLine, p.RestaurantID, p.RestaurantName, time.Now().Unix())
 	line := "✓ order placed — " + order.ID
 	if order.ETA != "" {
 		line += " · eta " + order.ETA
 	}
 	fmt.Fprintf(d.Out, "\n%s\n", st.ok(line))
 	return 0
-}
-
-// presetToCartItems maps a preset's lines to api.CartItem, replaying the exact
-// channel routing the TUI uses (variantsV2 / variantsLegacy / addons).
-func presetToCartItems(p localstore.Preset) []api.CartItem {
-	out := make([]api.CartItem, 0, len(p.Lines))
-	for _, l := range p.Lines {
-		ci := api.CartItem{ItemID: l.ItemID, Quantity: l.Qty}
-		for _, s := range l.Sels {
-			switch {
-			case s.Variant && s.Absolute:
-				ci.VariantsV2 = append(ci.VariantsV2, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
-			case s.Variant:
-				ci.VariantsLegacy = append(ci.VariantsLegacy, api.CartVariantSel{GroupID: s.GroupID, VariationID: s.ChoiceID})
-			default:
-				ci.Addons = append(ci.Addons, api.CartAddonSel{GroupID: s.GroupID, ChoiceID: s.ChoiceID})
-			}
-		}
-		out = append(out, ci)
-	}
-	return out
 }
 
 func unavailableNames(c api.Cart) []string {
