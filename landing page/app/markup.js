@@ -39,7 +39,7 @@ export const MARKUP = String.raw`
     <div style="display:flex;align-items:center;gap:26px;font-size:12.5px;color:#565b80">
       <a href="#run" class="lnk">run</a>
       <a href="#keys" class="lnk">terminal &amp; agent</a>
-      <a href="#features" class="lnk">features</a>
+      <a href="/features" class="lnk">features</a>
       <a href="#faq" class="lnk">faq</a>
     </div>
   </nav>
