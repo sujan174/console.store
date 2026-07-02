@@ -200,6 +200,13 @@ func tagline() string {
 	return strings.Repeat(" ", bodyIndent) + theme.DimStyle.Render("coffee · food · quick snacks")
 }
 
+// swiggyLine is the faint provenance note under the tagline: every order is
+// brokered through Swiggy, placed on the user's own Swiggy account. Shown on both
+// the login gate and the home screen so the backing is never a surprise.
+func swiggyLine() string {
+	return strings.Repeat(" ", bodyIndent) + theme.FaintStyle.Render("orders powered by Swiggy")
+}
+
 // prompt is the settled call-to-action: a live shell prompt with a blinking
 // block cursor. Enter goes to the shop; q quits.
 // When orderLabel is non-empty a gold "track order · {label}" row is inserted
@@ -278,7 +285,7 @@ func (s Splash) view() string {
 		for _, l := range storeBlock(s.caps, blockWidth(artLines)) {
 			lines = append(lines, ind+l)
 		}
-		lines = append(lines, "", tagline())
+		lines = append(lines, "", tagline(), swiggyLine())
 		padRight(lines, blockWidth(lines))
 		return strings.Join(lines, "\n")
 	}
@@ -320,7 +327,7 @@ func (s Splash) view() string {
 	for _, l := range logoLines {
 		lines = append(lines, ind+l)
 	}
-	lines = append(lines, "", tagline(), "", "")
+	lines = append(lines, "", tagline(), swiggyLine(), "", "")
 	// Append each prompt line as its own element so padRight equalizes their
 	// widths — otherwise the root's per-line centering drifts the short button
 	// rows rightward, out of line with the wordmark/tagline.
