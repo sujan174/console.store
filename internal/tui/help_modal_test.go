@@ -29,7 +29,7 @@ func TestHelpOpensAndCloses(t *testing.T) {
 	if !m.helpOpen {
 		t.Fatal("? should open the help modal")
 	}
-	if v := m.View(); !strings.Contains(v, "powered by Swiggy") || !strings.Contains(v, "esc esc") {
+	if v := m.View(); !strings.Contains(v, "through Swiggy") || !strings.Contains(v, "esc esc") {
 		t.Fatalf("help view should show the intro + controls:\n%s", v)
 	}
 	m = key(m, "esc")

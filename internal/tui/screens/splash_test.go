@@ -34,8 +34,8 @@ func TestSplashLogoPhase(t *testing.T) {
 	if !strings.Contains(v, "coffee · food · quick snacks") {
 		t.Errorf("settled splash should show the section subtitle:\n%s", v)
 	}
-	if !strings.Contains(v, "powered by Swiggy") {
-		t.Errorf("settled splash should note that orders are powered by Swiggy:\n%s", v)
+	if !strings.Contains(v, "fulfilled through") || !strings.Contains(v, "Swiggy") {
+		t.Errorf("settled splash should note that orders are fulfilled through Swiggy:\n%s", v)
 	}
 	// The gold compact "STORE" wordmark under CONSOLE — half-block glyphs (▀▄)
 	// are unique to it (CONSOLE's block-art uses only box-drawing chars).

@@ -50,7 +50,7 @@ func helpPages() [][]string {
 
 	// Page 0: Welcome / contents
 	page0 := []string{
-		helpTxt("order real food from your terminal, powered by Swiggy."),
+		helpTxt("order real food from your terminal, through Swiggy."),
 		blank,
 		helpSec("safety"),
 		helpTxt("  orders are real — can't cancel here, call Swiggy."),

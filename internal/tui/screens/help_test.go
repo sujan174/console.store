@@ -58,7 +58,7 @@ func TestHelpPage0Welcome(t *testing.T) {
 	v := strip(screens.NewHelp().WithViewport(60).WithPage(0).View())
 	for _, want := range []string{
 		"consolestore",
-		"powered by Swiggy",
+		"through Swiggy",
 		"orders are real",
 		"call Swiggy",
 		"esc esc",

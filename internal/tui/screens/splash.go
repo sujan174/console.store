@@ -200,11 +200,15 @@ func tagline() string {
 	return strings.Repeat(" ", bodyIndent) + theme.DimStyle.Render("coffee · food · quick snacks")
 }
 
-// swiggyLine is the faint provenance note under the tagline: every order is
-// brokered through Swiggy, placed on the user's own Swiggy account. Shown on both
-// the login gate and the home screen so the backing is never a surprise.
+// swiggyLine is the provenance note under the tagline: every order is fulfilled
+// through Swiggy's API, placed on the user's own Swiggy account. Shown on both the
+// login gate and the home screen so the backing is never a surprise. The brand
+// word is accented in warm Gold (Tokyo Night's on-theme stand-in for Swiggy
+// orange) so the line reads as a deliberate badge, not a footnote.
 func swiggyLine() string {
-	return strings.Repeat(" ", bodyIndent) + theme.FaintStyle.Render("orders powered by Swiggy")
+	return strings.Repeat(" ", bodyIndent) +
+		theme.DimStyle.Render("orders fulfilled through ") +
+		theme.GoldStyle.Bold(true).Render("Swiggy")
 }
 
 // prompt is the settled call-to-action: a live shell prompt with a blinking
