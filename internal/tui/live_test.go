@@ -226,11 +226,19 @@ func TestLivePlaceOrderTransitionsToConfirm(t *testing.T) {
 	m.cartRestaurant = "Blue Tokai"
 	m.checkout = screens.NewCheckout("Blue Tokai", m.addr, m.lines, "~35 min")
 
-	// Press enter → should set placingOrder=true and return a PlaceOrderCmd.
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Press enter → opens the order-confirm modal (default focus "yes").
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	um := updated.(Model)
+	if !um.orderConfirmOpen {
+		t.Fatal("expected orderConfirmOpen=true after checkout enter in live mode")
+	}
+
+	// Press enter again (confirm "yes") → should set placingOrder=true and
+	// return a PlaceOrderCmd.
+	updated, cmd := um.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um = updated.(Model)
 	if !um.placingOrder {
-		t.Fatal("expected placingOrder=true after checkout enter in live mode")
+		t.Fatal("expected placingOrder=true after confirming order")
 	}
 	if cmd == nil {
 		t.Fatal("expected PlaceOrderCmd to be returned")

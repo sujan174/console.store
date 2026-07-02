@@ -77,7 +77,9 @@ func TestAvailableCartAllowsOrder(t *testing.T) {
 	if m.hasUnavailableLine() {
 		t.Fatal("no line should be unavailable")
 	}
-	out, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	out, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // opens order-confirm modal
+	m = out.(Model)
+	out, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm (default "yes")
 	m = out.(Model)
 	if !m.placingOrder || cmd == nil {
 		t.Fatal("an all-available cart should place the order")

@@ -457,7 +457,8 @@ func TestCheckoutFlowPlacesAndResets(t *testing.T) {
 		{Type: tea.KeyEnter},                     // open place
 		{Type: tea.KeyEnter},                     // add item
 		{Type: tea.KeyRunes, Runes: []rune("c")}, // merged checkout (no separate cart step)
-		{Type: tea.KeyEnter},                     // place order
+		{Type: tea.KeyEnter},                     // place order -> confirm modal
+		{Type: tea.KeyEnter},                     // confirm (default "yes") -> place order
 	}
 	for _, k := range steps {
 		updated, _ := m.Update(k)
@@ -482,8 +483,9 @@ func TestTrackingFlowAdvancesAndEscResets(t *testing.T) {
 		{Type: tea.KeyEnter},                     // open place
 		{Type: tea.KeyEnter},                     // add item
 		{Type: tea.KeyRunes, Runes: []rune("c")}, // merged checkout (no separate cart step)
-		{Type: tea.KeyEnter},                     // place order -> confirm
-		{Type: tea.KeyEnter},                     // confirm -> tracking
+		{Type: tea.KeyEnter},                     // place order -> confirm modal
+		{Type: tea.KeyEnter},                     // confirm (default "yes") -> place order
+		{Type: tea.KeyEnter},                     // order-placed screen -> tracking
 	}
 	for _, k := range steps {
 		updated, _ := m.Update(k)

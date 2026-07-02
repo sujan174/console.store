@@ -151,6 +151,12 @@ type Model struct {
 	wizardScopeValid   []catalog.Choice                 // variations the server accepted for the current selection (deduped by name)
 	wizardScopeSeen    map[string]bool                  // variation names already resolved during scoping (skip remaining candidates)
 
+	// order-confirm modal: shown on ↵ in checkout before an order actually
+	// fires. Default focus is "yes" so a reflexive Enter still places the
+	// order — this is a safety pause, not an extra hoop.
+	orderConfirmOpen bool
+	orderConfirmSel  int // focused button: 0 = yes (default), 1 = no
+
 	// conflict modal: shown when adding an item from a restaurant other than
 	// the one the cart holds (Swiggy allows one restaurant per cart).
 	conflictOpen      bool
@@ -2415,6 +2421,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// While the order-confirm modal is open it captures all keys: ← → (or
+		// y/n) move focus between "yes" and "no", Enter confirms the focused
+		// button. esc cancels (no order placed); ctrl+c quits. Default focus is
+		// "yes", so a reflexive Enter places the order — same as before this
+		// modal existed, just with one extra keypress to reach it.
+		if m.orderConfirmOpen {
+			switch k.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "left", "h", "right", "l":
+				m.orderConfirmSel = 1 - m.orderConfirmSel
+			case "y":
+				m.orderConfirmSel = 0
+				return m.confirmPlaceOrder()
+			case "n":
+				m.orderConfirmOpen = false
+			case "enter":
+				if m.orderConfirmSel == 0 {
+					return m.confirmPlaceOrder()
+				}
+				m.orderConfirmOpen = false
+			case "esc":
+				m.orderConfirmOpen = false
+			}
+			return m, nil
+		}
+
 		if m.conflictOpen {
 			switch k.String() {
 			case "ctrl+c":
@@ -3135,17 +3168,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// the bordered cap notice + a disabled bar; refuse to fire.
 					return m, nil
 				}
-				if m.live && !m.placingOrder {
-					m.placingOrder = true
-					m.orderErr = ""
-					m.cartSyncPending = false // the Sequence syncs final lines; no trailing debounce after placing
-					return m, tea.Sequence(m.liveSyncCart(), datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID))
-				}
-				if !m.live {
-					oid := orderID(m.checkout.Lines())
-					m.checkout = m.checkout.Placed(oid, "~40 min")
-					m.screen = scrConfirm
-					m.track = screens.NewTracking(m.checkout.Place(), m.addr.Line, oid, 0, 0, 0)
+				if !m.placingOrder {
+					m.orderConfirmOpen = true
+					m.orderConfirmSel = 0 // default "yes" — a reflexive ↵ still places the order
 				}
 				return m, nil
 			}
@@ -3329,7 +3354,7 @@ func (m Model) listRows(chrome int) int {
 // blocking modal is already up, and not while typing into a search box or the
 // command palette (where the key is real input).
 func (m Model) helpTriggerable() bool {
-	if m.helpOpen || m.cmdOpen || m.settingsOpen || m.addrOpen || m.conflictOpen || m.customizeOpen || m.wizardOpen || m.restInfoOpen {
+	if m.helpOpen || m.cmdOpen || m.settingsOpen || m.addrOpen || m.conflictOpen || m.customizeOpen || m.wizardOpen || m.restInfoOpen || m.orderConfirmOpen {
 		return false
 	}
 	if m.searchMode || m.menu.Searching() {
@@ -3415,6 +3440,13 @@ func (m Model) View() string {
 	}
 	if m.conflictOpen {
 		dialog := m.conflict.WithFocus(m.conflictSel).View()
+		if m.w == 0 || m.h == 0 {
+			return dialog
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, dialog)
+	}
+	if m.orderConfirmOpen {
+		dialog := screens.NewOrderConfirm(m.checkout.Place(), m.checkout.PayAmount()).WithFocus(m.orderConfirmSel).View()
 		if m.w == 0 || m.h == 0 {
 			return dialog
 		}
@@ -3578,6 +3610,26 @@ func (m Model) afterCheckoutReduce() (tea.Model, tea.Cmd) {
 	m.menu = m.menu.WithCartChip(m.cartChip())
 	m.checkout = m.buildCheckout()
 	return m, cmd
+}
+
+// confirmPlaceOrder fires the actual order placement — the "yes" branch of
+// the order-confirm modal. This is the same logic checkout's ↵ ran directly
+// before the confirm modal existed.
+func (m Model) confirmPlaceOrder() (tea.Model, tea.Cmd) {
+	m.orderConfirmOpen = false
+	if m.live && !m.placingOrder {
+		m.placingOrder = true
+		m.orderErr = ""
+		m.cartSyncPending = false // the Sequence syncs final lines; no trailing debounce after placing
+		return m, tea.Sequence(m.liveSyncCart(), datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID))
+	}
+	if !m.live {
+		oid := orderID(m.checkout.Lines())
+		m.checkout = m.checkout.Placed(oid, "~40 min")
+		m.screen = scrConfirm
+		m.track = screens.NewTracking(m.checkout.Place(), m.addr.Line, oid, 0, 0, 0)
+	}
+	return m, nil
 }
 
 // clampIdx clamps a cursor index into [0, n-1], or 0 when n==0.

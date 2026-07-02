@@ -154,6 +154,10 @@ func (c Checkout) payAmount() int {
 	return c.toPay()
 }
 
+// PayAmount exposes payAmount to callers outside the package (the root
+// model's order-confirm modal, which shows the same due amount).
+func (c Checkout) PayAmount() int { return c.payAmount() }
+
 // SwiggyBetaOrderCap is Swiggy's MCP beta ceiling: place_food_order is rejected
 // for carts of ₹1000 or more. We surface it in-app and block the CTA before it
 // can fail server-side.
