@@ -81,6 +81,7 @@ const (
 	scrTracking
 	scrInstamart
 	scrImCart
+	scrWelcome // first-run onboarding: food animation + intro card (appended last so no other iota shifts)
 )
 
 type Model struct {
@@ -193,6 +194,8 @@ type Model struct {
 	imCart  screens.Cart
 
 	splash       screens.Splash
+	welcome      screens.Welcome // first-run onboarding screen (holds its own phase)
+	welcomeTick  int             // ticks since welcome entry; drives the food animation
 	decodeStep   int
 	splashTick   int    // ticks since the splash was (re)entered; phases the shimmer
 	splashPhrase string // Minecraft-style splash line, re-rolled each time we land
@@ -267,20 +270,19 @@ type Model struct {
 	// fires ONE sync once the keys settle (cartSettleFrames). SyncCart sends the
 	// full cart snapshot (idempotent SET), so collapsing many edits into one
 	// trailing sync is correct.
-	cartSyncPending   bool
-	cartSyncFrame     int
-	restInfoOpen      bool // restaurant-info modal ('i' on the browse list) is open
-	addrOpen          bool // address switcher modal ('a') is open
-	addrForced        bool // true while addrOpen is the forced entry gate (non-dismissible)
-	addrGatePending   bool // true from launch until the forced pick is satisfied
-	addressesLoaded   bool // true once AddressesLoadedMsg has been handled
-	settingsOpen      bool // settings modal (from the splash) is open
-	settingsSel       int  // selected row in the settings modal
-	helpOpen          bool // help & controls modal (? / H / :help) is open
-	helpScroll        int  // scroll offset within the help modal
-	helpPage          int  // current page in the paginated help modal (0-indexed)
-	onboardingPending bool // true once auto-opened on first run, until the first close writes the marker
-	wantOnboarding    bool // set by WithOnboarding(true); defers auto-open until the start screen
+	cartSyncPending bool
+	cartSyncFrame   int
+	restInfoOpen    bool // restaurant-info modal ('i' on the browse list) is open
+	addrOpen        bool // address switcher modal ('a') is open
+	addrForced      bool // true while addrOpen is the forced entry gate (non-dismissible)
+	addrGatePending bool // true from launch until the forced pick is satisfied
+	addressesLoaded bool // true once AddressesLoadedMsg has been handled
+	settingsOpen    bool // settings modal (from the splash) is open
+	settingsSel     int  // selected row in the settings modal
+	helpOpen        bool // help & controls modal (? / H / :help) is open
+	helpScroll      int  // scroll offset within the help modal
+	helpPage        int  // current page in the paginated help modal (0-indexed)
+	wantOnboarding  bool // set by WithOnboarding(true); starts the session on the welcome screen
 
 	// what's-new modal: shows release notes after an update.
 	whatsnewOpen   bool     // true while the what's-new modal is showing
@@ -318,6 +320,7 @@ func New(caps render.Caps, opts ...Option) Model {
 		m.chips = config.DefaultCategories()
 	}
 	m.splash = screens.NewSplash().WithCaps(caps)
+	m.welcome = screens.NewWelcome(screens.DefaultLearnURL).WithCaps(caps)
 	m.splashPhrase = screens.RandomPhrase("")
 	// Live+seeded fires the Home load at Init() — mark it pending so the first
 	// Home paint shows the "loading…" cue (matching the category pages).
@@ -1654,6 +1657,15 @@ func (m Model) onTick() (Model, tea.Cmd) {
 		}
 		m.splashTick++
 	}
+	if m.screen == scrWelcome && m.welcome.Phase() == 0 {
+		// Advance the food animation; auto-hand off to the intro card once it ends.
+		t := m.welcomeTick + 1
+		m.welcomeTick = t
+		m.welcome = m.welcome.WithTick(t)
+		if t >= screens.WelcomeAnimEnd {
+			m.welcome = m.welcome.WithPhase(1)
+		}
+	}
 	if m.screen == scrConfirm {
 		m.confirmTick++
 		if m.confirmTick >= 42 && m.hasActiveOrder {
@@ -2490,17 +2502,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.helpScroll = 0
 			case "esc", "q", "?", "H", "enter", " ":
 				m.helpOpen = false
-				if m.onboardingPending {
-					m.onboardingPending = false
-					markerCmd := func() tea.Msg {
-						_ = localstore.MarkOnboarded()
-						return nil
-					}
-					if m.addrGatePending {
-						return m, tea.Batch(markerCmd, m.maybeOpenAddrGate())
-					}
-					return m, markerCmd
-				}
 				if m.addrGatePending {
 					return m, m.maybeOpenAddrGate()
 				}
@@ -2884,6 +2885,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// fall through to per-screen single-Esc (restaurant/checkout/tracking/…)
 		}
+		// First-run onboarding: the welcome screen owns all keys (handled before
+		// the global ?/H trigger so keys never leak into help or other handlers).
+		if m.screen == scrWelcome {
+			if m.welcome.Phase() == 0 {
+				// Any key skips the animation straight to the intro card.
+				m.welcome = m.welcome.WithPhase(1)
+				return m, nil
+			}
+			// Phase 1 (intro card).
+			switch k.String() {
+			case "enter", " ":
+				// Dismiss onboarding: write the first-run marker and drop into the
+				// normal splash with a fresh wordmark boot.
+				markerCmd := func() tea.Msg {
+					_ = localstore.MarkOnboarded()
+					return nil
+				}
+				m.screen = scrSplash
+				m.decodeStep = 0
+				m.splashTick = 0
+				m.wantOnboarding = false
+				return m, markerCmd
+			case "l", "L":
+				url := m.welcome.LearnURL()
+				if url == "" {
+					url = screens.DefaultLearnURL
+				}
+				return m, openBrowserCmd(url)
+			}
+			// Any other key on the card is ignored.
+			return m, nil
+		}
 		// ? or H opens the help & controls modal from anywhere — except while
 		// typing (search / palette) or with a blocking modal already up, where the
 		// key means something else or would be swallowed.
@@ -2950,14 +2983,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, pollCmd
 				} else {
 					m.screen = scrMenu
-					if m.wantOnboarding {
-						m.helpOpen = true
-						m.helpPage = 0
-						m.helpScroll = 0
-						m.onboardingPending = true
-						m.wantOnboarding = false
-						// Gate waits until the overlay closes.
-					} else if m.notesReady {
+					if m.notesReady {
 						// What's-new auto-open: mutually exclusive with onboarding.
 						m.whatsnewOpen = true
 						m.whatsnewPage = 0
@@ -3688,6 +3714,14 @@ func (m Model) View() string {
 	// the terminal's own background — wrapping the frame in a lipgloss
 	// Background tears on inner colour resets (banding), and a dark terminal
 	// already provides the #15161f-ish canvas.
+	if m.screen == scrWelcome {
+		v := m.welcome.WithCaps(m.caps).WithFrame(m.frame).WithTick(m.welcomeTick).View()
+		if m.w == 0 || m.h == 0 {
+			return v
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, v)
+	}
+
 	if m.screen == scrSplash {
 		sp := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSplashTick(m.splashTick).
 			WithSelection(m.homeSel).WithPhrase(m.splashPhrase).View()

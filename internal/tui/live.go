@@ -68,12 +68,20 @@ func WithChips(cats []config.Category) Option {
 	return func(m *Model) { m.chips = cats }
 }
 
-// WithOnboarding arranges for the help modal to auto-open once, over the start
-// screen after the splash settles, when show is true. The modal is flagged with
-// onboardingPending so closing it writes the first-run marker via MarkOnboarded.
-// Pass localstore.ShouldOnboard() at the call site in main.go.
+// WithOnboarding arranges the first-run onboarding sequence when show is true:
+// the session starts on the welcome screen (a short ramen food animation, then
+// an intro card) instead of the splash. Pressing Enter on the intro card writes
+// the first-run marker via MarkOnboarded and drops into the normal splash. This
+// runs after the `screen: scrSplash` initializer, so it correctly overrides the
+// start screen only on first run. Pass localstore.ShouldOnboard() at the call
+// site in main.go.
 func WithOnboarding(show bool) Option {
-	return func(m *Model) { m.wantOnboarding = show }
+	return func(m *Model) {
+		if show {
+			m.wantOnboarding = true
+			m.screen = scrWelcome
+		}
+	}
 }
 
 // WithReleaseNotes arranges for the what's-new modal to auto-open once after

@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"consolestore/internal/localstore"
 	"consolestore/internal/tui/render"
 	"consolestore/internal/tui/screens"
 )
@@ -24,97 +25,161 @@ func advanceThroughSplash(m Model) Model {
 	return m
 }
 
-// TestOnboardingAutoOpensAfterSplash verifies that WithOnboarding(true) causes
-// the help modal to open exactly once after the splash→start transition, with
-// onboardingPending=true.
-func TestOnboardingAutoOpensAfterSplash(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-	m := New(render.Caps{}, WithOnboarding(true))
-	m.w, m.h = 100, 40
-
-	// Before the splash→menu transition: help must NOT be open.
-	if m.helpOpen {
-		t.Fatal("help must not be open before the splash→start transition")
-	}
-
-	m = advanceThroughSplash(m)
-
-	if m.screen != scrMenu {
-		t.Fatalf("expected scrMenu after splash transition, got screen %d", m.screen)
-	}
-	if !m.helpOpen {
-		t.Fatal("WithOnboarding(true): help modal must auto-open after the splash→start transition")
-	}
-	if !m.onboardingPending {
-		t.Fatal("WithOnboarding(true): onboardingPending must be true on auto-open")
-	}
-	if m.wantOnboarding {
-		t.Fatal("wantOnboarding must be cleared after auto-open (so it only fires once)")
-	}
-	if m.helpPage != 0 {
-		t.Fatalf("helpPage must be 0 on auto-open, got %d", m.helpPage)
-	}
-	if m.helpScroll != 0 {
-		t.Fatalf("helpScroll must be 0 on auto-open, got %d", m.helpScroll)
+// drainCmd runs a tea.Cmd to completion (single-message cmds only) so its side
+// effects (e.g. MarkOnboarded's disk write) happen synchronously in the test.
+func drainCmd(cmd tea.Cmd) {
+	if cmd != nil {
+		_ = cmd()
 	}
 }
 
-// TestOnboardingCloseWritesMarker verifies that closing the onboarding modal (esc)
-// clears onboardingPending and returns a non-nil cmd (the MarkOnboarded call).
-func TestOnboardingCloseWritesMarker(t *testing.T) {
+// TestOnboardingStartsOnWelcome verifies that WithOnboarding(true) starts the
+// session on the welcome screen (phase 0, the food animation) — NOT the splash,
+// and never auto-opens the help modal.
+func TestOnboardingStartsOnWelcome(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	m := New(render.Caps{}, WithOnboarding(true))
 	m.w, m.h = 100, 40
-	m = advanceThroughSplash(m)
 
-	if !m.helpOpen || !m.onboardingPending {
-		t.Fatal("precondition: help must be open and onboardingPending=true")
+	if m.screen != scrWelcome {
+		t.Fatalf("WithOnboarding(true): must start on scrWelcome, got screen %d", m.screen)
+	}
+	if m.welcome.Phase() != 0 {
+		t.Fatalf("welcome must start in phase 0 (animation), got %d", m.welcome.Phase())
+	}
+	if m.helpOpen {
+		t.Fatal("onboarding must NOT auto-open the help modal")
+	}
+	if !m.wantOnboarding {
+		t.Fatal("wantOnboarding must be set while onboarding is in progress")
+	}
+}
+
+// TestOnboardingTickAdvancesToCard verifies the food animation auto-advances to
+// the intro card (phase 1) once enough ticks elapse, without ever opening help.
+func TestOnboardingTickAdvancesToCard(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	m := New(render.Caps{}, WithOnboarding(true))
+	m.w, m.h = 100, 40
+
+	for i := 0; i < screens.WelcomeAnimEnd+2; i++ {
+		u, _ := m.Update(tickMsg(time.Now()))
+		m = u.(Model)
 	}
 
-	// Close via esc.
-	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.welcome.Phase() != 1 {
+		t.Fatalf("welcome must reach phase 1 after WelcomeAnimEnd ticks, got %d", m.welcome.Phase())
+	}
+	if m.screen != scrWelcome {
+		t.Fatalf("still on the welcome screen until Enter, got screen %d", m.screen)
+	}
+	if m.helpOpen {
+		t.Fatal("help must NOT open during the onboarding animation")
+	}
+}
+
+// TestOnboardingKeySkipsToCard verifies pressing any key during phase 0 skips
+// the animation straight to the intro card (phase 1).
+func TestOnboardingKeySkipsToCard(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	m := New(render.Caps{}, WithOnboarding(true))
+	m.w, m.h = 100, 40
+
+	if m.welcome.Phase() != 0 {
+		t.Fatal("precondition: welcome starts in phase 0")
+	}
+
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	m = u.(Model)
 
+	if m.welcome.Phase() != 1 {
+		t.Fatalf("any key in phase 0 must skip to phase 1, got %d", m.welcome.Phase())
+	}
+	if m.screen != scrWelcome {
+		t.Fatalf("skipping must stay on the welcome screen, got screen %d", m.screen)
+	}
 	if m.helpOpen {
-		t.Fatal("esc must close the help modal")
-	}
-	if m.onboardingPending {
-		t.Fatal("onboardingPending must be false after closing the onboarding modal")
-	}
-	// The MarkOnboarded cmd must be returned (non-nil).
-	if cmd == nil {
-		t.Fatal("closing the onboarding modal must return a non-nil MarkOnboarded cmd")
+		t.Fatal("the skip key must NOT open help")
 	}
 }
 
-// TestOnboardingFalseDoesNotAutoOpen verifies that WithOnboarding(false) leaves
-// the help modal closed through the same splash→start transition.
-func TestOnboardingFalseDoesNotAutoOpen(t *testing.T) {
+// TestOnboardingEnterWritesMarkerAndGoesToSplash verifies pressing Enter on the
+// intro card transitions to the splash, writes the first-run marker, and clears
+// wantOnboarding — with no help modal opened anywhere in the flow.
+func TestOnboardingEnterWritesMarkerAndGoesToSplash(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	if localstore.Onboarded() {
+		t.Fatal("precondition: fresh config must not be onboarded")
+	}
+
+	m := New(render.Caps{}, WithOnboarding(true))
+	m.w, m.h = 100, 40
+
+	// Skip the animation to the card, then press Enter.
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = u.(Model)
+	if m.welcome.Phase() != 1 {
+		t.Fatal("precondition: on the intro card")
+	}
+
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+
+	if m.screen != scrSplash {
+		t.Fatalf("Enter on the intro card must go to scrSplash, got screen %d", m.screen)
+	}
+	if m.wantOnboarding {
+		t.Fatal("wantOnboarding must be cleared after dismissing onboarding")
+	}
+	if m.helpOpen {
+		t.Fatal("dismissing onboarding must NOT open the help modal")
+	}
+	if m.decodeStep != 0 || m.splashTick != 0 {
+		t.Fatal("splash boot must be reset so the wordmark plays fresh")
+	}
+	if cmd == nil {
+		t.Fatal("dismissing onboarding must return the MarkOnboarded cmd")
+	}
+	drainCmd(cmd)
+	if !localstore.Onboarded() {
+		t.Fatal("the onboarding marker must be written to disk after Enter")
+	}
+}
+
+// TestOnboardingFalseStartsOnSplash verifies WithOnboarding(false) leaves the
+// session on the splash (returning-user behaviour), never on the welcome screen.
+func TestOnboardingFalseStartsOnSplash(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	m := New(render.Caps{}, WithOnboarding(false))
 	m.w, m.h = 100, 40
-	m = advanceThroughSplash(m)
 
+	if m.screen != scrSplash {
+		t.Fatalf("WithOnboarding(false): must start on scrSplash, got screen %d", m.screen)
+	}
+	m = advanceThroughSplash(m)
 	if m.helpOpen {
 		t.Fatal("WithOnboarding(false): help must NOT auto-open")
 	}
-	if m.onboardingPending {
-		t.Fatal("WithOnboarding(false): onboardingPending must be false")
-	}
 }
 
-// TestOnboardingNoOptionDoesNotAutoOpen verifies the default (no WithOnboarding
-// option) behaves the same as WithOnboarding(false).
-func TestOnboardingNoOptionDoesNotAutoOpen(t *testing.T) {
+// TestReturningUserStartsOnSplashNoHelp verifies the default (no WithOnboarding)
+// returning-user path: starts on the splash and advancing through it never opens
+// help.
+func TestReturningUserStartsOnSplashNoHelp(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	m := New(render.Caps{}) // no WithOnboarding
 	m.w, m.h = 100, 40
-	m = advanceThroughSplash(m)
 
+	if m.screen != scrSplash {
+		t.Fatalf("returning user must start on scrSplash, got screen %d", m.screen)
+	}
+	m = advanceThroughSplash(m)
 	if m.helpOpen {
 		t.Fatal("no WithOnboarding: help must NOT auto-open")
 	}
@@ -211,9 +276,9 @@ func TestHelpNumberKeyJumpsToPage(t *testing.T) {
 	}
 }
 
-// TestHelpCloseWithoutOnboardingWritesNothing verifies that closing help normally
-// (when not in onboarding flow) returns nil cmd and does not set onboardingPending.
-func TestHelpCloseWithoutOnboardingWritesNothing(t *testing.T) {
+// TestHelpCloseWritesNothing verifies that closing a manually-opened help modal
+// returns a nil cmd (onboarding no longer uses the help modal at all).
+func TestHelpCloseWritesNothing(t *testing.T) {
 	m := newAtMenu()
 	m.w, m.h = 100, 40
 
@@ -223,16 +288,12 @@ func TestHelpCloseWithoutOnboardingWritesNothing(t *testing.T) {
 		t.Fatal("? must open help")
 	}
 
-	// onboardingPending is false — close must return nil cmd.
 	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = u.(Model)
 	if m.helpOpen {
 		t.Fatal("esc must close help")
 	}
-	if m.onboardingPending {
-		t.Fatal("onboardingPending must remain false")
-	}
 	if cmd != nil {
-		t.Fatal("closing non-onboarding help must return nil cmd")
+		t.Fatal("closing help must return nil cmd")
 	}
 }

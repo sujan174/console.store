@@ -192,25 +192,27 @@ func TestWhatsNewPageNav(t *testing.T) {
 	}
 }
 
-// TestWhatsNewOnboardingTakesPrecedence verifies that onboarding wins when both
-// wantOnboarding and notesReady are somehow set simultaneously.
+// TestWhatsNewOnboardingTakesPrecedence verifies that onboarding takes over the
+// start of the session: with WithOnboarding(true) the session begins on the
+// welcome screen (not the splash, not help, not what's-new). The what's-new
+// modal never opens while onboarding owns the screen.
 func TestWhatsNewOnboardingTakesPrecedence(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 	m := New(render.Caps{}, WithOnboarding(true), WithReleaseNotes("v1.0.0", "stable", ""))
 	m.w, m.h = 100, 40
 
 	// Manually arm notesReady (would normally come via ReleaseNotesMsg).
 	m.notesReady = true
 
-	m = advanceThroughSplash(m)
-
-	if m.screen != scrMenu {
-		t.Fatalf("expected scrMenu, got %d", m.screen)
+	// Onboarding owns the session start: welcome screen, no help, no what's-new.
+	if m.screen != scrWelcome {
+		t.Fatalf("expected scrWelcome at session start, got %d", m.screen)
 	}
-	// Onboarding (helpOpen) takes precedence.
-	if !m.helpOpen {
-		t.Fatal("helpOpen must be true when wantOnboarding=true, even if notesReady")
+	if m.helpOpen {
+		t.Fatal("onboarding must NOT auto-open help")
 	}
 	if m.whatsnewOpen {
-		t.Fatal("whatsnewOpen must be false when onboarding takes precedence")
+		t.Fatal("what's-new must NOT open while onboarding owns the screen")
 	}
 }

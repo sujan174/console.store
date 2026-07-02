@@ -160,10 +160,14 @@ func TestAddrGate1AddrAutoUse(t *testing.T) {
 	}
 }
 
-// TestAddrGateOverlayFirst verifies the ordering requirement:
-// with onboarding armed (WithOnboarding(true)), entering the shop opens help
-// (not the addr gate); closing help opens the forced addr gate.
+// TestAddrGateOverlayFirst verifies the ordering requirement under the new
+// onboarding flow: with WithOnboarding(true) the session starts on the welcome
+// screen; onboarding never opens the addr gate or the help modal. After the
+// intro card is dismissed (→ splash) and the shop is entered, the forced addr
+// gate opens directly.
 func TestAddrGateOverlayFirst(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 	snap, _ := twoAddrSnap()
 	m := New(render.Caps{},
 		WithLiveBackend(&liveFake{}, snap, "acct-1", ""),
@@ -171,43 +175,44 @@ func TestAddrGateOverlayFirst(t *testing.T) {
 	)
 	m.w, m.h = 100, 40
 
-	// Simulate AddressesLoadedMsg arriving before the splash transition.
-	u, _ := m.Update(datasource.AddressesLoadedMsg{})
-	m = u.(Model)
-	// Still on splash — gate must not open yet.
-	if m.addrOpen {
-		t.Fatal("gate must not open while still on splash")
+	// Session starts on the welcome screen.
+	if m.screen != scrWelcome {
+		t.Fatalf("expected scrWelcome at session start, got %d", m.screen)
 	}
 
-	// Advance through splash to scrMenu.
+	// Simulate AddressesLoadedMsg arriving during onboarding.
+	u, _ := m.Update(datasource.AddressesLoadedMsg{})
+	m = u.(Model)
+	if m.addrOpen {
+		t.Fatal("gate must not open while onboarding owns the screen")
+	}
+
+	// Skip the animation to the intro card, then Enter → splash.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+	if m.screen != scrSplash {
+		t.Fatalf("Enter on the intro card must go to scrSplash, got %d", m.screen)
+	}
+	if m.helpOpen {
+		t.Fatal("onboarding must NOT open the help modal")
+	}
+
+	// Advance through the splash to scrMenu — the forced addr gate opens directly.
 	m = advanceThroughSplash(m)
 
 	if m.screen != scrMenu {
 		t.Fatalf("expected scrMenu, got %d", m.screen)
 	}
-	// Onboarding overlay opens; addr gate must NOT open yet.
-	if !m.helpOpen {
-		t.Fatal("onboarding help must open on splash→menu with WithOnboarding(true)")
-	}
-	if m.addrOpen {
-		t.Fatal("addr gate must NOT open while help is open")
-	}
-	if !m.addrGatePending {
-		t.Fatal("addrGatePending must still be true while onboarding is open")
-	}
-
-	// Close the onboarding overlay — gate must open now.
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	m = u.(Model)
-
 	if m.helpOpen {
-		t.Fatal("esc must close the help modal")
+		t.Fatal("help must NOT auto-open on the splash→menu transition")
 	}
 	if !m.addrOpen {
-		t.Fatal("addr gate must open after onboarding overlay closes")
+		t.Fatal("addr gate must open directly on splash→menu")
 	}
 	if !m.addrForced {
-		t.Fatal("addrForced must be true: the gate opened from the overlay-close path")
+		t.Fatal("addrForced must be true: the forced gate opened")
 	}
 }
 
