@@ -47,7 +47,7 @@ export const MARKUP = String.raw`
   <!-- HERO — brand screen: wordmark + one-line gist + keyword chips -->
   <header id="top" style="position:relative;z-index:2;min-height:calc(100vh - 72px);display:flex;flex-direction:column">
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:100%;max-width:1100px;margin:0 auto;padding:18px clamp(24px,6vw,56px) 0">
-      <div style="display:inline-flex;align-items:center;gap:9px;font-size:11px;letter-spacing:2px;color:#93a8ff;text-transform:lowercase;margin-bottom:12px;animation:introUp .7s cubic-bezier(.22,1,.36,1) both .1s"><span style="width:3px;height:14px;background:#93a8ff;flex:none;box-shadow:0 0 9px #93a8ff;animation:blink 1.05s step-end infinite"></span>terminal &amp; agent ordering</div>
+      <div style="display:inline-flex;align-items:center;gap:9px;font-size:11px;letter-spacing:2px;color:#93a8ff;text-transform:lowercase;margin-bottom:12px;animation:introUp .7s cubic-bezier(.22,1,.36,1) both .1s"><span style="width:3px;height:14px;background:#93a8ff;flex:none;box-shadow:0 0 9px #93a8ff;animation:blink 1.05s step-end infinite"></span>order food in ~9 seconds</div>
 
       <!-- ASCII particle wordmark -->
       <div data-ref="hero3dwrap" style="position:relative;width:100%;max-width:1120px;height:clamp(240px,42vh,480px);margin:-4px 0 -4px;user-select:none;animation:introFade 1s ease both">
@@ -64,6 +64,7 @@ export const MARKUP = String.raw`
         <span>no mouse</span><span style="color:#2d2f48">·</span>
         <span>no cookie walls</span><span style="color:#2d2f48">·</span>
         <span>no checkout forms</span><span style="color:#2d2f48">·</span>
+        <span>agent = your AI assistant</span><span style="color:#2d2f48">·</span>
         <span style="color:#e9ebf7">just&nbsp;<span style="color:#93a8ff">↵</span></span>
       </div>
 
@@ -99,7 +100,7 @@ export const MARKUP = String.raw`
       <div class="pitch-left" style="text-align:left">
         <div data-pitch-item style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:6px">// what it is</div>
         <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:16ch">dinner, piped through your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">terminal</span> — or your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">agent</span>.</h1>
-        <p data-pitch-item style="max-width:52ch;color:#8a8fb4;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI and full TUI for ordering real food through Swiggy without leaving your shell — plus an MCP server that lets your AI agent do it for you. authorize once, then reorder a saved favourite with a keystroke, or just tell your agent <span style="color:#cdd3f0">“order my usual.”</span></p>
+        <p data-pitch-item style="max-width:52ch;color:#8a8fb4;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI <span style="color:#cdd3f0">(type commands)</span> and full TUI <span style="color:#cdd3f0">(a keyboard-only menu)</span> for ordering real food through Swiggy without leaving your shell — plus an MCP server <span style="color:#cdd3f0">(a plug-in your AI agent talks to)</span> that lets it order for you. authorize once, then reorder a saved favourite with a keystroke, or just tell your agent <span style="color:#cdd3f0">“order my usual.”</span></p>
       </div>
       <div data-pitch-item style="perspective:1200px">
         <a href="/features" data-action="features-zoom" class="feat-window" aria-label="open the full feature map">
@@ -120,6 +121,44 @@ export const MARKUP = String.raw`
             </div>
           </div>
         </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" style="position:relative;z-index:2;max-width:980px;margin:0 auto;padding:60px clamp(24px,6vw,56px) 48px" data-reveal>
+    <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:20px">// the same order, three ways</div>
+    <h2 style="font-weight:800;font-size:clamp(26px,4vw,46px);letter-spacing:-.025em;line-height:1.1;margin:0">
+      <span style="color:#3a3d5c">a browser order is a chore.</span><br>
+      <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">this is a command — or a sentence.</span>
+    </h2>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:36px 56px;margin-top:40px">
+      <div>
+        <div style="font-size:10.5px;letter-spacing:1.5px;color:#ff7d96;margin-bottom:20px">THE BROWSER WAY</div>
+        <div style="display:flex;flex-direction:column;gap:13px;font-size:13.5px;line-height:1.5;color:#4c4f6e;text-decoration:line-through;text-decoration-color:rgba(255,125,150,.4)">
+          <span>open a tab, log in, clear a captcha</span>
+          <span>re-pick your delivery address</span>
+          <span>scroll past the "sponsored" rows</span>
+          <span>pay, then dismiss the pop-ups</span>
+        </div>
+        <div style="margin-top:24px;font-size:11.5px;color:#565b80">~14 clicks · ~2 min · mouse</div>
+      </div>
+      <div>
+        <div style="font-size:10.5px;letter-spacing:1.5px;color:#93a8ff;margin-bottom:20px">YOU, IN THE TERMINAL</div>
+        <div style="border-left:2px solid rgba(147,168,255,.45);padding-left:18px;display:flex;flex-direction:column;gap:12px;font-size:13.5px;line-height:1.45">
+          <div><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console order</span> <span style="color:#eab560">dinner</span></div>
+          <div><span style="color:#93a8ff">↵</span> <span style="color:#8ee08a">order placed · 35 min</span></div>
+        </div>
+        <div style="margin-top:24px;font-size:11.5px;color:#93a8ff">3 keystrokes · ~9 seconds</div>
+      </div>
+      <div>
+        <div style="font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;margin-bottom:20px">YOUR AGENT, HANDS-FREE</div>
+        <div style="border-left:2px solid rgba(176,140,245,.45);padding-left:18px;display:flex;flex-direction:column;gap:12px;font-size:13.5px;line-height:1.45">
+          <div><span style="color:#565b80">you:</span> <span style="color:#e9ebf7">order my usual dinner</span></div>
+          <div><span style="color:#b08cf5">✳</span> <span style="color:#8ee08a">placed ✓ · on its way</span></div>
+        </div>
+        <div style="margin-top:24px;font-size:11.5px;color:#b08cf5">1 message · you approve</div>
       </div>
     </div>
   </section>
@@ -282,44 +321,6 @@ export const MARKUP = String.raw`
       <span style="padding:20px 42px;font-size:16px;color:#565b80">guarded live checkout</span><span style="padding:20px 42px;font-size:16px;color:#8ee08a">·</span>
       <span style="padding:20px 42px;font-size:16px;color:#565b80">no server to babysit</span><span style="padding:20px 42px;font-size:16px;color:#eab560">·</span>
       <span style="padding:20px 42px;font-size:16px;color:#565b80">swiggy-backed</span><span style="padding:20px 42px;font-size:16px;color:#7fe0ff">·</span>
-    </div>
-  </section>
-
-  <!-- FEATURES -->
-  <section id="features" style="position:relative;z-index:2;max-width:980px;margin:0 auto;padding:60px clamp(24px,6vw,56px) 48px" data-reveal>
-    <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:20px">// the same order, three ways</div>
-    <h2 style="font-weight:800;font-size:clamp(26px,4vw,46px);letter-spacing:-.025em;line-height:1.1;margin:0">
-      <span style="color:#3a3d5c">a browser order is a chore.</span><br>
-      <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">this is a command — or a sentence.</span>
-    </h2>
-
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:36px 56px;margin-top:40px">
-      <div>
-        <div style="font-size:10.5px;letter-spacing:1.5px;color:#ff7d96;margin-bottom:20px">THE BROWSER WAY</div>
-        <div style="display:flex;flex-direction:column;gap:13px;font-size:13.5px;line-height:1.5;color:#4c4f6e;text-decoration:line-through;text-decoration-color:rgba(255,125,150,.4)">
-          <span>open a tab, log in, clear a captcha</span>
-          <span>re-pick your delivery address</span>
-          <span>scroll past the "sponsored" rows</span>
-          <span>pay, then dismiss the pop-ups</span>
-        </div>
-        <div style="margin-top:24px;font-size:11.5px;color:#565b80">~14 clicks · ~2 min · mouse</div>
-      </div>
-      <div>
-        <div style="font-size:10.5px;letter-spacing:1.5px;color:#93a8ff;margin-bottom:20px">YOU, IN THE TERMINAL</div>
-        <div style="border-left:2px solid rgba(147,168,255,.45);padding-left:18px;display:flex;flex-direction:column;gap:12px;font-size:13.5px;line-height:1.45">
-          <div><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console order</span> <span style="color:#eab560">dinner</span></div>
-          <div><span style="color:#93a8ff">↵</span> <span style="color:#8ee08a">order placed · 35 min</span></div>
-        </div>
-        <div style="margin-top:24px;font-size:11.5px;color:#93a8ff">3 keystrokes · ~9 seconds</div>
-      </div>
-      <div>
-        <div style="font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;margin-bottom:20px">YOUR AGENT, HANDS-FREE</div>
-        <div style="border-left:2px solid rgba(176,140,245,.45);padding-left:18px;display:flex;flex-direction:column;gap:12px;font-size:13.5px;line-height:1.45">
-          <div><span style="color:#565b80">you:</span> <span style="color:#e9ebf7">order my usual dinner</span></div>
-          <div><span style="color:#b08cf5">✳</span> <span style="color:#8ee08a">placed ✓ · on its way</span></div>
-        </div>
-        <div style="margin-top:24px;font-size:11.5px;color:#b08cf5">1 message · you approve</div>
-      </div>
     </div>
   </section>
 
