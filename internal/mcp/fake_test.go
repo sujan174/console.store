@@ -15,6 +15,12 @@ type fakeBackend struct {
 	order    api.Order
 	placeErr error
 	placed   int
+
+	// optional scripted behavior for cart flows; nil falls back to `cart`.
+	getFn    func(addressID string) (api.Cart, error)
+	updateFn func(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error)
+	updates  int
+	cleared  int
 }
 
 func (f *fakeBackend) Addresses() ([]api.Address, error) { return f.addrs, nil }
@@ -29,11 +35,20 @@ func (f *fakeBackend) Menu(addressID, restaurantID string) (api.Menu, error) { r
 func (f *fakeBackend) ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {
 	return f.itemOpts, nil
 }
-func (f *fakeBackend) GetCart(addressID, restaurantName string) (api.Cart, error) { return f.cart, nil }
-func (f *fakeBackend) UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error) {
+func (f *fakeBackend) GetCart(addressID, restaurantName string) (api.Cart, error) {
+	if f.getFn != nil {
+		return f.getFn(addressID)
+	}
 	return f.cart, nil
 }
-func (f *fakeBackend) ClearCart() error { return nil }
+func (f *fakeBackend) UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error) {
+	f.updates++
+	if f.updateFn != nil {
+		return f.updateFn(addressID, restaurantID, restaurantName, items)
+	}
+	return f.cart, nil
+}
+func (f *fakeBackend) ClearCart() error { f.cleared++; return nil }
 func (f *fakeBackend) PlaceOrder(addressID string) (api.Order, error) {
 	f.placed++
 	if f.placeErr != nil {

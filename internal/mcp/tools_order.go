@@ -14,6 +14,17 @@ import (
 
 func nowUnix() int64 { return time.Now().Unix() }
 
+// orderCapRupees is Swiggy's Builders Club limit: place_food_order is refused
+// at ≥₹1000 (real COD). Enforced here so the failure lands at prepare time,
+// with a clear message, instead of at the moment of placement.
+const orderCapRupees = 1000
+
+// cartRebuildWindowSeconds bounds how old a cached cart write may be and still
+// seed an automatic rebuild (address switch / Swiggy-side expiry). Conversation
+// scale: old enough to span a long ordering chat, young enough that yesterday's
+// cart never resurrects.
+const cartRebuildWindowSeconds = 2 * 60 * 60
+
 // prepare syncs the cart, validates availability, stores a confirmation bound to
 // the bill, and returns both. Shared by prepare_order and order_preset.
 func (s *Server) prepare(addressID string, c api.Cart, ident orderIdentity) (string, CartDTO, error) {
@@ -25,8 +36,26 @@ func (s *Server) prepare(addressID string, c api.Cart, ident orderIdentity) (str
 			return "", CartDTO{}, fmt.Errorf("%q is sold out — remove it before ordering", l.Name)
 		}
 	}
+	if c.Total >= orderCapRupees {
+		return "", CartDTO{}, codedErr(codeOverCap, "the bill is ₹%d — Swiggy refuses agent-placed orders of ₹%d or more; ask the user what to remove to get under the cap", c.Total, orderCapRupees)
+	}
 	id := s.pending.put(addressID, c, ident, nowUnix())
 	return id, cartToDTO(c), nil
+}
+
+// rebuildCart re-syncs the cached last cart write at addressID. Returns the
+// fresh cart and re-records the cache under the (possibly new) address, which
+// also keeps taste observation working after an address switch.
+func (s *Server) rebuildCart(addressID string, cw *cartWrite) (api.Cart, error) {
+	c, err := s.be.UpdateCart(addressID, cw.RestaurantID, cw.RestaurantName, cartWriteItems(cw))
+	if err != nil {
+		return api.Cart{}, err
+	}
+	cp := *cw
+	cp.AddressID = addressID
+	cp.WrittenAt = nowUnix()
+	s.recordCartWrite(&cp)
+	return c, nil
 }
 
 type PrepareOrderIn struct {
@@ -36,7 +65,11 @@ type PrepareOrderOut struct {
 	ConfirmationID string     `json:"confirmation_id"`
 	Bill           CartDTO    `json:"bill"`
 	Address        AddrRefDTO `json:"address"` // where this order delivers — show it with the bill
-	Note           string     `json:"note"`
+	// Rebuilt is set when the server re-synced the cart before preparing:
+	// "address_change" (cart moved to this address) or "expired" (Swiggy had
+	// dropped the cart). Mention it to the user in one line with the bill.
+	Rebuilt string `json:"rebuilt,omitempty"`
+	Note    string `json:"note"`
 }
 
 func (s *Server) handlePrepareOrder(ctx context.Context, _ *mcp.CallToolRequest, in PrepareOrderIn) (*mcp.CallToolResult, PrepareOrderOut, error) {
@@ -47,9 +80,40 @@ func (s *Server) handlePrepareOrder(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return nil, PrepareOrderOut{}, err
 	}
-	// Ad-hoc order: the cart carries only a restaurant name, no Swiggy id, so
-	// restaurantID stays empty (bumpFavorite will skip — no name-keyed favorite).
-	id, bill, err := s.prepare(in.AddressID, c, orderIdentity{restaurantName: c.Restaurant})
+	// The identity defaults to ad-hoc: the live cart carries only a restaurant
+	// name, no Swiggy id, so restaurantID stays empty (bumpFavorite skips).
+	ident := orderIdentity{restaurantName: c.Restaurant}
+	rebuilt := ""
+	if cw, ok := s.lastCartWrite(); ok && !cw.Placed && len(cw.Lines) > 0 &&
+		nowUnix()-cw.WrittenAt <= cartRebuildWindowSeconds {
+		switch {
+		case cw.AddressID != in.AddressID:
+			// Address switch: re-sync the same lines at the new address so
+			// serviceability and the bill are recomputed for where the food
+			// actually goes. Same outlet only — never silently switch outlets.
+			c, err = s.rebuildCart(in.AddressID, cw)
+			if err != nil {
+				return nil, PrepareOrderOut{}, codedErr(codeUnserviceable,
+					"%s can't deliver to this address (%v) — offer search_restaurants near the new address for the same brand, or keep the original address",
+					cartName(cw.RestaurantName), err)
+			}
+			rebuilt = "address_change"
+		case len(c.Lines) == 0:
+			// Same address but the cart vanished — Swiggy expired it server-side.
+			c, err = s.rebuildCart(in.AddressID, cw)
+			if err != nil {
+				return nil, PrepareOrderOut{}, codedErr(codeCartExpired,
+					"the cart expired on Swiggy and rebuilding it failed (%v) — re-add the items with update_cart", err)
+			}
+			rebuilt = "expired"
+		}
+		if rebuilt != "" {
+			// The rebuild came from our own cache, so the real Swiggy identity
+			// is known — record it (favorites/taste work like a preset order).
+			ident = orderIdentity{restaurantID: cw.RestaurantID, restaurantName: cw.RestaurantName}
+		}
+	}
+	id, bill, err := s.prepare(in.AddressID, c, ident)
 	if err != nil {
 		return nil, PrepareOrderOut{}, err
 	}
@@ -57,6 +121,7 @@ func (s *Server) handlePrepareOrder(ctx context.Context, _ *mcp.CallToolRequest,
 	return nil, PrepareOrderOut{
 		ConfirmationID: id, Bill: bill,
 		Address: AddrRefDTO{ID: in.AddressID, Label: addrLabelFor(card, in.AddressID)},
+		Rebuilt: rebuilt,
 		Note:    "show the user the full bill breakdown AND the delivery address; call place_order with this confirmation_id ONLY after they confirm.",
 	}, nil
 }
@@ -74,7 +139,7 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	}
 	p, ok := s.pending.take(in.ConfirmationID, nowUnix())
 	if !ok {
-		return nil, PlaceOrderOut{}, errors.New("unknown or expired confirmation_id — call prepare_order again")
+		return nil, PlaceOrderOut{}, codedErr(codeConfirmationExpired, "unknown or expired confirmation_id — call prepare_order again")
 	}
 	// Re-fetch and verify the cart still matches what the user confirmed.
 	c, err := s.be.GetCart(p.addressID, "")
@@ -82,7 +147,7 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 		return nil, PlaceOrderOut{}, err
 	}
 	if cartHash(p.addressID, c) != p.hash || c.Total != p.total {
-		return nil, PlaceOrderOut{}, errors.New("cart changed since prepare_order — call prepare_order again to re-confirm")
+		return nil, PlaceOrderOut{}, codedErr(codeCartChanged, "cart changed since prepare_order — call prepare_order again to re-confirm")
 	}
 	order, err := s.be.PlaceOrder(p.addressID) // never retried
 	if err != nil {
@@ -116,6 +181,9 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 			}
 		}
 	}
+	// The cart write was consumed by this order: keep it (save_preset and taste
+	// still read it) but never let it seed a rebuild of a fresh cart.
+	s.markCartWritePlaced()
 	return nil, PlaceOrderOut{Order: toOrderDTO(order)}, nil
 }
 

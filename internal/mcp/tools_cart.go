@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -98,8 +100,21 @@ type UpdateCartIn struct {
 	RestaurantName string       `json:"restaurant_name,omitempty"`
 	Items          []CartItemIn `json:"items" jsonschema:"the full desired set of cart lines (this replaces the cart for the restaurant)"`
 }
+
+// ReplacedCartDTO is the receipt for a conflicting cart the server auto-flushed
+// to make room for this write. Restaurant is "an existing cart" when Swiggy
+// returned no name (carts seeded outside the agent often carry none).
+type ReplacedCartDTO struct {
+	Restaurant string `json:"restaurant"`
+	ItemCount  int    `json:"item_count"`
+	Total      int    `json:"total"`
+}
+
 type UpdateCartOut struct {
 	Cart CartDTO `json:"cart"`
+	// ReplacedCart is set when a cart from another restaurant was auto-replaced
+	// by this write. Mention it to the user in one line; never ask beforehand.
+	ReplacedCart *ReplacedCartDTO `json:"replaced_cart,omitempty"`
 }
 
 func (s *Server) handleUpdateCart(ctx context.Context, _ *mcp.CallToolRequest, in UpdateCartIn) (*mcp.CallToolResult, UpdateCartOut, error) {
@@ -107,11 +122,49 @@ func (s *Server) handleUpdateCart(ctx context.Context, _ *mcp.CallToolRequest, i
 		return nil, UpdateCartOut{}, err
 	}
 	c, err := s.be.UpdateCart(in.AddressID, in.RestaurantID, in.RestaurantName, toCartItems(in.Items))
+	var replaced *ReplacedCartDTO
 	if err != nil {
-		return nil, UpdateCartOut{}, err
+		// The write may have hit Swiggy's one-restaurant-per-cart rule. Look at
+		// what's actually in the cart; if it belongs to another restaurant (or
+		// one Swiggy won't name — foreign carts), replace it and retry once.
+		// New order intent wins; the receipt keeps the user informed after.
+		old, gerr := s.be.GetCart(in.AddressID, "")
+		if gerr != nil || len(old.Lines) == 0 || sameRestaurant(old.Restaurant, in.RestaurantName) {
+			return nil, UpdateCartOut{}, err
+		}
+		if cerr := s.be.ClearCart(); cerr != nil {
+			return nil, UpdateCartOut{}, codedErr(codeCartConflict, "a cart from %s is in the way and could not be cleared: %v", describeCart(old), cerr)
+		}
+		s.clearCartWrite()
+		c, err = s.be.UpdateCart(in.AddressID, in.RestaurantID, in.RestaurantName, toCartItems(in.Items))
+		if err != nil {
+			return nil, UpdateCartOut{}, codedErr(codeCartConflict, "replaced the cart from %s but re-adding the new items failed: %v", describeCart(old), err)
+		}
+		replaced = &ReplacedCartDTO{Restaurant: cartName(old.Restaurant), ItemCount: len(old.Lines), Total: old.Total}
 	}
 	s.recordCartWrite(cartWriteFromUpdate(s, in, c))
-	return nil, UpdateCartOut{Cart: cartToDTO(c)}, nil
+	return nil, UpdateCartOut{Cart: cartToDTO(c), ReplacedCart: replaced}, nil
+}
+
+// sameRestaurant reports whether the existing cart's restaurant name matches the
+// requested one. Unknown names (either side empty) are treated as different —
+// a nameless cart can't be proven to be ours, and replacing it is the intended
+// recovery.
+func sameRestaurant(existing, requested string) bool {
+	a := strings.ToLower(strings.TrimSpace(existing))
+	b := strings.ToLower(strings.TrimSpace(requested))
+	return a != "" && b != "" && a == b
+}
+
+func cartName(restaurant string) string {
+	if strings.TrimSpace(restaurant) == "" {
+		return "an existing cart"
+	}
+	return restaurant
+}
+
+func describeCart(c api.Cart) string {
+	return fmt.Sprintf("%s (%d items, ₹%d)", cartName(c.Restaurant), len(c.Lines), c.Total)
 }
 
 // cartWriteFromUpdate projects an update_cart call + its resulting cart into a
@@ -160,5 +213,6 @@ func (s *Server) handleClearCart(ctx context.Context, _ *mcp.CallToolRequest, _ 
 	if err := s.be.ClearCart(); err != nil {
 		return nil, ClearCartOut{}, err
 	}
+	s.clearCartWrite()
 	return nil, ClearCartOut{Cleared: true}, nil
 }

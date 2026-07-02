@@ -44,6 +44,14 @@ Use the address already in the `card` from `auth_status` — no extra call:
 - Never invent an address id. Never narrate the address mechanic — just proceed.
 - Surface `warnings` (from `auth_status`/`get_card`) plainly (e.g. a saved default
   deleted on Swiggy) before relying on that address.
+- **Mid-flow address change** ("actually, send it to the office"): just call
+  `prepare_order` with the new address id. The server moves the cart — same
+  restaurant, same lines — and re-prices for the new address, returning
+  `rebuilt: "address_change"`. Mention it in one line with the bill ("moved the
+  cart to Office"). If the restaurant can't deliver there you get an
+  `unserviceable:` error — tell the user plainly and offer to find the same
+  brand near the new address with `search_restaurants`; never switch outlets
+  silently (menus and prices differ between outlets).
 
 ## Finding the food
 
@@ -85,8 +93,11 @@ Use the address already in the `card` from `auth_status` — no extra call:
   - **Starting fresh:** send just the new lines.
 - Each line: menu `item_id` + `quantity`, plus variant/add-on ids from
   `get_item_options` (taste-resolved where applicable).
-- A cross-restaurant add is rejected because the cart holds a different restaurant.
-  Ask whether to replace it (`clear_cart`, then re-add) or keep the old one.
+- **A cart from another restaurant is replaced automatically** — the new order
+  intent wins. When that happens `update_cart` returns a `replaced_cart` receipt
+  (`{restaurant, item_count, total}`); fold it into your next message in one line
+  ("replaced the ₹340 KFC cart that was sitting there") — never ask beforehand,
+  never hide it. The money gate below still protects anything that costs money.
 - Check each line's `available` flag — a sold-out line blocks the order.
 - Don't narrate the mechanics ("clearing your cart", "checking your usual milk") —
   just act. Only surface what actually matters to the user: the cart contents and
@@ -121,6 +132,26 @@ Delivering to: Home
 
 Fold the one-line memory-transparency note into the relevant line (as above), so a
 silently-wrong assumption is catchable. Then ask for confirmation.
+
+## Recoveries, receipts, and error codes
+
+The server fixes what it can and *reports* it; you only surface the outcome.
+Receipts on success payloads — mention each in one line, never as a question:
+
+- `update_cart.replaced_cart` — a conflicting cart was replaced.
+- `prepare_order.rebuilt` — `"address_change"` (cart moved to the new address)
+  or `"expired"` (Swiggy had dropped the cart; it was rebuilt as-was).
+
+Hard stops are errors with a stable `code:` prefix — branch on the prefix:
+
+| prefix | meaning | what to do |
+|---|---|---|
+| `unserviceable:` | restaurant can't deliver to that address | say so; offer a same-brand `search_restaurants` at the new address |
+| `over_cap:` | bill ≥ ₹1000 (Swiggy's cap for agent-placed orders) | tell the user the cap; ask what to trim |
+| `cart_expired:` | cart gone and not rebuildable | re-add the items with `update_cart` |
+| `cart_conflict:` | auto-replace failed midway | retry `update_cart`; if it persists, `clear_cart` and rebuild |
+| `confirmation_expired:` | confirmation too old | `prepare_order` again, show the bill again |
+| `cart_changed:` | cart no longer matches the confirmed bill | `prepare_order` again, re-confirm the new bill |
 
 ## Placing the order (two steps, always)
 

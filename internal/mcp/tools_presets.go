@@ -44,13 +44,10 @@ func (s *Server) handleSavePreset(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, SavePresetOut{}, err
 	}
-	s.mu.Lock()
-	lc := s.lastCart
-	s.mu.Unlock()
-	if lc == nil {
+	cw, ok := s.lastCartWrite()
+	if !ok {
 		return nil, SavePresetOut{}, errors.New("no recent cart to save — add items first")
 	}
-	cw, _ := s.cartWriteFor(lc.AddressID)
 
 	c, err := localstore.LoadCard()
 	if err != nil {
