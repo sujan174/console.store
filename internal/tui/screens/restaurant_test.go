@@ -148,13 +148,13 @@ func TestPlaceHasDescription(t *testing.T) {
 	}
 }
 
-// System 4: dish rows carry an aligned ★rating column (real Item.Rating).
+// System 4: dish rows carry an aligned rating★ column (real Item.Rating).
 func TestDishRowShowsRatingColumn(t *testing.T) {
 	p := catalog.Place{Name: "X", ETA: "30 min", Items: []catalog.Item{
 		{ID: "a", Name: "Hot Americano", Price: 139, Rating: 4.2},
 	}}
 	v := NewRestaurant(p, map[string]int{}, "").View()
-	if !strings.Contains(v, "★4.2") {
+	if !strings.Contains(v, "4.2 ★") {
 		t.Fatalf("dish row missing aligned rating column:\n%s", v)
 	}
 	if !strings.Contains(v, "₹139") {

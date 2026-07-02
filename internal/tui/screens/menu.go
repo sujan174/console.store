@@ -246,14 +246,16 @@ func (m Menu) placeRow(p catalog.Place, selected bool) string {
 		w = 16
 	}
 
-	// meta = ★rating + ETA, RIGHT-aligned to the row edge. Shown ONLY in search
+	// meta = rating★ + ETA, RIGHT-aligned to the row edge. Shown ONLY in search
 	// results; on Home/category the focused restaurant's stats live in the detail
-	// strip above the list, so the rows stay clean (just names).
+	// strip above the list, so the rows stay clean (just names). The compact
+	// per-row form is unspaced ("4.7★") to stay distinct from the spaced strip
+	// form ("4.7 ★") above.
 	meta := ""
 	if m.searchMode {
 		rating := ""
 		if p.Rating > 0 {
-			rating = theme.Fg(theme.Gold).Render(fmt.Sprintf("★%.1f", p.Rating))
+			rating = theme.Fg(theme.Gold).Render(fmt.Sprintf("%.1f★", p.Rating))
 		}
 		eta := ""
 		if p.ETA != "" {
@@ -431,7 +433,7 @@ func (m Menu) focusedDetail() string {
 		stats += s
 	}
 	if p.Rating > 0 {
-		add(theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", p.Rating)))
+		add(theme.GoldStyle.Render(fmt.Sprintf("%.1f ★", p.Rating)))
 	}
 	if p.ETA != "" {
 		add(theme.DimStyle.Render(p.ETA))

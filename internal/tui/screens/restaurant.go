@@ -56,10 +56,10 @@ func buildRows(items []catalog.Item, qtyByItemID map[string]int) []components.Ro
 		// Two fixed-width right columns so rating AND price line up vertically
 		// down the whole list (the list right-aligns the Right block as a unit,
 		// so each sub-cell must be a constant width to stay columnar).
-		ratingW := lipgloss.Width("★0.0")
+		ratingW := lipgloss.Width("0.0 ★")
 		ratingCell := strings.Repeat(" ", ratingW) // blank when the dish has no rating
 		if it.Rating > 0 {
-			ratingCell = theme.GoldStyle.Render(fmt.Sprintf("★%.1f", it.Rating))
+			ratingCell = theme.GoldStyle.Render(fmt.Sprintf("%.1f ★", it.Rating))
 		}
 		priceW := lipgloss.Width("₹9999")
 		priceCell := lipgloss.PlaceHorizontal(priceW, lipgloss.Right, theme.PriceStyle.Render(fmt.Sprintf("₹%d", it.Price)))
@@ -353,7 +353,7 @@ func (s Restaurant) View() string {
 	// was the browse enum, not the real cuisine — and no item count, which reads 0
 	// until the menu streams in.)
 	dot := theme.FaintStyle.Render("  ·  ")
-	meta := theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", s.p.Rating))
+	meta := theme.GoldStyle.Render(fmt.Sprintf("%.1f ★", s.p.Rating))
 	if s.p.ETA != "" {
 		meta += dot + theme.DimStyle.Render(s.p.ETA)
 	}
@@ -457,7 +457,7 @@ func (s Restaurant) InfoView(int) string {
 	}
 	badge := []string{veg}
 	if it.Rating > 0 {
-		badge = append(badge, theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", it.Rating)))
+		badge = append(badge, theme.GoldStyle.Render(fmt.Sprintf("%.1f ★", it.Rating)))
 	}
 	badge = append(badge, theme.BrightStyle.Render(fmt.Sprintf("₹%d", it.Price)))
 	if it.Kcal > 0 {
@@ -501,7 +501,7 @@ func RestaurantInfoCard(p catalog.Place) string {
 
 	badge := []string{}
 	if p.Rating > 0 {
-		badge = append(badge, theme.GoldStyle.Render(fmt.Sprintf("★ %.1f", p.Rating)))
+		badge = append(badge, theme.GoldStyle.Render(fmt.Sprintf("%.1f ★", p.Rating)))
 	}
 	if p.ETA != "" {
 		badge = append(badge, theme.DimStyle.Render(p.ETA))
