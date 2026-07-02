@@ -6,33 +6,6 @@ export const dynamic = "force-dynamic";
 const CHANNELS = new Set(["stable", "beta", "alpha"]);
 const ASSET_RE = /^store_[a-z0-9]+_[a-z0-9]+(\.exe)?$/;
 
-// ghFetchAsset fetches a release asset for server-side streaming (the alpha
-// path), with a bounded connection timeout and a few retries. Railway's egress
-// to GitHub's asset CDN intermittently returns a transient non-ok or stalls;
-// unretried, that surfaced to the client updater as a 502 (or an open-ended
-// hang) and silently aborted the self-update, stranding testers on the old
-// build. The timeout guards only the connection/header phase — it's cleared the
-// moment the response resolves, so it never aborts an in-flight body stream.
-async function ghFetchAsset(url, attempts = 3) {
-  for (let i = 0; i < attempts; i++) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
-    try {
-      const res = await fetch(url, {
-        headers: { "User-Agent": "consolestore-landing" },
-        signal: ctrl.signal,
-        redirect: "follow",
-      });
-      clearTimeout(timer);
-      if (res.ok && res.body) return res;
-    } catch {
-      clearTimeout(timer);
-      // transient (abort/reset) — fall through to the next attempt
-    }
-  }
-  return null;
-}
-
 export async function GET(req, { params }) {
   const { channel, asset } = await params;
   if (!CHANNELS.has(channel) || !ASSET_RE.test(asset)) {
@@ -52,23 +25,20 @@ export async function GET(req, { params }) {
   if (!tag) return new Response("no release", { status: 404 });
   const target = ghAssetURL(tag, asset);
 
-  if (channel !== "alpha") {
-    return Response.redirect(target, 302);
+  // All channels REDIRECT to the public GitHub asset rather than proxying the
+  // bytes. Alpha used to stream server-side to keep the code gate meaningful,
+  // but proxying a ~10MB binary through the single Railway Node process stalled
+  // intermittently (body stream never completing) — the client updater then
+  // hung or 502'd and silently aborted the self-update, stranding testers on the
+  // old build. The release assets are public on a public repo (the GitHub URL is
+  // guessable from the tag), so streaming added no real secrecy — we still gate
+  // on the invite code and log the grant here, then hand off the bytes to
+  // GitHub's CDN, which is what beta/stable already do reliably.
+  if (channel === "alpha") {
+    logAlphaGrant({
+      label, asset, version: tag,
+      ip: req.headers.get("x-forwarded-for"), ua: req.headers.get("user-agent"),
+    });
   }
-
-  const upstream = await ghFetchAsset(target);
-  if (!upstream) return new Response("asset temporarily unavailable", { status: 502 });
-
-  logAlphaGrant({
-    label, asset, version: tag,
-    ip: req.headers.get("x-forwarded-for"), ua: req.headers.get("user-agent"),
-  });
-  return new Response(upstream.body, {
-    status: 200,
-    headers: {
-      "content-type": "application/octet-stream",
-      "content-disposition": `attachment; filename="${asset}"`,
-      "cache-control": "no-store",
-    },
-  });
+  return Response.redirect(target, 302);
 }
