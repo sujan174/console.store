@@ -406,6 +406,7 @@ export default function FeaturesPage() {
             >
               features
             </a>
+            <a href="/how-to" className="lnk">how-to</a>
             <a href="/#faq" className="lnk">faq</a>
           </div>
         </nav>
@@ -800,6 +801,7 @@ export default function FeaturesPage() {
                   <a href="/features" className="lnk" style={{ color: "#e9ebf7" }}>
                     features
                   </a>
+                  <a href="/how-to" className="lnk">how-to</a>
                 </div>
 
                 {/* SUPPORT */}

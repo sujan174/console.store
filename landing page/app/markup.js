@@ -40,6 +40,7 @@ export const MARKUP = String.raw`
       <a href="#run" class="lnk">run</a>
       <a href="#keys" class="lnk">terminal &amp; agent</a>
       <a href="/features" class="lnk">features</a>
+      <a href="/how-to" class="lnk">how-to</a>
       <a href="#faq" class="lnk">faq</a>
     </div>
   </nav>
@@ -393,6 +394,7 @@ export const MARKUP = String.raw`
             <a href="#run" class="lnk">run</a>
             <a href="#keys" class="lnk">terminal &amp; agent</a>
             <a href="#features" class="lnk">features</a>
+            <a href="/how-to" class="lnk">how-to</a>
           </div>
           <div style="display:flex;flex-direction:column;gap:11px">
             <span style="color:#565b80;font-size:10.5px;letter-spacing:1px">SUPPORT</span>
