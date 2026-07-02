@@ -118,14 +118,47 @@ fi
 chmod 600 "$CFG_DIR/channel.json"
 ok "channel ${DIM}→${R} ${CYAN}$CHANNEL${R} ${DIM}(self-updates on launch)${R}"
 
-# 5. PATH check ─────────────────────────────────────────────────────────────
+# 5. PATH check + persist ────────────────────────────────────────────────────
+# $BIN_DIR is never on macOS's default PATH (/etc/paths only) unless something
+# else already put it there — dev tooling (pyenv/rustup/pipx) commonly does,
+# which is why this "just worked" on machines that already had it and silently
+# failed on a stock/fresh install. Printing a note isn't enough — most people
+# never see or act on it. Persist the export into the shell's own rc file so
+# `console` resolves in every new shell, not just ones that already had it.
 on_path=1
 case ":$PATH:" in *":$BIN_DIR:"*) ;; *) on_path=0 ;; esac
 
+persisted=0
+RC=""
+if [ "$on_path" -eq 0 ]; then
+  case "${SHELL:-}" in
+    */zsh)  RC="$HOME/.zprofile" ;;
+    */bash) RC="$HOME/.bash_profile"; [ -f "$RC" ] || RC="$HOME/.bashrc" ;;
+    */fish) RC="$HOME/.config/fish/config.fish" ;;
+    *)      RC="$HOME/.profile" ;;
+  esac
+  case "${SHELL:-}" in
+    */fish) LINE="set -gx PATH $BIN_DIR \$PATH" ;;
+    *)      LINE="export PATH=\"$BIN_DIR:\$PATH\"" ;;
+  esac
+  mkdir -p "$(dirname "$RC")" 2>/dev/null || true
+  touch "$RC" 2>/dev/null || true
+  # Idempotent: skip if a prior install (or the user) already added this dir.
+  if [ -w "$RC" ] && ! grep -qsF "$BIN_DIR" "$RC" 2>/dev/null; then
+    printf '\n# added by the consolestore installer\n%s\n' "$LINE" >> "$RC"
+    persisted=1
+  fi
+fi
+
 printf "\n  ${GREEN}${B}ready${R}   ${DIM}run${R}  ${B}${CYAN}console${R}\n"
 if [ "$on_path" -eq 0 ]; then
-  printf "\n  ${DIM}note:${R} %s isn't on your PATH — add it:\n" "$BIN_DIR"
-  printf "    ${B}export PATH=\"%s:\$PATH\"${R}\n" "$BIN_DIR"
+  if [ "$persisted" -eq 1 ]; then
+    printf "\n  ${DIM}note:${R} added %s to PATH in %s\n" "$BIN_DIR" "$RC"
+    printf "  ${DIM}open a new terminal, or run:${R}  ${B}source %s${R}\n" "$RC"
+  else
+    printf "\n  ${DIM}note:${R} %s isn't on your PATH — add it:\n" "$BIN_DIR"
+    printf "    ${B}export PATH=\"%s:\$PATH\"${R}\n" "$BIN_DIR"
+  fi
 fi
 printf "\n"
 
