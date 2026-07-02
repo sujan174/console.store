@@ -59,7 +59,11 @@ export function pickLatestTag(tags, channel) {
 
 // latestTag returns the highest-version release tag for a channel.
 export async function latestTag(channel) {
-  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=30`, {
+  // per_page must exceed the total release count: GitHub's list order is not
+  // reliably newest-first, so a too-small window can drop a channel's latest tag
+  // and silently serve a stale version. 100 is the API max — revisit with real
+  // pagination before the repo ever holds 100+ releases.
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100`, {
     headers: { Accept: "application/vnd.github+json", "User-Agent": "consolestore-landing" },
     next: { revalidate: 60 },
   });

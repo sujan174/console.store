@@ -6,6 +6,33 @@ export const dynamic = "force-dynamic";
 const CHANNELS = new Set(["stable", "beta", "alpha"]);
 const ASSET_RE = /^store_[a-z0-9]+_[a-z0-9]+(\.exe)?$/;
 
+// ghFetchAsset fetches a release asset for server-side streaming (the alpha
+// path), with a bounded connection timeout and a few retries. Railway's egress
+// to GitHub's asset CDN intermittently returns a transient non-ok or stalls;
+// unretried, that surfaced to the client updater as a 502 (or an open-ended
+// hang) and silently aborted the self-update, stranding testers on the old
+// build. The timeout guards only the connection/header phase — it's cleared the
+// moment the response resolves, so it never aborts an in-flight body stream.
+async function ghFetchAsset(url, attempts = 3) {
+  for (let i = 0; i < attempts; i++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "consolestore-landing" },
+        signal: ctrl.signal,
+        redirect: "follow",
+      });
+      clearTimeout(timer);
+      if (res.ok && res.body) return res;
+    } catch {
+      clearTimeout(timer);
+      // transient (abort/reset) — fall through to the next attempt
+    }
+  }
+  return null;
+}
+
 export async function GET(req, { params }) {
   const { channel, asset } = await params;
   if (!CHANNELS.has(channel) || !ASSET_RE.test(asset)) {
@@ -29,8 +56,8 @@ export async function GET(req, { params }) {
     return Response.redirect(target, 302);
   }
 
-  const upstream = await fetch(target, { headers: { "User-Agent": "consolestore-landing" } });
-  if (!upstream.ok || !upstream.body) return new Response("asset missing", { status: 502 });
+  const upstream = await ghFetchAsset(target);
+  if (!upstream) return new Response("asset temporarily unavailable", { status: 502 });
 
   logAlphaGrant({
     label, asset, version: tag,
