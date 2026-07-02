@@ -113,13 +113,25 @@ func (s *Service) Restaurants(ctx context.Context, accountID, addressID, query s
 	return mapRestaurants(r), effective, nil
 }
 
+// RestaurantsPage fetches ONE page of a category/home restaurant search
+// (dishes dropped, ads kept sans tag — the non-organic treatment). nextOffset
+// feeds the next call; more is false when results ran out. The streaming
+// counterpart of Restaurants for lists where a partial render beats waiting.
+func (s *Service) RestaurantsPage(ctx context.Context, accountID, addressID, query string, offset int) ([]api.Restaurant, int, bool, error) {
+	rs, next, more, err := s.foodClient(accountID).SearchRestaurantsOnePage(ctx, addressID, query, offset)
+	if err != nil {
+		return nil, offset, false, err
+	}
+	return mapRestaurants(rs), next, more, nil
+}
+
 func (s *Service) Menu(ctx context.Context, accountID, addressID, restaurantID string) (api.Menu, error) {
 	// get_restaurant_menu paginates by CATEGORY (pageSize = categories per page,
 	// max 8, 1-indexed). A single call returns only the first page, so the TUI
 	// saw a truncated menu. Loop pages until one comes back empty, merging items.
 	client := s.foodClient(accountID)
 	var items []swiggy.MenuItem
-	for page := 1; page <= 20; page++ {
+	for page := 1; page <= menuMaxPages; page++ {
 		m, err := client.GetRestaurantMenu(ctx, addressID, restaurantID, page, 8)
 		if err != nil {
 			if page == 1 {
@@ -133,6 +145,26 @@ func (s *Service) Menu(ctx context.Context, accountID, addressID, restaurantID s
 		items = append(items, m.Items...)
 	}
 	return mapMenu(swiggy.Menu{RestaurantID: restaurantID, Items: items}), nil
+}
+
+// menuMaxPages caps the category-page loop — 20 pages × 8 categories is far
+// beyond any real menu; it exists only to bound a server that never returns
+// an empty page.
+const menuMaxPages = 20
+
+// MenuPage fetches ONE category page of a restaurant menu (pageSize 8,
+// 1-indexed). more is true while the page had items and the page cap isn't
+// hit — the caller decides whether to fetch the next page. This is the
+// streaming seam: the TUI renders page 1 immediately and pulls the rest one
+// page at a time (each page still serialized through the client's rate
+// limiter, so streaming never changes the call rate — only when we render).
+func (s *Service) MenuPage(ctx context.Context, accountID, addressID, restaurantID string, page int) (api.Menu, bool, error) {
+	m, err := s.foodClient(accountID).GetRestaurantMenu(ctx, addressID, restaurantID, page, 8)
+	if err != nil {
+		return api.Menu{}, false, err
+	}
+	more := len(m.Items) > 0 && page < menuMaxPages
+	return mapMenu(swiggy.Menu{RestaurantID: restaurantID, Items: m.Items}), more, nil
 }
 
 func (s *Service) ClearCart(ctx context.Context, accountID string) error {

@@ -34,6 +34,12 @@ func (f *liveFake) SearchOrganic(string, string) ([]api.Restaurant, string, erro
 }
 func (f *liveFake) Usuals(string) ([]api.Restaurant, error) { return nil, f.err }
 func (f *liveFake) Menu(string, string) (api.Menu, error)   { return api.Menu{}, f.err }
+func (f *liveFake) MenuPage(string, string, int) (api.Menu, bool, error) {
+	return api.Menu{}, false, f.err
+}
+func (f *liveFake) PlacesQueryPage(string, string, int) ([]api.Restaurant, int, bool, error) {
+	return nil, 0, false, f.err
+}
 func (f *liveFake) ItemOptions(string, string, string, string) ([]api.OptionGroup, error) {
 	return nil, f.err
 }

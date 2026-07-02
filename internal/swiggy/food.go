@@ -46,6 +46,28 @@ func (c *Client) SearchOrganic(ctx context.Context, addressID, query string) ([]
 	return c.searchFill(ctx, addressID, query, 0, true)
 }
 
+// SearchRestaurantsOnePage fetches exactly ONE search page, filtered (dishes
+// dropped, "(Ad)" tags stripped but sponsored listings kept — the category
+// treatment). It returns the next offset and whether more pages may exist, so
+// the caller can stream: render this page now, pull the next later. Dedup
+// across pages is the caller's job (each call here is stateless).
+func (c *Client) SearchRestaurantsOnePage(ctx context.Context, addressID, query string, offset int) ([]Restaurant, int, bool, error) {
+	page, err := c.searchRestaurantsPage(ctx, addressID, query, offset)
+	if err != nil {
+		return nil, offset, false, err
+	}
+	var out []Restaurant
+	for _, r := range onlyRestaurants(page) {
+		if isAd(r.Name) {
+			r.Name = stripAd(r.Name)
+		}
+		if r.ID != "" {
+			out = append(out, r)
+		}
+	}
+	return out, offset + len(page), len(page) > 0, nil
+}
+
 // searchFill paginates search_restaurants, dropping dishes (always) and ads
 // (when dropAds), de-duplicating, until it has ~searchWant or results run out.
 func (c *Client) searchFill(ctx context.Context, addressID, query string, offset int, dropAds bool) ([]Restaurant, error) {

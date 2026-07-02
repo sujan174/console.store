@@ -35,6 +35,12 @@ func (f *fakeBackend) SearchOrganic(string, string) ([]api.Restaurant, string, e
 }
 func (f *fakeBackend) Usuals(string) ([]api.Restaurant, error) { return f.restaurants, f.err }
 func (f *fakeBackend) Menu(string, string) (api.Menu, error)   { return f.menu, f.err }
+func (f *fakeBackend) MenuPage(string, string, int) (api.Menu, bool, error) {
+	return f.menu, false, f.err
+}
+func (f *fakeBackend) PlacesQueryPage(string, string, int) ([]api.Restaurant, int, bool, error) {
+	return f.rests, len(f.rests), false, f.err
+}
 func (f *fakeBackend) ItemOptions(string, string, string, string) ([]api.OptionGroup, error) {
 	return nil, f.err
 }

@@ -29,6 +29,14 @@ func (f *fakeService) Menu(_ context.Context, a, _, _ string) (api.Menu, error) 
 	f.gotAccount = a
 	return api.Menu{}, nil
 }
+func (f *fakeService) MenuPage(_ context.Context, a, _, _ string, _ int) (api.Menu, bool, error) {
+	f.gotAccount = a
+	return api.Menu{}, false, nil
+}
+func (f *fakeService) RestaurantsPage(_ context.Context, a, _, _ string, offset int) ([]api.Restaurant, int, bool, error) {
+	f.gotAccount = a
+	return []api.Restaurant{{ID: "r1"}}, offset + 1, false, nil
+}
 func (f *fakeService) ItemOptions(_ context.Context, a, _, _, _, _ string) ([]api.OptionGroup, error) {
 	f.gotAccount = a
 	return nil, nil

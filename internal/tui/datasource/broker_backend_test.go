@@ -46,6 +46,20 @@ func (f *fakeRPC) Menu(accountID, addressID, restaurantID string) (api.Menu, err
 	}
 	return api.Menu{RestaurantID: restaurantID}, nil
 }
+func (f *fakeRPC) MenuPage(accountID, addressID, restaurantID string, page int) (api.Menu, bool, error) {
+	f.lastAccount = accountID
+	if f.err != nil {
+		return api.Menu{}, false, f.err
+	}
+	return api.Menu{RestaurantID: restaurantID}, false, nil
+}
+func (f *fakeRPC) RestaurantsPage(accountID, addressID, query string, offset int) ([]api.Restaurant, int, bool, error) {
+	f.lastAccount, f.lastQuery = accountID, query
+	if f.err != nil {
+		return nil, offset, false, f.err
+	}
+	return []api.Restaurant{{ID: "r1"}}, offset + 1, false, nil
+}
 func (f *fakeRPC) ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {
 	f.lastAccount = accountID
 	return nil, nil

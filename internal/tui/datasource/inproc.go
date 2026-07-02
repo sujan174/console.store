@@ -15,6 +15,8 @@ type inprocService interface {
 	Restaurants(ctx context.Context, accountID, addressID, query string, organic bool) ([]api.Restaurant, string, error)
 	Usuals(ctx context.Context, accountID, addressID string) ([]api.Restaurant, error)
 	Menu(ctx context.Context, accountID, addressID, restaurantID string) (api.Menu, error)
+	MenuPage(ctx context.Context, accountID, addressID, restaurantID string, page int) (api.Menu, bool, error)
+	RestaurantsPage(ctx context.Context, accountID, addressID, query string, offset int) ([]api.Restaurant, int, bool, error)
 	ItemOptions(ctx context.Context, accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(ctx context.Context, a api.UpdateCartArgs) (api.Cart, error)
 	GetCart(ctx context.Context, accountID, addressID, restaurantName string) (api.Cart, error)
@@ -56,6 +58,14 @@ func (p InProc) Usuals(accountID, addressID string) ([]api.Restaurant, error) {
 
 func (p InProc) Menu(accountID, addressID, restaurantID string) (api.Menu, error) {
 	return p.svc.Menu(context.Background(), accountID, addressID, restaurantID)
+}
+
+func (p InProc) MenuPage(accountID, addressID, restaurantID string, page int) (api.Menu, bool, error) {
+	return p.svc.MenuPage(context.Background(), accountID, addressID, restaurantID, page)
+}
+
+func (p InProc) RestaurantsPage(accountID, addressID, query string, offset int) ([]api.Restaurant, int, bool, error) {
+	return p.svc.RestaurantsPage(context.Background(), accountID, addressID, query, offset)
 }
 
 func (p InProc) ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {

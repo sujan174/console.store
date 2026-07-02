@@ -44,6 +44,13 @@ func (f *railFake) SearchOrganic(_, q string) ([]api.Restaurant, string, error) 
 }
 func (f *railFake) Usuals(string) ([]api.Restaurant, error) { return f.usuals, f.err }
 func (f *railFake) Menu(string, string) (api.Menu, error)   { return api.Menu{}, f.err }
+func (f *railFake) MenuPage(string, string, int) (api.Menu, bool, error) {
+	return api.Menu{}, false, f.err
+}
+func (f *railFake) PlacesQueryPage(_, q string, _ int) ([]api.Restaurant, int, bool, error) {
+	rs, err := f.PlacesQuery("", q)
+	return rs, len(rs), false, err
+}
 func (f *railFake) ItemOptions(string, string, string, string) ([]api.OptionGroup, error) {
 	return nil, f.err
 }

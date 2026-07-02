@@ -14,6 +14,8 @@ type brokerRPC interface {
 	SearchOrganic(accountID, addressID, query string) ([]api.Restaurant, string, error)
 	Usuals(accountID, addressID string) ([]api.Restaurant, error)
 	Menu(accountID, addressID, restaurantID string) (api.Menu, error)
+	MenuPage(accountID, addressID, restaurantID string, page int) (api.Menu, bool, error)
+	RestaurantsPage(accountID, addressID, query string, offset int) ([]api.Restaurant, int, bool, error)
 	ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(a api.UpdateCartArgs) (api.Cart, error)
 	GetCart(accountID, addressID, restaurantName string) (api.Cart, error)
@@ -81,6 +83,16 @@ func (b *BrokerBackend) Usuals(addressID string) ([]api.Restaurant, error) {
 func (b *BrokerBackend) Menu(addressID, restaurantID string) (api.Menu, error) {
 	r, err := b.rpc.Menu(b.accountID, addressID, restaurantID)
 	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) MenuPage(addressID, restaurantID string, page int) (api.Menu, bool, error) {
+	r, more, err := b.rpc.MenuPage(b.accountID, addressID, restaurantID, page)
+	return r, more, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) PlacesQueryPage(addressID, query string, offset int) ([]api.Restaurant, int, bool, error) {
+	r, next, more, err := b.rpc.RestaurantsPage(b.accountID, addressID, query, offset)
+	return r, next, more, wrapAuthErr(err)
 }
 
 func (b *BrokerBackend) ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {

@@ -23,6 +23,9 @@ type Restaurant struct {
 	category string // active category filter; "" or "All" = no filter
 	vegOnly  bool
 	qtyByID  map[string]int // cart quantities (for rebuilding rows after filter change)
+
+	loadingMore bool // a menu-page stream is still filling the list
+	partial     bool // the stream died mid-way; some dishes may be missing
 }
 
 // buildRows converts a slice of catalog items into display rows using the
@@ -125,6 +128,13 @@ func (s Restaurant) CursorIndex() int { return s.list.Cursor }
 
 // WithCursor restores a previously captured cursor position.
 func (s Restaurant) WithCursor(i int) Restaurant { s.list.Cursor = i; return s }
+
+// WithLoading sets the menu-stream state: loadingMore while pages are still
+// arriving, partial when the stream failed mid-way (dishes may be missing).
+func (s Restaurant) WithLoading(more, partial bool) Restaurant {
+	s.loadingMore, s.partial = more, partial
+	return s
+}
 
 // InfoOpen reports whether the detail panel is showing (so the router can
 // preserve it across a NewRestaurant rebuild).
@@ -381,7 +391,18 @@ func (s Restaurant) View() string {
 	} else {
 		b.WriteString(s.list.View())
 	}
-	b.WriteString("\n")
+	// The menu-stream status replaces the blank spacer line (same height either
+	// way, so the footer never jumps while pages arrive).
+	switch {
+	case s.loadingMore && len(s.p.Items) == 0:
+		b.WriteString("  " + theme.DimStyle.Render("loading menu…") + "\n")
+	case s.loadingMore:
+		b.WriteString("  " + theme.FaintStyle.Render("… more dishes loading") + "\n")
+	case s.partial:
+		b.WriteString("  " + theme.DimStyle.Render("some dishes may be missing — reopen to retry") + "\n")
+	default:
+		b.WriteString("\n")
+	}
 	// Search mode gets its own focused hint; otherwise the full key set,
 	// now including / to enter dish search.
 	if s.searching {

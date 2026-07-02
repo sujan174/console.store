@@ -28,6 +28,12 @@ type Backend interface {
 	SearchOrganic(addressID, query string) ([]api.Restaurant, string, error)
 	Usuals(addressID string) ([]api.Restaurant, error)
 	Menu(addressID, restaurantID string) (api.Menu, error)
+	// MenuPage fetches one category page of a menu (1-indexed); more reports
+	// whether another page may exist. The streaming counterpart of Menu.
+	MenuPage(addressID, restaurantID string, page int) (api.Menu, bool, error)
+	// PlacesQueryPage fetches one page of a category/home restaurant search;
+	// nextOffset feeds the following call, more is false when results ran out.
+	PlacesQueryPage(addressID, query string, offset int) ([]api.Restaurant, int, bool, error)
 	ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error)
 	GetCart(addressID, restaurantName string) (api.Cart, error)
@@ -49,6 +55,30 @@ type (
 	MenuLoadedMsg struct {
 		PlaceID string
 		Err     error
+	}
+	// MenuPageLoadedMsg reports one streamed menu page merged into the
+	// snapshot. Gen is the load generation stamped by the root when the
+	// stream started — a mismatch means the user re-opened/changed
+	// restaurants and this page belongs to a dead stream. Done means no
+	// more pages; the root fires the next page's Cmd otherwise (root-driven
+	// chain: pages stay serial and cancellation is just "don't continue").
+	MenuPageLoadedMsg struct {
+		PlaceID string
+		Page    int
+		Gen     int
+		Done    bool
+		Err     error
+	}
+	// PlacesPageLoadedMsg reports one streamed restaurant-search page merged
+	// into the snapshot under Query. Same gen/chain contract as
+	// MenuPageLoadedMsg.
+	PlacesPageLoadedMsg struct {
+		Query      string
+		Page       int
+		Gen        int
+		NextOffset int
+		Done       bool
+		Err        error
 	}
 	ItemOptionsLoadedMsg struct {
 		ItemID string
@@ -186,6 +216,39 @@ func LoadMenu(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID stri
 		}
 		snap.SetMenu(toMenuPlace(got))
 		return MenuLoadedMsg{PlaceID: restaurantID}
+	}
+}
+
+// LoadMenuPage fetches ONE menu page and merges it into the snapshot — page 1
+// replaces (dropping any stale copy), later pages append. staged streams the
+// pages into the snapshot's staging area instead, for loads that seeded the
+// visible menu from the disk cache (the root promotes the staged copy when
+// the stream completes, so the seeded menu never shrinks mid-refresh). The
+// root renders on every page msg and fires the next page itself, so a big
+// menu paints in ~one call's latency instead of the whole loop's. Pages
+// remain serial (one in flight), preserving the client's rate-limit posture.
+func LoadMenuPage(b Backend, snap *swiggysnap.Snapshot, addressID, restaurantID string, page, gen int, staged bool) tea.Cmd {
+	return func() tea.Msg {
+		got, more, err := b.MenuPage(addressID, restaurantID, page)
+		if err != nil {
+			return MenuPageLoadedMsg{PlaceID: restaurantID, Page: page, Gen: gen, Err: err}
+		}
+		snap.MergeMenuPage(restaurantID, toMenuPlace(got).Items, page == 1, staged)
+		return MenuPageLoadedMsg{PlaceID: restaurantID, Page: page, Gen: gen, Done: !more}
+	}
+}
+
+// LoadPlacesPage fetches ONE page of a category/home restaurant search and
+// merges it under the query key — page 1 replaces, later pages append. Same
+// root-driven chain contract as LoadMenuPage.
+func LoadPlacesPage(b Backend, snap *swiggysnap.Snapshot, addressID, query string, offset, page, gen int) tea.Cmd {
+	return func() tea.Msg {
+		got, next, more, err := b.PlacesQueryPage(addressID, query, offset)
+		if err != nil {
+			return PlacesPageLoadedMsg{Query: query, Page: page, Gen: gen, Err: err}
+		}
+		snap.MergePlacesPage(addressID, query, toPlaces(got, catalog.SectionCoffee), page == 1)
+		return PlacesPageLoadedMsg{Query: query, Page: page, Gen: gen, NextOffset: next, Done: !more}
 	}
 }
 

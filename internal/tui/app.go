@@ -157,6 +157,25 @@ type Model struct {
 	orderConfirmOpen bool
 	orderConfirmSel  int // focused button: 0 = yes (default), 1 = no
 
+	// progressive catalog streaming. Generation counters stamp every page
+	// Cmd; a page landing with a stale gen belongs to a dead stream (the
+	// user navigated away or restarted the load) and is dropped — which also
+	// kills the chain, since the next page is only ever fired from the
+	// current page's handler.
+	menuGen         int
+	menuLoadingMore bool // pages still arriving for the open restaurant
+	menuPartial     bool // stream died mid-way; menu on screen is incomplete
+	menuStaged      bool // stream fills the staging area behind a disk-cache seed
+	placesGen       int
+	// seededQueries marks place-list snapshot entries that came from the
+	// disk cache (not a live fetch) — ensureQuery must still fire a live
+	// refresh for them exactly once.
+	seededQueries map[string]bool
+	// deferredLaunch holds the below-the-fold launch loads (usuals, cart
+	// pull, active-order check) until the first visible list paints, so the
+	// serialized rate-limiter slots go to what the user is looking at.
+	deferredLaunch []tea.Cmd
+
 	// conflict modal: shown when adding an item from a restaurant other than
 	// the one the cart holds (Swiggy allows one restaurant per cart).
 	conflictOpen      bool
@@ -283,7 +302,7 @@ type Model struct {
 func New(caps render.Caps, opts ...Option) Model {
 	repo := mem.New()
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome, railFocus: true, addrGatePending: true}
+	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome, railFocus: true, addrGatePending: true, seededQueries: map[string]bool{}}
 	for _, o := range opts {
 		o(&m)
 	}
@@ -423,15 +442,161 @@ func (m Model) liveRepo() *swiggysnap.Repository {
 	return nil
 }
 
-// ensureQuery fires LoadPlacesQuery for query if the snapshot doesn't already
-// have results for it. Deduplicates: if the cache is non-empty, no-ops.
-func (m Model) ensureQuery(query string) tea.Cmd {
+// ensureQuery starts a progressive places load for query if the snapshot
+// doesn't already hold LIVE results for it. Disk-seeded entries (see
+// seedPlacesFromCache) still get one live refresh — the stream's first page
+// replaces the seed in place. Deduplicates: a live-loaded cache no-ops.
+func (m *Model) ensureQuery(query string) tea.Cmd {
 	if r := m.liveRepo(); r != nil {
-		if places := r.PlacesByQuery(m.addr, query); len(places) > 0 {
-			return nil // already cached
+		if places := r.PlacesByQuery(m.addr, query); len(places) > 0 && !m.seededQueries[query] {
+			return nil // already live-loaded
 		}
 	}
-	return datasource.LoadPlacesQuery(m.backend, m.snap, m.addr.ID, query)
+	return m.startPlacesLoad(query)
+}
+
+// startPlacesLoad begins a fresh progressive restaurant-list stream for
+// query: seed the visible list from the disk cache when available (instant
+// paint), then fire page 1 — whose merge replaces the seed with live data.
+// Bumping placesGen kills any previous stream's chain.
+func (m *Model) startPlacesLoad(query string) tea.Cmd {
+	m.placesGen++
+	m.seedPlacesFromCache(query)
+	return datasource.LoadPlacesPage(m.backend, m.snap, m.addr.ID, query, 0, 1, m.placesGen)
+}
+
+// seedPlacesFromCache paints the last-known restaurant list for (addr, query)
+// from disk while the live fetch runs — stale-while-revalidate. Only seeds an
+// empty snapshot slot, and marks the query seeded so ensureQuery still
+// refreshes it.
+func (m *Model) seedPlacesFromCache(query string) {
+	r := m.liveRepo()
+	if r == nil || m.addr.ID == "" || len(r.PlacesByQuery(m.addr, query)) > 0 {
+		return
+	}
+	cached, ok := localstore.LoadCachedPlaces(m.addr.ID, query)
+	if !ok {
+		return
+	}
+	places := make([]catalog.Place, 0, len(cached))
+	for _, p := range cached {
+		places = append(places, catalog.Place{
+			ID: p.ID, SwiggyID: p.ID, Name: p.Name, City: p.City,
+			Section: catalog.SectionCoffee, ETA: p.ETA, Rating: p.Rating,
+			Description: p.Description, Offer: p.Offer,
+		})
+	}
+	m.snap.SetPlaces(m.addr.ID, query, places)
+	m.seededQueries[query] = true
+}
+
+// placesListEmpty reports whether the snapshot has nothing to paint for query
+// — the "show a loading label" test (a disk seed counts as content).
+func (m Model) placesListEmpty(query string) bool {
+	r := m.liveRepo()
+	return r == nil || len(r.PlacesByQuery(m.addr, query)) == 0
+}
+
+// savePlacesCache persists the live list for (addr, query) so the next launch
+// paints it instantly. Conversion happens synchronously (snapshot reads are
+// mutex-guarded). The write is a few KB — synchronous keeps it race-free with tests/exit.
+func (m Model) savePlacesCache(query string) {
+	r := m.liveRepo()
+	if r == nil || m.addr.ID == "" {
+		return
+	}
+	places := r.PlacesByQuery(m.addr, query)
+	if len(places) == 0 {
+		return
+	}
+	cached := make([]localstore.CachedPlace, 0, len(places))
+	for _, p := range places {
+		cached = append(cached, localstore.CachedPlace{
+			ID: p.SwiggyID, Name: p.Name, City: p.City,
+			ETA: p.ETA, Rating: p.Rating, Description: p.Description, Offer: p.Offer,
+		})
+	}
+	localstore.SaveCachedPlaces(m.addr.ID, query, cached)
+}
+
+// startMenuLoad begins a fresh progressive menu stream for the restaurant the
+// user just opened. When the disk cache has a copy, the full cached menu
+// paints instantly and the live stream fills the snapshot's STAGING area,
+// promoted atomically at Done (the visible menu never shrinks mid-refresh).
+// Without a cache hit, pages render progressively as they land. Bumping
+// menuGen kills any previous stream's chain.
+func (m *Model) startMenuLoad(swiggyID string) tea.Cmd {
+	m.menuGen++
+	m.menuPartial = false
+	m.menuLoadingMore = true
+	m.menuStaged = false
+	if cached, ok := localstore.LoadCachedMenu(swiggyID); ok {
+		items := make([]catalog.Item, 0, len(cached))
+		for _, it := range cached {
+			items = append(items, catalog.Item{
+				ID: it.ID, SwiggyID: it.ID, Name: it.Name, Price: it.Price,
+				Veg: it.Veg, Desc: it.Desc, Rating: it.Rating,
+				Customizable: it.Customizable, Category: it.Category,
+				OutOfStock: it.OutOfStock,
+			})
+		}
+		m.snap.SetMenu(catalog.Place{ID: swiggyID, SwiggyID: swiggyID, Items: items})
+		m.menuStaged = true
+		m.applyMenuFromRepo(swiggyID) // instant paint from disk
+	} else {
+		m.rest = m.rest.WithLoading(true, false)
+	}
+	return datasource.LoadMenuPage(m.backend, m.snap, m.addr.ID, swiggyID, 1, m.menuGen, m.menuStaged)
+}
+
+// applyMenuFromRepo rebuilds the restaurant screen from the snapshot's menu
+// for placeID, preserving the identity fields and cursor/filter state of the
+// screen the user is on. The menu place carries only Items; its descriptive
+// fields come back empty, so identity is re-stamped from the previous screen
+// (without the Name, cartRestaurant stays "" and the live cart sync never
+// fires).
+func (m *Model) applyMenuFromRepo(placeID string) {
+	p, ok := m.repo.Menu(placeID)
+	if !ok {
+		m.rest = m.rest.WithLoading(m.menuLoadingMore, m.menuPartial)
+		return
+	}
+	prev := m.rest.PlaceData()
+	p.Name = prev.Name
+	p.ID = prev.ID
+	p.SwiggyID = prev.SwiggyID
+	p.Section = prev.Section
+	p.City = prev.City
+	p.ETA = prev.ETA
+	p.Rating = prev.Rating
+	p.Description = prev.Description
+	ci := m.rest.CursorIndex()
+	info := m.rest.InfoOpen()
+	cat := m.rest.ActiveCategory()
+	veg := m.rest.VegOnly()
+	m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).
+		WithAddr(m.addr).WithInfo(info).
+		WithCategory(cat).WithVegOnly(veg).WithCursor(ci).
+		WithLoading(m.menuLoadingMore, m.menuPartial)
+}
+
+// saveMenuCache persists the completed menu for placeID (a few KB —
+// synchronous keeps it race-free with tests/exit).
+func (m Model) saveMenuCache(placeID string) {
+	p, ok := m.repo.Menu(placeID)
+	if !ok || len(p.Items) == 0 {
+		return
+	}
+	cached := make([]localstore.CachedMenuItem, 0, len(p.Items))
+	for _, it := range p.Items {
+		cached = append(cached, localstore.CachedMenuItem{
+			ID: it.SwiggyID, Name: it.Name, Price: it.Price,
+			Veg: it.Veg, Desc: it.Desc, Rating: it.Rating,
+			Customizable: it.Customizable, Category: it.Category,
+			OutOfStock: it.OutOfStock,
+		})
+	}
+	localstore.SaveCachedMenu(placeID, cached)
 }
 
 // searchLoad fires an ad-free global search for query, cached under the search
@@ -490,8 +655,9 @@ func (m *Model) loadForRail(rail screens.Rail) tea.Cmd {
 		if catIdx, isCat := rail.IsCategory(m.railActive); isCat && catIdx < len(m.chips) {
 			q := m.chips[catIdx].Query
 			cmd := m.ensureQuery(q)
-			// A non-nil cmd means results aren't cached yet — show "loading…".
-			m.catPending = cmd != nil
+			// Show "loading…" only when there's nothing on screen — a disk
+			// seed paints the cached list while the live refresh streams in.
+			m.catPending = cmd != nil && m.placesListEmpty(q)
 			m.catPendingQuery = q
 			return cmd
 		}
@@ -584,7 +750,9 @@ func (m *Model) ensureHomeLoaded() tea.Cmd {
 		cmds = append(cmds, datasource.LoadUsuals(m.backend, m.snap, m.addr.ID))
 	}
 	if c := m.ensureQuery(m.homeNearbyQuery()); c != nil {
-		m.homePending = true // "popular near you" is fetching
+		// Only show the loading label when there's nothing to paint — a disk
+		// seed already fills the list while the live refresh streams in.
+		m.homePending = m.placesListEmpty(m.homeNearbyQuery())
 		cmds = append(cmds, c)
 	}
 	if len(cmds) == 0 {
@@ -593,13 +761,28 @@ func (m *Model) ensureHomeLoaded() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// loadHomeForCurrentAddr fires the Home-load trio for the currently-adopted
-// address. It resets usualsLoaded so the new address's usuals are re-fetched,
-// then returns the batch of ensureHomeLoaded + PullCart + activeOrderCheckCmd.
-// Callers must have already set m.addr before calling.
+// loadHomeForCurrentAddr fires the Home loads for the currently-adopted
+// address, PRIORITIZED: the visible "popular near you" list gets the first
+// rate-limiter slots; usuals, the launch cart pull, and the active-order
+// check — none of which the user sees on first paint — are deferred until the
+// list's first page lands (flushed by the PlacesPageLoadedMsg handler). This
+// turns "blank list while five serialized calls queue" into "list in one
+// call's latency". Callers must have already set m.addr.
 func (m *Model) loadHomeForCurrentAddr() tea.Cmd {
-	m.usualsLoaded = false
-	return tea.Batch(m.ensureHomeLoaded(), datasource.PullCart(m.backend, m.addr.ID), m.activeOrderCheckCmd())
+	m.usualsLoaded = true // fired below (deferred or batched), never via ensureHomeLoaded
+	rest := []tea.Cmd{
+		datasource.LoadUsuals(m.backend, m.snap, m.addr.ID),
+		datasource.PullCart(m.backend, m.addr.ID),
+		m.activeOrderCheckCmd(),
+	}
+	first := m.ensureQuery(m.homeNearbyQuery())
+	if first == nil {
+		// List already live-cached — nothing to prioritize over.
+		return tea.Batch(rest...)
+	}
+	m.homePending = m.placesListEmpty(m.homeNearbyQuery())
+	m.deferredLaunch = rest
+	return first
 }
 
 // maybeOpenAddrGate opens the forced address gate when all conditions hold:
@@ -1705,14 +1888,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addr = addrs[0]
 		}
 		if m.live {
-			// Address just adopted → load Home (usuals + the popular list) for it,
-			// and pull the account cart once to detect a pre-existing foreign cart.
-			// Reset usualsLoaded so the new address's usuals are fetched.
-			m.usualsLoaded = false
-			// Also check for a live order now that we have an address — this is the
-			// "first time we enter the app" Start Screen check (the splash is the
-			// initial screen), surfacing the delivery-status button on launch.
-			return m, tea.Batch(m.ensureHomeLoaded(), datasource.PullCart(m.backend, m.addr.ID), m.activeOrderCheckCmd())
+			// Address just adopted → load Home for it: the visible list first,
+			// usuals + launch cart pull + active-order check deferred behind
+			// its first page (see loadHomeForCurrentAddr).
+			return m, m.loadHomeForCurrentAddr()
 		}
 		return m, nil
 	case datasource.PlacesLoadedMsg:
@@ -1732,6 +1911,89 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.menu = m.buildMenu()
 		return m, nil
+	case datasource.PlacesPageLoadedMsg:
+		if errIsNeedsAuth(dm.Err) {
+			m.needsAuth = true
+			return m, nil
+		}
+		// Whatever happened, release any deferred launch loads (usuals, cart
+		// pull, active-order check): the visible list either painted or
+		// failed, and holding the rest hostage helps nobody.
+		var cmds []tea.Cmd
+		if len(m.deferredLaunch) > 0 {
+			cmds = append(cmds, m.deferredLaunch...)
+			m.deferredLaunch = nil
+		}
+		if dm.Gen != m.placesGen {
+			return m, tea.Batch(cmds...) // dead stream — drop the page, chain dies
+		}
+		if m.catPending && dm.Query == m.catPendingQuery {
+			m.catPending = false
+		}
+		if m.homePending && dm.Query == m.homeNearbyQuery() {
+			m.homePending = false
+		}
+		if dm.Err == nil && dm.Page == 1 {
+			delete(m.seededQueries, dm.Query) // live data replaced the disk seed
+		}
+		m.menu = m.buildMenu()
+		if dm.Err != nil {
+			return m, tea.Batch(cmds...) // keep whatever pages already painted
+		}
+		// Continue the chain under the same cap as the old barrier loop
+		// (~12 restaurants / 2 pages) so streaming never increases call volume.
+		count := 0
+		if r := m.liveRepo(); r != nil {
+			count = len(r.PlacesByQuery(m.addr, dm.Query))
+		}
+		if !dm.Done && dm.Page < 2 && count < 12 {
+			cmds = append(cmds, datasource.LoadPlacesPage(m.backend, m.snap, m.addr.ID, dm.Query, dm.NextOffset, dm.Page+1, m.placesGen))
+		} else {
+			m.savePlacesCache(dm.Query) // list settled — persist for instant next launch
+		}
+		return m, tea.Batch(cmds...)
+	case datasource.MenuPageLoadedMsg:
+		if errIsNeedsAuth(dm.Err) {
+			m.needsAuth = true
+			return m, nil
+		}
+		if dm.Gen != m.menuGen {
+			return m, nil // dead stream (restarted load) — drop, chain dies
+		}
+		if m.screen != scrRestaurant {
+			// User left the restaurant — stop the stream. Discard any staged
+			// refresh so a later visit starts clean.
+			m.snap.DropStagedMenu(dm.PlaceID)
+			return m, nil
+		}
+		if cur := m.rest.PlaceData().SwiggyID; cur == "" || dm.PlaceID != cur {
+			m.snap.DropStagedMenu(dm.PlaceID)
+			return m, nil // different restaurant open — same stale-guard as MenuLoadedMsg
+		}
+		if dm.Err != nil {
+			// Partial menu beats none: keep the pages that landed, flag the gap.
+			// With a cache seed the full (stale) menu is on screen — also flag it.
+			m.menuLoadingMore = false
+			m.menuPartial = dm.Page > 1 || m.menuStaged
+			m.snap.DropStagedMenu(dm.PlaceID)
+			m.menuStaged = false
+			m.applyMenuFromRepo(dm.PlaceID)
+			return m, nil
+		}
+		if dm.Done {
+			m.menuLoadingMore = false
+			if m.menuStaged {
+				m.snap.PromoteStagedMenu(dm.PlaceID) // atomic swap: seed → fresh menu
+				m.menuStaged = false
+			}
+			m.applyMenuFromRepo(dm.PlaceID)
+			m.saveMenuCache(dm.PlaceID)
+			return m, nil
+		}
+		if !m.menuStaged {
+			m.applyMenuFromRepo(dm.PlaceID) // progressive paint, page by page
+		}
+		return m, datasource.LoadMenuPage(m.backend, m.snap, m.addr.ID, dm.PlaceID, dm.Page+1, m.menuGen, m.menuStaged)
 	case datasource.MenuLoadedMsg:
 		if errIsNeedsAuth(dm.Err) {
 			m.needsAuth = true
@@ -2821,7 +3083,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
 							m.screen = scrRestaurant
 							if p.SwiggyID != "" {
-								return m, datasource.LoadMenu(m.backend, m.snap, m.addr.ID, p.SwiggyID)
+								return m, m.startMenuLoad(p.SwiggyID)
 							}
 						}
 						return m, nil
@@ -2963,7 +3225,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.rest = screens.NewRestaurant(p, m.qtyMap(), m.cartChip()).WithAddr(m.addr)
 						m.screen = scrRestaurant
 						if p.SwiggyID != "" {
-							return m, datasource.LoadMenu(m.backend, m.snap, m.addr.ID, p.SwiggyID)
+							return m, m.startMenuLoad(p.SwiggyID)
 						}
 					}
 					return m, nil
