@@ -21,25 +21,29 @@ after an explicit user "yes" — see the two-step gate.
   don't build a cart.
 - Unsure which? Ask. Never place an order the user didn't clearly ask to place.
 
-## First: make sure you can act
+## First: one call gets you everything
 
-1. `auth_status`. If `signed_in` is false → `sign_in`, show the `authorize_url`,
-   poll `auth_status` until `signed_in: true`.
-2. `get_card` — the one read for who/where/preferences. Returns
-   `address:{default,last}`, `favorites`, `policies`, `taste[]`, `suggestions[]`,
-   and `warnings[]`. Call it once per conversation up front; re-call if the cart
-   or address context changes mid-conversation.
+1. `auth_status`. When `signed_in` is true it **also returns `card`** — the opening
+   snapshot: `card.address:{default,last}`, `favorites`, `policies`, `taste[]`,
+   `suggestions[]`, plus `warnings[]`. That single call answers who + where + what
+   they like — **do NOT also call `get_card` to start an order.**
+2. If `signed_in` is false → `sign_in`, show the `authorize_url`, poll `auth_status`
+   until `signed_in: true` (the successful poll carries the `card`).
+3. `get_card` still exists for a later "what do you remember about me" read, or to
+   re-check after the cart/address context changed mid-conversation.
 
 ## Choosing the address — silent by default
 
-- `address.default` set → use it, don't ask, don't mention it.
-- No default but `address.last` set → use that, silently.
+Use the address already in the `card` from `auth_status` — no extra call:
+
+- `card.address.default` set → use it, don't ask, don't mention it.
+- No default but `card.address.last` set → use that, silently.
 - Both absent, or the user asks to change it → `list_addresses`: one address →
   use it; several → ask which; none → tell the user to add one in the Swiggy app.
   This is the only case where `list_addresses` is normally needed.
 - Never invent an address id. Never narrate the address mechanic — just proceed.
-- Surface `warnings` from `get_card` plainly (e.g. a saved default deleted on
-  Swiggy) before relying on that address.
+- Surface `warnings` (from `auth_status`/`get_card`) plainly (e.g. a saved default
+  deleted on Swiggy) before relying on that address.
 
 ## Finding the food
 
@@ -88,21 +92,42 @@ after an explicit user "yes" — see the two-step gate.
   just act. Only surface what actually matters to the user: the cart contents and
   the bill.
 
-## Reading the bill
+## Reading & presenting the bill
 
-The bill has `item_total`, `delivery`, `taxes`, and a to-pay/total. A coupon or
-offer can make these **not add up**, and a line's price can differ from
-`item_total` — that is normal, not an error. **The to-pay/total is what the user
-is charged; present that as the authoritative amount.** Never invent a reason for a
-mismatch and never hide it — if a number looks wrong, say so and offer to re-check
-rather than guess.
+The bill has `lines` (each with name, quantity, price), `item_total`, `delivery`,
+`taxes`, and a to-pay/`total`. A coupon or offer can make these **not add up**, and
+a line's price can differ from `item_total` — that is normal, not an error.
+**The to-pay/`total` is what the user is charged; present that as the authoritative
+amount.** Never invent a reason for a mismatch and never hide it — if a number looks
+wrong, say so and offer to re-check rather than guess.
+
+**Always show the bill as a clear itemized breakdown, with the delivery address.**
+`prepare_order`/`order_preset` return `address` alongside `bill` — show it. Never
+present just a single total. Use a layout like:
+
+```
+Blue Tokai Coffee Roasters
+Delivering to: Home
+
+  1 × Vietnamese Style Iced Coffee   ₹275
+  (oat milk, your usual)
+
+  Item total                         ₹260
+  Delivery                            ₹46
+  Taxes                               ₹65
+  ─────────────────────────────────
+  To pay                             ₹371
+```
+
+Fold the one-line memory-transparency note into the relevant line (as above), so a
+silently-wrong assumption is catchable. Then ask for confirmation.
 
 ## Placing the order (two steps, always)
 
-1. `prepare_order` with the address id → the real bill + a `confirmation_id`. Show
-   the bill (to-pay authoritative) with a **one-line transparency note** naming
-   anything memory did — e.g. "oat milk latte to Home, your usual" — so a silently
-   wrong assumption is catchable right there. Ask the user to confirm.
+1. `prepare_order` with the address id → the real `bill`, the delivery `address`,
+   and a `confirmation_id`. Present the **itemized breakdown + delivery address**
+   (see "Reading & presenting the bill"), to-pay authoritative, with the one-line
+   memory-transparency note. Ask the user to confirm.
 2. Only after a clear "yes" (a plain affirmative — if the reply is hedged, ask
    again) → `place_order` with that `confirmation_id`. If the cart changed since
    `prepare_order`, the call is refused — re-run `prepare_order` and re-confirm the

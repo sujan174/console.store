@@ -151,7 +151,7 @@ func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "place_order", Description: "place the order for a confirmation_id from prepare_order (real, charges COD; never call without user confirmation)"}, s.handlePlaceOrder)
 	addTool(srv, &mcp.Tool{Name: "order_preset", Description: "load a saved preset into the cart and return a bill + confirmation_id (does NOT place)"}, s.handleOrderPreset)
 	addTool(srv, &mcp.Tool{Name: "sign_in", Description: "start Swiggy sign-in; returns a browser URL (opened automatically when possible)"}, s.handleSignIn)
-	addTool(srv, &mcp.Tool{Name: "auth_status", Description: "whether the user is signed in"}, s.handleAuthStatus)
+	addTool(srv, &mcp.Tool{Name: "auth_status", Description: "whether the user is signed in — and, when signed in, the opening card snapshot (default/last address, favorites, taste, suggestions, policies) so no separate get_card is needed to start"}, s.handleAuthStatus)
 	addTool(srv, &mcp.Tool{Name: "get_card", Description: "the user's saved personalization: default/last address, favorite restaurants, policies, per-item tastes, and pending suggestions"}, s.handleGetCard)
 	addTool(srv, &mcp.Tool{Name: "remember", Description: "save an explicit preference — a per-restaurant-item taste, a cross-restaurant policy, or the default address; or confirm a suggestion"}, s.handleRemember)
 	addTool(srv, &mcp.Tool{Name: "forget", Description: "remove a saved taste or policy"}, s.handleForget)

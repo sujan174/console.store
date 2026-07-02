@@ -104,20 +104,18 @@ type GetCardOut struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
-func (s *Server) handleGetCard(ctx context.Context, _ *mcp.CallToolRequest, _ GetCardIn) (*mcp.CallToolResult, GetCardOut, error) {
-	if err := s.requireAuth(ctx); err != nil {
-		return nil, GetCardOut{}, err
-	}
+// cardSnapshot loads the card + taste, reconciles against live addresses (caching
+// them and persisting any healing), and returns the agent-facing DTO plus any
+// staleness warnings. Best-effort: a load error degrades to a partial/empty card
+// rather than failing the caller. Shared by get_card and auth_status (the latter
+// embeds it so the agent gets auth + card in a single opening call).
+func (s *Server) cardSnapshot() (CardDTO, []string) {
 	c, err := localstore.LoadCard()
 	if err != nil {
-		return nil, GetCardOut{}, err
+		return cardToDTO(localstore.Card{}, localstore.Taste{}), nil
 	}
-	t, err := localstore.LoadTaste()
-	if err != nil {
-		return nil, GetCardOut{}, err
-	}
+	t, _ := localstore.LoadTaste()
 	var warns []string
-	// Reconcile against live addresses; persist any healing (+ cache) so it sticks.
 	if addrs, aerr := s.be.Addresses(); aerr == nil {
 		_ = localstore.CacheAddresses(addrs, nowUnix())
 		healed, w := localstore.ReconcileCard(c, addrs)
@@ -128,7 +126,15 @@ func (s *Server) handleGetCard(ctx context.Context, _ *mcp.CallToolRequest, _ Ge
 		}
 		c = healed
 	}
-	return nil, GetCardOut{Card: cardToDTO(c, t), Warnings: warns}, nil
+	return cardToDTO(c, t), warns
+}
+
+func (s *Server) handleGetCard(ctx context.Context, _ *mcp.CallToolRequest, _ GetCardIn) (*mcp.CallToolResult, GetCardOut, error) {
+	if err := s.requireAuth(ctx); err != nil {
+		return nil, GetCardOut{}, err
+	}
+	card, warns := s.cardSnapshot()
+	return nil, GetCardOut{Card: card, Warnings: warns}, nil
 }
 
 // --- remember ---

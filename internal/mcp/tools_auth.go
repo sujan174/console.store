@@ -8,11 +8,23 @@ import (
 
 type AuthStatusIn struct{}
 type AuthStatusOut struct {
-	SignedIn bool `json:"signed_in"`
+	SignedIn bool     `json:"signed_in"`
+	Card     *CardDTO `json:"card,omitempty"`     // present only when signed_in — the opening snapshot (address, favorites, taste, suggestions, policies) so the agent needn't call get_card too
+	Warnings []string `json:"warnings,omitempty"` // e.g. a saved default address deleted on Swiggy
 }
 
 func (s *Server) handleAuthStatus(ctx context.Context, _ *mcp.CallToolRequest, _ AuthStatusIn) (*mcp.CallToolResult, AuthStatusOut, error) {
-	return nil, AuthStatusOut{SignedIn: s.auth != nil && s.auth.TokenPresent(ctx)}, nil
+	signedIn := s.auth != nil && s.auth.TokenPresent(ctx)
+	out := AuthStatusOut{SignedIn: signedIn}
+	// Only when signed in: fold the card in so the very first call answers both
+	// "can I act?" and "where/what do they like?". While polling during sign-in
+	// (not signed in) this stays a cheap token check with no backend call.
+	if signedIn {
+		card, warns := s.cardSnapshot()
+		out.Card = &card
+		out.Warnings = warns
+	}
+	return nil, out, nil
 }
 
 type SignInIn struct{}

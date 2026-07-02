@@ -23,6 +23,32 @@ func TestGetCardReconcilesWarnings(t *testing.T) {
 	}
 }
 
+// auth_status must fold in the card when signed in (one opening call), and must
+// stay a bare token check — no card, no backend call — when signed out.
+func TestAuthStatusFoldsCardWhenSignedIn(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	_ = localstore.SaveCard(localstore.Card{Version: 1, DefaultAddrID: "a1", AddrLabel: "Home"})
+	be := &fakeBackend{addrs: []api.Address{{ID: "a1", Label: "Home"}}}
+
+	s := NewServer(be, &fakeAuth{token: true})
+	_, out, err := s.handleAuthStatus(context.Background(), nil, AuthStatusIn{})
+	if err != nil {
+		t.Fatalf("auth_status: %v", err)
+	}
+	if !out.SignedIn || out.Card == nil {
+		t.Fatalf("signed-in auth_status must carry a card: %+v", out)
+	}
+	if out.Card.Address.Default.ID != "a1" || out.Card.Address.Default.Label != "Home" {
+		t.Fatalf("card address = %+v", out.Card.Address)
+	}
+
+	sOut := NewServer(be, &fakeAuth{token: false})
+	_, out2, _ := sOut.handleAuthStatus(context.Background(), nil, AuthStatusIn{})
+	if out2.SignedIn || out2.Card != nil {
+		t.Fatalf("signed-out auth_status must be bare: %+v", out2)
+	}
+}
+
 func TestRememberSetsDefaultAddressAndPolicy(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	s := NewServer(&fakeBackend{addrs: []api.Address{{ID: "a9", Label: "Home"}}}, &fakeAuth{token: true})

@@ -33,9 +33,10 @@ type PrepareOrderIn struct {
 	AddressID string `json:"address_id"`
 }
 type PrepareOrderOut struct {
-	ConfirmationID string  `json:"confirmation_id"`
-	Bill           CartDTO `json:"bill"`
-	Note           string  `json:"note"`
+	ConfirmationID string     `json:"confirmation_id"`
+	Bill           CartDTO    `json:"bill"`
+	Address        AddrRefDTO `json:"address"` // where this order delivers — show it with the bill
+	Note           string     `json:"note"`
 }
 
 func (s *Server) handlePrepareOrder(ctx context.Context, _ *mcp.CallToolRequest, in PrepareOrderIn) (*mcp.CallToolResult, PrepareOrderOut, error) {
@@ -52,9 +53,11 @@ func (s *Server) handlePrepareOrder(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return nil, PrepareOrderOut{}, err
 	}
+	card, _ := localstore.LoadCard()
 	return nil, PrepareOrderOut{
 		ConfirmationID: id, Bill: bill,
-		Note: "show this bill to the user; call place_order with this confirmation_id ONLY after they confirm.",
+		Address: AddrRefDTO{ID: in.AddressID, Label: addrLabelFor(card, in.AddressID)},
+		Note:    "show the user the full bill breakdown AND the delivery address; call place_order with this confirmation_id ONLY after they confirm.",
 	}, nil
 }
 
@@ -121,9 +124,10 @@ type OrderPresetIn struct {
 	Index int    `json:"index,omitempty" jsonschema:"0-based pick among presets sharing a name; default 0"`
 }
 type OrderPresetOut struct {
-	ConfirmationID string  `json:"confirmation_id"`
-	Bill           CartDTO `json:"bill"`
-	Note           string  `json:"note"`
+	ConfirmationID string     `json:"confirmation_id"`
+	Bill           CartDTO    `json:"bill"`
+	Address        AddrRefDTO `json:"address"` // where this order delivers — show it with the bill
+	Note           string     `json:"note"`
 }
 
 func (s *Server) handleOrderPreset(ctx context.Context, _ *mcp.CallToolRequest, in OrderPresetIn) (*mcp.CallToolResult, OrderPresetOut, error) {
@@ -155,7 +159,8 @@ func (s *Server) handleOrderPreset(ctx context.Context, _ *mcp.CallToolRequest, 
 		return nil, OrderPresetOut{}, err
 	}
 	return nil, OrderPresetOut{ConfirmationID: id, Bill: bill,
-		Note: "show this bill; call place_order with this confirmation_id ONLY after the user confirms."}, nil
+		Address: AddrRefDTO{ID: p.AddrID, Label: p.AddrLine},
+		Note:    "show the user the full bill breakdown AND the delivery address; call place_order with this confirmation_id ONLY after they confirm."}, nil
 }
 
 // cartWriteFromPreset projects a preset into a cartWrite for the memory
