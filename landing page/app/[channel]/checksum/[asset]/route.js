@@ -1,4 +1,4 @@
-import { latestTag, ghAssetURL, checkAlphaCode } from "../../../_lib/channels.js";
+import { latestTag, fetchSignedManifest, checkAlphaCode } from "../../../_lib/channels.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,11 +21,9 @@ export async function GET(req, { params }) {
   const tag = await latestTag(channel);
   if (!tag) return new Response("no release", { status: 404 });
 
-  const res = await fetch(ghAssetURL(tag, "console-manifest.json"), {
-    headers: { "User-Agent": "consolestore-landing" },
-  });
-  if (!res.ok) return new Response("manifest missing", { status: 502 });
-  const env = await res.json();
+  const body = await fetchSignedManifest(tag);
+  if (body === null) return new Response("manifest missing", { status: 502 });
+  const env = JSON.parse(body);
   const payload = JSON.parse(Buffer.from(env.payload, "base64").toString("utf8"));
   // asset name → asset key: strip "store_" prefix and ".exe" suffix.
   const key = asset.replace(/^store_/, "").replace(/\.exe$/, "");

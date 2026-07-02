@@ -4,6 +4,31 @@ export function ghAssetURL(tag, asset) {
   return `https://github.com/${GITHUB_REPO}/releases/download/${tag}/${asset}`;
 }
 
+// fetchSignedManifest returns a release's signed manifest envelope (JSON text),
+// or null on failure. Both the manifest and checksum endpoints need it, and it
+// was previously fetched from GitHub on EVERY request, uncached — that ~3s
+// round-trip dominated their server-side latency (p50 ≈ 2.9s) and made installs
+// and update-checks sluggish, worst for high-latency clients. Cache it 10 min
+// (keyed by URL, which includes the tag, so a new release still fetches fresh)
+// and bound it with a timeout so a stalled GitHub fetch can't hang the request.
+export async function fetchSignedManifest(tag) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(ghAssetURL(tag, "console-manifest.json"), {
+      headers: { "User-Agent": "consolestore-landing" },
+      signal: ctrl.signal,
+      next: { revalidate: 600 },
+    });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // channelMatches reports whether a tag belongs to a channel. stable = no
 // -alpha/-beta suffix; beta/alpha = the matching prerelease suffix.
 export function channelMatches(tag, channel) {

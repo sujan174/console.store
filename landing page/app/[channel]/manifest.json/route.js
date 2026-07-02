@@ -1,4 +1,4 @@
-import { latestTag, ghAssetURL, checkAlphaCode, logAlphaGrant } from "../../_lib/channels.js";
+import { latestTag, fetchSignedManifest, checkAlphaCode, logAlphaGrant } from "../../_lib/channels.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,12 +23,9 @@ export async function GET(req, { params }) {
   if (!tag) return new Response("no release for channel", { status: 404 });
 
   // The signed envelope is a release asset; pass it through verbatim so the
-  // ed25519 signature stays valid.
-  const upstream = await fetch(ghAssetURL(tag, "console-manifest.json"), {
-    headers: { "User-Agent": "consolestore-landing" },
-  });
-  if (!upstream.ok) return new Response("manifest missing", { status: 502 });
-  const body = await upstream.text();
+  // ed25519 signature stays valid. Cached + timeout-bounded (see helper).
+  const body = await fetchSignedManifest(tag);
+  if (body === null) return new Response("manifest missing", { status: 502 });
 
   if (channel === "alpha") {
     logAlphaGrant({
