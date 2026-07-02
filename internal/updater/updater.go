@@ -18,7 +18,15 @@ import (
 const defaultBase = "https://consolestore.in"
 
 const (
-	manifestTimeout = 1500 * time.Millisecond
+	// manifestTimeout bounds the launch-time update check so a slow/unreachable
+	// server can't hang startup — but it must clear real-world latency or the
+	// update silently never happens. 1.5s was too tight: a high-latency client
+	// (e.g. India → the SFO-hosted endpoint) hitting a cold server cache that
+	// makes a live GitHub API call measured ~3.4s and bailed every launch, while
+	// nearer/warm-cache clients slipped under and updated fine. 6s covers that
+	// with margin; the check still returns silently on timeout and the app
+	// continues on the current binary.
+	manifestTimeout = 6 * time.Second
 	downloadTimeout = 10 * time.Minute
 )
 
