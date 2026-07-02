@@ -72,6 +72,8 @@ func Dispatch(args []string, d Deps) int {
 		return requireAuth(d, func() int { return runOrder(d, args[1], idx) })
 	case "logout", "disconnect", "signout":
 		return runLogout(d)
+	case "uninstall":
+		return runUninstall(d, args[1:])
 	case "whoami", "account":
 		return runWhoami(d)
 	case "alias":

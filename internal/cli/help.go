@@ -17,6 +17,7 @@ usage:
   console alias rm <name> [n]   remove preset <name> (the nth, if several share it)
   store whoami                show connection + saved addresses
   store logout                disconnect your Swiggy account
+  console uninstall             remove consolestore + all data (--yes to skip confirm)
   console version               print version + channel
   console update [--channel stable|beta|alpha [--code X]]
                               switch channel, or check for updates now
