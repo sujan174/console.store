@@ -38,7 +38,7 @@ func TestSplashSettingsDisconnectReauths(t *testing.T) {
 		t.Fatal("disconnect should fire a Logout command")
 	}
 
-	out, _ = m.Update(cmd()) // run Logout → LoggedOutMsg, feed back
+	out, reauthCmd := m.Update(cmd()) // run Logout → LoggedOutMsg, feed back
 	m = out.(Model)
 	if !m.needsAuth {
 		t.Fatal("after disconnect the app should re-enter the auth gate")
@@ -46,7 +46,9 @@ func TestSplashSettingsDisconnectReauths(t *testing.T) {
 	if m.authorizeURL != "https://authz/y" {
 		t.Fatalf("re-auth authorize URL = %q, want https://authz/y", m.authorizeURL)
 	}
-	if m.authAutoOpen {
+	// Re-auth must NOT auto-open the browser — the gate waits for an explicit
+	// Enter. The re-auth path returns no command at all.
+	if reauthCmd != nil {
 		t.Fatal("logout re-auth must NOT auto-open the browser (force Enter)")
 	}
 }

@@ -36,10 +36,12 @@ func WithSeededSnapshot() Option {
 
 // WithPendingAuth starts the session on the authorize gate. main.go sets this on
 // first run when no token is present yet: there is no account to scope live loads
-// to, so we show the authorize URL immediately instead of firing loads against an
-// empty account id.
+// to, so we show the connect gate instead of firing loads against an empty
+// account id. The browser is never auto-opened — the user connects by pressing
+// Enter on the "connect swiggy" button (and, on first run, only after the welcome
+// walkthrough).
 func WithPendingAuth() Option {
-	return func(m *Model) { m.needsAuth = true; m.authAutoOpen = true }
+	return func(m *Model) { m.needsAuth = true }
 }
 
 // AuthClient drives the loopback authorize flow from inside the TUI: it reports

@@ -226,7 +226,6 @@ type Model struct {
 	needsAuth    bool       // set when a load returns datasource.ErrNeedsAuth
 	authFlowID   string     // authorize flow id (native gate poll)
 	authClient   AuthClient // polls callback completion + starts re-auth; nil on the mock path
-	authAutoOpen bool       // first-run gate auto-opens the browser; logout gate waits for Enter
 	seeded       bool       // true when catalog/swiggy.Snapshot was pre-seeded from config; skips live init loads
 
 	placingOrder bool     // true while PlaceOrderCmd is in-flight; blocks double-fire
@@ -1632,9 +1631,8 @@ func (m Model) Init() tea.Cmd {
 	if c := m.liveInitCmds(); c != nil {
 		cmds = append(cmds, c)
 	}
-	if m.needsAuth && m.authAutoOpen && m.authorizeURL != "" {
-		cmds = append(cmds, openBrowserCmd(m.authorizeURL))
-	}
+	// The browser is never auto-opened: the user connects by pressing Enter on the
+	// "connect swiggy" gate (on first run, only after the welcome walkthrough).
 	// In live mode with a valid address, check active orders to refresh liveness.
 	if m.live && m.hasActiveOrder && m.backend != nil && m.addr.ID != "" {
 		cmds = append(cmds, datasource.LoadActiveOrdersCmd(m.backend, m.addr.ID))
@@ -2306,10 +2304,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.liveCart = api.Cart{}
 		m.cartLoaded = false
 		m.screen = scrSplash
-		// Do NOT auto-open the browser here: if the user is still logged into
-		// Swiggy, an auto-open silently re-consents instantly and the disconnect
-		// is pointless. Require an explicit Enter to reconnect.
-		m.authAutoOpen = false
+		// The browser is never auto-opened on the gate — the user reconnects by
+		// pressing Enter. (If still logged into Swiggy, an auto-open would silently
+		// re-consent and make the disconnect pointless.)
 		if m.authClient != nil {
 			fid, url, err := m.authClient.StartAuth(m.accountID)
 			if err == nil {
@@ -2609,8 +2606,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Authorize gate captures all keys until the user retries or quits.
-		if m.needsAuth {
+		// Authorize gate captures all keys until the user retries or quits — but
+		// not during the first-run welcome walkthrough, which owns the screen until
+		// it hands off to the connect gate.
+		if m.needsAuth && m.screen != scrWelcome {
 			switch k.String() {
 			case "enter":
 				return m, openBrowserCmd(m.authorizeURL)
@@ -3668,7 +3667,10 @@ func (m Model) helpTriggerable() bool {
 }
 
 func (m Model) View() string {
-	if m.needsAuth {
+	// The connect gate is the start screen once the welcome walkthrough is done;
+	// while scrWelcome is active it owns the viewport (its View branch is below),
+	// so the gate must not pre-empt it here.
+	if m.needsAuth && m.screen != scrWelcome {
 		// The login gate IS the start screen — same boot banner, but the home menu
 		// is a single "connect swiggy" button (↵ opens the browser to authorize).
 		gate := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSplashTick(m.splashTick).
