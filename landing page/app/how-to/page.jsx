@@ -1,3 +1,5 @@
+import GuidedTour from "./GuidedTour";
+
 export const metadata = {
   title: "how to use consolestore — install, order, reorder",
   description:
@@ -137,7 +139,7 @@ function TermMock({ title, lines, accent = "#93a8ff", width }) {
         </span>
         <span
           style={{
-            fontSize: "11px",
+            fontSize: "12px",
             color: "#565b80",
             letterSpacing: ".2px",
             marginLeft: "4px"
@@ -152,7 +154,7 @@ function TermMock({ title, lines, accent = "#93a8ff", width }) {
           padding: "16px 18px",
           fontFamily:
             "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace",
-          fontSize: "12.5px",
+          fontSize: "14px",
           lineHeight: 1.85,
           whiteSpace: "pre-wrap",
           wordBreak: "break-word"
@@ -220,7 +222,7 @@ function KeyRow({ keys, desc, accent }) {
               display: "inline-block",
               fontFamily:
                 "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace",
-              fontSize: "11.5px",
+              fontSize: "12.5px",
               color: accent,
               background: "#0a0a12",
               border: `1px solid ${hexA(accent, 0.3)}`,
@@ -233,7 +235,7 @@ function KeyRow({ keys, desc, accent }) {
           </kbd>
         ))}
       </div>
-      <span style={{ fontSize: "13px", color: "#8a8fb4", lineHeight: 1.6 }}>{desc}</span>
+      <span style={{ fontSize: "14px", color: "#8a8fb4", lineHeight: 1.6 }}>{desc}</span>
     </div>
   );
 }
@@ -245,7 +247,7 @@ function SectionHeader({ kicker, glyph, title, sub, accent }) {
     <div className="howto-section-hdr" style={{ marginBottom: "34px" }}>
       <div
         style={{
-          fontSize: "11px",
+          fontSize: "12px",
           letterSpacing: "2px",
           color: accent,
           marginBottom: "10px"
@@ -288,7 +290,7 @@ function SectionHeader({ kicker, glyph, title, sub, accent }) {
           style={{
             maxWidth: "56ch",
             margin: 0,
-            fontSize: "13.5px",
+            fontSize: "15px",
             color: "#8a8fb4",
             lineHeight: 1.7
           }}
@@ -314,7 +316,7 @@ function Step({ n, children, accent }) {
           border: `1px solid ${hexA(accent, 0.3)}`,
           background: "rgba(0,0,0,.25)",
           color: accent,
-          fontSize: "11.5px",
+          fontSize: "12px",
           fontWeight: 700,
           display: "flex",
           alignItems: "center",
@@ -323,7 +325,7 @@ function Step({ n, children, accent }) {
       >
         {n}
       </span>
-      <p style={{ margin: 0, fontSize: "13.5px", color: "#8a8fb4", lineHeight: 1.75, paddingTop: "3px" }}>
+      <p style={{ margin: 0, fontSize: "15px", color: "#8a8fb4", lineHeight: 1.75, paddingTop: "3px" }}>
         {children}
       </p>
     </div>
@@ -337,7 +339,7 @@ export default function HowToPage() {
     <>
       <style>{`
         html { scroll-behavior: smooth; }
-        #install, #app, #alias, #cli, #agent {
+        #install, #app, #controls, #alias, #cli, #agent {
           scroll-margin-top: 84px;
         }
 
@@ -520,7 +522,7 @@ export default function HowToPage() {
               display: "flex",
               alignItems: "center",
               gap: "26px",
-              fontSize: "12.5px",
+              fontSize: "13px",
               color: "#565b80"
             }}
           >
@@ -554,7 +556,7 @@ export default function HowToPage() {
           <div
             className="howto-section-hdr"
             style={{
-              fontSize: "11px",
+              fontSize: "12px",
               letterSpacing: "2px",
               color: "#93a8ff",
               textTransform: "lowercase",
@@ -584,7 +586,7 @@ export default function HowToPage() {
             style={{
               maxWidth: "58ch",
               margin: "0 auto",
-              fontSize: "14.5px",
+              fontSize: "16px",
               color: "#8a8fb4",
               lineHeight: 1.75
             }}
@@ -626,7 +628,7 @@ export default function HowToPage() {
                 className="howto-chip"
                 style={{
                   display: "inline-block",
-                  fontSize: "12.5px",
+                  fontSize: "13px",
                   color: "#8a8fb4",
                   border: "1px solid rgba(147,168,255,.16)",
                   borderRadius: "99px",
@@ -773,10 +775,11 @@ export default function HowToPage() {
           </div>
 
           {/* keymap */}
-          <div style={{ marginBottom: "10px", fontSize: "11px", letterSpacing: "1.5px", color: "#565b80", textTransform: "uppercase" }}>
+          <div style={{ marginBottom: "10px", fontSize: "12px", letterSpacing: "1.5px", color: "#565b80", textTransform: "uppercase" }}>
             keymap
           </div>
           <div
+            id="controls"
             className="howto-grid-2"
             style={{
               display: "grid",
@@ -788,7 +791,7 @@ export default function HowToPage() {
               <div key={group.title}>
                 <div
                   style={{
-                    fontSize: "13px",
+                    fontSize: "14px",
                     fontWeight: 700,
                     color: "#e9ebf7",
                     marginBottom: "4px"
@@ -855,7 +858,7 @@ export default function HowToPage() {
             />
           </div>
 
-          <p style={{ maxWidth: "62ch", fontSize: "13.5px", color: "#8a8fb4", lineHeight: 1.75, marginBottom: "28px" }}>
+          <p style={{ maxWidth: "62ch", fontSize: "15px", color: "#8a8fb4", lineHeight: 1.75, marginBottom: "28px" }}>
             A preset is bound to the restaurant and delivery address it was saved
             with, so <code style={{ color: "#e9ebf7" }}>console order usual-dinner</code>{" "}
             always reorders exactly what you snapshotted.
@@ -923,13 +926,13 @@ export default function HowToPage() {
                     maxWidth: "100%",
                     fontFamily:
                       "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace",
-                    fontSize: "12.5px",
+                    fontSize: "14px",
                     color: "#93a8ff"
                   }}
                 >
                   {row.cmd}
                 </code>
-                <span style={{ fontSize: "13px", color: "#8a8fb4", lineHeight: 1.6, flex: "1 1 260px" }}>
+                <span style={{ fontSize: "15px", color: "#8a8fb4", lineHeight: 1.6, flex: "1 1 260px" }}>
                   {row.desc}
                 </span>
               </div>
@@ -998,7 +1001,7 @@ export default function HowToPage() {
             />
           </div>
 
-          <p style={{ maxWidth: "62ch", fontSize: "13.5px", color: "#8a8fb4", lineHeight: 1.75, marginBottom: "22px" }}>
+          <p style={{ maxWidth: "62ch", fontSize: "15px", color: "#8a8fb4", lineHeight: 1.75, marginBottom: "22px" }}>
             It auto-detects Claude Desktop &amp; Code, Cursor, Windsurf, Zed, VS
             Code, Codex, and Hermes, and wires in the MCP server + skills. It
             re-runs itself on update, so your agents stay current.
@@ -1017,7 +1020,7 @@ export default function HowToPage() {
             />
           </div>
 
-          <p style={{ maxWidth: "62ch", fontSize: "13.5px", color: "#8a8fb4", lineHeight: 1.75, margin: 0 }}>
+          <p style={{ maxWidth: "62ch", fontSize: "15px", color: "#8a8fb4", lineHeight: 1.75, margin: 0 }}>
             See the full agent tool list on the{" "}
             <a href="/features" className="lnk" style={{ color: "#b08cf5" }}>
               features page
@@ -1086,7 +1089,7 @@ export default function HowToPage() {
                     store
                   </span>
                 </div>
-                <div style={{ fontSize: "13px", color: "#565b80", marginBottom: "20px" }}>
+                <div style={{ fontSize: "15px", color: "#565b80", marginBottom: "20px" }}>
                   <span style={{ color: "#3a3d5c" }}>&gt;</span> see you in the shell{" "}
                   <span
                     style={{
@@ -1109,7 +1112,7 @@ export default function HowToPage() {
                     borderRadius: "8px",
                     background: "#0a0a12",
                     padding: "12px 16px",
-                    fontSize: "12.5px",
+                    fontSize: "13px",
                     marginBottom: "16px",
                     flexWrap: "wrap"
                   }}
@@ -1120,7 +1123,7 @@ export default function HowToPage() {
                   </span>
                   <span
                     style={{
-                      fontSize: "10px",
+                      fontSize: "11px",
                       letterSpacing: "1.2px",
                       textTransform: "uppercase",
                       color: "#7fe0ff",
@@ -1133,7 +1136,7 @@ export default function HowToPage() {
                     beta
                   </span>
                 </div>
-                <div style={{ fontSize: "11.5px", color: "#2d2f48" }}>
+                <div style={{ fontSize: "12px", color: "#2d2f48" }}>
                   // not affiliated with swiggy. preview build, no warranty, no real orders on
                   this page.
                 </div>
@@ -1144,7 +1147,7 @@ export default function HowToPage() {
                 style={{
                   display: "flex",
                   gap: "40px",
-                  fontSize: "12.5px",
+                  fontSize: "13px",
                   color: "#8a8fb4",
                   flexWrap: "wrap"
                 }}
@@ -1154,7 +1157,7 @@ export default function HowToPage() {
                   <span
                     style={{
                       color: "#565b80",
-                      fontSize: "10.5px",
+                      fontSize: "11px",
                       letterSpacing: "1px"
                     }}
                   >
@@ -1173,7 +1176,7 @@ export default function HowToPage() {
                   <span
                     style={{
                       color: "#565b80",
-                      fontSize: "10.5px",
+                      fontSize: "11px",
                       letterSpacing: "1px"
                     }}
                   >
@@ -1190,7 +1193,7 @@ export default function HowToPage() {
                   <span
                     style={{
                       color: "#565b80",
-                      fontSize: "10.5px",
+                      fontSize: "11px",
                       letterSpacing: "1px"
                     }}
                   >
@@ -1215,6 +1218,9 @@ export default function HowToPage() {
           </div>
         </footer>
       </div>
+
+      {/* guided walkthrough — activates only via the secret `?guide` link */}
+      <GuidedTour />
     </>
   );
 }
