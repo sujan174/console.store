@@ -58,14 +58,30 @@ export function pickLatestTag(tags, channel) {
 }
 
 // latestTag returns the highest-version release tag for a channel.
+//
+// This is the single dependency behind every channel endpoint (manifest,
+// checksum, download). It calls GitHub's REST API, which is the thing to keep
+// robust: unauthenticated calls share a 60-req/hour limit PER SOURCE IP, so
+// Railway's egress IP — serving every tester's launch-time poll — was blowing
+// that limit and making this return null, which surfaced as intermittent 404s
+// ("no release") across all channels and blocked self-updates. Two guards:
+//   1. Authenticate when GITHUB_TOKEN is set (raises the limit to 5000/hour).
+//   2. Cache the list for 10 min, so even unauthenticated we make at most ~6
+//      calls/hour regardless of how many testers poll.
 export async function latestTag(channel) {
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "consolestore-landing",
+  };
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
+  if (token) headers.Authorization = `Bearer ${token}`;
   // per_page must exceed the total release count: GitHub's list order is not
   // reliably newest-first, so a too-small window can drop a channel's latest tag
   // and silently serve a stale version. 100 is the API max — revisit with real
   // pagination before the repo ever holds 100+ releases.
   const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100`, {
-    headers: { Accept: "application/vnd.github+json", "User-Agent": "consolestore-landing" },
-    next: { revalidate: 60 },
+    headers,
+    next: { revalidate: 600 },
   });
   if (!res.ok) return null;
   const releases = await res.json();
