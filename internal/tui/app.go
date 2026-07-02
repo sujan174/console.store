@@ -433,6 +433,19 @@ func (m Model) buildMenu() screens.Menu {
 		WithCounts(counts)
 }
 
+// refreshMenu rebuilds the menu screen from fresh snapshot data while keeping
+// the user's place in the list. Async loads land whenever they land — usuals
+// finishing after launch, another category's debounced fetch, a streamed page
+// — and rebuilding via buildMenu() alone resets the list cursor to 0, yanking
+// a mid-scroll user back to the top. Data refreshes go through here; genuine
+// view switches (rail move, search enter, address adoption) keep calling
+// buildMenu() directly, where the reset-to-top is the correct behavior.
+// WithListCursor clamps, so a shrunken list can't strand the cursor.
+func (m *Model) refreshMenu() {
+	cur := m.menu.ListCursor()
+	m.menu = m.buildMenu().WithListCursor(cur)
+}
+
 // liveRepo casts the Repository to the swiggy snapshot repo for PlacesByQuery.
 // Returns nil when not live; callers guard with m.live.
 func (m Model) liveRepo() *swiggysnap.Repository {
@@ -1909,7 +1922,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.homePending && dm.Query == m.homeNearbyQuery() {
 			m.homePending = false // Home's "popular near you" landed
 		}
-		m.menu = m.buildMenu()
+		m.refreshMenu() // data refresh — keep the user's scroll position
 		return m, nil
 	case datasource.PlacesPageLoadedMsg:
 		if errIsNeedsAuth(dm.Err) {
@@ -1936,7 +1949,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if dm.Err == nil && dm.Page == 1 {
 			delete(m.seededQueries, dm.Query) // live data replaced the disk seed
 		}
-		m.menu = m.buildMenu()
+		m.refreshMenu() // data refresh — keep the user's scroll position
 		if dm.Err != nil {
 			return m, tea.Batch(cmds...) // keep whatever pages already painted
 		}
@@ -2266,7 +2279,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			dbgTUI("usuals: %v", dm.Err)
 		}
 		m.usualsLoaded = true // fetched (success or empty); don't refire for this addr
-		m.menu = m.buildMenu()
+		m.refreshMenu()       // data refresh — keep the user's scroll position
 		return m, nil
 	case datasource.LoggedOutMsg:
 		// Token purged → drop the cart/session state and re-authorize in place:
