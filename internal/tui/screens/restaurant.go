@@ -26,6 +26,8 @@ type Restaurant struct {
 
 	loadingMore bool // a menu-page stream is still filling the list
 	partial     bool // the stream died mid-way; some dishes may be missing
+	animFrame   int  // global tick frame — drives the loading scene
+	animHour    int  // local hour — flips loaders to late-night copy
 }
 
 // buildRows converts a slice of catalog items into display rows using the
@@ -133,6 +135,13 @@ func (s Restaurant) WithCursor(i int) Restaurant { s.list.Cursor = i; return s }
 // arriving, partial when the stream failed mid-way (dishes may be missing).
 func (s Restaurant) WithLoading(more, partial bool) Restaurant {
 	s.loadingMore, s.partial = more, partial
+	return s
+}
+
+// WithAnim carries the global frame + local hour into the loading scenes.
+// Chained at render time by the root (like WithMaxRows).
+func (s Restaurant) WithAnim(frame, hour int) Restaurant {
+	s.animFrame, s.animHour = frame, hour
 	return s
 }
 
@@ -395,7 +404,7 @@ func (s Restaurant) View() string {
 	// way, so the footer never jumps while pages arrive).
 	switch {
 	case s.loadingMore && len(s.p.Items) == 0:
-		b.WriteString("  " + theme.DimStyle.Render("loading menu…") + "\n")
+		b.WriteString(FoodLoading(s.animFrame, s.animHour, components.ContentWidth(), s.list.MaxRows))
 	case s.loadingMore:
 		b.WriteString("  " + theme.FaintStyle.Render("… more dishes loading") + "\n")
 	case s.partial:

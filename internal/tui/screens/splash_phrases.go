@@ -39,18 +39,42 @@ var splashPhrases = []string{
 	"Commit message: \"fix\"",
 }
 
+// nightPhrases join the pool during the late-night window (23:00–04:59) —
+// the splash gets to gently heckle whoever is ordering dinner at 2 am.
+var nightPhrases = []string{
+	"Go to sleep after this",
+	"It's late. Order fast",
+	"sleep 28800 && standup",
+	"The bug will still be there tomorrow",
+	"Nothing good compiles after 2am",
+	"cron says: bedtime",
+	"Snack, then SIGSTOP yourself",
+}
+
 // RandomPhrase returns a splash phrase at random, avoiding prev so the same
 // line never shows twice in a row. The global rand source is auto-seeded
 // (Go 1.20+), so each process picks a fresh sequence.
-func RandomPhrase(prev string) string {
-	switch len(splashPhrases) {
+func RandomPhrase(prev string) string { return pickPhrase(splashPhrases, prev) }
+
+// RandomPhraseAt is RandomPhrase with a clock: during the late-night window
+// it flips a coin between the regular pool and the go-to-sleep pool, so a
+// night owl sees the heckle about half the time.
+func RandomPhraseAt(hour int, prev string) string {
+	if IsLateNight(hour) && rand.Intn(2) == 0 {
+		return pickPhrase(nightPhrases, prev)
+	}
+	return pickPhrase(splashPhrases, prev)
+}
+
+func pickPhrase(pool []string, prev string) string {
+	switch len(pool) {
 	case 0:
 		return ""
 	case 1:
-		return splashPhrases[0]
+		return pool[0]
 	}
 	for {
-		p := splashPhrases[rand.Intn(len(splashPhrases))]
+		p := pool[rand.Intn(len(pool))]
 		if p != prev {
 			return p
 		}

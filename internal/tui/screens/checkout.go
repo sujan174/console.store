@@ -26,7 +26,9 @@ type Checkout struct {
 	syncErr    string
 	orderErr   string // last place-order failure / blocked-order reason
 	mutating   bool
-	viewportH  int // terminal height; windows the item list so the page never overflows
+	viewportH  int  // terminal height; windows the item list so the page never overflows
+	cartWait   bool // live cart fetch in flight — an empty cart shows a loader, never "empty"
+	hour       int  // local hour (0–23) for the loaders' late-night copy
 }
 
 func NewCheckout(restaurant string, addr catalog.Address, lines []CartLine, eta string) Checkout {
@@ -93,6 +95,15 @@ func (c Checkout) WithLiveSync(live bool, syncErr string) Checkout {
 
 // WithMutating marks a reduce/delete sync as in flight (freezes the CTA + line).
 func (c Checkout) WithMutating(m bool) Checkout { c.mutating = m; return c }
+
+// WithCartWait marks the live cart fetch as still in flight: while true, an
+// EMPTY line list renders the CartLoading scene instead of "your cart is
+// empty" — the empty state must never flash before the truth arrives.
+func (c Checkout) WithCartWait(wait bool) Checkout { c.cartWait = wait; return c }
+
+// WithHour sets the local hour (0–23), which flips the loaders' copy to the
+// late-night set. Chained at render time by the root, like WithPlacing.
+func (c Checkout) WithHour(h int) Checkout { c.hour = h; return c }
 
 // WithOrderErr carries the last place-order failure (or the blocked-order
 // reason, e.g. a sold-out item), shown prominently above the place-order bar.
@@ -191,7 +202,7 @@ func (c Checkout) View(frame int) string {
 	if c.placed {
 		return c.confirmView(frame)
 	}
-	return c.summaryView()
+	return c.summaryView(frame)
 }
 
 // padTo right-pads s with spaces to the given display width.
@@ -202,7 +213,7 @@ func padTo(s string, width int) string {
 	return s
 }
 
-func (c Checkout) summaryView() string {
+func (c Checkout) summaryView(frame int) string {
 	var b strings.Builder
 	w := components.ContentWidth()
 
@@ -214,6 +225,14 @@ func (c Checkout) summaryView() string {
 	b.WriteString("  " + title + "\n")
 	b.WriteString(components.Divider())
 	b.WriteString("\n")
+
+	// Cart still in flight — never claim "empty" before the fetch lands; the
+	// server may be about to hand us a cart built in the app or last session.
+	if len(c.lines) == 0 && c.cartWait {
+		b.WriteString(CartLoading(frame, c.hour, w))
+		b.WriteString("\n" + components.Hint("esc", "back"))
+		return b.String()
+	}
 
 	// Empty state — no bill, no place-order bar; a calm prompt back to browsing.
 	if len(c.lines) == 0 {

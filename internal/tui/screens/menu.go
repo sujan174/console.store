@@ -54,6 +54,8 @@ type Menu struct {
 	searchCorrected string // non-empty when results came from a spell-correction
 	results         []catalog.Place
 	resultCount     int
+	animFrame       int // global tick frame — drives the loading scene
+	animHour        int // local hour — flips loaders to late-night copy
 }
 
 func NewMenu(places []catalog.Place, addr catalog.Address, section catalog.Section, usual catalog.Usual, hasUsual bool, cartChip string) Menu {
@@ -185,6 +187,19 @@ func (m Menu) WithSearchMode(active bool, query string, results []catalog.Place,
 // WithLoading marks the flat (category) list as still loading, so an empty list
 // shows a "loading…" cue instead of "no restaurants" while results stream in.
 func (m Menu) WithLoading(loading bool) Menu { m.loading = loading; return m }
+
+// WithAnim carries the global frame + local hour into the loading scenes.
+// Chained at render time by the root (like WithMaxRows).
+func (m Menu) WithAnim(frame, hour int) Menu { m.animFrame, m.animHour = frame, hour; return m }
+
+// paneW is the width of the pane a loading scene should center in: the main
+// column right of the rail in two-pane mode, the full content width otherwise.
+func (m Menu) paneW() int {
+	if m.hasRail {
+		return components.ContentWidth() - railWidth - 2
+	}
+	return components.ContentWidth()
+}
 
 // WithSearchCaret sets the caret position (in runes) for the search input.
 func (m Menu) WithSearchCaret(caret int) Menu { m.searchCaret = caret; return m }
@@ -379,7 +394,7 @@ func (m Menu) browseRows(budget int) string {
 	places := m.mainPlaces()
 	if len(places) == 0 {
 		if m.loading {
-			return "  " + theme.GoldStyle.Render("loading restaurants…") + "\n"
+			return FoodLoading(m.animFrame, m.animHour, m.paneW(), budget)
 		}
 		return "  " + theme.DimStyle.Render("no restaurants nearby") + "\n"
 	}

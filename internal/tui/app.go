@@ -203,6 +203,7 @@ type Model struct {
 	imOrderErr     string     // last Instamart order-placement error
 	imCartMutating bool       // true while an IM reduce/delete sync is in flight (freezes input)
 	imCartRebuilt  bool       // true after a one-shot cart-expired auto-rebuild, to avoid retry loops
+	imCartFetched  bool       // the IM checkout's live cart fetch has answered (gates the empty state)
 
 	// imConfirmed* is the last Instamart-cart-CONFIRMED state (mirrors
 	// confirmedLines/cartConfirmed for food) — the rollback target for a failed sync.
@@ -392,7 +393,7 @@ func New(caps render.Caps, opts ...Option) Model {
 	m.imChips = config.DefaultIMCategories() // fixed set, no config.json override
 	m.splash = screens.NewSplash().WithCaps(caps)
 	m.welcome = screens.NewWelcome(screens.DefaultLearnURL).WithCaps(caps)
-	m.splashPhrase = screens.RandomPhrase("")
+	m.splashPhrase = screens.RandomPhraseAt(time.Now().Hour(), "")
 	// Live+seeded fires the Home load at Init() — mark it pending so the first
 	// Home paint shows the "loading…" cue (matching the category pages).
 	if m.live && m.seeded && m.addr.ID != "" {
@@ -2040,7 +2041,7 @@ func (m Model) toSplash() Model {
 	m.homeSel = 0
 	m.cmdOpen = false
 	// Re-roll the splash phrase so returning home shows a fresh one-liner.
-	m.splashPhrase = screens.RandomPhrase(m.splashPhrase)
+	m.splashPhrase = screens.RandomPhraseAt(m.hourNow(), m.splashPhrase)
 	return m
 }
 
@@ -2144,6 +2145,10 @@ func trackPickLabel(o localstore.ActiveOrder) string {
 }
 
 func (m Model) spin() string { return spinFrames[m.frame%len(spinFrames)] }
+
+// hourNow is the local hour (0–23) derived from the tick-refreshed clock —
+// the loaders and status hints use it to flip to late-night copy.
+func (m Model) hourNow() int { return time.Unix(m.nowUnix, 0).Hour() }
 
 // blinkOn reports the on-phase of a ~1s cursor blink.
 func (m Model) blinkOn() bool { return (m.frame/9)%2 == 0 }
@@ -2713,6 +2718,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case datasource.CartLoadedMsg:
 		if dm.Err != nil {
 			m.cartSyncErr = "cart: " + dm.Err.Error()
+			// The fetch answered (with an error) — release the checkout's loading
+			// gate so it shows the local truth instead of spinning forever.
+			m.cartLoaded = true
+			if m.screen == scrCheckout && m.checkoutVertical == 0 {
+				m.checkout = m.buildCheckout()
+			}
 			return m, nil
 		}
 		m.cartSyncErr = ""
@@ -2731,6 +2742,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// user is already building in this session.
 		if dm.Err != nil {
 			dbgTUI("cart pull: %v", dm.Err)
+			// Still release the checkout's loading gate: the pull answered, and
+			// an error must degrade to "empty", never to an eternal spinner.
+			m.cartLoaded = true
+			if m.screen == scrCheckout && m.checkoutVertical == 0 {
+				m.checkout = m.buildCheckout()
+			}
 			return m, nil
 		}
 		m.liveCart = dm.Cart
@@ -2738,6 +2755,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.applyCartAvailability(dm.Cart)
 		if len(m.lines) == 0 && m.cartRestaurant == "" && len(dm.Cart.Lines) > 0 {
 			m = m.seedCartFromLive(dm.Cart)
+		}
+		if m.screen == scrCheckout && m.checkoutVertical == 0 {
+			// The user beat the launch pull to the checkout — swap the loading
+			// state for the seeded cart (or a now-confirmed empty one).
+			m.checkout = m.buildCheckout()
 		}
 		return m, nil
 	case datasource.IMProductsLoadedMsg:
@@ -2765,9 +2787,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the user is already building in this session.
 		if dm.Err != nil {
 			dbgTUI("im cart pull: %v", dm.Err)
+			// Release the checkout's loading gate — an error degrades to
+			// "empty", never to an eternal spinner.
+			m.imCartFetched = true
+			if m.screen == scrCheckout && m.checkoutVertical == 1 {
+				m.checkout = m.buildIMCheckout()
+			}
 			return m, nil
 		}
 		m.imLiveCart = dm.Cart
+		m.imCartFetched = true
 		if len(m.imLines) == 0 && len(dm.Cart.Lines) > 0 {
 			var lines []screens.CartLine
 			for _, l := range dm.Cart.Lines {
@@ -2781,6 +2810,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.imLines = lines
 			m = m.commitIMCartConfirmed()
+		}
+		if m.screen == scrCheckout && m.checkoutVertical == 1 {
+			// The user beat the launch pull to the checkout — swap the loading
+			// state for the seeded cart (or a now-confirmed empty one).
+			m.checkout = m.buildIMCheckout()
 		}
 		return m, nil
 	case datasource.IMCartSyncedMsg:
@@ -2818,6 +2852,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.imCartSyncErr = ""
 		m.imCartRebuilt = false
+		m.imCartFetched = true // a successful sync is as authoritative as a fetch
 		m.imLiveCart = dm.Cart
 		// Mark line availability straight on the lines (the IM cart has no
 		// separate id-set like unavailableItems — spinIds are line-scoped, not
@@ -2849,8 +2884,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case datasource.IMCartLoadedMsg:
+		m.imCartFetched = true // the fetch answered — release the loading gate either way
 		if dm.Err != nil {
 			m.imCartSyncErr = "cart: " + dm.Err.Error()
+			if m.screen == scrCheckout && m.checkoutVertical == 1 {
+				m.checkout = m.buildIMCheckout()
+			}
 			return m, nil
 		}
 		m.imCartSyncErr = ""
@@ -4833,6 +4872,11 @@ func (m Model) screenKeybinds() string {
 // statusBar renders the bottom bar for the current frame/screen.
 func (m Model) statusBar() string {
 	hint := statusHints[(m.frame/27)%len(statusHints)]
+	// Late at night, every other rotation slot swaps in a go-to-sleep taunt —
+	// the app keeps working, it just also has opinions about your bedtime.
+	if nh := screens.NightHint(m.frame, m.hourNow()); nh != "" && (m.frame/27)%2 == 1 {
+		hint = nh
+	}
 	if kb := m.screenKeybinds(); kb != "" {
 		hint = kb // real keybinds on the screens users live on
 	}
@@ -5017,23 +5061,24 @@ func (m Model) View() string {
 		// footer; the list windows to the rest so it fills the viewport (the old
 		// 14 left a ~5-row blank gap above the footer).
 		chrome := 10 + screens.BrandHeaderLines
-		body = m.rest.WithMaxRows(m.listRows(chrome)).View()
+		body = m.rest.WithMaxRows(m.listRows(chrome)).WithAnim(m.frame, m.hourNow()).View()
 	case scrCheckout, scrConfirm:
-		body = m.checkout.WithPlacing(m.placingOrder).WithViewport(m.h).View(m.frame)
+		body = m.checkout.WithPlacing(m.placingOrder).WithViewport(m.h).
+			WithHour(m.hourNow()).View(m.frame)
 	case scrTracking:
 		body = m.track.WithViewport(m.h).WithAlt(m.hasAltOrder).View(m.nowUnix, m.frame, m.spin())
 	case scrInstamart:
 		// Two-pane live layout mirrors scrMenu's chrome exactly (store switcher +
 		// footer); the mock single-pane path (no rail attached) uses its own
 		// fixed header instead, so this budget only matters when hasRail is true.
-		body = m.inst.WithMaxRows(m.listRows(8 + screens.BrandHeaderLines)).View()
+		body = m.inst.WithMaxRows(m.listRows(8+screens.BrandHeaderLines)).WithAnim(m.frame, m.hourNow()).View()
 	case scrImCart:
 		body = m.imCart.View()
 	default: // scrMenu
 		// chrome above the list: store switcher (2) + detail strip + a section
 		// header + the footer; the list windows to whatever rows remain so the
 		// brand header stays pinned and the page fills the viewport (no big gap).
-		body = m.menu.WithMaxRows(m.listRows(8 + screens.BrandHeaderLines)).View()
+		body = m.menu.WithMaxRows(m.listRows(8+screens.BrandHeaderLines)).WithAnim(m.frame, m.hourNow()).View()
 	}
 
 	// The footer — the screen's hint line + optional command palette + status
@@ -5219,6 +5264,7 @@ func (m Model) buildCheckout() screens.Checkout {
 		WithLiveSync(m.live, m.cartSyncErr).
 		WithOrderErr(m.orderErr).
 		WithMutating(m.cartMutating).
+		WithCartWait(m.live && !m.cartLoaded).
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.cartScreenLines())))
 }
 
@@ -5231,17 +5277,17 @@ func (m Model) buildIMCheckout() screens.Checkout {
 		WithLiveSync(m.live, m.imCartSyncErr).
 		WithOrderErr(m.imOrderErr).
 		WithMutating(m.imCartMutating).
+		WithCartWait(m.live && !m.imCartFetched).
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.imLines)))
 }
 
 // openCartCmd opens the merged checkout screen and, in live mode, fetches the
 // real Swiggy cart so the bill reflects exactly what Place Order will charge.
 func (m *Model) openCartCmd() tea.Cmd {
-	m.cartLoaded = false
 	m.checkoutVertical = 0 // food
-	m.checkout = m.buildCheckout()
 	m.screen = scrCheckout
 	if !m.live {
+		m.checkout = m.buildCheckout()
 		return nil
 	}
 	rest := m.cartRestaurant
@@ -5249,8 +5295,17 @@ func (m *Model) openCartCmd() tea.Cmd {
 		rest = m.rest.PlaceData().Name
 	}
 	if rest == "" {
+		// Nothing to fetch (no cart restaurant) — but the launch cart pull may
+		// still be in flight, and IT decides whether this cart is truly empty.
+		// Leave cartLoaded as the pull left it so the empty state can't flash
+		// ahead of a seeded cart; don't arm a fetch that will never answer.
+		m.checkout = m.buildCheckout()
 		return nil
 	}
+	// Arm the loading gate only now that a fetch is actually firing; its
+	// CartLoadedMsg (success or error) releases it.
+	m.cartLoaded = false
+	m.checkout = m.buildCheckout()
 	return datasource.LoadCart(m.backend, m.addr.ID, rest)
 }
 
@@ -5260,6 +5315,11 @@ func (m *Model) openCartCmd() tea.Cmd {
 // binds to the ADDRESS (not a restaurant), so there is no restaurant guard.
 func (m *Model) openIMCheckoutCmd() tea.Cmd {
 	m.checkoutVertical = 1 // instamart
+	// Re-arm the loading gate only when there's nothing to show — with local
+	// lines on screen the fetch is a silent bill refresh, not a loading state.
+	if len(m.imLines) == 0 {
+		m.imCartFetched = false
+	}
 	m.checkout = m.buildIMCheckout()
 	m.screen = scrCheckout
 	if !m.live {

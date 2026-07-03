@@ -7,21 +7,36 @@ import (
 	"consolestore/internal/tui/render"
 )
 
-// TestWelcomePhase0TypesCommand verifies the phase-0 animation types out the
-// shell command and, once enough ticks elapse, reveals the ramen bowl art.
-func TestWelcomePhase0TypesCommand(t *testing.T) {
+// TestWelcomePhase0OrderStory verifies the three beats of phase 0: the typed
+// command, the working pulse, and the "on its way" settle before hand-off.
+func TestWelcomePhase0OrderStory(t *testing.T) {
 	w := NewWelcome(DefaultLearnURL).WithCaps(render.Caps{})
 
-	// Enough ticks to fully type the command.
+	// Beat 1 — enough ticks to fully type the command; nothing else yet.
 	early := w.WithTick(typeDone).WithPhase(0).View()
-	if !strings.Contains(early, "console order ramen") {
+	if !strings.Contains(early, "console order dinner") {
 		t.Fatalf("phase-0 view must show the typed command; got:\n%s", early)
 	}
+	if strings.Contains(early, "●") {
+		t.Fatalf("the pulse must not run before workTick; got:\n%s", early)
+	}
 
-	// After the bowl fully reveals, the art (noodles) is visible.
+	// Beat 2 — the pulse works under the command; no settle line yet.
+	working := w.WithTick(workTick + 3).WithPhase(0).View()
+	if !strings.Contains(working, "●") {
+		t.Fatalf("working beat must show the pulse; got:\n%s", working)
+	}
+	if strings.Contains(working, "on its way") {
+		t.Fatalf("the settle line must not land before stampTick; got:\n%s", working)
+	}
+
+	// Beat 3 — the settle line before hand-off; the pulse keeps breathing.
 	late := w.WithTick(WelcomeAnimEnd).WithPhase(0).View()
-	if !strings.Contains(late, "noodles") {
-		t.Fatalf("phase-0 view must reveal the ramen bowl; got:\n%s", late)
+	if !strings.Contains(late, "dinner is on its way") {
+		t.Fatalf("phase-0 view must settle on the dispatch line; got:\n%s", late)
+	}
+	if !strings.Contains(late, "●") {
+		t.Fatalf("the pulse must keep breathing through the settle; got:\n%s", late)
 	}
 }
 

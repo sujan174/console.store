@@ -36,6 +36,9 @@ type Instamart struct {
 	rail      Rail
 	hasRail   bool
 	railFocus bool
+
+	animFrame int // global tick frame — drives the loading scene
+	animHour  int // local hour — flips loaders to late-night copy
 }
 
 // NewInstamart builds the Instamart fast-lane screen, rendering in-cart checks
@@ -78,6 +81,22 @@ func itemRow(it catalog.Item, qty int) components.Row {
 // WithLoading marks a browse/search load in flight (shows "loading…" instead
 // of the list or empty hint).
 func (s Instamart) WithLoading(v bool) Instamart { s.loading = v; return s }
+
+// WithAnim carries the global frame + local hour into the loading scenes.
+// Chained at render time by the root (like WithMaxRows).
+func (s Instamart) WithAnim(frame, hour int) Instamart {
+	s.animFrame, s.animHour = frame, hour
+	return s
+}
+
+// paneW is the width of the pane a loading scene should center in: the main
+// column right of the rail in two-pane mode, the full content width otherwise.
+func (s Instamart) paneW() int {
+	if s.hasRail {
+		return components.ContentWidth() - railWidth - 2
+	}
+	return components.ContentWidth()
+}
 
 // WithSearch renders a submit-only search input in the header area: query is
 // the typed (not-yet-submitted) text, caret its rune position, active whether
@@ -200,7 +219,7 @@ func (s Instamart) browseRows(budget int) string {
 	}
 	if len(s.items) == 0 {
 		if s.loading {
-			return chip + "  " + theme.GoldStyle.Render("loading…") + "\n"
+			return chip + IMLoading(s.animFrame, s.animHour, s.paneW(), budget)
 		}
 		if s.submitted != "" {
 			return chip + "  " + theme.DimStyle.Render(fmt.Sprintf("no products for %q", s.submitted)) + "\n"
@@ -371,7 +390,7 @@ func (s Instamart) View() string {
 			b.WriteString(s.list.View())
 		}
 	case s.loading:
-		b.WriteString("  " + theme.GoldStyle.Render("loading…") + "\n")
+		b.WriteString(IMLoading(s.animFrame, s.animHour, s.paneW(), 0))
 	case len(s.items) == 0:
 		b.WriteString("  " + theme.DimStyle.Render("no usuals yet — press / to search") + "\n")
 	default:

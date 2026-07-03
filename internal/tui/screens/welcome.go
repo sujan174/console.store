@@ -12,38 +12,26 @@ import (
 const DefaultLearnURL = "https://consolestore.in/how-to"
 
 // welcomeCmd is the command the phase-0 typewriter "types" at the shell prompt.
-const welcomeCmd = "console order ramen"
+const welcomeCmd = "console order dinner"
 
-// Phase-0 animation tick thresholds (60ms/tick). The command types out one
-// character every typeEvery ticks; once typed it holds for a beat, then the
-// bowl reveals line-by-line, and the whole animation settles by animEnd — after
-// which onTick auto-advances to phase 1. All thresholds are in ticks.
+// Phase-0 animation tick thresholds (60ms/tick). Three beats, kept minimal:
+// the command types out at the prompt; the loading pulse "works" beneath it
+// for a moment; the ✓ settle line lands. onTick auto-advances to phase 1 at
+// animEnd. All thresholds are in ticks.
 const (
-	typeEvery      = 2                                           // one char every ~120ms
-	typeDone       = len(welcomeCmd)*typeEvery + typeEvery       // command fully typed
-	bowlRevealTick = typeDone + 8                                // ~0.5s pause, then the bowl starts revealing
-	bowlPerLine    = 2                                           // ticks between revealed bowl rows
-	bowlLines      = 6                                           // == len(bowlArt); kept const so animEnd is const
-	animEnd        = bowlRevealTick + bowlLines*bowlPerLine + 20 // hold, then hand off to the card
+	typeEvery = 2                                     // one char every ~120ms
+	typeDone  = len(welcomeCmd)*typeEvery + typeEvery // command fully typed
+	workTick  = typeDone + 5                          // beat, then the pulse "places the order"
+	stampTick = workTick + 34                         // ~2s of work → the settle line
+	animEnd   = stampTick + 25                        // hold, then hand off to the card
 )
 
 // WelcomeAnimEnd is the phase-0 tick at which the food animation is finished and
 // the root should auto-advance to the intro card (phase 1).
 const WelcomeAnimEnd = animEnd
 
-// bowlArt is the ramen bowl, revealed line-by-line during phase 0. Steam wisps
-// above it (rendered separately, animated) are NOT part of this slice.
-var bowlArt = []string{
-	`     .-"""""""""""-.`,
-	`    /  ~~~~~~~~~~~  \`,
-	`   |   ( noodles )   |====`,
-	`    \  ~~~~~~~~~~~  /`,
-	`     '-._______.-'`,
-	`        \_____/`,
-}
-
-// keep bowlLines in sync with bowlArt (const needed for animEnd).
-var _ = [1]struct{}{}[len(bowlArt)-bowlLines]
+// welcomeW is the width the phase-0 beats center against (≈ the typed line).
+const welcomeW = 24
 
 // Welcome is the first-run onboarding screen: a short ramen food animation
 // (phase 0) that gives way to a welcome/intro card (phase 1). It is a passive
@@ -97,15 +85,19 @@ func (w Welcome) View() string {
 // blink reports whether the block cursor is in its "on" phase this frame.
 func (w Welcome) blink() bool { return (w.frame/8)%2 == 0 }
 
-// foodView renders phase 0: a shell prompt typing out `console order ramen`,
-// then a steaming ramen bowl that reveals line-by-line.
+// foodView renders phase 0 — three minimal beats, centered as one block by
+// the root:
+//
+//	~ % console order dinner     (typewriter)
+//	· ∙ • ● • ∙ · · ·            (the pulse "places the order")
+//	✓ dinner is on its way       (settle, hand off to the card)
 func (w Welcome) foodView() string {
 	cur := "█"
 	if !w.blink() {
 		cur = " "
 	}
 
-	// Typewriter: reveal one char of the command every typeEvery ticks.
+	// Beat 1 — typewriter: reveal one char of the command every typeEvery ticks.
 	shown := w.tick / typeEvery
 	if shown > len(welcomeCmd) {
 		shown = len(welcomeCmd)
@@ -113,8 +105,6 @@ func (w Welcome) foodView() string {
 	typed := welcomeCmd[:shown]
 
 	prompt := theme.PurpleStyle.Render("~ % ") + theme.BrightStyle.Render(typed)
-	// While typing, the cursor trails the text; once committed it drops away and
-	// the bowl takes over below.
 	committed := w.tick >= typeDone
 	if !committed {
 		prompt += theme.CursorStyle.Render(cur)
@@ -122,57 +112,20 @@ func (w Welcome) foodView() string {
 
 	lines := []string{prompt, ""}
 
-	if committed {
-		// Steam wisps rise above the bowl, animated off frame. Two alternating
-		// rows of offset glyphs read as wisps drifting upward.
-		lines = append(lines, w.steam()...)
+	// Beat 2 — the order "places": the same traveling-light pulse every wait
+	// in the app uses, centered under the command. It keeps breathing through
+	// the settle so the block never freezes.
+	if w.tick >= workTick {
+		lines = append(lines, centerTo(pulse(w.frame), welcomeW))
+	}
 
-		// Bowl reveals line-by-line after the pause.
-		revealed := 0
-		if w.tick >= bowlRevealTick {
-			revealed = (w.tick - bowlRevealTick) / bowlPerLine
-		}
-		if revealed > len(bowlArt) {
-			revealed = len(bowlArt)
-		}
-		for i := 0; i < revealed; i++ {
-			lines = append(lines, w.styleBowl(bowlArt[i]))
-		}
+	// Beat 3 — the settle line: order away, welcome in.
+	if w.tick >= stampTick {
+		lines = append(lines, "",
+			centerTo(theme.GreenStyle.Render("✓ ")+theme.BrightStyle.Render("dinner is on its way"), welcomeW))
 	}
 
 	return strings.Join(lines, "\n")
-}
-
-// steam renders two rows of rising steam wisps above the bowl. The glyphs shift
-// horizontally with the frame so the wisps appear to drift upward.
-func (w Welcome) steam() []string {
-	off := (w.frame / 6) % 3
-	pad := strings.Repeat(" ", 8+off)
-	pad2 := strings.Repeat(" ", 7+((off+1)%3))
-	top := pad + theme.DimStyle.Render(")   )   )")
-	bot := pad2 + theme.DimStyle.Render("(   (   (")
-	// Alternate which wisp row leads so the steam looks like it's rising.
-	if (w.frame/12)%2 == 0 {
-		return []string{top, bot}
-	}
-	return []string{bot, top}
-}
-
-// styleBowl colors a single bowl row: noodles in gold, ~ broth waves in green,
-// the bowl body in the default text tone.
-func (w Welcome) styleBowl(line string) string {
-	switch {
-	case strings.Contains(line, "noodles"):
-		// Split so "noodles" reads gold against the text-toned rim.
-		i := strings.Index(line, "noodles")
-		return theme.TextStyle.Render(line[:i]) +
-			theme.GoldStyle.Render("noodles") +
-			theme.TextStyle.Render(line[i+len("noodles"):])
-	case strings.Contains(line, "~"):
-		return theme.GreenStyle.Render(line)
-	default:
-		return theme.TextStyle.Render(line)
-	}
 }
 
 // cardView renders phase 1: the welcome/intro card.
