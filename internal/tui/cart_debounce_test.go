@@ -83,8 +83,10 @@ func TestCartDebounceFiresSyncOnSettle(t *testing.T) {
 }
 
 // A freeze-path reduce already serializes one sync at a time (cartMutating), so
-// the debounce must NOT pile a second sync on top while one is in flight.
-func TestCartDebounceSkipsWhileMutating(t *testing.T) {
+// the debounce must NOT pile a second sync on top while one is in flight — but
+// it must HOLD the pending edit (not drop it) and fire once the freeze clears,
+// so no quantity change is ever silently lost.
+func TestCartDebounceHoldsWhileMutating(t *testing.T) {
 	m := checkoutModel(t)
 	m.cartSyncPending = true
 	m.cartSyncFrame = m.frame
@@ -98,8 +100,20 @@ func TestCartDebounceSkipsWhileMutating(t *testing.T) {
 			t.Fatal("debounce must not fire a sync while a freeze-path sync is in flight")
 		}
 	}
+	if !m.cartSyncPending {
+		t.Fatal("pending edit must be HELD through the freeze, not dropped")
+	}
+
+	// Freeze clears (the in-flight sync answered) → the held edit fires.
+	m.cartMutating = false
+	m.frame++
+	nm, cmd := m.onTick()
+	m = nm
+	if cmd == nil {
+		t.Fatal("held edit must fire once the freeze clears")
+	}
 	if m.cartSyncPending {
-		t.Fatal("pending flag should still clear (consumed), just without firing")
+		t.Fatal("pending flag must clear once the held sync fires")
 	}
 }
 

@@ -309,6 +309,14 @@ func (c Checkout) summaryView(frame int) string {
 	// the itemized split collapses to a single "to pay" line so the CTA still fits.
 	compact := c.compactBill()
 	switch {
+	case c.cartWait:
+		// A cart write is still settling — the last synced bill prices lines
+		// the user has already changed, so showing it would lie. Hold with the
+		// pulse-family spinner until the chain converges.
+		b.WriteString(components.DashRule())
+		b.WriteString("  " + theme.GoldStyle.Render(spinAt(frame)) + " " +
+			theme.DimStyle.Render("updating bill…") + "\n")
+		b.WriteString(components.DashRule())
 	case compact && c.bill.Live:
 		b.WriteString(components.DashRule())
 		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
@@ -359,7 +367,7 @@ func (c Checkout) summaryView(frame int) string {
 	// Full-bleed place-order bar: green left bar + selected-row background. The
 	// bar reads dim/disabled when the order is blocked (sold-out item) or over
 	// the ₹1000 beta cap.
-	disabled := blocked || over
+	disabled := blocked || over || c.cartWait
 	barLabel := " ❯ place order "
 	switch {
 	case c.placing:

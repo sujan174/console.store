@@ -232,6 +232,10 @@ type Model struct {
 	// authoritative bill for exactly the lines being ordered, never a stale one.
 	imConfirmPending bool
 
+	// imSyncInFlight — see cartSyncInFlight; the Instamart cart has the same
+	// replace-semantics write race, serialized the same way.
+	imSyncInFlight bool
+
 	// Instamart rail nav state — mirrors railActive/railFocus/railSettlePending/
 	// railSettleFrame exactly (own fields since Food and Instamart rails are
 	// independent columns with independent cursors). The IM rail is Home-less:
@@ -343,17 +347,29 @@ type Model struct {
 	// trailing sync is correct.
 	cartSyncPending bool
 	cartSyncFrame   int
-	restInfoOpen    bool // restaurant-info modal ('i' on the browse list) is open
-	addrOpen        bool // address switcher modal ('a') is open
-	addrForced      bool // true while addrOpen is the forced entry gate (non-dismissible)
-	addrGatePending bool // true from launch until the forced pick is satisfied
-	addressesLoaded bool // true once AddressesLoadedMsg has been handled
-	settingsOpen    bool // settings modal (from the splash) is open
-	settingsSel     int  // selected row in the settings modal
-	helpOpen        bool // help & controls modal (? / H / :help) is open
-	helpScroll      int  // scroll offset within the help modal
-	helpPage        int  // current page in the paginated help modal (0-indexed)
-	wantOnboarding  bool // set by WithOnboarding(true); starts the session on the welcome screen
+	// cartSyncInFlight serializes cart WRITES: update_food_cart REPLACES the
+	// whole cart, and bubbletea runs each Cmd in its own goroutine — two
+	// in-flight writes can reach Swiggy out of order (retries/backoff make it
+	// worse), so a stale payload can win and silently drop quantities. While a
+	// write is in flight, new edits keep cartSyncPending armed and the settled
+	// debounce HOLDS; the response releases the flag and the next tick fires
+	// one write with the LATEST lines. Single-flight, ordered, convergent.
+	cartSyncInFlight bool
+	// cartConfirmPending mirrors imConfirmPending for food: ↵ on the checkout
+	// with unflushed/in-flight edits defers the confirm modal until the cart
+	// write converges, so the total the user approves is the real bill.
+	cartConfirmPending bool
+	restInfoOpen       bool // restaurant-info modal ('i' on the browse list) is open
+	addrOpen           bool // address switcher modal ('a') is open
+	addrForced         bool // true while addrOpen is the forced entry gate (non-dismissible)
+	addrGatePending    bool // true from launch until the forced pick is satisfied
+	addressesLoaded    bool // true once AddressesLoadedMsg has been handled
+	settingsOpen       bool // settings modal (from the splash) is open
+	settingsSel        int  // selected row in the settings modal
+	helpOpen           bool // help & controls modal (? / H / :help) is open
+	helpScroll         int  // scroll offset within the help modal
+	helpPage           int  // current page in the paginated help modal (0-indexed)
+	wantOnboarding     bool // set by WithOnboarding(true); starts the session on the welcome screen
 
 	// what's-new modal: shows release notes after an update.
 	whatsnewOpen   bool     // true while the what's-new modal is showing
@@ -896,11 +912,19 @@ func (m *Model) settledCartSync() tea.Cmd {
 	if !m.cartSyncPending || m.frame-m.cartSyncFrame < cartSettleFrames {
 		return nil
 	}
-	m.cartSyncPending = false
-	if m.cartMutating {
+	if m.cartMutating || m.cartSyncInFlight {
+		// HOLD the pending sync (don't clear): a write is already in flight, and
+		// firing a second would race it on Swiggy's side (replace semantics →
+		// the stale payload can land last and drop quantities). The in-flight
+		// response clears the flag and the next tick fires with the latest lines.
 		return nil
 	}
-	return m.liveCartCmd()
+	m.cartSyncPending = false
+	cmd := m.liveCartCmd()
+	if cmd != nil {
+		m.cartSyncInFlight = true
+	}
+	return cmd
 }
 
 // armIMCartSync defers the Instamart cart's live sync until qty edits settle —
@@ -919,11 +943,47 @@ func (m *Model) settledIMCartSync() tea.Cmd {
 	if !m.imCartSyncPending || m.frame-m.imCartSyncFrame < cartSettleFrames {
 		return nil
 	}
+	if m.imCartMutating || m.imSyncInFlight {
+		return nil // HOLD — see settledCartSync; never two cart writes in flight
+	}
 	m.imCartSyncPending = false
-	if m.imCartMutating {
+	cmd := m.imLiveCartCmd()
+	if cmd != nil {
+		m.imSyncInFlight = true
+	}
+	return cmd
+}
+
+// fireSyncNow / fireIMSyncNow flush the cart write immediately, respecting the
+// single-flight rule: if a write is already in flight they QUEUE (re-arm the
+// debounce to fire on the next free tick) and return nil — the caller keeps
+// its freeze/wait state and the chain converges when the flight lands.
+func (m *Model) fireSyncNow() tea.Cmd {
+	if m.cartSyncInFlight {
+		m.cartSyncPending = true
+		m.cartSyncFrame = m.frame - cartSettleFrames
 		return nil
 	}
-	return m.imLiveCartCmd()
+	m.cartSyncPending = false
+	cmd := m.liveCartCmd()
+	if cmd != nil {
+		m.cartSyncInFlight = true
+	}
+	return cmd
+}
+
+func (m *Model) fireIMSyncNow() tea.Cmd {
+	if m.imSyncInFlight {
+		m.imCartSyncPending = true
+		m.imCartSyncFrame = m.frame - cartSettleFrames
+		return nil
+	}
+	m.imCartSyncPending = false
+	cmd := m.imLiveCartCmd()
+	if cmd != nil {
+		m.imSyncInFlight = true
+	}
+	return cmd
 }
 
 // homeNearbyQuery is the keyword used to populate Home's "popular near you"
@@ -1243,6 +1303,14 @@ func (m Model) clearPlacedCarts() Model {
 	m.imOrderErr = ""
 	m.imCartConfirmed = false
 	m.checkoutVertical = 0
+	// Drop any in-flight/pending write state with the carts: a response for a
+	// dead cart must not wedge the single-flight gate (or open a stale modal).
+	m.cartSyncPending = false
+	m.cartSyncInFlight = false
+	m.cartConfirmPending = false
+	m.imCartSyncPending = false
+	m.imSyncInFlight = false
+	m.imConfirmPending = false
 	return m
 }
 
@@ -2695,13 +2763,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The optimistic change did NOT reach Swiggy. Roll the local cart back
 			// to the last confirmed state and tell the user — never leave a phantom
 			// item that isn't really in their Swiggy cart.
+			m.cartSyncInFlight = false
+			m.cartConfirmPending = false // a failed write must not open the confirm modal
 			m.cartMutating = false
 			m = m.rollbackCart()
 			m.cartSyncErr = "⚠ cart change didn't go through — reverted. try again"
 			return m, nil
 		}
+		m.cartSyncInFlight = false
 		m.cartSyncErr = ""
 		m.liveCart = dm.Cart // real Swiggy pricing for an accurate bill
+		m.cartLoaded = true  // a write's response is as authoritative as a fetch
 		m = m.applyCartAvailability(dm.Cart)
 		m = m.commitCartConfirmed()
 		m.cartMutating = false // confirmed — unfreeze
@@ -2709,6 +2781,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// on screen must not clobber it with the food cart's view.
 		if m.screen == scrCheckout && m.checkoutVertical == 0 {
 			m.checkout = m.buildCheckout()
+		}
+		if m.cartConfirmPending {
+			if m.cartSyncPending {
+				// Edits landed while this write flew — chase them before
+				// confirming, so the modal total is for the final lines.
+				m.cartMutating = m.live
+				return m, m.fireSyncNow()
+			}
+			m.cartConfirmPending = false
+			if !m.placingOrder && len(m.lines) > 0 && m.screen == scrCheckout && m.checkoutVertical == 0 {
+				m.orderConfirmOpen = true
+				m.orderConfirmSel = 0
+			}
 		}
 		return m, nil
 	case datasource.CartLoadedMsg:
@@ -2818,6 +2903,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The optimistic change did NOT reach Swiggy. Map the common failures to
 			// a friendly message; roll back to the last confirmed state so the local
 			// cart never shows an item Swiggy rejected.
+			m.imSyncInFlight = false
 			m.imCartMutating = false
 			m.imConfirmPending = false // a failed sync must not open the confirm modal
 			switch {
@@ -2833,6 +2919,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// race the in-flight replacement.
 					m.imCartRebuilt = true
 					m.imCartMutating = m.live
+					m.imSyncInFlight = m.live
 					return m, m.imLiveCartCmd()
 				}
 				m = m.rollbackIMCart()
@@ -2846,6 +2933,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		m.imSyncInFlight = false
 		m.imCartSyncErr = ""
 		m.imCartRebuilt = false
 		m.imCartFetched = true // a successful sync is as authoritative as a fetch
@@ -2870,6 +2958,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.refreshInstamart()
 		}
 		if m.imConfirmPending {
+			if m.imCartSyncPending || !m.imLiveMatchesLines() {
+				// Edits landed while this write flew (or the response is stale) —
+				// chase them before confirming, so the modal total is for the
+				// final lines. Single-flight keeps the chain ordered.
+				m.imCartMutating = m.live
+				return m, m.fireIMSyncNow()
+			}
 			// The pre-confirm flush landed: the bill now reflects exactly these
 			// lines. Open the order-confirm modal on the fresh, authoritative total.
 			m.imConfirmPending = false
@@ -4399,15 +4494,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.placingOrder {
 						return m, nil
 					}
-					// Final-value guarantee: if the server cart doesn't yet match the
-					// local lines (a debounced + bump still settling), flush it now and
-					// open the confirm modal only when the sync returns — so the total
-					// the user approves is Swiggy's real bill for these exact lines.
-					if m.live && !m.imLiveMatchesLines() {
+					// Final-value guarantee: if any cart write is pending/in flight, or
+					// the server cart doesn't yet match the local lines, flush and open
+					// the confirm modal only when the write chain converges — so the
+					// total the user approves is Swiggy's real bill for these lines.
+					if m.live && (m.imCartSyncPending || m.imSyncInFlight || !m.imLiveMatchesLines()) {
 						m.imConfirmPending = true
-						m.imCartSyncPending = false // the explicit sync below supersedes the debounce
-						m.imCartMutating = true     // freeze input until the sync lands (then the modal opens)
-						return m, m.imLiveCartCmd()
+						m.imCartMutating = true // freeze input until the chain lands (then the modal opens)
+						return m, m.fireIMSyncNow()
 					}
 					m.orderConfirmOpen = true
 					m.orderConfirmSel = 0 // default "yes" — a reflexive ↵ still places the order
@@ -4477,10 +4571,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// the bordered cap notice + a disabled bar; refuse to fire.
 					return m, nil
 				}
-				if !m.placingOrder {
-					m.orderConfirmOpen = true
-					m.orderConfirmSel = 0 // default "yes" — a reflexive ↵ still places the order
+				if m.placingOrder {
+					return m, nil
 				}
+				// Final-value guarantee (mirrors Instamart): any pending/in-flight
+				// cart write defers the confirm modal until the chain converges.
+				if m.live && (m.cartSyncPending || m.cartSyncInFlight) {
+					m.cartConfirmPending = true
+					m.cartMutating = true // freeze input until the chain lands
+					return m, m.fireSyncNow()
+				}
+				m.orderConfirmOpen = true
+				m.orderConfirmSel = 0 // default "yes" — a reflexive ↵ still places the order
 				return m, nil
 			}
 		case scrConfirm:
@@ -5170,11 +5272,11 @@ func (m Model) afterCheckoutReduce() (tea.Model, tea.Cmd) {
 		m.cartRestaurant = ""
 		m.cartSection = ""
 	}
-	cmd := m.liveCartCmd()
-	// Freeze input only when a real sync is in flight. In mock mode
-	// liveCartCmd() is nil — no CartSyncedMsg would ever arrive to clear the
-	// freeze, so freezing here would hard-lock the screen.
-	m.cartMutating = m.live && cmd != nil
+	cmd := m.fireSyncNow()
+	// Freeze input only when a real sync is in (or queued behind a) flight. In
+	// mock mode fireSyncNow() is nil with nothing in flight — no CartSyncedMsg
+	// would ever arrive to clear the freeze, so freezing would hard-lock.
+	m.cartMutating = m.live && (cmd != nil || m.cartSyncInFlight)
 	m.menu = m.menu.WithCartChip(m.cartChip())
 	m.checkout = m.buildCheckout()
 	return m, cmd
@@ -5186,11 +5288,12 @@ func (m Model) afterCheckoutReduce() (tea.Model, tea.Cmd) {
 // and there is no restaurant field to clear.
 func (m Model) afterIMCheckoutReduce() (tea.Model, tea.Cmd) {
 	m.imOrderErr = "" // editing the cart clears a stale "can't order" message
-	cmd := m.imLiveCartCmd()
-	// Freeze input only when a real sync is in flight. In mock mode
-	// imLiveCartCmd() is nil — no IMCartSyncedMsg would ever arrive to clear
-	// the freeze, so freezing here would hard-lock the screen.
-	m.imCartMutating = m.live && cmd != nil
+	cmd := m.fireIMSyncNow()
+	// Freeze input only when a real sync is in (or queued behind a) flight. In
+	// mock mode fireIMSyncNow() is nil with nothing in flight — no
+	// IMCartSyncedMsg would ever arrive to clear the freeze, so freezing would
+	// hard-lock the screen.
+	m.imCartMutating = m.live && (cmd != nil || m.imSyncInFlight)
 	m.menu = m.menu.WithCartChip(m.cartChip())
 	m.checkout = m.buildIMCheckout()
 	return m, cmd
@@ -5206,7 +5309,9 @@ func (m Model) confirmPlaceOrder() (tea.Model, tea.Cmd) {
 			m.placingOrder = true
 			m.imOrderErr = ""
 			m.imCartSyncPending = false // the Sequence syncs final lines; no trailing debounce after placing
-			return m, tea.Sequence(m.imLiveCartCmd(), datasource.PlaceIMOrderCmd(m.backend, m.addr.ID))
+			sync := m.imLiveCartCmd()
+			m.imSyncInFlight = sync != nil // single-flight: this is the final pre-place write
+			return m, tea.Sequence(sync, datasource.PlaceIMOrderCmd(m.backend, m.addr.ID))
 		}
 		if !m.live {
 			oid := orderID(m.checkout.Lines())
@@ -5220,7 +5325,9 @@ func (m Model) confirmPlaceOrder() (tea.Model, tea.Cmd) {
 		m.placingOrder = true
 		m.orderErr = ""
 		m.cartSyncPending = false // the Sequence syncs final lines; no trailing debounce after placing
-		return m, tea.Sequence(m.liveSyncCart(), datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID))
+		sync := m.liveSyncCart()
+		m.cartSyncInFlight = sync != nil // single-flight: this is the final pre-place write
+		return m, tea.Sequence(sync, datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID))
 	}
 	if !m.live {
 		oid := orderID(m.checkout.Lines())
@@ -5254,7 +5361,7 @@ func (m Model) buildCheckout() screens.Checkout {
 		WithLiveSync(m.live, m.cartSyncErr).
 		WithOrderErr(m.orderErr).
 		WithMutating(m.cartMutating).
-		WithCartWait(m.live && !m.cartLoaded).
+		WithCartWait(m.live && (!m.cartLoaded || m.cartSyncPending || m.cartSyncInFlight)).
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.cartScreenLines())))
 }
 
@@ -5267,7 +5374,7 @@ func (m Model) buildIMCheckout() screens.Checkout {
 		WithLiveSync(m.live, m.imCartSyncErr).
 		WithOrderErr(m.imOrderErr).
 		WithMutating(m.imCartMutating).
-		WithCartWait(m.live && !m.imCartFetched).
+		WithCartWait(m.live && (!m.imCartFetched || m.imCartSyncPending || m.imSyncInFlight)).
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.imLines)))
 }
 
@@ -5279,6 +5386,16 @@ func (m *Model) openCartCmd() tea.Cmd {
 	if !m.live {
 		m.checkout = m.buildCheckout()
 		return nil
+	}
+	if m.cartSyncPending || m.cartSyncInFlight {
+		// Unsent or in-flight cart edits: flush the WRITE first instead of racing
+		// it with a read — its response carries the authoritative cart+bill, so
+		// no extra get_food_cart is needed. The wait gate holds the bill until
+		// the chain converges.
+		m.cartLoaded = false
+		cmd := m.fireSyncNow()
+		m.checkout = m.buildCheckout()
+		return cmd
 	}
 	rest := m.cartRestaurant
 	if rest == "" {
@@ -5310,18 +5427,29 @@ func (m *Model) openIMCheckoutCmd() tea.Cmd {
 	if len(m.imLines) == 0 {
 		m.imCartFetched = false
 	}
-	m.checkout = m.buildIMCheckout()
 	m.screen = scrCheckout
 	if !m.live {
+		m.checkout = m.buildIMCheckout()
 		return nil
 	}
+	if m.imCartSyncPending || m.imSyncInFlight {
+		// Unsent or in-flight cart edits (e.g. rapid adds then an instant `c`):
+		// flush the WRITE first instead of racing it with a read — update_cart's
+		// response carries the authoritative cart+bill. The wait gate holds the
+		// bill until the chain converges on the latest lines.
+		m.imCartFetched = false
+		cmd := m.fireIMSyncNow()
+		m.checkout = m.buildIMCheckout()
+		return cmd
+	}
+	m.checkout = m.buildIMCheckout()
 	return datasource.LoadIMCart(m.backend)
 }
 
-// imEnterCmd fires the Instamart entry loads: the go-to ("your usuals") list
-// always refreshes (cheap, address-scoped), and the account's Instamart cart
-// pulls once per session (re-armed on an address change, mirroring the food
-// cart pull) so a pre-existing Swiggy-app cart seeds the local lines.
+// imEnterCmd fires the Instamart entry loads: the first curated category's
+// product list, and the account's Instamart cart pull once per session
+// (re-armed on an address change, mirroring the food cart pull) so a
+// pre-existing Swiggy-app cart seeds the local lines.
 func (m *Model) imEnterCmd() tea.Cmd {
 	if !m.live {
 		return nil

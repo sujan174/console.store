@@ -67,6 +67,12 @@ func loadingLine(day, night []string, frame, hour int) string {
 	return set[(frame/copyEvery)%len(set)]
 }
 
+// loaderSpin is the braille micro-spinner for single-line waits (e.g. the
+// checkout's "updating bill…" row) where the full pulse would be too wide.
+var loaderSpin = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+func spinAt(frame int) string { return loaderSpin[frame%len(loaderSpin)] }
+
 // pulse renders the traveling-light row: pulseN dots, one bright peak
 // ping-ponging end to end, neighbours falling off in glyph size and tone —
 // terminal motion blur. One step every 2 ticks (~8 sweeps a minute).

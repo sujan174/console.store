@@ -373,3 +373,141 @@ func TestIMConfirmWaitsForFreshBill(t *testing.T) {
 		t.Fatalf("confirm total must be the fresh server bill 205, got %d", got)
 	}
 }
+
+// THE rapid-add lost-update regression: 7 fast adds produce ONE in-flight
+// update_cart at a time; edits arriving mid-flight are held and re-fired with
+// the LATEST quantities once the flight lands — the server can never be left
+// on a stale smaller cart by out-of-order writes.
+func TestIMRapidAddsSingleFlightConverges(t *testing.T) {
+	be := &liveFake{}
+	m := imModel(t, be)
+	m.imRailFocus = false
+	m.imQuery = ""
+	// Seed the snapshot too: each add repaints the browse list from it
+	// (refreshInstamart), so an empty snapshot would swallow later presses.
+	m.snap.SetInstamart(m.addr.ID, "", []catalog.Item{
+		{ID: "p1", SwiggyID: "sp1", Name: "Red Bull", Price: 125, Section: catalog.SectionInstamart},
+	})
+	m.inst = m.buildInstamart()
+
+	press := func(n int) {
+		for i := 0; i < n; i++ {
+			nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			m = nm.(Model)
+		}
+	}
+
+	// 3 fast adds → debounce settles → sync #1 fires with qty 3.
+	press(3)
+	var sync1 tea.Cmd
+	for i := 0; i < cartSettleFrames+2 && sync1 == nil; i++ {
+		m.frame++
+		var c tea.Cmd
+		m, c = m.onTick()
+		sync1 = c
+	}
+	if sync1 == nil {
+		t.Fatal("settled debounce must fire sync #1")
+	}
+	if !m.imSyncInFlight {
+		t.Fatal("firing a sync must mark the write in flight")
+	}
+
+	// 4 more adds while sync #1 is STILL IN FLIGHT (not delivered yet).
+	press(4)
+	if m.imLines[0].Qty != 7 {
+		t.Fatalf("local qty = %d, want 7", m.imLines[0].Qty)
+	}
+	// The debounce must HOLD — no second write while one is in flight.
+	for i := 0; i < cartSettleFrames+2; i++ {
+		m.frame++
+		var c tea.Cmd
+		m, c = m.onTick()
+		if c != nil {
+			t.Fatal("a second sync must NOT fire while one is in flight (write reorder risk)")
+		}
+	}
+	if !m.imCartSyncPending {
+		t.Fatal("mid-flight edits must stay pending, not be dropped")
+	}
+
+	// sync #1 lands (server confirms qty 3 — already stale vs local 7).
+	be.imCart = api.IMCart{ItemTotal: 375, Total: 375,
+		Lines: []api.IMCartLine{{SpinID: "sp1", Name: "Red Bull", Quantity: 3, Price: 125, Available: true}}}
+	m = deliver(t, m, sync1)
+	if m.imSyncInFlight {
+		t.Fatal("the response must release the in-flight flag")
+	}
+
+	// Next tick: the held edit fires sync #2 with the LATEST qty 7.
+	var sync2 tea.Cmd
+	for i := 0; i < 2 && sync2 == nil; i++ {
+		m.frame++
+		var c tea.Cmd
+		m, c = m.onTick()
+		sync2 = c
+	}
+	if sync2 == nil {
+		t.Fatal("the held edit must fire a follow-up sync after the flight lands")
+	}
+	be.imCart = api.IMCart{ItemTotal: 875, Total: 875,
+		Lines: []api.IMCartLine{{SpinID: "sp1", Name: "Red Bull", Quantity: 7, Price: 125, Available: true}}}
+	m = deliver(t, m, sync2)
+	if len(be.imUpdateCalls) != 1 || be.imUpdateCalls[0].Quantity != 7 {
+		t.Fatalf("final update_cart must carry qty 7, got %+v", be.imUpdateCalls)
+	}
+	if got := m.imCartChip(); !strings.Contains(got, "· 7 · ₹875") {
+		t.Fatalf("chip must converge to the 7-item server cart; got %q", got)
+	}
+}
+
+// Rapid adds then an INSTANT `c`: the checkout must flush the pending write
+// (not race it with a read), hold the bill in the "updating" state until the
+// chain converges, and disable placing meanwhile.
+func TestIMCheckoutFlushesPendingAddsBeforeBill(t *testing.T) {
+	be := &liveFake{}
+	m := imModel(t, be)
+	m.imRailFocus = false
+	m.imQuery = ""
+	m.snap.SetInstamart(m.addr.ID, "", []catalog.Item{
+		{ID: "p1", SwiggyID: "sp1", Name: "Red Bull", Price: 125, Section: catalog.SectionInstamart},
+	})
+	m.inst = m.buildInstamart()
+
+	// 7 rapid adds, then `c` before the debounce ever settles.
+	for i := 0; i < 7; i++ {
+		nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = nm.(Model)
+	}
+	if !m.imCartSyncPending {
+		t.Fatal("precondition: adds must leave a pending sync")
+	}
+	cmd := m.openIMCheckoutCmd()
+	if cmd == nil {
+		t.Fatal("opening the checkout with pending edits must flush the write now")
+	}
+	if !m.imSyncInFlight {
+		t.Fatal("the flush must be marked in flight")
+	}
+	// While the flush is in flight the bill must read "updating", never a
+	// stale total, and the place bar must be disabled.
+	v := m.checkout.WithViewport(m.h).View(m.frame)
+	if !strings.Contains(v, "updating bill…") {
+		t.Fatalf("checkout must hold the bill while the write settles; got:\n%s", v)
+	}
+
+	// The flush lands with the full 7-item cart → bill + place bar unlock.
+	be.imCart = api.IMCart{ItemTotal: 875, Total: 880,
+		Lines: []api.IMCartLine{{SpinID: "sp1", Name: "Red Bull", Quantity: 7, Price: 125, Available: true}}}
+	m = deliver(t, m, cmd)
+	if len(be.imUpdateCalls) != 1 || be.imUpdateCalls[0].Quantity != 7 {
+		t.Fatalf("the flushed update_cart must carry qty 7, got %+v", be.imUpdateCalls)
+	}
+	v = m.checkout.WithViewport(m.h).View(m.frame)
+	if strings.Contains(v, "updating bill…") {
+		t.Fatalf("converged checkout must show the real bill; got:\n%s", v)
+	}
+	if !strings.Contains(v, "880") {
+		t.Fatalf("bill must show the live 7-item total 880; got:\n%s", v)
+	}
+}
