@@ -172,6 +172,9 @@ func TestPlaceOrderRoutesInstamartIdentity(t *testing.T) {
 	if be.imPlaced != 1 || be.placed != 0 {
 		t.Fatalf("imPlaced=%d placed=%d, want imPlaced=1 placed=0", be.imPlaced, be.placed)
 	}
+	if be.imCleared != 1 {
+		t.Fatalf("placement must force-clear the server cart (leftover-items defense), cleared %d", be.imCleared)
+	}
 	ao, ok, err := localstore.LoadActiveOrder()
 	if err != nil || !ok || ao.Vertical != "instamart" || ao.Lat != 12.9 || ao.Lng != 77.6 {
 		t.Fatalf("active order = %+v ok=%v err=%v", ao, ok, err)

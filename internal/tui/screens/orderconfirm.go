@@ -13,8 +13,9 @@ import (
 // CartConflict.
 type OrderConfirm struct {
 	restaurant string
-	total      int // payable amount in rupees; 0 hides the amount line
-	focus      int // highlighted button: 0 = yes (default), 1 = no
+	total      int    // payable amount in rupees; 0 hides the amount line
+	address    string // delivery address line; empty hides the address line
+	focus      int    // highlighted button: 0 = yes (default), 1 = no
 }
 
 // NewOrderConfirm builds the modal for placing an order at restaurant for
@@ -22,6 +23,14 @@ type OrderConfirm struct {
 // render; the zero-value focus (0 = yes) is the intended default.
 func NewOrderConfirm(restaurant string, total int) OrderConfirm {
 	return OrderConfirm{restaurant: restaurant, total: total}
+}
+
+// WithAddress sets the delivery address line shown on the dialog, so the last
+// look before a real order states WHERE it lands (the same Swiggy-saved
+// address the order will be placed against). Returns a copy.
+func (o OrderConfirm) WithAddress(line string) OrderConfirm {
+	o.address = line
+	return o
 }
 
 // WithFocus sets which action button is highlighted (0 = yes, 1 = no).
@@ -36,6 +45,10 @@ func (o OrderConfirm) View() string {
 	body := theme.TextStyle.Render("place this order at ") +
 		theme.GoldStyle.Render(o.restaurant) + theme.TextStyle.Render("?")
 	lines := []string{body}
+	if o.address != "" {
+		lines = append(lines, theme.TextStyle.Render("deliver to ")+
+			theme.BrightStyle.Render(o.address))
+	}
 	if o.total > 0 {
 		lines = append(lines, theme.TextStyle.Render("total ")+
 			theme.BrightStyle.Render(fmt.Sprintf("₹%d", o.total)))

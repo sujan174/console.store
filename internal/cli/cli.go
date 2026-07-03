@@ -33,6 +33,7 @@ type Backend interface {
 	// datasource.BrokerBackend structurally satisfies this interface too.
 	IMUpdateCart(addressID string, items []api.IMCartItem) (api.IMCart, error)
 	IMGetCart() (api.IMCart, error)
+	IMClearCart() error
 	IMPlaceOrder(addressID string) (api.Order, error)
 	IMOrders(activeOnly bool) ([]api.IMOrder, error)
 	IMTrack(orderID string, lat, lng float64) (api.Tracking, error)

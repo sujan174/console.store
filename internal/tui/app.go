@@ -224,6 +224,13 @@ type Model struct {
 	imCartSyncPending bool
 	imCartSyncFrame   int
 
+	// imConfirmPending gates the order-confirm modal on a fresh sync: when the
+	// user hits Enter to place while the server cart lags the local lines (a
+	// debounced qty bump not yet flushed), we sync FIRST and open the modal only
+	// once IMCartSyncedMsg lands — so the confirmed total is always Swiggy's
+	// authoritative bill for exactly the lines being ordered, never a stale one.
+	imConfirmPending bool
+
 	// Instamart rail nav state — mirrors railActive/railFocus/railSettlePending/
 	// railSettleFrame exactly (own fields since Food and Instamart rails are
 	// independent columns with independent cursors). Index 0 = Search, 1 =
@@ -2190,7 +2197,53 @@ func (m Model) cartChip() string {
 	}
 	return cartChipStr(m.cartCount(), m.cartTotal())
 }
-func (m Model) imCartChip() string { return cartChipStr(m.imCartCount(), m.imCartTotal()) }
+func (m Model) imCartChip() string {
+	// Prefer Swiggy's confirmed cart (accurate count + fee-inclusive total) —
+	// but ONLY when it matches the current local lines. Right after an add or
+	// delete the server cart lags the user's intent for the length of the
+	// debounce + round-trip; showing it THEN would flash the old contents (e.g.
+	// a pre-existing/seeded item) and hide what was just added — the "new items
+	// didn't show, bill was the old item" bug. While a change is still settling,
+	// fall back to the optimistic local lines so the indicator moves instantly,
+	// then converges to the server total when the sync lands.
+	if m.live && len(m.imLiveCart.Lines) > 0 && m.imLiveMatchesLines() {
+		n := 0
+		for _, l := range m.imLiveCart.Lines {
+			n += l.Quantity
+		}
+		return cartChipStr(n, m.imLiveCart.Total)
+	}
+	return cartChipStr(m.imCartCount(), m.imCartTotal())
+}
+
+// imLiveMatchesLines reports whether Swiggy's last-confirmed cart (imLiveCart)
+// holds exactly the syncable local lines (same spinIds, same quantities). When
+// it does, the server cart is in sync and its fee-inclusive total is safe to
+// show; when it doesn't, a mutation is still in flight (or was dropped) and the
+// server view is stale. Mirrors imItemsForLines' spinId selection so a line
+// without a resolved SwiggyID (never syncable) can't cause a false mismatch.
+func (m Model) imLiveMatchesLines() bool {
+	local := map[string]int{}
+	for _, l := range m.imLines {
+		if l.Item.SwiggyID == "" {
+			continue
+		}
+		local[l.Item.SwiggyID] += l.Qty
+	}
+	server := map[string]int{}
+	for _, l := range m.imLiveCart.Lines {
+		server[l.SpinID] += l.Quantity
+	}
+	if len(local) != len(server) {
+		return false
+	}
+	for spin, qty := range local {
+		if server[spin] != qty {
+			return false
+		}
+	}
+	return true
+}
 
 // cartRestaurantServes reports whether the cart's restaurant/section is serviceable
 // at addr. For snacks, any non-empty snack catalogue at the new address is enough.
@@ -2736,6 +2789,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// a friendly message; roll back to the last confirmed state so the local
 			// cart never shows an item Swiggy rejected.
 			m.imCartMutating = false
+			m.imConfirmPending = false // a failed sync must not open the confirm modal
 			switch {
 			case strings.Contains(dm.Err.Error(), "store is currently unavailable or closed"):
 				m = m.rollbackIMCart()
@@ -2779,6 +2833,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.imCartMutating = false // confirmed — unfreeze
 		if m.screen == scrCheckout && m.checkoutVertical == 1 {
 			m.checkout = m.buildIMCheckout()
+		}
+		if m.screen == scrInstamart {
+			// Repaint so the cart chip picks up Swiggy's confirmed count/total.
+			m = m.refreshInstamart()
+		}
+		if m.imConfirmPending {
+			// The pre-confirm flush landed: the bill now reflects exactly these
+			// lines. Open the order-confirm modal on the fresh, authoritative total.
+			m.imConfirmPending = false
+			if !m.placingOrder && len(m.imLines) > 0 && m.screen == scrCheckout && m.checkoutVertical == 1 {
+				m.orderConfirmOpen = true
+				m.orderConfirmSel = 0
+			}
 		}
 		return m, nil
 	case datasource.IMCartLoadedMsg:
@@ -3037,6 +3104,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lat, lng := m.imLiveCart.AddrLat, m.imLiveCart.AddrLng
 		m.imLines = nil
 		m.imLiveCart = api.IMCart{}
+		// The empty cart is the new confirmed baseline: a later failed sync must
+		// roll back to EMPTY, never resurrect the just-placed lines.
+		m = m.commitIMCartConfirmed()
 		// Persist the active order for crash-resume + splash liveness.
 		etaLo, etaHi := localstore.ParseETAMinutes(eta)
 		placedAt := time.Now().Unix()
@@ -3065,9 +3135,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.confirmTick = 0
 		m.track = screens.NewTracking("Instamart", m.addr.Line, dm.Order.ID, placedAt, etaLo, etaHi)
 		m = m.splashOrder(splashOrderLabel("Instamart", "", "", etaHi))
-		// Harvest lat/lng for tracking — track_order requires coordinates that
-		// only get_orders (IMOrders) carries; get_addresses omits them.
-		return m, datasource.LoadIMActiveOrdersCmd(m.backend)
+		// Force-clear the server cart after placement: checkout normally consumes
+		// it, but leftovers have been seen live lingering in the Swiggy app cart —
+		// clear_cart is idempotent ("Cart not found" maps to success), so this is
+		// a safe belt-and-braces flush. Also harvest lat/lng for tracking —
+		// track_order requires coordinates that only get_orders (IMOrders)
+		// carries; get_addresses omits them.
+		return m, tea.Batch(datasource.ClearIMCartCmd(m.backend), datasource.LoadIMActiveOrdersCmd(m.backend))
 	case datasource.IMActiveOrdersLoadedMsg:
 		if dm.Err != nil {
 			return m, nil
@@ -4287,10 +4361,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							return m, nil
 						}
 					}
-					if !m.placingOrder {
-						m.orderConfirmOpen = true
-						m.orderConfirmSel = 0 // default "yes" — a reflexive ↵ still places the order
+					if m.placingOrder {
+						return m, nil
 					}
+					// Final-value guarantee: if the server cart doesn't yet match the
+					// local lines (a debounced + bump still settling), flush it now and
+					// open the confirm modal only when the sync returns — so the total
+					// the user approves is Swiggy's real bill for these exact lines.
+					if m.live && !m.imLiveMatchesLines() {
+						m.imConfirmPending = true
+						m.imCartSyncPending = false // the explicit sync below supersedes the debounce
+						m.imCartMutating = true     // freeze input until the sync lands (then the modal opens)
+						return m, m.imLiveCartCmd()
+					}
+					m.orderConfirmOpen = true
+					m.orderConfirmSel = 0 // default "yes" — a reflexive ↵ still places the order
 					return m, nil
 				}
 				return m, nil
@@ -4890,7 +4975,8 @@ func (m Model) View() string {
 		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, dialog)
 	}
 	if m.orderConfirmOpen {
-		dialog := screens.NewOrderConfirm(m.checkout.Place(), m.checkout.PayAmount()).WithFocus(m.orderConfirmSel).View()
+		dialog := screens.NewOrderConfirm(m.checkout.Place(), m.checkout.PayAmount()).
+			WithAddress(m.addr.Line).WithFocus(m.orderConfirmSel).View()
 		if m.w == 0 || m.h == 0 {
 			return dialog
 		}
@@ -4958,7 +5044,14 @@ func (m Model) View() string {
 
 	// Centered brand logo at the top of every post-landing screen, with a gap
 	// below it (the splash has its own big wordmark, so it is excluded above).
-	content = screens.BrandBanner(components.FrameWidth(), m.frame, m.addr.Line, m.addr.Label, m.cartChip()) + content
+	// The cart chip follows the vertical on screen: Instamart pages (browse,
+	// legacy cart, IM checkout/confirm) show the Instamart cart, not food's.
+	chip := m.cartChip()
+	if m.screen == scrInstamart || m.screen == scrImCart ||
+		((m.screen == scrCheckout || m.screen == scrConfirm) && m.checkoutVertical == 1) {
+		chip = m.imCartChip()
+	}
+	content = screens.BrandBanner(components.FrameWidth(), m.frame, m.addr.Line, m.addr.Label, chip) + content
 
 	footer := ""
 	if hint != "" {

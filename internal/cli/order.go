@@ -267,6 +267,10 @@ func placeIMPreset(d Deps, p localstore.Preset, st style) int {
 			st.dim("if you may have been charged, run `console status` before retrying."))
 		return 1
 	}
+	// Force-clear the server cart after placement: checkout normally consumes
+	// it, but leftovers have been seen live lingering in the Swiggy app cart.
+	// Best-effort — clear_cart maps "Cart not found" (already empty) to success.
+	_ = d.Backend.IMClearCart()
 	etaLo, etaHi := localstore.ParseETAMinutes(order.ETA)
 	active := localstore.ActiveOrder{
 		OrderID: order.ID, Restaurant: "Instamart", AddrLine: p.AddrLine,

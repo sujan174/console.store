@@ -218,6 +218,10 @@ func (s *Server) placeIMOrder(p pendingOrder) (*mcp.CallToolResult, PlaceOrderOu
 	_ = localstore.SaveActiveOrder(active)
 	_ = localstore.RecordOrder(p.addressID, p.addrLabel, p.restaurantID, p.restaurantName, nowUnix())
 	s.markCartWritePlaced()
+	// Force-clear the server cart after placement: checkout normally consumes
+	// it, but leftovers have been seen live lingering in the Swiggy app cart.
+	// Best-effort — clear_cart maps "Cart not found" (already empty) to success.
+	_ = s.be.IMClearCart()
 	return nil, PlaceOrderOut{Order: toOrderDTO(order)}, nil
 }
 

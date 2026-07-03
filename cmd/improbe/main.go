@@ -161,6 +161,26 @@ func run() error {
 	goTo, err := c.IMGoToItems(ctx, addrID)
 	log.Printf("IMPROBE your_go_to_items(typed) err=%v products=%d", err, len(goTo))
 
+	// IMPROBE_SESS=1: two-session cart-scoping probe. Runs the user's exact
+	// reported sequence across TWO independent MCP sessions (same token) to
+	// answer: is the Instamart cart bound to the token/account (docs claim) or
+	// to the MCP session id (which would mean every fresh `console` launch and
+	// the website each see a DIFFERENT cart)? Fetches + dumps cartId/items/total
+	// after every mutation. Read/write on the cart only — never checkout.
+	if os.Getenv("IMPROBE_SESS") == "1" {
+		return sessProbe(ctx, ts, addrID)
+	}
+
+	// IMPROBE_DELSEM=1: delete-semantics probe. Builds a two-item cart, then
+	// re-sends update_cart with only ONE of them and inspects get_cart to see
+	// whether the omitted item was actually removed (docs claim update_cart
+	// REPLACES the cart; the TUI's delete relies on that). Also probes
+	// quantity:0 as an explicit-removal fallback. Clears the cart at the end.
+	// NEVER calls checkout.
+	if os.Getenv("IMPROBE_DELSEM") == "1" {
+		return delsemProbe(ctx, c, addrID)
+	}
+
 	// Safe cart round-trip: update_cart (1 item) → get_cart → clear_cart, via
 	// the SAME typed methods the app uses. NEVER calls checkout. Harvests the
 	// real cart/bill/payment shapes (the raw JSON lands in the debug log; the
@@ -180,6 +200,229 @@ func run() error {
 		cart, err = c.GetIMCart(ctx)
 		log.Printf("IMPROBE get_cart(after clear) err=%v items=%d", err, len(cart.Items))
 	}
+	return nil
+}
+
+// sessProbe is the IMPROBE_SESS=1 mode. It stands up TWO independent MCP
+// clients (c1, c2) on the SAME token — each runs its own initialize handshake,
+// so they hold DISTINCT Mcp-Session-Id values. It then runs the user's exact
+// reported flow and, at every step, reads the cart back from BOTH sessions and
+// dumps cartId/items/total. If c1's writes are invisible to c2 (or the cartIds
+// differ), the cart is session-scoped, not account-scoped — which is the
+// "second cart we can't see" the user suspected. NEVER calls checkout.
+func sessProbe(ctx context.Context, ts tokenSource, addrID string) error {
+	mk := func() *swiggy.Client {
+		return swiggy.NewClient(swiggy.InstamartBaseURL, ts, swiggy.WithMinInterval(600*time.Millisecond))
+	}
+	c1, c2 := mk(), mk()
+
+	// Three distinct in-stock variants.
+	var spins, names []string
+	for _, q := range []string{"milk", "bread", "eggs"} {
+		products, err := c1.SearchIMProducts(ctx, addrID, q, 0)
+		if err != nil {
+			return fmt.Errorf("search %q: %w", q, err)
+		}
+	pick:
+		for _, p := range products {
+			for _, v := range p.Variants {
+				if v.InStock && v.SpinID != "" && !contains(spins, v.SpinID) {
+					spins = append(spins, v.SpinID)
+					names = append(names, p.Name)
+					break pick
+				}
+			}
+		}
+	}
+	if len(spins) < 3 {
+		return fmt.Errorf("sess: found only %d in-stock variants; need 3", len(spins))
+	}
+	log.Printf("SESS spins: A=%s(%s) B=%s(%s) C=%s(%s)", spins[0], names[0], spins[1], names[1], spins[2], names[2])
+	item := func(idxs ...int) []swiggy.IMCartItem {
+		var out []swiggy.IMCartItem
+		for _, i := range idxs {
+			out = append(out, swiggy.IMCartItem{SpinID: spins[i], Quantity: 1})
+		}
+		return out
+	}
+
+	// readBoth fetches the cart from BOTH sessions and dumps them side by side.
+	// The comparison line is the verdict: same cartId + same items = one shared
+	// account cart; divergence = session-scoped carts.
+	readBoth := func(tag string) {
+		g1, e1 := c1.GetIMCart(ctx)
+		g2, e2 := c2.GetIMCart(ctx)
+		dumpCart("SESS "+tag+" [c1]", g1, e1)
+		dumpCart("SESS "+tag+" [c2]", g2, e2)
+		same := g1.CartID == g2.CartID && sameLines(g1, g2)
+		log.Printf("SESS %s VERDICT sessions-agree=%v (cartId c1=%q c2=%q)", tag, same, g1.CartID, g2.CartID)
+	}
+
+	// Clean slate on BOTH sessions.
+	_ = c1.ClearIMCart(ctx)
+	_ = c2.ClearIMCart(ctx)
+	readBoth("after-clear")
+
+	// STEP 1 (user's "add three, remove one, check cost"): c1 adds A,B,C.
+	cart, err := c1.UpdateIMCart(ctx, addrID, item(0, 1, 2))
+	dumpCart("SESS c1 update[A,B,C]", cart, err)
+	readBoth("after-add-3")
+
+	// c1 removes C (replace with A,B). Cost must drop by C's price.
+	cart, err = c1.UpdateIMCart(ctx, addrID, item(0, 1))
+	dumpCart("SESS c1 update[A,B] (removed C)", cart, err)
+	readBoth("after-remove-1")
+
+	// STEP 2 (user's "add two, complete; new session add another"): reset,
+	// c1 adds A,B. Then c2 — a FRESH session — reads the cart and adds C.
+	// Because update_cart REPLACES, c2 must resend A,B,C. If c2 can't SEE A,B
+	// (session-scoped), it would send only C and silently wipe A,B — exactly
+	// the data-loss the user hit. We test BOTH: c2 blind-add [C] AND c2
+	// see-then-merge.
+	_ = c1.ClearIMCart(ctx)
+	cart, err = c1.UpdateIMCart(ctx, addrID, item(0, 1))
+	dumpCart("SESS c1 update[A,B]", cart, err)
+	readBoth("session2-sees")
+
+	// c2 reads what it sees, appends C on top of whatever's there, writes back.
+	seen, _ := c2.GetIMCart(ctx)
+	merged := append(cartToItems(seen), swiggy.IMCartItem{SpinID: spins[2], Quantity: 1})
+	cart, err = c2.UpdateIMCart(ctx, addrID, merged)
+	dumpCart("SESS c2 update[seen+C]", cart, err)
+	readBoth("after-c2-add")
+
+	// Cleanup on both.
+	_ = c1.ClearIMCart(ctx)
+	_ = c2.ClearIMCart(ctx)
+	readBoth("final-clear")
+	return nil
+}
+
+func contains(ss []string, s string) bool {
+	for _, x := range ss {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+func cartToItems(c swiggy.IMCart) []swiggy.IMCartItem {
+	var out []swiggy.IMCartItem
+	for _, l := range c.Items {
+		out = append(out, swiggy.IMCartItem{SpinID: l.SpinID, Quantity: l.Quantity})
+	}
+	return out
+}
+
+func sameLines(a, b swiggy.IMCart) bool {
+	qa := map[string]int{}
+	for _, l := range a.Items {
+		qa[l.SpinID] = l.Quantity
+	}
+	qb := map[string]int{}
+	for _, l := range b.Items {
+		qb[l.SpinID] = l.Quantity
+	}
+	if len(qa) != len(qb) {
+		return false
+	}
+	for k, v := range qa {
+		if qb[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+func dumpCart(tag string, c swiggy.IMCart, err error) {
+	log.Printf("%s err=%v cartId=%q lines=%d itemTotal=%d total=%d", tag, err, c.CartID, len(c.Items), c.ItemTotal, c.Total)
+	for _, l := range c.Items {
+		log.Printf("%s   spin=%s name=%q qty=%d price=₹%d", tag, l.SpinID, l.Name, l.Quantity, l.Price)
+	}
+}
+
+// delsemProbe is the IMPROBE_DELSEM=1 mode: establishes whether update_cart
+// REPLACES the whole cart (omitted spinIds removed) or MERGES (omitted spinIds
+// survive), and whether quantity:0 removes a line. Read/write on the cart
+// only — never checkout.
+func delsemProbe(ctx context.Context, c *swiggy.Client, addrID string) error {
+	// Two distinct in-stock variants from two searches.
+	var spins, names []string
+	for _, q := range []string{"milk", "bread"} {
+		products, err := c.SearchIMProducts(ctx, addrID, q, 0)
+		if err != nil {
+			return fmt.Errorf("search %q: %w", q, err)
+		}
+	pick:
+		for _, p := range products {
+			for _, v := range p.Variants {
+				if v.InStock && v.SpinID != "" && (len(spins) == 0 || v.SpinID != spins[0]) {
+					spins = append(spins, v.SpinID)
+					names = append(names, p.Name+" / "+v.QtyDesc)
+					break pick
+				}
+			}
+		}
+		if len(spins) >= 2 {
+			break
+		}
+	}
+	if len(spins) < 2 {
+		return fmt.Errorf("delsem: found only %d in-stock variants; need 2", len(spins))
+	}
+	a, b := spins[0], spins[1]
+	log.Printf("DELSEM A=%s (%s)  B=%s (%s)", a, names[0], b, names[1])
+
+	dump := func(tag string, cart swiggy.IMCart, err error) {
+		log.Printf("DELSEM %s err=%v lines=%d total=%d", tag, err, len(cart.Items), cart.Total)
+		for _, l := range cart.Items {
+			log.Printf("DELSEM   %s spin=%s name=%q qty=%d", tag, l.SpinID, l.Name, l.Quantity)
+		}
+	}
+
+	// 1) Seed cart with A+B.
+	cart, err := c.UpdateIMCart(ctx, addrID, []swiggy.IMCartItem{{SpinID: a, Quantity: 1}, {SpinID: b, Quantity: 1}})
+	dump("update[A,B]", cart, err)
+	if err != nil {
+		return err
+	}
+	cart, err = c.GetIMCart(ctx)
+	dump("get(after A,B)", cart, err)
+
+	// 2) THE test: resend with only A. Replace semantics → B gone. Merge → B survives.
+	cart, err = c.UpdateIMCart(ctx, addrID, []swiggy.IMCartItem{{SpinID: a, Quantity: 1}})
+	dump("update[A only]", cart, err)
+	cart, err = c.GetIMCart(ctx)
+	dump("get(after A only)", cart, err)
+	bGone := true
+	for _, l := range cart.Items {
+		if l.SpinID == b {
+			bGone = false
+		}
+	}
+	log.Printf("DELSEM VERDICT: omitted item removed by update_cart = %v (replace=%v merge=%v)", bGone, bGone, !bGone)
+
+	// 3) If merge: does an explicit quantity:0 remove?
+	if !bGone {
+		cart, err = c.UpdateIMCart(ctx, addrID, []swiggy.IMCartItem{{SpinID: a, Quantity: 1}, {SpinID: b, Quantity: 0}})
+		dump("update[A, B qty0]", cart, err)
+		cart, err = c.GetIMCart(ctx)
+		dump("get(after B qty0)", cart, err)
+		bGone = true
+		for _, l := range cart.Items {
+			if l.SpinID == b {
+				bGone = false
+			}
+		}
+		log.Printf("DELSEM VERDICT: quantity:0 removes omitted-survivor = %v", bGone)
+	}
+
+	// 4) Cleanup.
+	err = c.ClearIMCart(ctx)
+	log.Printf("DELSEM clear_cart err=%v", err)
+	cart, err = c.GetIMCart(ctx)
+	dump("get(after clear)", cart, err)
 	return nil
 }
 

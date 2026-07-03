@@ -358,6 +358,9 @@ func TestOrderIMPresetRoutesThroughIMMethods(t *testing.T) {
 	if be.imPlaceN != 1 {
 		t.Fatalf("instamart order should place exactly once via IMPlaceOrder, placed %d", be.imPlaceN)
 	}
+	if be.imClearN != 1 {
+		t.Fatalf("placement must force-clear the server cart (leftover-items defense), cleared %d", be.imClearN)
+	}
 	if be.imUpdateAddr != "a1" || len(be.imUpdateArgs) != 1 || be.imUpdateArgs[0].SpinID != "spin-1" || be.imUpdateArgs[0].Quantity != 2 {
 		t.Fatalf("IMUpdateCart should be called with the preset's spinIds: addr=%q args=%+v", be.imUpdateAddr, be.imUpdateArgs)
 	}

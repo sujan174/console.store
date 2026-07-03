@@ -33,6 +33,7 @@ type fakeBackend struct {
 	imGetErr     error
 	imOrdersErr  error
 	imPlaceN     int
+	imClearN     int
 	imUpdateArgs []api.IMCartItem // last items passed to IMUpdateCart, for assertions
 	imUpdateAddr string
 
@@ -61,6 +62,7 @@ func (f *fakeBackend) IMUpdateCart(addressID string, items []api.IMCartItem) (ap
 	return f.imCart, f.imUpdErr
 }
 func (f *fakeBackend) IMGetCart() (api.IMCart, error) { return f.imCart, f.imGetErr }
+func (f *fakeBackend) IMClearCart() error             { f.imClearN++; return nil }
 func (f *fakeBackend) IMPlaceOrder(string) (api.Order, error) {
 	f.imPlaceN++
 	return f.imPlaced, f.imPlaceErr
