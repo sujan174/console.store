@@ -130,3 +130,76 @@ type UpdateCartArgs struct {
 	RestaurantName string
 	Items          []CartItem
 }
+
+// ---- Instamart (grocery) vertical ----
+// The Instamart cart is a SEPARATE cart from the Food cart: it binds to the
+// delivery address (not a restaurant), allows items from multiple dark stores,
+// and is keyed by SKU-level spinIds instead of menu_item_ids.
+
+// IMVariantSel is one purchasable variation (pack size) of a product.
+type IMVariantSel struct {
+	SpinID  string // SKU id sent to update_cart
+	Label   string // "250 ml x 4"
+	Price   int    // effective rupees (offer price)
+	MRP     int    // strike-through price; 0 or ==Price when no offer
+	InStock bool
+}
+
+// IMProduct is one product from search_products / your_go_to_items.
+type IMProduct struct {
+	ID       string // productId
+	Name     string
+	Brand    string
+	InStock  bool
+	Variants []IMVariantSel
+}
+
+// IMCartLine is one line of the live Instamart cart.
+type IMCartLine struct {
+	SpinID    string
+	Name      string
+	Quantity  int
+	Price     int // per-unit rupees
+	Available bool
+}
+
+// IMCart carries Swiggy's real Instamart bill. Handling is Instamart's
+// handling fee (a row Food doesn't have). AddrLat/AddrLng are the delivery
+// coordinates from the cart's selectedAddressDetails — the only source for
+// them (track_order requires coordinates; get_addresses/get_orders omit them),
+// so they are captured here and persisted at placement.
+type IMCart struct {
+	AddrID         string
+	AddrLat        float64
+	AddrLng        float64
+	ItemTotal      int
+	Delivery       int
+	Handling       int
+	Taxes          int
+	Total          int
+	Lines          []IMCartLine
+	PaymentMethods []string
+}
+
+// IMCartItem is the SENT shape for an Instamart cart sync (update_cart
+// REPLACES the whole cart with these items).
+type IMCartItem struct {
+	SpinID   string
+	Quantity int
+}
+
+// IMOrder is one Instamart order. Status is the human display state
+// ("Order picked up"); Detail is the sub-line (rider updates). The live
+// payload carries NO coordinates — Lat/Lng stay for drift tolerance, but
+// tracking coordinates are persisted from the CART at placement time.
+type IMOrder struct {
+	ID     string
+	Status string
+	Detail string
+	ETA    string
+	Total  int
+	Lat    float64
+	Lng    float64
+	Items  []string
+	Active bool
+}

@@ -15,15 +15,16 @@ import (
 // it's an arrow-key picker (↑/↓ or j/k to move, ↵ to choose, a number to jump
 // straight to it, q/Esc/Ctrl-C to cancel). Otherwise — tests, pipes, or a
 // non-terminal stdin — it falls back to a numbered list + a typed number.
+// avail marks unavailable candidates inline (nil/short = no marking).
 // Returns the chosen index; ok=false on cancel.
-func pickPreset(d Deps, name string, matches []localstore.Preset, st style) (int, bool) {
+func pickPreset(d Deps, name string, matches []localstore.Preset, avail []availability, st style) (int, bool) {
 	if f, isFile := d.In.(*os.File); isFile {
-		if idx, picked, handled := rawPick(f, d.Out, name, matches, st); handled {
+		if idx, picked, handled := rawPick(f, d.Out, name, matches, avail, st); handled {
 			return idx, picked
 		}
 	}
 	// Fallback: list + typed number (no raw terminal available).
-	listPresets(d.Out, name, matches, st)
+	listPresets(d.Out, name, matches, avail, st)
 	fmt.Fprintf(d.Out, "\n%s ", st.dim(fmt.Sprintf("pick 1-%d:", len(matches))))
 	sel := prompt(d)
 	if sel == "" {
@@ -40,7 +41,7 @@ func pickPreset(d Deps, name string, matches []localstore.Preset, st style) (int
 // false when raw mode can't be entered (the caller then falls back). Rows are
 // truncated to the terminal width so they never soft-wrap — a wrapped line would
 // break the cursor-up redraw math and the list would stack/glitch.
-func rawPick(in *os.File, out io.Writer, name string, matches []localstore.Preset, st style) (idx int, picked, handled bool) {
+func rawPick(in *os.File, out io.Writer, name string, matches []localstore.Preset, avail []availability, st style) (idx int, picked, handled bool) {
 	old, err := xterm.MakeRaw(in.Fd())
 	if err != nil {
 		return 0, false, false
@@ -67,10 +68,14 @@ func rawPick(in *os.File, out io.Writer, name string, matches []localstore.Prese
 		for i, p := range matches {
 			// number + restaurant + items (no address — it's in the bill after).
 			text := truncate(fmt.Sprintf("%d) %s  ·  %s", i+1, p.RestaurantName, summarize(p)), maxRow-2)
+			suffix := ""
+			if i < len(avail) {
+				suffix = soldOutSuffix(avail[i], st)
+			}
 			if i == cur {
-				fmt.Fprintf(out, "\r\x1b[K%s%s\r\n", st.num("❯ "), st.bright(text))
+				fmt.Fprintf(out, "\r\x1b[K%s%s%s\r\n", st.num("❯ "), st.bright(text), suffix)
 			} else {
-				fmt.Fprintf(out, "\r\x1b[K  %s\r\n", st.text(text))
+				fmt.Fprintf(out, "\r\x1b[K  %s%s\r\n", st.text(text), suffix)
 			}
 		}
 	}

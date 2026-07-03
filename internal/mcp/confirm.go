@@ -21,15 +21,21 @@ type pendingOrder struct {
 	total          int
 	hash           string
 	createdAt      int64
+	// vertical is "" (food) or "instamart". Routes place_order to the right
+	// Backend methods and re-verification path.
+	vertical string
 }
 
 // orderIdentity carries the real Swiggy identity a placement should record on the
 // taste card. restaurantID is empty for ad-hoc orders (cart carries only a name),
 // which makes bumpFavorite correctly skip — we never key a favorite by a name.
+// vertical is "" (food) or "instamart"; propagated onto the pendingOrder so
+// place_order knows how to re-verify and place.
 type orderIdentity struct {
 	restaurantID   string
 	restaurantName string
 	addrLabel      string
+	vertical       string
 }
 
 type confirmStore struct {
@@ -66,7 +72,43 @@ func (s *confirmStore) put(addressID string, c api.Cart, ident orderIdentity, no
 	s.m[id] = pendingOrder{
 		addressID: addressID, total: c.Total,
 		restaurantID: ident.restaurantID, restaurantName: ident.restaurantName, addrLabel: ident.addrLabel,
-		hash: cartHash(addressID, c), createdAt: nowUnix,
+		hash: cartHash(addressID, c), createdAt: nowUnix, vertical: ident.vertical,
+	}
+	s.mu.Unlock()
+	return id
+}
+
+// imCartHash binds a confirmation to the exact Instamart lines + address +
+// total the user saw. Mirrors cartHash but keys lines by spinId.
+func imCartHash(addressID string, c api.IMCart) string {
+	type kv struct {
+		id  string
+		qty int
+	}
+	lines := make([]kv, 0, len(c.Lines))
+	for _, l := range c.Lines {
+		lines = append(lines, kv{l.SpinID, l.Quantity})
+	}
+	sort.Slice(lines, func(i, j int) bool { return lines[i].id < lines[j].id })
+	h := sha256.New()
+	fmt.Fprintf(h, "addr=%s;total=%d;", addressID, c.Total)
+	for _, l := range lines {
+		fmt.Fprintf(h, "%s:%d;", l.id, l.qty)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// putIM mints a confirmation for an Instamart cart. Same TTL/lookup discipline
+// as put; vertical is always "instamart" so place_order routes correctly.
+func (s *confirmStore) putIM(addressID string, c api.IMCart, ident orderIdentity, nowUnix int64) string {
+	var b [12]byte
+	_, _ = rand.Read(b[:])
+	id := hex.EncodeToString(b[:])
+	s.mu.Lock()
+	s.m[id] = pendingOrder{
+		addressID: addressID, total: c.Total,
+		restaurantID: ident.restaurantID, restaurantName: ident.restaurantName, addrLabel: ident.addrLabel,
+		hash: imCartHash(addressID, c), createdAt: nowUnix, vertical: "instamart",
 	}
 	s.mu.Unlock()
 	return id

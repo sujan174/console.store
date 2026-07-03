@@ -21,6 +21,24 @@ type Backend interface {
 	ActiveOrders(addressID string) ([]api.Order, error)
 	TrackOrder(orderID string) (api.Tracking, error)
 	Logout() error
+
+	// Menu is a READ-ONLY probe used to check preset-line availability before
+	// pushing a cart (see availability.go). Signature mirrors
+	// datasource.Backend.Menu exactly so datasource.BrokerBackend structurally
+	// satisfies this interface too.
+	Menu(addressID, restaurantID string) (api.Menu, error)
+
+	// Instamart (grocery) vertical — a separate cart keyed by address, not
+	// restaurant. Signatures mirror datasource.Backend's IM* methods exactly so
+	// datasource.BrokerBackend structurally satisfies this interface too.
+	IMUpdateCart(addressID string, items []api.IMCartItem) (api.IMCart, error)
+	IMGetCart() (api.IMCart, error)
+	IMPlaceOrder(addressID string) (api.Order, error)
+	IMOrders(activeOnly bool) ([]api.IMOrder, error)
+	IMTrack(orderID string, lat, lng float64) (api.Tracking, error)
+	// IMSearch is a READ-ONLY probe (see availability.go) — same signature as
+	// datasource.Backend.IMSearch.
+	IMSearch(addressID, query string) ([]api.IMProduct, error)
 }
 
 // Deps carries everything a command needs. In/Out default to os.Stdin/os.Stdout

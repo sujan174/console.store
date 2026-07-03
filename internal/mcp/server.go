@@ -32,6 +32,16 @@ type Backend interface {
 	PlaceOrder(addressID string) (api.Order, error)
 	TrackOrder(orderID string) (api.Tracking, error)
 	ActiveOrders(addressID string) ([]api.Order, error)
+
+	// Instamart (grocery) vertical — separate cart, address-bound not
+	// restaurant-bound, keyed by spinId.
+	IMSearch(addressID, query string) ([]api.IMProduct, error)
+	IMGetCart() (api.IMCart, error)
+	IMUpdateCart(addressID string, items []api.IMCartItem) (api.IMCart, error)
+	IMClearCart() error
+	IMPlaceOrder(addressID string) (api.Order, error)
+	IMOrders(activeOnly bool) ([]api.IMOrder, error)
+	IMTrack(orderID string, lat, lng float64) (api.Tracking, error)
 }
 
 // Authenticator drives first-run sign-in without exposing the token. Implemented
@@ -148,13 +158,18 @@ func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "update_cart", Description: "set the cart lines for a restaurant (replaces the cart; a cart from another restaurant is auto-replaced and reported in replaced_cart)"}, s.handleUpdateCart)
 	addTool(srv, &mcp.Tool{Name: "clear_cart", Description: "empty the cart"}, s.handleClearCart)
 	addTool(srv, &mcp.Tool{Name: "prepare_order", Description: "sync the cart and return the real bill + a confirmation_id (does NOT place; auto-moves the cart when the address changed and rebuilds it if Swiggy expired it — see the rebuilt field)"}, s.handlePrepareOrder)
-	addTool(srv, &mcp.Tool{Name: "place_order", Description: "place the order for a confirmation_id from prepare_order (real, charges COD; never call without user confirmation)"}, s.handlePlaceOrder)
-	addTool(srv, &mcp.Tool{Name: "order_preset", Description: "load a saved preset into the cart and return a bill + confirmation_id (does NOT place)"}, s.handleOrderPreset)
+	addTool(srv, &mcp.Tool{Name: "place_order", Description: "place the order for a confirmation_id from prepare_order or im_prepare_order (real, charges COD; never call without user confirmation)"}, s.handlePlaceOrder)
+	addTool(srv, &mcp.Tool{Name: "order_preset", Description: "load a saved preset (food or instamart) into the cart and return a bill + confirmation_id (does NOT place)"}, s.handleOrderPreset)
 	addTool(srv, &mcp.Tool{Name: "sign_in", Description: "start Swiggy sign-in; returns a browser URL (opened automatically when possible)"}, s.handleSignIn)
 	addTool(srv, &mcp.Tool{Name: "auth_status", Description: "whether the user is signed in — and, when signed in, the opening card snapshot (default/last address, favorites, taste, suggestions, policies) so no separate get_card is needed to start"}, s.handleAuthStatus)
 	addTool(srv, &mcp.Tool{Name: "get_card", Description: "the user's saved personalization: default/last address, favorite restaurants, policies, per-item tastes, and pending suggestions"}, s.handleGetCard)
 	addTool(srv, &mcp.Tool{Name: "remember", Description: "save an explicit preference — a per-restaurant-item taste, a cross-restaurant policy, or the default address; or confirm a suggestion"}, s.handleRemember)
 	addTool(srv, &mcp.Tool{Name: "forget", Description: "remove a saved taste or policy"}, s.handleForget)
-	addTool(srv, &mcp.Tool{Name: "save_preset", Description: "save the current cart as a named preset the user can reorder"}, s.handleSavePreset)
+	addTool(srv, &mcp.Tool{Name: "save_preset", Description: "save the current cart as a named preset the user can reorder (pass vertical: \"instamart\" to save the instamart cart instead of food)"}, s.handleSavePreset)
 	addTool(srv, &mcp.Tool{Name: "forget_preset", Description: "delete a saved preset"}, s.handleForgetPreset)
+	addTool(srv, &mcp.Tool{Name: "im_search_products", Description: "search instamart (grocery) products deliverable to an address; carts are keyed by spin_id, the variant/pack-size id"}, s.handleIMSearchProducts)
+	addTool(srv, &mcp.Tool{Name: "im_get_cart", Description: "the current instamart cart with the authoritative bill"}, s.handleIMGetCart)
+	addTool(srv, &mcp.Tool{Name: "im_update_cart", Description: "set the instamart cart lines (replaces the whole instamart cart)"}, s.handleIMUpdateCart)
+	addTool(srv, &mcp.Tool{Name: "im_clear_cart", Description: "empty the instamart cart"}, s.handleIMClearCart)
+	addTool(srv, &mcp.Tool{Name: "im_prepare_order", Description: "sync the instamart cart and return the real bill + a confirmation_id (does NOT place)"}, s.handleIMPrepareOrder)
 }

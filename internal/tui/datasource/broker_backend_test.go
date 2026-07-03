@@ -175,6 +175,59 @@ func (f *fakeRPC) ActiveFoodOrders(accountID, addressID string) ([]api.Order, er
 }
 func (f *fakeRPC) Logout(accountID string) error { f.lastAccount = accountID; return nil }
 
+func (f *fakeRPC) IMSearch(accountID, addressID, query string) ([]api.IMProduct, error) {
+	f.lastAccount, f.lastQuery = accountID, query
+	return nil, f.err
+}
+func (f *fakeRPC) IMGoTo(accountID, addressID string) ([]api.IMProduct, error) {
+	f.lastAccount = accountID
+	return nil, f.err
+}
+func (f *fakeRPC) IMGetCart(accountID string) (api.IMCart, error) {
+	f.lastAccount = accountID
+	return api.IMCart{}, f.err
+}
+func (f *fakeRPC) IMUpdateCart(accountID, addressID string, items []api.IMCartItem) (api.IMCart, error) {
+	f.lastAccount = accountID
+	return api.IMCart{}, f.err
+}
+func (f *fakeRPC) IMClearCart(accountID string) error { f.lastAccount = accountID; return f.err }
+func (f *fakeRPC) IMPlaceOrder(accountID, addressID string) (api.Order, error) {
+	f.lastAccount = accountID
+	return api.Order{}, f.err
+}
+func (f *fakeRPC) IMOrders(accountID string, activeOnly bool) ([]api.IMOrder, error) {
+	f.lastAccount = accountID
+	return nil, f.err
+}
+func (f *fakeRPC) IMTrack(accountID, orderID string, lat, lng float64) (api.Tracking, error) {
+	f.lastAccount = accountID
+	return api.Tracking{}, f.err
+}
+
+func TestBrokerBackendIMUpdateCartPinsAccount(t *testing.T) {
+	rpc := &fakeRPC{}
+	be := NewBrokerBackend(rpc, "acct-7")
+	items := []api.IMCartItem{{SpinID: "spin-1", Quantity: 2}}
+	if _, err := be.IMUpdateCart("a1", items); err != nil {
+		t.Fatal(err)
+	}
+	if rpc.lastAccount != "acct-7" {
+		t.Fatalf("IMUpdateCart account = %q; want acct-7", rpc.lastAccount)
+	}
+}
+
+func TestBrokerBackendIMWrapsAuthErr(t *testing.T) {
+	rpc := &fakeRPC{err: errors.New("swiggy: access token expired (401)")}
+	be := NewBrokerBackend(rpc, "x")
+	if _, err := be.IMGetCart(); !errors.Is(err, ErrNeedsAuth) {
+		t.Fatalf("IMGetCart err = %v; want ErrNeedsAuth", err)
+	}
+	if _, err := be.IMSearch("a1", "milk"); !errors.Is(err, ErrNeedsAuth) {
+		t.Fatalf("IMSearch err = %v; want ErrNeedsAuth", err)
+	}
+}
+
 func TestBrokerBackendLogoutForwardsAccount(t *testing.T) {
 	f := &fakeRPC{}
 	if err := NewBrokerBackend(f, "acct-9").Logout(); err != nil {

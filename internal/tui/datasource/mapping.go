@@ -64,6 +64,71 @@ func toOptionGroups(in []api.OptionGroup) []catalog.OptionGroup {
 	return out
 }
 
+// toIMItems maps Instamart products (search_products / your_go_to_items) to
+// catalog.Items. Each product's default variant (first in-stock, else first)
+// sets SwiggyID/Price; a product with more than one variant is Customizable
+// with a synthesized single-choice "pack size" group so the TUI never needs a
+// network round-trip to open the picker.
+func toIMItems(ps []api.IMProduct) []catalog.Item {
+	out := make([]catalog.Item, len(ps))
+	for i, p := range ps {
+		def, hasInStock := defaultIMVariant(p)
+		desc := joinNonEmpty(" · ", p.Brand, def.Label)
+
+		item := catalog.Item{
+			ID:         p.ID,
+			SwiggyID:   def.SpinID,
+			Name:       p.Name,
+			Price:      def.Price,
+			Desc:       desc,
+			Section:    catalog.SectionInstamart,
+			OutOfStock: !p.InStock || !hasInStock,
+		}
+
+		if len(p.Variants) > 1 {
+			choices := make([]catalog.Choice, len(p.Variants))
+			for j, v := range p.Variants {
+				choices[j] = catalog.Choice{ID: v.SpinID, Name: v.Label, Price: v.Price, InStock: v.InStock}
+			}
+			item.Customizable = true
+			item.Options = []catalog.OptionGroup{{
+				ID: "im-size", Name: "pack size", Min: 1, Max: 1,
+				Variant: true, Absolute: true, Choices: choices,
+			}}
+		}
+
+		out[i] = item
+	}
+	return out
+}
+
+// defaultIMVariant picks a product's default purchasable variant: the first
+// in-stock one, else the first overall (so an out-of-stock product still shows
+// a representative price). hasInStock reports whether any variant was in
+// stock — toIMItems uses it to mark the item OutOfStock when none are.
+func defaultIMVariant(p api.IMProduct) (v api.IMVariantSel, hasInStock bool) {
+	for _, cand := range p.Variants {
+		if cand.InStock {
+			return cand, true
+		}
+	}
+	if len(p.Variants) > 0 {
+		return p.Variants[0], false
+	}
+	return api.IMVariantSel{}, false
+}
+
+// joinNonEmpty joins the non-empty parts with sep.
+func joinNonEmpty(sep string, parts ...string) string {
+	kept := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, sep)
+}
+
 func toMenuPlace(m api.Menu) catalog.Place {
 	items := make([]catalog.Item, len(m.Items))
 	for i, it := range m.Items {

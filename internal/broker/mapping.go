@@ -107,7 +107,7 @@ func mapCartItems(in []api.CartItem) []swiggy.CartItem {
 }
 
 func mapTracking(t swiggy.Tracking) api.Tracking {
-	return api.Tracking{OrderID: t.OrderID, Status: t.Status, ETA: t.ETA, Active: t.Active}
+	return api.Tracking{OrderID: t.OrderID, Status: t.Status, Detail: t.Detail, ETA: t.ETA, Active: t.Active}
 }
 
 func mapOptions(in []swiggy.OptionGroup) []api.OptionGroup {
@@ -118,6 +118,52 @@ func mapOptions(in []swiggy.OptionGroup) []api.OptionGroup {
 			choices[j] = api.OptionChoice{ID: ch.ID, Name: ch.Name, Price: ch.Price, InStock: ch.InStock}
 		}
 		out[i] = api.OptionGroup{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Absolute: g.Absolute, Choices: choices}
+	}
+	return out
+}
+
+func mapIMProducts(in []swiggy.IMProduct) []api.IMProduct {
+	out := make([]api.IMProduct, 0, len(in))
+	for _, p := range in {
+		mp := api.IMProduct{ID: p.ID, Name: p.Name, Brand: p.Brand, InStock: p.InStock && p.Avail}
+		for _, v := range p.Variants {
+			mp.Variants = append(mp.Variants, api.IMVariantSel{
+				SpinID: v.SpinID, Label: v.QtyDesc, Price: v.Price.Rupees(),
+				MRP: int(math.Round(v.Price.MRP)), InStock: v.InStock,
+			})
+		}
+		if len(mp.Variants) == 0 {
+			continue // a product without a purchasable SKU is dead weight
+		}
+		out = append(out, mp)
+	}
+	return out
+}
+
+func mapIMCart(in swiggy.IMCart) api.IMCart {
+	lines := make([]api.IMCartLine, len(in.Items))
+	for i, l := range in.Items {
+		lines[i] = api.IMCartLine{SpinID: l.SpinID, Name: l.Name, Quantity: l.Quantity, Price: l.Price, Available: l.Available}
+	}
+	return api.IMCart{
+		AddrID: in.AddrID, AddrLat: in.AddrLat, AddrLng: in.AddrLng,
+		ItemTotal: in.ItemTotal, Delivery: in.Delivery, Handling: in.Handling,
+		Taxes: in.Taxes, Total: in.Total, Lines: lines, PaymentMethods: in.PaymentMethods,
+	}
+}
+
+func mapIMCartItems(in []api.IMCartItem) []swiggy.IMCartItem {
+	out := make([]swiggy.IMCartItem, len(in))
+	for i, c := range in {
+		out[i] = swiggy.IMCartItem{SpinID: c.SpinID, Quantity: c.Quantity}
+	}
+	return out
+}
+
+func mapIMOrders(in []swiggy.IMOrder) []api.IMOrder {
+	out := make([]api.IMOrder, len(in))
+	for i, o := range in {
+		out[i] = api.IMOrder{ID: o.ID, Status: o.Status, Detail: o.Detail, ETA: o.ETA, Total: o.Total, Lat: o.Lat, Lng: o.Lng, Items: o.Items, Active: o.Active}
 	}
 	return out
 }

@@ -326,3 +326,171 @@ func TestOrderArmedWritesActiveOrder(t *testing.T) {
 		t.Fatalf("active order OrderID = %q, want %q", ao.OrderID, "777")
 	}
 }
+
+// ---- Instamart presets ----
+
+func imBasePreset(name string) localstore.Preset {
+	return localstore.Preset{Name: name, AddrID: "a1", AddrLine: "Home", RestaurantName: "Instamart",
+		Vertical: "instamart",
+		Lines:    []localstore.PresetLine{{ItemID: "spin-1", Name: "Amul Milk 500ml", Qty: 2}}}
+}
+
+func imAvailCart() api.IMCart {
+	return api.IMCart{ItemTotal: 100, Delivery: 25, Handling: 10, Total: 135,
+		Lines: []api.IMCartLine{{SpinID: "spin-1", Name: "Amul Milk 500ml", Quantity: 2, Price: 50, Available: true}}}
+}
+
+// An Instamart preset must route through the IM* backend methods, not Food's.
+func TestOrderIMPresetRoutesThroughIMMethods(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, imBasePreset("milk"))
+	var out bytes.Buffer
+	be := &fakeBackend{imCart: imAvailCart(), imPlaced: api.Order{ID: "IM1", ETA: "10-20 mins"}}
+	code := Dispatch([]string{"order", "milk"}, Deps{
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+	})
+	if code != 0 {
+		t.Fatalf("order exit = %d:\n%s", code, out.String())
+	}
+	if be.placeN != 0 {
+		t.Fatal("an instamart preset must never call the FOOD PlaceOrder")
+	}
+	if be.imPlaceN != 1 {
+		t.Fatalf("instamart order should place exactly once via IMPlaceOrder, placed %d", be.imPlaceN)
+	}
+	if be.imUpdateAddr != "a1" || len(be.imUpdateArgs) != 1 || be.imUpdateArgs[0].SpinID != "spin-1" || be.imUpdateArgs[0].Quantity != 2 {
+		t.Fatalf("IMUpdateCart should be called with the preset's spinIds: addr=%q args=%+v", be.imUpdateAddr, be.imUpdateArgs)
+	}
+	if !strings.Contains(out.String(), "Instamart") {
+		t.Fatalf("bill should show Instamart as the header:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "IM1") {
+		t.Fatalf("should print the placed order id:\n%s", out.String())
+	}
+	ao, ok, err := localstore.LoadActiveOrder()
+	if err != nil || !ok {
+		t.Fatalf("active order not saved: ok=%v err=%v", ok, err)
+	}
+	if ao.Vertical != "instamart" || ao.Restaurant != "Instamart" {
+		t.Fatalf("active order should be tagged instamart: %+v", ao)
+	}
+}
+
+// The ctx-aware confirm gate must apply identically to Instamart — Ctrl-C must
+// abort, never place. Same safety property as TestOrderCanceledCtxDoesNotPlace.
+func TestOrderIMCanceledCtxDoesNotPlace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, imBasePreset("milk"))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out bytes.Buffer
+	be := &fakeBackend{imCart: imAvailCart(), imPlaced: api.Order{ID: "IM1"}}
+	Dispatch([]string{"order", "milk"}, Deps{
+		Ctx: ctx, SignedIn: true, Armed: true, Interactive: true, Out: &out,
+		In: blockingReader{}, Backend: be,
+	})
+	if be.imPlaceN != 0 {
+		t.Fatalf("canceled ctx (Ctrl-C) must NOT place an instamart order; placed %d", be.imPlaceN)
+	}
+	if !strings.Contains(strings.ToLower(out.String()), "cancel") {
+		t.Fatalf("should report it cancelled:\n%s", out.String())
+	}
+}
+
+func TestOrderIMSoldOutAborts(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, imBasePreset("milk"))
+	var out bytes.Buffer
+	soldOut := imAvailCart()
+	soldOut.Lines[0].Available = false
+	be := &fakeBackend{imCart: soldOut}
+	code := Dispatch([]string{"order", "milk"}, Deps{
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+	})
+	if code == 0 {
+		t.Fatal("a sold-out line must abort the instamart order")
+	}
+	if be.imPlaceN != 0 {
+		t.Fatal("must not place when an instamart item is unavailable")
+	}
+	if !strings.Contains(strings.ToLower(out.String()), "unavailable") {
+		t.Fatalf("should mention unavailable item:\n%s", out.String())
+	}
+}
+
+func TestOrderIMOverBetaCapDoesNotPlace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, imBasePreset("milk"))
+	var out bytes.Buffer
+	big := imAvailCart()
+	big.Total = 1180
+	be := &fakeBackend{imCart: big, imPlaced: api.Order{ID: "IM1"}}
+	code := Dispatch([]string{"order", "milk"}, Deps{
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+	})
+	if be.imPlaceN != 0 {
+		t.Fatalf("must NOT place an instamart order ≥ ₹1000; placed %d", be.imPlaceN)
+	}
+	if code == 0 {
+		t.Fatal("over-cap instamart order should return non-zero")
+	}
+	if !strings.Contains(strings.ToLower(out.String()), "1000") {
+		t.Fatalf("should mention the ₹1000 cap:\n%s", out.String())
+	}
+}
+
+func TestOrderIMUnderMinDoesNotPlace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, imBasePreset("milk"))
+	var out bytes.Buffer
+	small := imAvailCart()
+	small.Total = 50
+	be := &fakeBackend{imCart: small, imPlaced: api.Order{ID: "IM1"}}
+	code := Dispatch([]string{"order", "milk"}, Deps{
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+	})
+	if be.imPlaceN != 0 {
+		t.Fatalf("must NOT place an instamart order under the ₹99 minimum; placed %d", be.imPlaceN)
+	}
+	if code == 0 {
+		t.Fatal("under-minimum instamart order should return non-zero")
+	}
+	if !strings.Contains(out.String(), "99") {
+		t.Fatalf("should mention the ₹99 minimum:\n%s", out.String())
+	}
+}
+
+func TestOrderIMDisarmedNeverPlaces(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, imBasePreset("milk"))
+	var out bytes.Buffer
+	be := &fakeBackend{imCart: imAvailCart()}
+	code := Dispatch([]string{"order", "milk"}, Deps{
+		SignedIn: true, Armed: false, Out: &out, In: strings.NewReader("\n"), Backend: be,
+	})
+	if be.imPlaceN != 0 {
+		t.Fatal("disarmed (localsafeconsole) must NEVER place an instamart order")
+	}
+	if !strings.Contains(strings.ToLower(out.String()), "browse-only") {
+		t.Fatalf("disarmed should explain it didn't place:\n%s", out.String())
+	}
+	_ = code
+}
+
+// A preset saved before Vertical existed decodes as food and routes through
+// the Food backend methods, never the Instamart ones.
+func TestOrderOldPresetJSONLoadsAsFoodAndPlaces(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	seedPreset(t, basePreset("breakfast")) // Vertical left at zero value ("")
+	var out bytes.Buffer
+	be := &fakeBackend{cart: availCart(), placed: api.Order{ID: "999"}}
+	code := Dispatch([]string{"order", "breakfast"}, Deps{
+		SignedIn: true, Armed: true, Interactive: true, Out: &out, In: strings.NewReader("\n"), Backend: be,
+	})
+	if code != 0 {
+		t.Fatalf("order exit = %d:\n%s", code, out.String())
+	}
+	if be.placeN != 1 || be.imPlaceN != 0 {
+		t.Fatalf("old-style preset should place via FOOD only: placeN=%d imPlaceN=%d", be.placeN, be.imPlaceN)
+	}
+}

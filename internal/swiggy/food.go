@@ -236,7 +236,7 @@ func parseOrdersText(s string) []Order {
 	var out []Order
 	for _, m := range reOrderLine.FindAllStringSubmatch(s, -1) {
 		total, _ := strconv.Atoi(m[4])
-		out = append(out, Order{ID: json.Number(m[1]), Restaurant: m[2], Status: m[3], Total: total})
+		out = append(out, Order{ID: flexID(m[1]), Restaurant: m[2], Status: m[3], Total: total})
 	}
 	return out
 }
@@ -258,7 +258,7 @@ func (c *Client) GetFoodOrderDetails(ctx context.Context, orderID string) (Order
 	if len(os) > 0 {
 		return os[0], nil
 	}
-	return Order{ID: json.Number(orderID)}, nil
+	return Order{ID: flexID(orderID)}, nil
 }
 
 func (c *Client) TrackFoodOrder(ctx context.Context, orderID string) (Tracking, error) {

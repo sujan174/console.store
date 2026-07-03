@@ -14,6 +14,7 @@ const (
 	codeCartExpired         = "cart_expired"
 	codeConfirmationExpired = "confirmation_expired"
 	codeCartChanged         = "cart_changed"
+	codeUnderMin            = "under_min"
 )
 
 // codedErr builds a "<code>: message" error.

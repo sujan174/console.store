@@ -14,6 +14,7 @@ usage:
   console order <name>          order a saved preset (lists them if several share the name)
   console order <name> <n>      order the nth same-named preset directly
   console alias list            list your saved presets
+  console alias list --check    also probe live stock and mark sold-out presets
   console alias rm <name> [n]   remove preset <name> (the nth, if several share it)
   store whoami                show connection + saved addresses
   store logout                disconnect your Swiggy account

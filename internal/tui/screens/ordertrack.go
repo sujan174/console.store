@@ -54,7 +54,10 @@ func ShortStatus(raw string) string {
 	case strings.Contains(s, "deliver"), strings.Contains(s, "completed"), strings.Contains(s, "handed"):
 		return "delivered"
 	case strings.Contains(s, "prepar"), strings.Contains(s, "process"),
-		strings.Contains(s, "cook"), strings.Contains(s, "kitchen"), strings.Contains(s, "making"):
+		strings.Contains(s, "cook"), strings.Contains(s, "kitchen"), strings.Contains(s, "making"),
+		strings.Contains(s, "pack"):
+		// "pack" covers Instamart's dark-store states ("Packed", "Packing your
+		// order") — the grocery equivalent of a kitchen preparing.
 		return "preparing"
 	case strings.Contains(s, "confirm"), strings.Contains(s, "placed"),
 		strings.Contains(s, "received"), strings.Contains(s, "accept"):
@@ -85,7 +88,7 @@ var stageRules = []struct {
 	{[]string{"out for delivery", "on the way", "picked", "dispatch", "rider"}, 2, false},
 	{[]string{"arriv", "reach", "near"}, 2, false},
 	{[]string{"deliver", "completed", "handed"}, 3, true},
-	{[]string{"prepar", "process", "cook", "kitchen", "making"}, 1, false},
+	{[]string{"prepar", "process", "cook", "kitchen", "making", "pack"}, 1, false},
 	{[]string{"confirm", "placed", "received", "accept"}, 0, false},
 }
 

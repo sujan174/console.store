@@ -48,15 +48,17 @@ type Config struct {
 type Service struct {
 	cfg Config
 	mu  sync.Mutex
-	// per-account Food client cache (each carries that account's TokenSource).
+	// per-account client caches (each carries that account's TokenSource).
+	// Food and Instamart are separate MCP endpoints sharing one OAuth token.
 	food map[string]*swiggy.Client
+	im   map[string]*swiggy.Client
 }
 
 func NewService(cfg Config) *Service {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = http.DefaultClient
 	}
-	return &Service{cfg: cfg, food: map[string]*swiggy.Client{}}
+	return &Service{cfg: cfg, food: map[string]*swiggy.Client{}, im: map[string]*swiggy.Client{}}
 }
 
 func (s *Service) foodClient(accountID string) *swiggy.Client {
@@ -253,9 +255,10 @@ func (s *Service) CaptureTracking(ctx context.Context, accountID, addressID, ord
 }
 
 func (s *Service) Logout(ctx context.Context, accountID string) error {
-	// drop the cached client (and its token source) then purge the token.
+	// drop the cached clients (and their token sources) then purge the token.
 	s.mu.Lock()
 	delete(s.food, accountID)
+	delete(s.im, accountID)
 	s.mu.Unlock()
 	return s.cfg.Store.PurgeToken(ctx, accountID)
 }
@@ -268,4 +271,99 @@ func (s *Service) Usuals(ctx context.Context, accountID, addressID string) ([]ap
 		return nil, err
 	}
 	return mapRestaurants(rs), nil
+}
+
+// ---- Instamart (grocery) vertical ----
+
+// imClient mirrors foodClient for the Instamart MCP endpoint; the token source
+// is shared (one Swiggy OAuth token works across all Swiggy MCP servers).
+func (s *Service) imClient(accountID string) *swiggy.Client {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c, ok := s.im[accountID]; ok {
+		return c
+	}
+	c := swiggy.NewClient(s.cfg.ImBaseURL,
+		newStoreTokenSource(s.cfg.Store, s.cfg.Refresher, accountID),
+		swiggy.WithHTTPClient(s.cfg.HTTPClient),
+		swiggy.WithMinInterval(s.cfg.MinInterval))
+	s.im[accountID] = c
+	return c
+}
+
+// IMSearch searches the Instamart catalog at an address.
+func (s *Service) IMSearch(ctx context.Context, accountID, addressID, query string) ([]api.IMProduct, error) {
+	ps, err := s.imClient(accountID).SearchIMProducts(ctx, addressID, query, 0)
+	if err != nil {
+		return nil, err
+	}
+	return mapIMProducts(ps), nil
+}
+
+// IMGoTo returns the account's frequently-bought Instamart items (empty, not
+// an error, for accounts without Instamart history).
+func (s *Service) IMGoTo(ctx context.Context, accountID, addressID string) ([]api.IMProduct, error) {
+	ps, err := s.imClient(accountID).IMGoToItems(ctx, addressID)
+	if err != nil {
+		return nil, err
+	}
+	return mapIMProducts(ps), nil
+}
+
+// IMGetCart returns the live Instamart cart; an empty cart is a zero IMCart.
+func (s *Service) IMGetCart(ctx context.Context, accountID string) (api.IMCart, error) {
+	c, err := s.imClient(accountID).GetIMCart(ctx)
+	if err != nil {
+		return api.IMCart{}, err
+	}
+	return mapIMCart(c), nil
+}
+
+// IMUpdateCart REPLACES the whole Instamart cart with items at an address.
+func (s *Service) IMUpdateCart(ctx context.Context, accountID, addressID string, items []api.IMCartItem) (api.IMCart, error) {
+	c, err := s.imClient(accountID).UpdateIMCart(ctx, addressID, mapIMCartItems(items))
+	if err != nil {
+		return api.IMCart{}, err
+	}
+	return mapIMCart(c), nil
+}
+
+func (s *Service) IMClearCart(ctx context.Context, accountID string) error {
+	return s.imClient(accountID).ClearIMCart(ctx)
+}
+
+// IMPlaceOrder places the Instamart order via checkout (COD). Gated by the
+// same live-orders arming as PlaceOrder; counts toward order telemetry.
+func (s *Service) IMPlaceOrder(ctx context.Context, accountID, addressID string) (api.Order, error) {
+	o, err := s.imClient(accountID).Checkout(ctx, swiggy.CheckoutRequest{AddressID: addressID})
+	if err != nil {
+		return api.Order{}, err
+	}
+	mapped := mapOrder(o)
+	if mapped.Restaurant == "" {
+		mapped.Restaurant = "Instamart"
+	}
+	if shouldPingOrder(mapped, nil) {
+		telemetry.OrderPlaced() // anonymous count; fire-and-forget, gated
+	}
+	return mapped, nil
+}
+
+// IMOrders lists Instamart orders (last 15 days; activeOnly filters to live).
+func (s *Service) IMOrders(ctx context.Context, accountID string, activeOnly bool) ([]api.IMOrder, error) {
+	os, err := s.imClient(accountID).GetIMOrders(ctx, 20, activeOnly)
+	if err != nil {
+		return nil, err
+	}
+	return mapIMOrders(os), nil
+}
+
+// IMTrack polls live Instamart tracking. lat/lng come from IMOrders (the
+// track_order tool requires coordinates).
+func (s *Service) IMTrack(ctx context.Context, accountID, orderID string, lat, lng float64) (api.Tracking, error) {
+	t, err := s.imClient(accountID).TrackIMOrder(ctx, orderID, lat, lng)
+	if err != nil {
+		return api.Tracking{}, err
+	}
+	return mapTracking(t), nil
 }

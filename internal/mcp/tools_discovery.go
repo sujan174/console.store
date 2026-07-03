@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -208,13 +209,20 @@ type OrderDTO struct {
 	Restaurant string `json:"restaurant"`
 	Total      int    `json:"total"`
 	ETA        string `json:"eta"`
+	Vertical   string `json:"vertical"` // "food" or "instamart"
 }
 type ListActiveOrdersOut struct {
-	Orders []OrderDTO `json:"orders"`
+	Orders  []OrderDTO `json:"orders"`
+	Warning string     `json:"warning,omitempty"` // set when the instamart query failed; food orders above are still complete
 }
 
 func toOrderDTO(o api.Order) OrderDTO {
-	return OrderDTO{ID: o.ID, Status: o.Status, Restaurant: o.Restaurant, Total: o.Total, ETA: o.ETA}
+	return OrderDTO{ID: o.ID, Status: o.Status, Restaurant: o.Restaurant, Total: o.Total, ETA: o.ETA, Vertical: "food"}
+}
+
+func toIMOrderDTO(o api.IMOrder) OrderDTO {
+	restaurant := "Instamart"
+	return OrderDTO{ID: o.ID, Status: o.Status, Restaurant: restaurant, Total: o.Total, ETA: o.ETA, Vertical: "instamart"}
 }
 
 func (s *Server) handleListActiveOrders(ctx context.Context, _ *mcp.CallToolRequest, in ListActiveOrdersIn) (*mcp.CallToolResult, ListActiveOrdersOut, error) {
@@ -228,6 +236,16 @@ func (s *Server) handleListActiveOrders(ctx context.Context, _ *mcp.CallToolRequ
 	out := ListActiveOrdersOut{Orders: make([]OrderDTO, 0, len(orders))}
 	for _, o := range orders {
 		out.Orders = append(out.Orders, toOrderDTO(o))
+	}
+	// Instamart orders are merged in best-effort: a failure here (e.g. no
+	// Instamart history/account restriction) must not break the food listing.
+	imOrders, imErr := s.be.IMOrders(true)
+	if imErr != nil {
+		out.Warning = fmt.Sprintf("instamart orders unavailable: %v", imErr)
+	} else {
+		for _, o := range imOrders {
+			out.Orders = append(out.Orders, toIMOrderDTO(o))
+		}
 	}
 	return nil, out, nil
 }
@@ -246,11 +264,39 @@ func (s *Server) handleTrackOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, TrackOrderOut{}, err
 	}
+	if lat, lng, ok := s.imTrackCoords(in.OrderID); ok {
+		tr, err := s.be.IMTrack(in.OrderID, lat, lng)
+		if err != nil {
+			return nil, TrackOrderOut{}, err
+		}
+		return nil, TrackOrderOut{Status: tr.Status, ETA: tr.ETA}, nil
+	}
 	tr, err := s.be.TrackOrder(in.OrderID)
 	if err != nil {
 		return nil, TrackOrderOut{}, err
 	}
 	return nil, TrackOrderOut{Status: tr.Status, ETA: tr.ETA}, nil
+}
+
+// imTrackCoords resolves the lat/lng needed to poll IMTrack for orderID: first
+// the locally saved ActiveOrder (cheap, no network), then a live IMOrders(true)
+// lookup. Returns ok=false when orderID isn't a known Instamart order — the
+// caller then falls back to food TrackOrder.
+func (s *Server) imTrackCoords(orderID string) (lat, lng float64, ok bool) {
+	if ao, found, err := localstore.LoadActiveOrder(); err == nil && found &&
+		ao.OrderID == orderID && ao.Vertical == "instamart" {
+		return ao.Lat, ao.Lng, true
+	}
+	orders, err := s.be.IMOrders(true)
+	if err != nil {
+		return 0, 0, false
+	}
+	for _, o := range orders {
+		if o.ID == orderID {
+			return o.Lat, o.Lng, true
+		}
+	}
+	return 0, 0, false
 }
 
 // --- list_presets (local, no Swiggy call, still gated for consistency) ---
@@ -261,6 +307,7 @@ type PresetDTO struct {
 	RestaurantName string `json:"restaurant"`
 	AddrLine       string `json:"address"`
 	Lines          int    `json:"line_count"`
+	Vertical       string `json:"vertical"` // "food" or "instamart"
 }
 type ListPresetsOut struct {
 	Presets []PresetDTO `json:"presets"`
@@ -276,7 +323,11 @@ func (s *Server) handleListPresets(ctx context.Context, _ *mcp.CallToolRequest, 
 	}
 	out := ListPresetsOut{Presets: make([]PresetDTO, 0, len(ps.Items))}
 	for _, p := range ps.Items {
-		out.Presets = append(out.Presets, PresetDTO{Name: p.Name, RestaurantName: p.RestaurantName, AddrLine: p.AddrLine, Lines: len(p.Lines)})
+		v := "food"
+		if p.IsInstamart() {
+			v = "instamart"
+		}
+		out.Presets = append(out.Presets, PresetDTO{Name: p.Name, RestaurantName: p.RestaurantName, AddrLine: p.AddrLine, Lines: len(p.Lines), Vertical: v})
 	}
 	return nil, out, nil
 }

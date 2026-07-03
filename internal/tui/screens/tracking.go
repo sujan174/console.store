@@ -15,8 +15,17 @@ type Tracking struct {
 	placedAt                 int64
 	etaLo, etaHi             int
 	liveStatus, liveETA      string
-	viewportH                int // terminal height; trims the secondary notes on a short screen
+	// liveDetail is the secondary live line under the status — Instamart's
+	// rider updates ("SANJAY J is on the way to deliver your order"). "" for
+	// Food, whose text tools carry no equivalent.
+	liveDetail string
+	viewportH  int  // terminal height; trims the secondary notes on a short screen
+	hasAlt     bool // a second delivery is live; the hint row offers 'o' to switch
 }
+
+// WithAlt marks that a second live delivery exists (the other vertical), so
+// the hint row offers 'o' to switch the page to it.
+func (t Tracking) WithAlt(v bool) Tracking { t.hasAlt = v; return t }
 
 // WithViewport sets the terminal height so the page can drop secondary "open the
 // Swiggy app" / "rate the delivery" notes on a short terminal instead of
@@ -37,6 +46,9 @@ func NewTracking(place, addrLine, orderID string, placedAt int64, etaLo, etaHi i
 		etaHi:    etaHi,
 	}
 }
+
+// WithDetail sets the secondary live line rendered under the status row.
+func (t Tracking) WithDetail(d string) Tracking { t.liveDetail = d; return t }
 
 // WithLive returns a copy of t with the live status and ETA override applied.
 func (t Tracking) WithLive(status, eta string) Tracking {
@@ -257,10 +269,20 @@ func (t Tracking) View(nowUnix int64, frame int, spin string) string {
 			}
 		}
 		b.WriteString("  " + theme.DimStyle.Render(padTo(label, 7)) + theme.GreenStyle.Render(line) + "\n")
+		// Secondary live line — Instamart's rider updates carry the rider's
+		// name ("SANJAY J is on the way…"), which Food never exposes. Skip it
+		// when it just repeats the status.
+		if d := strings.TrimSpace(t.liveDetail); d != "" && !strings.EqualFold(d, t.liveStatus) {
+			b.WriteString("  " + theme.DimStyle.Render(padTo("", 7)) + theme.DimStyle.Render(d) + "\n")
+		}
 		swiggyNote("rider contact & live map → open the Swiggy app")
 	}
 	b.WriteString("\n")
 
-	b.WriteString(components.Hint("d", "done", "esc", "back to menu"))
+	if t.hasAlt {
+		b.WriteString(components.Hint("o", "other order", "d", "done", "esc", "back to menu"))
+	} else {
+		b.WriteString(components.Hint("d", "done", "esc", "back to menu"))
+	}
 	return b.String()
 }

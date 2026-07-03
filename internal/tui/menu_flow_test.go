@@ -63,6 +63,19 @@ func (f *railFake) PlaceOrder(string) (api.Order, error)     { return api.Order{
 func (f *railFake) TrackOrder(string) (api.Tracking, error)  { return api.Tracking{}, f.err }
 func (f *railFake) ActiveOrders(string) ([]api.Order, error) { return nil, f.err }
 
+func (f *railFake) IMSearch(string, string) ([]api.IMProduct, error) { return nil, f.err }
+func (f *railFake) IMGoTo(string) ([]api.IMProduct, error)           { return nil, f.err }
+func (f *railFake) IMGetCart() (api.IMCart, error)                   { return api.IMCart{}, f.err }
+func (f *railFake) IMUpdateCart(string, []api.IMCartItem) (api.IMCart, error) {
+	return api.IMCart{}, f.err
+}
+func (f *railFake) IMClearCart() error                     { return f.err }
+func (f *railFake) IMPlaceOrder(string) (api.Order, error) { return api.Order{}, f.err }
+func (f *railFake) IMOrders(bool) ([]api.IMOrder, error)   { return nil, f.err }
+func (f *railFake) IMTrack(string, float64, float64) (api.Tracking, error) {
+	return api.Tracking{}, f.err
+}
+
 // buildRailModel constructs a seeded live Model with chips and canned snapshot data.
 func buildRailModel(t *testing.T) Model {
 	t.Helper()

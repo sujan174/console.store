@@ -1,12 +1,14 @@
 ---
 name: console-order
-description: Use when the user wants to order food, build or add to a cart, reorder a usual, pick a restaurant/dish, track a live order, or asks what consolestore remembers about them (default address, favorites, tastes, presets) through consolestore's Swiggy tools.
+description: Use when the user wants to order food or groceries (Instamart), build or add to a cart, reorder a usual, pick a restaurant/dish/product, track a live order, or asks what consolestore remembers about them (default address, favorites, tastes, presets) through consolestore's Swiggy tools.
 ---
 
-# Ordering food with consolestore
+# Ordering food & groceries with consolestore
 
 consolestore exposes Swiggy ordering as MCP tools, plus a small local memory
 (address, per-item tastes, presets) that makes ordering need less back-and-forth.
+Two verticals: **Food** (restaurants) and **Instamart** (groceries, `im_*` tools —
+see "Instamart" below). They have **separate carts** that never interact.
 Orders cost **real money and cannot be cancelled**, so `place_order` runs only
 after an explicit user "yes" — see the two-step gate.
 
@@ -196,19 +198,51 @@ old, nothing accumulates):
 
 To undo any of the above, use `forget`.
 
+## Instamart (groceries)
+
+Quick-commerce groceries ("get me milk", "order a red bull", "add bananas") go
+through the `im_*` tools — NOT the restaurant tools:
+
+- `im_search_products {address_id, query}` — products come back with `variants`
+  (pack sizes), each with its own `spin_id` and price. **Carts hold variants**:
+  when several pack sizes exist, ask which one (or match the user's words) —
+  never pick a size silently.
+- `im_update_cart {address_id, items:[{spin_id, qty}]}` — **REPLACES the whole
+  Instamart cart.** Adding to an existing cart: `im_get_cart` first, resend the
+  existing lines plus the new one. The Instamart cart binds to the address and
+  may span multiple stores — there is no restaurant-conflict concept.
+- `im_get_cart` — lines + the real bill (`item_total`, `delivery`, `handling`,
+  `to_pay`) and the available payment methods.
+- `im_prepare_order {address_id}` → bill + `confirmation_id`, then the SAME
+  confirm-then-`place_order` gate as food (`place_order` routes by the
+  confirmation automatically). Limits: **₹99 minimum** (`under_min:`) and the
+  same **₹1000 cap** (`over_cap:`). COD only; typical delivery 10–20 min.
+- The Food cart and the Instamart cart are independent — building one never
+  touches the other. Say which cart you're acting on when both are in play.
+
 ## Presets
 
-- `save_preset {name}` snapshots the current/just-placed cart.
+Presets are **uniform across verticals**: a name can point at a food cart or an
+Instamart cart, and the ordering flow is identical.
+
+- `save_preset {name}` snapshots the current/just-placed food cart;
+  `save_preset {name, vertical:"instamart"}` snapshots the Instamart cart.
 - `order_preset` with the preset `name` (and `index` when several share a name)
-  loads it into the cart and returns a bill + `confirmation_id` — then the same
-  confirm-then-`place_order` gate.
-- `list_presets` lists saved presets.
+  loads it into the right cart — food or Instamart, routed automatically — and
+  returns a bill + `confirmation_id` — then the same confirm-then-`place_order`
+  gate.
+- `list_presets` lists saved presets (each carries its `vertical`). It does
+  NOT check live stock (would burn calls on every listing) — before ordering
+  a preset for the user, you may verify availability yourself first via
+  `get_menu` (food) or `im_search_products` (Instamart, search by item name);
+  either way, `order_preset`/`prepare_order` refuse a sold-out line for you.
 - `forget_preset {name, index?}` removes one.
 
 ## Tracking
 
-- "where's my order" → `list_active_orders`, then `track_order` for live status +
-  ETA.
+- "where's my order" → `list_active_orders` (covers food AND Instamart), then
+  `track_order` for live status + ETA (routed to the right vertical
+  automatically).
 
 ## Discovery
 

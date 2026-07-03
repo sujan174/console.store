@@ -215,7 +215,10 @@ type CheckoutRequest struct {
 }
 
 // Checkout is the Instamart non-idempotent order placement, gated + guarded
-// identically to PlaceFoodOrder.
+// identically to PlaceFoodOrder. The checkout response may fan out into one
+// order PER STORE (multi-store carts), so the place func normalizes whatever
+// shape comes back into a canonical Order payload before placeWithVerify
+// decodes it — the first order id found stands for the placement.
 func (c *Client) Checkout(ctx context.Context, req CheckoutRequest) (Order, error) {
 	if !liveOrdersEnabled() {
 		return Order{}, ErrOrdersDisabled
@@ -225,14 +228,76 @@ func (c *Client) Checkout(ctx context.Context, req CheckoutRequest) (Order, erro
 		pay = "Cash" // Swiggy's COD payment method is "Cash", not "COD".
 	}
 	snapshot := func(ctx context.Context) ([]Order, error) {
-		return c.GetOrders(ctx, 20, true)
+		ims, err := c.GetIMOrders(ctx, 20, true)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]Order, 0, len(ims))
+		for _, o := range ims {
+			out = append(out, Order{ID: flexID(o.ID), Status: o.Status, ETA: o.ETA, Total: o.Total})
+		}
+		return out, nil
 	}
 	place := func(ctx context.Context) (json.RawMessage, error) {
-		return c.CallTool(ctx, "checkout", map[string]any{
+		raw, err := c.CallTool(ctx, "checkout", map[string]any{
 			"addressId": req.AddressID, "paymentMethod": pay,
 		})
+		if err != nil {
+			return raw, err
+		}
+		return normalizeIMCheckout(raw), nil
 	}
 	return c.placeWithVerify(ctx, snapshot, place)
+}
+
+// normalizeIMCheckout maps the checkout response — whatever its shape — onto
+// the canonical {"orderId":...} payload placeWithVerify expects. Unrecognized
+// shapes pass through unchanged (the raw is already debug-logged) so the
+// phantom-success guard still fires rather than inventing an id. Ids are
+// carried as flexID end-to-end: an alphanumeric Instamart order id must
+// survive the re-marshal — a json.Number round-trip errors on it and would
+// report a REAL placed order as failed (duplicate-order hazard on COD).
+func normalizeIMCheckout(raw json.RawMessage) json.RawMessage {
+	var direct struct {
+		OrderID flexID `json:"orderId"`
+	}
+	if err := json.Unmarshal(raw, &direct); err == nil && direct.OrderID.val() != "" {
+		return raw
+	}
+	var multi struct {
+		Orders []imOrderRaw `json:"orders"`
+		Data   *struct {
+			OrderID flexID       `json:"orderId"`
+			Orders  []imOrderRaw `json:"orders"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &multi); err != nil {
+		return raw
+	}
+	orders := multi.Orders
+	if multi.Data != nil {
+		if id := multi.Data.OrderID.val(); id != "" {
+			b, err := json.Marshal(Order{ID: flexID(id)})
+			if err != nil {
+				return raw
+			}
+			return b
+		}
+		if len(multi.Data.Orders) > 0 {
+			orders = multi.Data.Orders
+		}
+	}
+	for _, r := range orders {
+		o := r.toOrder()
+		if o.ID != "" {
+			b, err := json.Marshal(Order{ID: flexID(o.ID), Status: o.Status, ETA: o.ETA, Total: o.Total})
+			if err != nil {
+				return raw
+			}
+			return b
+		}
+	}
+	return raw
 }
 
 func orderIDset(orders []Order) map[string]bool {

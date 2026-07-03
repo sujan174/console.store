@@ -18,9 +18,31 @@ type fakeBackend struct {
 	placeErr  error
 	updErr    error
 	getErr    error
+	activeErr error
 	logoutErr error
 	placeN    int
 	logoutN   int
+
+	// Instamart fakes.
+	imCart       api.IMCart
+	imPlaced     api.Order
+	imActive     []api.IMOrder
+	imTracking   api.Tracking
+	imPlaceErr   error
+	imUpdErr     error
+	imGetErr     error
+	imOrdersErr  error
+	imPlaceN     int
+	imUpdateArgs []api.IMCartItem // last items passed to IMUpdateCart, for assertions
+	imUpdateAddr string
+
+	// Availability-probe fakes (read-only; see availability.go).
+	menu          api.Menu
+	menuErr       error
+	menuCalls     int
+	imSearch      map[string][]api.IMProduct // query -> results
+	imSearchErr   error
+	imSearchCalls int
 }
 
 func (f *fakeBackend) Addresses() ([]api.Address, error) { return f.addrs, nil }
@@ -29,9 +51,36 @@ func (f *fakeBackend) UpdateCart(_, _, _ string, _ []api.CartItem) (api.Cart, er
 }
 func (f *fakeBackend) GetCart(_, _ string) (api.Cart, error)    { return f.cart, f.getErr }
 func (f *fakeBackend) PlaceOrder(string) (api.Order, error)     { f.placeN++; return f.placed, f.placeErr }
-func (f *fakeBackend) ActiveOrders(string) ([]api.Order, error) { return f.active, nil }
+func (f *fakeBackend) ActiveOrders(string) ([]api.Order, error) { return f.active, f.activeErr }
 func (f *fakeBackend) TrackOrder(string) (api.Tracking, error)  { return f.tracking, nil }
 func (f *fakeBackend) Logout() error                            { f.logoutN++; return f.logoutErr }
+
+func (f *fakeBackend) IMUpdateCart(addressID string, items []api.IMCartItem) (api.IMCart, error) {
+	f.imUpdateAddr = addressID
+	f.imUpdateArgs = items
+	return f.imCart, f.imUpdErr
+}
+func (f *fakeBackend) IMGetCart() (api.IMCart, error) { return f.imCart, f.imGetErr }
+func (f *fakeBackend) IMPlaceOrder(string) (api.Order, error) {
+	f.imPlaceN++
+	return f.imPlaced, f.imPlaceErr
+}
+func (f *fakeBackend) IMOrders(bool) ([]api.IMOrder, error) { return f.imActive, f.imOrdersErr }
+func (f *fakeBackend) IMTrack(string, float64, float64) (api.Tracking, error) {
+	return f.imTracking, nil
+}
+
+func (f *fakeBackend) Menu(string, string) (api.Menu, error) {
+	f.menuCalls++
+	return f.menu, f.menuErr
+}
+func (f *fakeBackend) IMSearch(_, query string) ([]api.IMProduct, error) {
+	f.imSearchCalls++
+	if f.imSearchErr != nil {
+		return nil, f.imSearchErr
+	}
+	return f.imSearch[query], nil
+}
 
 func TestLogoutAndWhoami(t *testing.T) {
 	var out bytes.Buffer

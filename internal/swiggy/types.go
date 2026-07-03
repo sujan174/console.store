@@ -296,26 +296,27 @@ type Coupon struct {
 	Amount      int    `json:"amount"`
 }
 
-// Order matches place_food_order / get_food_orders. orderId is a NUMBER in the
-// API (e.g. 241351408816590) — an int/string field fails to decode it and the
-// order silently looks failed even when CONFIRMED. json.Number accepts both.
+// Order matches place_food_order / get_food_orders / (normalized) checkout.
+// Food orderIds are NUMBERS (e.g. 241351408816590) but Instamart ids were not
+// harvestable and may be alphanumeric — flexID decodes either, and (unlike
+// json.Number) survives a re-marshal of a non-numeric id. A plain int/string
+// field fails to decode one of the two forms and the order silently looks
+// failed even when CONFIRMED — a duplicate-order hazard on COD.
 type Order struct {
-	ID         json.Number `json:"orderId"`
-	Status     string      `json:"status"`
-	Restaurant string      `json:"restaurantName"`
-	Total      int         `json:"totalAmount"`
-	ETA        string      `json:"estimatedDelivery"`
+	ID         flexID `json:"orderId"`
+	Status     string `json:"status"`
+	Restaurant string `json:"restaurantName"`
+	Total      int    `json:"totalAmount"`
+	ETA        string `json:"estimatedDelivery"`
 }
 
 type Tracking struct {
 	OrderID string
 	Status  string
-	ETA     string
-	Active  bool
-}
-
-type Product struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Price int    `json:"price"`
+	// Detail is a secondary human line under the status — Instamart's
+	// subStatusMessage carries the rider's name ("SANJAY J is on the way to
+	// deliver your order"); Food's text tools have no equivalent, so it's "".
+	Detail string
+	ETA    string
+	Active bool
 }

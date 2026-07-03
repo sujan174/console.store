@@ -59,6 +59,28 @@ func DefaultCategories() []Category {
 	}
 }
 
+// DefaultIMCategories is the curated, developer-focused Instamart rail
+// category set, in priority order (top = most reached-for). Unlike
+// DefaultCategories (config-overridable food chips), this list is fixed —
+// Instamart has no config.json override yet.
+func DefaultIMCategories() []Category {
+	return []Category{
+		{Label: "Energy Drinks", Query: "energy drink"},
+		{Label: "Chips", Query: "chips"},
+		{Label: "Snacks", Query: "snacks"},
+		{Label: "Popcorn", Query: "popcorn"},
+		{Label: "Instant Noodles", Query: "instant noodles"},
+		{Label: "Chocolate", Query: "chocolate"},
+		{Label: "Cold Drinks", Query: "soft drinks"},
+		{Label: "Coffee", Query: "cold coffee"},
+		{Label: "Biscuits", Query: "biscuits"},
+		{Label: "Protein Bars", Query: "protein bar"},
+		{Label: "Ice Cream", Query: "ice cream"},
+		{Label: "Milk & Bread", Query: "milk"},
+		{Label: "Dry Fruits", Query: "dry fruits"},
+	}
+}
+
 // ChipCategories returns the configured chips, or the defaults when none are set.
 // Safe on a nil *Config.
 func (c *Config) ChipCategories() []Category {

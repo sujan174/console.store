@@ -17,7 +17,13 @@ func runAlias(d Deps, args []string) int {
 	}
 	switch args[0] {
 	case "list", "ls":
-		return aliasList(d)
+		check := false
+		for _, a := range args[1:] {
+			if a == "--check" {
+				check = true
+			}
+		}
+		return aliasList(d, check)
 	case "rm", "remove", "delete":
 		if len(args) < 2 {
 			fmt.Fprintln(d.Out, "usage: console alias rm <name> [n]")
@@ -42,7 +48,13 @@ func runAlias(d Deps, args []string) int {
 	}
 }
 
-func aliasList(d Deps) int {
+// aliasList prints every saved preset grouped by name. With check=true (the
+// `--check` flag) it also probes each preset's live availability and appends
+// a "sold out: <item>" tag — off by default because probing EVERY preset on
+// EVERY plain `alias list` would be slow (one Menu/IMSearch round trip per
+// preset) and chatty for a command that's mostly used to just skim names.
+func aliasList(d Deps, check bool) int {
+	st := newStyle(d.Color)
 	ps, err := localstore.LoadPresets()
 	if err != nil {
 		fmt.Fprintf(d.Out, "store: %v\n", err)
@@ -52,6 +64,12 @@ func aliasList(d Deps) int {
 		fmt.Fprintln(d.Out, "no presets yet — create one in the app with `:alias set <name>`")
 		return 0
 	}
+	// --check needs a signed-in backend to probe with; without one, fall back to
+	// the plain listing rather than failing the whole command.
+	if check && (!d.SignedIn || d.Backend == nil) {
+		check = false
+	}
+	anyUnavailable := false
 	// Group by name in first-seen order.
 	seen := map[string]bool{}
 	for _, p := range ps.Items {
@@ -63,8 +81,19 @@ func aliasList(d Deps) int {
 		group := ps.ByName(p.Name)
 		fmt.Fprintf(d.Out, "%s (%d)\n", p.Name, len(group))
 		for i, g := range group {
-			fmt.Fprintf(d.Out, "  %d) %s · %s · %s\n", i+1, g.RestaurantName, g.AddrLine, summarize(g))
+			suffix := ""
+			if check {
+				a := probeAvailability(d.Backend, g)
+				if s := soldOutSuffix(a, st); s != "" {
+					suffix = s
+					anyUnavailable = true
+				}
+			}
+			fmt.Fprintf(d.Out, "  %d) %s · %s · %s%s\n", i+1, g.RestaurantName, g.AddrLine, summarize(g), suffix)
 		}
+	}
+	if check && !anyUnavailable {
+		fmt.Fprintf(d.Out, "\n%s\n", st.dim("everything checks available right now."))
 	}
 	return 0
 }

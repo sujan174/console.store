@@ -25,6 +25,15 @@ type inprocService interface {
 	TrackOrder(ctx context.Context, accountID, orderID string) (api.Tracking, error)
 	ActiveFoodOrders(ctx context.Context, accountID, addressID string) ([]api.Order, error)
 	Logout(ctx context.Context, accountID string) error
+
+	IMSearch(ctx context.Context, accountID, addressID, query string) ([]api.IMProduct, error)
+	IMGoTo(ctx context.Context, accountID, addressID string) ([]api.IMProduct, error)
+	IMGetCart(ctx context.Context, accountID string) (api.IMCart, error)
+	IMUpdateCart(ctx context.Context, accountID, addressID string, items []api.IMCartItem) (api.IMCart, error)
+	IMClearCart(ctx context.Context, accountID string) error
+	IMPlaceOrder(ctx context.Context, accountID, addressID string) (api.Order, error)
+	IMOrders(ctx context.Context, accountID string, activeOnly bool) ([]api.IMOrder, error)
+	IMTrack(ctx context.Context, accountID, orderID string, lat, lng float64) (api.Tracking, error)
 }
 
 // InProc adapts a broker.Service into the brokerRPC interface that
@@ -94,4 +103,36 @@ func (p InProc) TrackOrder(accountID, orderID string) (api.Tracking, error) {
 
 func (p InProc) ActiveFoodOrders(accountID, addressID string) ([]api.Order, error) {
 	return p.svc.ActiveFoodOrders(context.Background(), accountID, addressID)
+}
+
+func (p InProc) IMSearch(accountID, addressID, query string) ([]api.IMProduct, error) {
+	return p.svc.IMSearch(context.Background(), accountID, addressID, query)
+}
+
+func (p InProc) IMGoTo(accountID, addressID string) ([]api.IMProduct, error) {
+	return p.svc.IMGoTo(context.Background(), accountID, addressID)
+}
+
+func (p InProc) IMGetCart(accountID string) (api.IMCart, error) {
+	return p.svc.IMGetCart(context.Background(), accountID)
+}
+
+func (p InProc) IMUpdateCart(accountID, addressID string, items []api.IMCartItem) (api.IMCart, error) {
+	return p.svc.IMUpdateCart(context.Background(), accountID, addressID, items)
+}
+
+func (p InProc) IMClearCart(accountID string) error {
+	return p.svc.IMClearCart(context.Background(), accountID)
+}
+
+func (p InProc) IMPlaceOrder(accountID, addressID string) (api.Order, error) {
+	return p.svc.IMPlaceOrder(context.Background(), accountID, addressID)
+}
+
+func (p InProc) IMOrders(accountID string, activeOnly bool) ([]api.IMOrder, error) {
+	return p.svc.IMOrders(context.Background(), accountID, activeOnly)
+}
+
+func (p InProc) IMTrack(accountID, orderID string, lat, lng float64) (api.Tracking, error) {
+	return p.svc.IMTrack(context.Background(), accountID, orderID, lat, lng)
 }

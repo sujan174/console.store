@@ -30,3 +30,38 @@ func TestInstamartInCartStepper(t *testing.T) {
 		}
 	}
 }
+
+// liveInstamart builds a two-pane Instamart screen with the rail attached,
+// mirroring liveMenu() in menu_test.go — the render path exercised once a
+// rail has been attached (live mode).
+func liveInstamart() screens.Instamart {
+	return screens.NewInstamart(nil, nil, "🛒 empty").
+		WithRail(screens.NewRailLabeled("Usuals", []string{"Energy Drinks", "Chips"})).
+		WithRailFocus(true).WithMaxRows(20)
+}
+
+// TestInstamartTwoPaneShowsStoreSwitcher: the Instamart page renders the
+// mirror-image switcher — INSTAMART as the active gold pill, Food dim, no
+// "soon" tag (Instamart is live), plus the rail with the curated categories.
+func TestInstamartTwoPaneShowsStoreSwitcher(t *testing.T) {
+	v := liveInstamart().View()
+	for _, want := range []string{"INSTAMART", "Food", "tab", "switch", "Energy Drinks"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("instamart two-pane switcher/rail missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "soon") {
+		t.Fatalf("instamart is live now — must not show a soon marker:\n%s", v)
+	}
+}
+
+// TestInstamartRailShowsSearchAndUsuals: the rail's fixed slots are Search
+// then Usuals (the go-to list — Food's Home equivalent), ahead of categories.
+func TestInstamartRailShowsSearchAndUsuals(t *testing.T) {
+	v := liveInstamart().View()
+	for _, want := range []string{"Search", "Usuals"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("instamart rail missing %q:\n%s", want, v)
+		}
+	}
+}

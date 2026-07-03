@@ -22,6 +22,24 @@ type liveFake struct {
 	addrs  []api.Address
 	orders []api.Order // returned by ActiveOrders (active-order discovery tests)
 	err    error
+
+	// Instamart fixtures + call recording.
+	imGoTo        []api.IMProduct
+	imSearch      []api.IMProduct
+	imSearchErr   error
+	imCart        api.IMCart
+	imCartErr     error
+	imUpdateErr   error
+	imOrder       api.Order
+	imOrderErr    error
+	imOrders      []api.IMOrder
+	imTrack       api.Tracking
+	imTrackErr    error
+	imUpdateCalls []api.IMCartItem // last items sent to IMUpdateCart
+	imSearchQuery string           // last query sent to IMSearch
+	imPlacedAddr  string           // last addressID sent to IMPlaceOrder
+	imSearchCalls int              // count of IMSearch calls (rail-load dedupe tests)
+	imGoToCalls   int              // count of IMGoTo calls (rail-load dedupe tests)
 }
 
 func (f *liveFake) Addresses() ([]api.Address, error) { return f.addrs, f.err }
@@ -319,6 +337,33 @@ func TestLivePlaceOrderErrShowsError(t *testing.T) {
 }
 
 func (f *liveFake) Logout() error { return f.err }
+
+func (f *liveFake) IMSearch(_, q string) ([]api.IMProduct, error) {
+	f.imSearchQuery = q
+	f.imSearchCalls++
+	return f.imSearch, f.imSearchErr
+}
+func (f *liveFake) IMGoTo(string) ([]api.IMProduct, error) {
+	f.imGoToCalls++
+	return f.imGoTo, f.imSearchErr
+}
+func (f *liveFake) IMGetCart() (api.IMCart, error) { return f.imCart, f.imCartErr }
+func (f *liveFake) IMUpdateCart(_ string, items []api.IMCartItem) (api.IMCart, error) {
+	f.imUpdateCalls = items
+	if f.imUpdateErr != nil {
+		return api.IMCart{}, f.imUpdateErr
+	}
+	return f.imCart, nil
+}
+func (f *liveFake) IMClearCart() error { return f.imUpdateErr }
+func (f *liveFake) IMPlaceOrder(addressID string) (api.Order, error) {
+	f.imPlacedAddr = addressID
+	return f.imOrder, f.imOrderErr
+}
+func (f *liveFake) IMOrders(bool) ([]api.IMOrder, error) { return f.imOrders, f.err }
+func (f *liveFake) IMTrack(string, float64, float64) (api.Tracking, error) {
+	return f.imTrack, f.imTrackErr
+}
 
 // TestStaleMenuLoadIgnored is the regression for the cross-restaurant race:
 // open A (slow load) → open B before A lands → A's late MenuLoadedMsg must NOT

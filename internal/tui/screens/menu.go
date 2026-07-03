@@ -458,18 +458,32 @@ func keycapHint(key, label string) string {
 	return theme.DimStyle.Render(key) + theme.FaintStyle.Render(" "+label)
 }
 
-// verticalSwitcher is the top-level store switcher (Food ⟷ Instamart) — a full
-// width row above the rail/main split. Food is a solid gold pill (active);
-// Instamart is dim with a "soon" tag. Deliberately unlike the rail or chips.
-func (m Menu) verticalSwitcher() string {
+// verticalTabs renders the top-level store switcher (Food ⟷ Instamart) — a
+// full-width row above the rail/main split, shared by both live verticals so
+// their switchers can never drift apart. active is 0 for Food, 1 for
+// Instamart; the active side renders as a solid gold pill, the other dim.
+// Both verticals are live now — neither side carries a "soon" tag.
+func verticalTabs(active int) string {
 	w := components.ContentWidth()
-	active := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.Bg)).
-		Background(lipgloss.Color(theme.Gold)).
-		Bold(true).Render(" FOOD ")
-	inactive := theme.CatOffStyle.Render("Instamart") + theme.FaintStyle.Render("  ·  soon")
+	pill := func(label string) string {
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Bg)).
+			Background(lipgloss.Color(theme.Gold)).
+			Bold(true).Render(" " + label + " ")
+	}
+	dim := func(label string) string { return theme.CatOffStyle.Render(label) }
+
+	var food, inst string
+	if active == 1 {
+		food = dim("Food")
+		inst = pill("INSTAMART")
+	} else {
+		food = pill("FOOD")
+		inst = dim("Instamart")
+	}
+
 	hint := keycapHint("tab", "switch")
-	left := "  " + active + "    " + inactive
+	left := "  " + food + "    " + inst
 	gap := w - lipgloss.Width(left) - lipgloss.Width(hint) - 2
 	if gap < 2 {
 		gap = 2
@@ -558,7 +572,7 @@ func (m Menu) twoPaneView() string {
 	hint := components.Hint("↑↓", "move", "↵", "open", "/", "search", "i", "info", "c", "cart") +
 		"   " + theme.PurpleStyle.Render(":") + " " + theme.FaintStyle.Render("cmd")
 	// The store switcher (Food ⟷ Instamart) sits above the rail/main split.
-	return m.verticalSwitcher() + body + "\n\n" + hint
+	return verticalTabs(0) + body + "\n\n" + hint
 }
 
 func (m Menu) Init() tea.Cmd { return nil }

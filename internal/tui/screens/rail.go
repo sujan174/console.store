@@ -29,8 +29,15 @@ const (
 
 // NewRail builds the rail entries: Search, Home, then the categories.
 func NewRail(categories []string) Rail {
+	return NewRailLabeled("Home", categories)
+}
+
+// NewRailLabeled builds the rail entries with a custom label for the second
+// slot (index RailHome) — Food uses "Home", Instamart uses "Usuals" for its
+// your-go-to-items list. Same layout/behavior otherwise.
+func NewRailLabeled(homeLabel string, categories []string) Rail {
 	entries := make([]string, 0, len(categories)+2)
-	entries = append(entries, "⌕ Search", "Home")
+	entries = append(entries, "⌕ Search", homeLabel)
 	entries = append(entries, categories...)
 	return Rail{entries: entries, active: RailHome}
 }

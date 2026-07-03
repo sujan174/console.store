@@ -117,6 +117,103 @@ func choiceIDs(g catalog.OptionGroup) []string {
 	return ids
 }
 
+// toIMItems: a single-variant product maps directly (not Customizable), using
+// that variant's spinId/price.
+func TestToIMItemsSingleVariantNotCustomizable(t *testing.T) {
+	in := []api.IMProduct{{
+		ID: "p1", Name: "Milk", Brand: "Amul", InStock: true,
+		Variants: []api.IMVariantSel{{SpinID: "s1", Label: "500 ml", Price: 34, InStock: true}},
+	}}
+	out := toIMItems(in)
+	if len(out) != 1 {
+		t.Fatalf("len = %d", len(out))
+	}
+	it := out[0]
+	if it.Customizable {
+		t.Fatal("single-variant product should not be Customizable")
+	}
+	if it.SwiggyID != "s1" || it.Price != 34 {
+		t.Fatalf("default variant not applied: %+v", it)
+	}
+	if it.Section != catalog.SectionInstamart {
+		t.Fatalf("Section = %v; want SectionInstamart", it.Section)
+	}
+	if it.Desc != "Amul · 500 ml" {
+		t.Fatalf("Desc = %q; want \"Amul · 500 ml\"", it.Desc)
+	}
+	if it.OutOfStock {
+		t.Fatal("in-stock product should not be OutOfStock")
+	}
+}
+
+// toIMItems: multi-variant products become Customizable with a synthesized
+// single-choice "pack size" group, and the default variant is the first
+// IN-STOCK one (not necessarily index 0).
+func TestToIMItemsMultiVariantSynthesizesOptions(t *testing.T) {
+	in := []api.IMProduct{{
+		ID: "p2", Name: "Yogurt", Brand: "Nestle", InStock: true,
+		Variants: []api.IMVariantSel{
+			{SpinID: "s1", Label: "100 g", Price: 20, InStock: false},
+			{SpinID: "s2", Label: "400 g", Price: 60, InStock: true},
+		},
+	}}
+	out := toIMItems(in)
+	it := out[0]
+	if !it.Customizable {
+		t.Fatal("multi-variant product should be Customizable")
+	}
+	if len(it.Options) != 1 || it.Options[0].ID != "im-size" {
+		t.Fatalf("Options = %+v", it.Options)
+	}
+	g := it.Options[0]
+	if g.Min != 1 || g.Max != 1 || !g.Variant || !g.Absolute {
+		t.Fatalf("group flags wrong: %+v", g)
+	}
+	if len(g.Choices) != 2 || g.Choices[0].ID != "s1" || g.Choices[1].ID != "s2" {
+		t.Fatalf("choices = %+v", g.Choices)
+	}
+	// Default = first in-stock variant (s2), even though s1 is index 0.
+	if it.SwiggyID != "s2" || it.Price != 60 {
+		t.Fatalf("default variant should be first in-stock (s2): %+v", it)
+	}
+	if it.OutOfStock {
+		t.Fatal("product with an in-stock variant should not be OutOfStock")
+	}
+}
+
+// toIMItems: OutOfStock propagates when the product itself is flagged
+// unavailable, or when every variant is out of stock.
+func TestToIMItemsOutOfStockPropagation(t *testing.T) {
+	productFlag := []api.IMProduct{{
+		ID: "p3", Name: "Eggs", InStock: false,
+		Variants: []api.IMVariantSel{{SpinID: "s1", Price: 80, InStock: true}},
+	}}
+	if got := toIMItems(productFlag); !got[0].OutOfStock {
+		t.Fatal("InStock=false on the product should mark OutOfStock")
+	}
+
+	allVariantsOut := []api.IMProduct{{
+		ID: "p4", Name: "Cheese", InStock: true,
+		Variants: []api.IMVariantSel{
+			{SpinID: "s1", Price: 90, InStock: false},
+			{SpinID: "s2", Price: 150, InStock: false},
+		},
+	}}
+	out := toIMItems(allVariantsOut)
+	if !out[0].OutOfStock {
+		t.Fatal("all-variants-out-of-stock product should be OutOfStock")
+	}
+	// Falls back to the first variant for a representative price.
+	if out[0].SwiggyID != "s1" || out[0].Price != 90 {
+		t.Fatalf("fallback variant wrong: %+v", out[0])
+	}
+
+	noVariants := []api.IMProduct{{ID: "p5", Name: "Mystery", InStock: true}}
+	if got := toIMItems(noVariants); !got[0].OutOfStock {
+		t.Fatal("product with no variants should be OutOfStock")
+	}
+}
+
 func TestCleanAddrLineStripsNamePrefix(t *testing.T) {
 	cases := map[string]string{
 		"Sujan: FD 46 HAL SENIOR Off Officers Enclave": "FD 46 HAL SENIOR Off Officers Enclave",

@@ -102,3 +102,36 @@ func (f *fakeService) ActiveFoodOrders(_ context.Context, a, _ string) ([]api.Or
 	return nil, nil
 }
 func (f *fakeService) Logout(_ context.Context, a string) error { f.gotAccount = a; return nil }
+
+func (f *fakeService) IMSearch(_ context.Context, a, _, _ string) ([]api.IMProduct, error) {
+	f.gotAccount = a
+	return nil, nil
+}
+func (f *fakeService) IMGoTo(_ context.Context, a, _ string) ([]api.IMProduct, error) {
+	f.gotAccount = a
+	return nil, nil
+}
+func (f *fakeService) IMGetCart(_ context.Context, a string) (api.IMCart, error) {
+	f.gotAccount = a
+	return api.IMCart{}, nil
+}
+func (f *fakeService) IMUpdateCart(_ context.Context, a, _ string, _ []api.IMCartItem) (api.IMCart, error) {
+	f.gotAccount = a
+	return api.IMCart{}, nil
+}
+func (f *fakeService) IMClearCart(_ context.Context, a string) error {
+	f.gotAccount = a
+	return nil
+}
+func (f *fakeService) IMPlaceOrder(_ context.Context, a, _ string) (api.Order, error) {
+	f.gotAccount = a
+	return api.Order{}, nil
+}
+func (f *fakeService) IMOrders(_ context.Context, a string, _ bool) ([]api.IMOrder, error) {
+	f.gotAccount = a
+	return nil, nil
+}
+func (f *fakeService) IMTrack(_ context.Context, a, _ string, _, _ float64) (api.Tracking, error) {
+	f.gotAccount = a
+	return api.Tracking{}, nil
+}

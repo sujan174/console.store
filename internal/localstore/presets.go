@@ -39,6 +39,15 @@ type Preset struct {
 	RestaurantName string       `json:"restaurantName"`
 	Lines          []PresetLine `json:"lines"`
 	CreatedAt      int64        `json:"createdAt"`
+	// Vertical is "" (or "food") for a Swiggy Food preset, "instamart" for an
+	// Instamart preset. omitempty keeps old presets.json files loading unchanged.
+	Vertical string `json:"vertical,omitempty"`
+}
+
+// IsInstamart reports whether the preset targets the Instamart vertical rather
+// than Food. Empty Vertical ("") means food — the pre-Instamart default.
+func (p Preset) IsInstamart() bool {
+	return p.Vertical == "instamart"
 }
 
 type Presets struct {
@@ -145,6 +154,18 @@ func PresetCartItems(p Preset) []api.CartItem {
 			}
 		}
 		out = append(out, ci)
+	}
+	return out
+}
+
+// PresetIMCartItems maps an Instamart preset's lines to api.IMCartItem. For IM
+// presets, PresetLine.ItemID carries the spinId (the SKU-level variant id sent
+// to update_cart); Sels is unused (Instamart has no addon/variant channels —
+// pack-size choice is baked into the spinId itself).
+func PresetIMCartItems(p Preset) []api.IMCartItem {
+	out := make([]api.IMCartItem, 0, len(p.Lines))
+	for _, l := range p.Lines {
+		out = append(out, api.IMCartItem{SpinID: l.ItemID, Quantity: l.Qty})
 	}
 	return out
 }

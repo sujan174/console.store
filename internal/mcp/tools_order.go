@@ -141,6 +141,9 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	if !ok {
 		return nil, PlaceOrderOut{}, codedErr(codeConfirmationExpired, "unknown or expired confirmation_id — call prepare_order again")
 	}
+	if p.vertical == "instamart" {
+		return s.placeIMOrder(p)
+	}
 	// Re-fetch and verify the cart still matches what the user confirmed.
 	c, err := s.be.GetCart(p.addressID, "")
 	if err != nil {
@@ -187,14 +190,47 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	return nil, PlaceOrderOut{Order: toOrderDTO(order)}, nil
 }
 
+// placeIMOrder re-verifies and places an Instamart order from a confirmation
+// minted by im_prepare_order/order_preset. Mirrors handlePlaceOrder's food
+// path: re-fetch, hash/total re-check, place once (never retried), persist
+// ActiveOrder (Vertical "instamart"), best-effort stamp Lat/Lng from IMOrders.
+func (s *Server) placeIMOrder(p pendingOrder) (*mcp.CallToolResult, PlaceOrderOut, error) {
+	c, err := s.be.IMGetCart()
+	if err != nil {
+		return nil, PlaceOrderOut{}, err
+	}
+	if imCartHash(p.addressID, c) != p.hash || c.Total != p.total {
+		return nil, PlaceOrderOut{}, codedErr(codeCartChanged, "cart changed since im_prepare_order — call im_prepare_order again to re-confirm")
+	}
+	order, err := s.be.IMPlaceOrder(p.addressID) // never retried
+	if err != nil {
+		return nil, PlaceOrderOut{}, fmt.Errorf("order failed: %w — run list_active_orders before retrying in case it was placed", err)
+	}
+	etaLo, etaHi := localstore.ParseETAMinutes(order.ETA)
+	active := localstore.ActiveOrder{
+		OrderID: order.ID, Restaurant: order.Restaurant, ETALoMin: etaLo, ETAHiMin: etaHi,
+		Total: order.Total, PlacedAt: nowUnix(), Vertical: "instamart",
+		// The cart just re-fetched above is the ONLY source of the delivery
+		// coordinates track_order requires — get_addresses and get_orders both
+		// omit them (harvested 2026-07-03).
+		Lat: c.AddrLat, Lng: c.AddrLng,
+	}
+	_ = localstore.SaveActiveOrder(active)
+	_ = localstore.RecordOrder(p.addressID, p.addrLabel, p.restaurantID, p.restaurantName, nowUnix())
+	s.markCartWritePlaced()
+	return nil, PlaceOrderOut{Order: toOrderDTO(order)}, nil
+}
+
 type OrderPresetIn struct {
 	Name  string `json:"name"`
 	Index int    `json:"index,omitempty" jsonschema:"0-based pick among presets sharing a name; default 0"`
 }
 type OrderPresetOut struct {
 	ConfirmationID string     `json:"confirmation_id"`
-	Bill           CartDTO    `json:"bill"`
-	Address        AddrRefDTO `json:"address"` // where this order delivers — show it with the bill
+	Vertical       string     `json:"vertical"` // "food" or "instamart"
+	Bill           CartDTO    `json:"bill,omitempty"`
+	IMBill         IMCartDTO  `json:"im_bill,omitempty"` // set instead of bill when vertical is "instamart"
+	Address        AddrRefDTO `json:"address"`           // where this order delivers — show it with the bill
 	Note           string     `json:"note"`
 }
 
@@ -214,6 +250,9 @@ func (s *Server) handleOrderPreset(ctx context.Context, _ *mcp.CallToolRequest, 
 		return nil, OrderPresetOut{}, fmt.Errorf("preset %q has %d entries; index %d out of range", in.Name, len(matches), in.Index)
 	}
 	p := matches[in.Index]
+	if p.IsInstamart() {
+		return s.orderIMPreset(p)
+	}
 	c, err := s.be.UpdateCart(p.AddrID, p.RestaurantID, p.RestaurantName, localstore.PresetCartItems(p))
 	if err != nil {
 		return nil, OrderPresetOut{}, err
@@ -226,9 +265,29 @@ func (s *Server) handleOrderPreset(ctx context.Context, _ *mcp.CallToolRequest, 
 	if err != nil {
 		return nil, OrderPresetOut{}, err
 	}
-	return nil, OrderPresetOut{ConfirmationID: id, Bill: bill,
+	return nil, OrderPresetOut{ConfirmationID: id, Vertical: "food", Bill: bill,
 		Address: AddrRefDTO{ID: p.AddrID, Label: p.AddrLine},
 		Note:    "show the user the full bill breakdown AND the delivery address; call place_order with this confirmation_id ONLY after they confirm."}, nil
+}
+
+// orderIMPreset routes an Instamart preset through IMUpdateCart + the im
+// prepare path (same refusals as im_prepare_order: empty/sold-out/cap/min).
+func (s *Server) orderIMPreset(p localstore.Preset) (*mcp.CallToolResult, OrderPresetOut, error) {
+	c, err := s.be.IMUpdateCart(p.AddrID, localstore.PresetIMCartItems(p))
+	if err != nil {
+		return nil, OrderPresetOut{}, err
+	}
+	// Record the write like the food path does: saveIMPreset recovers the
+	// address binding from the last "Instamart" cart-write, so a follow-up
+	// save_preset {vertical:"instamart"} must not save an address-less preset.
+	s.recordCartWrite(&cartWrite{AddressID: p.AddrID, RestaurantName: "Instamart"})
+	id, bill, err := s.imPrepare(p.AddrID, c, orderIdentity{restaurantName: "Instamart", addrLabel: p.AddrLine})
+	if err != nil {
+		return nil, OrderPresetOut{}, err
+	}
+	return nil, OrderPresetOut{ConfirmationID: id, Vertical: "instamart", IMBill: bill,
+		Address: AddrRefDTO{ID: p.AddrID, Label: p.AddrLine},
+		Note:    "COD only — show the user the full bill breakdown AND the delivery address; call place_order with this confirmation_id ONLY after they confirm."}, nil
 }
 
 // cartWriteFromPreset projects a preset into a cartWrite for the memory

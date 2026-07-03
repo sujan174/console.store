@@ -286,3 +286,58 @@ func TestRankUsualsByFrequency(t *testing.T) {
 		t.Fatalf("second: got %+v", ranked[1])
 	}
 }
+
+// Instamart checkout ids were never harvested and may be ALPHANUMERIC. A
+// json.Number round-trip errors on a non-numeric id and reported a REAL placed
+// order as failed — pushing the user toward a duplicate COD order. flexID must
+// carry the id through every checkout response shape.
+func TestCheckoutAlphanumericOrderID(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	shapes := []struct {
+		name string
+		resp any
+	}{
+		{"direct", map[string]any{"orderId": "IM-abc123", "status": "PLACED"}},
+		{"multiStore", map[string]any{"orders": []map[string]any{{"orderId": "IM-abc123", "status": "PLACED"}}}},
+		{"dataWrapped", map[string]any{"data": map[string]any{"orderId": "IM-abc123"}}},
+	}
+	for _, tc := range shapes {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newFakeMCP(t, map[string]toolFn{
+				"get_orders": func(map[string]any) (any, error) {
+					return map[string]any{"orders": []map[string]any{}, "hasMore": false}, nil
+				},
+				"checkout": func(map[string]any) (any, error) { return tc.resp, nil },
+			})
+			c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
+			o, err := c.Checkout(context.Background(), CheckoutRequest{AddressID: "a1"})
+			if err != nil {
+				t.Fatalf("checkout with alphanumeric id must succeed: %v", err)
+			}
+			if string(o.ID) != "IM-abc123" {
+				t.Fatalf("order id = %q, want IM-abc123", o.ID)
+			}
+		})
+	}
+}
+
+// Checkout with a numeric id (the food-style shape) must keep working too.
+func TestCheckoutNumericOrderID(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	srv := newFakeMCP(t, map[string]toolFn{
+		"get_orders": func(map[string]any) (any, error) {
+			return map[string]any{"orders": []map[string]any{}, "hasMore": false}, nil
+		},
+		"checkout": func(map[string]any) (any, error) {
+			return map[string]any{"orderId": 241351408816590, "status": "PLACED"}, nil
+		},
+	})
+	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
+	o, err := c.Checkout(context.Background(), CheckoutRequest{AddressID: "a1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(o.ID) != "241351408816590" {
+		t.Fatalf("order id = %q", o.ID)
+	}
+}

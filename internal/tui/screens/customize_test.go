@@ -82,6 +82,79 @@ func bigOptItem() catalog.Item {
 	return catalog.Item{ID: "big", Name: "Loaded", Price: 100, Options: groups}
 }
 
+// imPackSizeItem builds a single-group "pack size" item like the synthesized
+// Instamart variant group (im-design.md), with one sold-out choice among the
+// selectable ones — the shape that motivated this test.
+func imPackSizeItem() catalog.Item {
+	group := catalog.OptionGroup{
+		ID: "im-size", Name: "pack size", Min: 1, Max: 1, Variant: true, Absolute: true,
+		Choices: []catalog.Choice{
+			{ID: "spin-250", Name: "250 ml", Price: 30, InStock: true},
+			{ID: "spin-500", Name: "500 ml", Price: 55, InStock: false}, // sold out
+			{ID: "spin-1l", Name: "1 L", Price: 100, InStock: true},
+		},
+	}
+	return catalog.Item{ID: "milk", Name: "Amul Milk", Price: 30, Options: []catalog.OptionGroup{group}}
+}
+
+// A sold-out choice in a grouped (Instamart pack-size) option group must
+// render dim + "sold out" and refuse to be toggled on — the cursor can still
+// land on it, but Toggle is a no-op there.
+func TestCustomizeSoldOutChoiceUnselectable(t *testing.T) {
+	c := screens.NewCustomize(imPackSizeItem())
+
+	// Required single-choice group pre-selects the first IN-STOCK choice
+	// (250 ml), skipping over nothing here since 250 ml is row 0 and in stock.
+	if got := c.SelectedOptions(); len(got) != 1 || got[0].ChoiceID != "spin-250" {
+		t.Fatalf("expected 250 ml pre-selected, got %+v", got)
+	}
+
+	// Move the cursor to the sold-out row (500 ml, index 1) and try to toggle it
+	// on — it must be a no-op, leaving the previous selection (250 ml) intact.
+	c = c.Down()
+	c = c.Toggle()
+	got := c.SelectedOptions()
+	if len(got) != 1 || got[0].ChoiceID != "spin-250" {
+		t.Fatalf("toggling a sold-out choice must be refused; selection changed to %+v", got)
+	}
+
+	v := c.View()
+	if !strings.Contains(v, "500 ml") {
+		t.Fatalf("sold-out choice should still render its name:\n%s", v)
+	}
+	if !strings.Contains(v, "sold out") {
+		t.Fatalf("sold-out choice should render a 'sold out' tag:\n%s", v)
+	}
+
+	// The cursor CAN land on the sold-out row (navigation isn't blocked) — only
+	// selecting it is refused. Move on to 1 L (row 2, in stock) and confirm a
+	// normal toggle still works, proving Toggle only special-cases OOS rows.
+	c = c.Down()
+	c = c.Toggle()
+	got = c.SelectedOptions()
+	if len(got) != 1 || got[0].ChoiceID != "spin-1l" {
+		t.Fatalf("toggling an in-stock choice (radio group) should select it: %+v", got)
+	}
+}
+
+// Valid() must never be satisfiable by a sold-out choice landing in `picked`
+// — NewCustomize's required-group default only pre-selects an in-stock choice.
+func TestCustomizeRequiredGroupSkipsSoldOutDefault(t *testing.T) {
+	item := imPackSizeItem()
+	item.Options[0].Choices[0].InStock = false // now the FIRST choice (250 ml) is sold out
+	c := screens.NewCustomize(item)
+	got := c.SelectedOptions()
+	if len(got) != 1 {
+		t.Fatalf("required single-choice group should still pre-select something in stock: %+v", got)
+	}
+	if got[0].ChoiceID == "spin-250" {
+		t.Fatalf("must not default-select a sold-out choice, got %+v", got)
+	}
+	if !c.Valid() {
+		t.Fatal("pre-selecting an in-stock fallback should satisfy Valid()")
+	}
+}
+
 func TestCustomizeWindowsToViewport(t *testing.T) {
 	c := screens.NewCustomize(bigOptItem()).WithViewport(20)
 	// move cursor near the bottom so the top must scroll off

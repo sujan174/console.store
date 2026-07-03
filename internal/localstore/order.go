@@ -18,6 +18,15 @@ type ActiveOrder struct {
 	ETAHiMin   int    `json:"etaHiMin"`
 	Total      int    `json:"total"`
 	PlacedAt   int64  `json:"placedAt"`
+	// Vertical is "" (or "food") for a Swiggy Food order, "instamart" for an
+	// Instamart order. omitempty keeps old active-order.json files loading
+	// unchanged.
+	Vertical string `json:"vertical,omitempty"`
+	// Lat/Lng are the delivery coordinates from Instamart's get_orders — Food
+	// tracking needs none, but track_order (Instamart) REQUIRES them. Unused
+	// (zero) for food orders.
+	Lat float64 `json:"lat,omitempty"`
+	Lng float64 `json:"lng,omitempty"`
 }
 
 func orderPath() (string, error) {

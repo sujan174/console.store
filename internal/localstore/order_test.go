@@ -1,6 +1,9 @@
 package localstore
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestParseETAMinutes(t *testing.T) {
 	for _, c := range []struct {
@@ -35,4 +38,38 @@ func TestActiveOrderRoundTrip(t *testing.T) {
 	if _, ok, _ := LoadActiveOrder(); ok {
 		t.Fatal("expected cleared")
 	}
+}
+
+func TestActiveOrderInstamartRoundTrip(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	o := ActiveOrder{OrderID: "IM1", Restaurant: "Instamart", AddrLine: "HSR", ETALoMin: 10, ETAHiMin: 20,
+		Total: 249, PlacedAt: 1782550000, Vertical: "instamart", Lat: 12.9716, Lng: 77.5946}
+	if err := SaveActiveOrder(o); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := LoadActiveOrder()
+	if err != nil || !ok || got != o {
+		t.Fatalf("got %+v ok=%v err=%v", got, ok, err)
+	}
+}
+
+func TestActiveOrderOldJSONLoadsUnchanged(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	// Simulate an active-order.json written before Vertical/Lat/Lng existed.
+	old := `{"orderId":"X1","restaurant":"Blue Tokai","addrLine":"HSR","etaLoMin":55,"etaHiMin":65,"total":386,"placedAt":1782550000}`
+	p, err := orderPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFileHelper(p, old); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := LoadActiveOrder()
+	if err != nil || !ok {
+		t.Fatalf("load: ok=%v err=%v", ok, err)
+	}
+	if got.OrderID != "X1" || got.Vertical != "" || got.Lat != 0 || got.Lng != 0 {
+		t.Fatalf("old order should default zero-value new fields: %+v", got)
+	}
+	_ = os.Remove(p) // tidy, though tempdir cleans up anyway
 }

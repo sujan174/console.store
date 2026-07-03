@@ -134,10 +134,26 @@ func (s *Snapshot) MergePlacesPage(addrID, key string, places []catalog.Place, r
 	return len(cur)
 }
 
-func (s *Snapshot) SetInstamart(addrID string, items []catalog.Item) {
+// imKey scopes Instamart lists by BOTH address and query ("" = the go-to
+// list). Keying by address alone let a slow search response overwrite the
+// go-to list after the user had already escaped back to it — the stale msg was
+// dropped but the snapshot was poisoned, so the next rebuild rendered search
+// results under the "your usuals" view.
+func imKey(addrID, query string) string { return addrID + "\x00" + query }
+
+func (s *Snapshot) SetInstamart(addrID, query string, items []catalog.Item) {
 	s.mu.Lock()
-	s.instamart[addrID] = items
+	s.instamart[imKey(addrID, query)] = items
 	s.mu.Unlock()
+}
+
+// InstamartFor returns the Instamart list stored for an address + query
+// ("" = the go-to list). The live TUI reads through this so a rebuild always
+// renders the list matching its current query, never a raced write.
+func (s *Snapshot) InstamartFor(addrID, query string) []catalog.Item {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.instamart[imKey(addrID, query)]
 }
 
 func (s *Snapshot) getAddresses() []catalog.Address {
@@ -159,8 +175,10 @@ func (s *Snapshot) getMenu(placeID string) (catalog.Place, bool) {
 	return p, ok
 }
 
+// getInstamart backs Repository.InstamartItems (which has no query param):
+// it returns the go-to list — the query-scoped lists are read via InstamartFor.
 func (s *Snapshot) getInstamart(addrID string) []catalog.Item {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.instamart[addrID]
+	return s.instamart[imKey(addrID, "")]
 }

@@ -57,7 +57,15 @@ func NewCustomize(item catalog.Item) Customize {
 	for gi, g := range item.Options {
 		c.picked[g.ID] = map[string]bool{}
 		if g.Min >= 1 && g.Max == 1 && len(g.Choices) > 0 {
-			c.picked[g.ID][g.Choices[0].ID] = true // sensible default for required single-choice
+			// Sensible default for a required single-choice group — but skip a
+			// sold-out first choice; picking an unorderable default would let
+			// Valid() report satisfied while nothing addable is selected.
+			for _, ch := range g.Choices {
+				if ch.InStock {
+					c.picked[g.ID][ch.ID] = true
+					break
+				}
+			}
 		}
 		for ci := range g.Choices {
 			c.rows = append(c.rows, optRow{group: gi, choice: ci})
@@ -110,6 +118,9 @@ func (c Customize) Toggle() Customize {
 	if pg[ch.ID] {
 		delete(pg, ch.ID) // turning off — allowed; min enforced at confirm.
 		return c
+	}
+	if !ch.InStock {
+		return c // sold out — cursor can land on it, but it can't be turned on.
 	}
 	if g.Max == 1 {
 		c.picked[g.ID] = map[string]bool{ch.ID: true} // radio
@@ -238,12 +249,15 @@ func (c Customize) groupedView() string {
 		for _, ch := range g.Choices {
 			on := c.picked[g.ID][ch.ID]
 			var box string
-			if g.Max == 1 {
+			switch {
+			case !ch.InStock:
+				box = theme.DimStyle.Render(" x ") // sold out — unselectable, distinct from an empty box
+			case g.Max == 1:
 				box = theme.DimStyle.Render("( )")
 				if on {
 					box = theme.GreenStyle.Render("(•)")
 				}
-			} else {
+			default:
 				box = theme.DimStyle.Render("[ ]")
 				if on {
 					box = theme.GreenStyle.Render("[x]")
@@ -257,6 +271,12 @@ func (c Customize) groupedView() string {
 					tag = "₹" // variantsV2 price is absolute
 				}
 				price = theme.GoldStyle.Render(fmt.Sprintf("%s%d", tag, ch.Price))
+			}
+			if !ch.InStock {
+				// Sold out — same dim-name + warn-tag language as the menu/instamart
+				// listing (theme.FaintStyle name + theme.FavStyle " · sold out").
+				name = theme.FaintStyle.Render(ch.Name) + theme.FavStyle.Render(" · sold out")
+				price = ""
 			}
 			cursor := "  "
 			if row == c.cursor {

@@ -80,13 +80,45 @@ internal/agents/      provisions local agents: registers `console mcp` in each
                       CONSOLE_NO_AGENT_SETUP=1.
 cmd/capture/          read-only dev tool: polls the tracking tools for a live order and dumps
                       raw JSON (CONSOLE_DEBUG_SWIGGY). Never places an order.
+cmd/improbe/          read-only dev probe for the Instamart MCP endpoint: tools/list +
+                      search/orders dumps; IMPROBE_CART=1 adds a safe update→get→clear
+                      cart round-trip. Never calls checkout.
 ```
+
+## Instamart (grocery vertical)
+
+Instamart is a **second, fully separate vertical** next to Food: its own MCP endpoint
+(`https://mcp.swiggy.com/im`, same OAuth token), its own cart, its own tools. Key facts
+(live-harvested; see memory `instamart-mcp-schemas`):
+- Products have **variants** (pack sizes); carts are keyed by variant `spinId`, never
+  the product id. `update_cart` REPLACES the whole cart. The cart binds to the
+  **address** (not a restaurant) and may span multiple dark stores — so there is NO
+  cross-restaurant conflict modal for Instamart; a pre-existing app cart is seeded
+  into the TUI as editable lines and the next sync replaces the server cart wholesale.
+- An EMPTY cart comes back as an MCP error ("Cart not found or session expired") —
+  mapped to an empty cart in `internal/swiggy/instamart.go`, not a failure.
+- Limits: **₹99 minimum**, same **₹1000 beta cap**, COD only, no cancellation.
+  `checkout` is the place-order tool (non-idempotent, place-with-verify like food).
+- Tracking (`track_order`) REQUIRES lat/lng, which only `get_orders` returns; they are
+  persisted on `localstore.ActiveOrder` (`Vertical`/`Lat`/`Lng`) at placement.
+- The exact get_cart/checkout/get_orders SUCCESS payload shapes were not harvestable
+  at build time (store closed) — decoders in `internal/swiggy/instamart.go` are
+  deliberately tolerant (alternate key spellings, flexID string/number ids) and the
+  raw JSON is always available under CONSOLE_DEBUG_SWIGGY. Re-run `cmd/improbe` when
+  refining them.
+- **Presets are uniform across verticals**: `Preset.Vertical == "instamart"` routes
+  `console order <name>`, the TUI `:alias set`, and the MCP `order_preset` through the
+  Instamart cart + checkout; food presets are unchanged (empty Vertical).
+- TUI: `Tab` toggles Restaurants ⟷ Instamart; browse = your-go-to items, `/` search;
+  multi-pack products open the customize sheet with a synthesized "pack size" variant
+  group (options are local — no network fetch). The checkout is the same merged page
+  with the handling fee folded into the "taxes & charges" row.
 
 ## Headless CLI + order presets (`internal/cli`, `internal/localstore/presets.go`)
 
 `console <subcommand>` runs without the TUI:
-- `console status` — live order status (active orders + `track_food_order` ETA), or "no live orders".
-- `console order <name>` — order a saved **preset**: push it to the cart (overrides any existing cart), pull the real bill, confirm with Enter, then place (armed) / no-op (disarmed `localsafeconsole`). Aborts if an item is sold out or the restaurant won't serve the address. Multiple presets can share a name (you pick).
+- `console status` — live order status for BOTH verticals (food: active orders + `track_food_order` ETA; instamart: `get_orders` + `track_order` when coords are known), or "no live orders".
+- `console order <name>` — order a saved **preset**: push it to the cart (overrides any existing cart), pull the real bill, confirm with Enter, then place (armed) / no-op (disarmed `localsafeconsole`). Aborts if an item is sold out or the restaurant won't serve the address. Multiple presets can share a name (you pick). An instamart preset routes through the Instamart cart/checkout automatically (₹99 min + ₹1000 cap enforced).
 - `console alias list | rm <name> [n]` — manage presets from the shell.
 
 A **preset** is a named cart snapshot (`presets.json`): restaurant id + saved address + lines (item SwiggyID, qty, variant/addon selections). Created **inside the TUI** via the `:alias set <name>` palette command, which captures the current cart. Presets exist because Swiggy's order API returns NO line items (`get_food_orders`/`get_food_order_details` are coarse text only) — so "reorder" is sourced from our own snapshots. Bound to one saved address (the terminal can't know GPS; the user manages region-specific presets). `cli.Backend` is structurally satisfied by `datasource.BrokerBackend`, so the CLI reuses the same account-pinned backend.

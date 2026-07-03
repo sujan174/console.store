@@ -71,3 +71,40 @@ func max1(n int) int {
 	}
 	return n
 }
+
+// renderIMCart prints an Instamart cart + bill breakdown in the same visual
+// language as renderCart — "Instamart" stands in for the restaurant name, and
+// the bill adds Instamart's handling-fee row (only when non-zero, like Food's
+// optional delivery/taxes rows).
+func renderIMCart(out io.Writer, addrLine string, c api.IMCart, st style) {
+	if a := shortAddr(addrLine); a != "" {
+		fmt.Fprintf(out, "  %s  %s  %s\n\n", st.head("Instamart"), st.link("→"), st.dim(a))
+	} else {
+		fmt.Fprintf(out, "  %s\n\n", st.head("Instamart"))
+	}
+	for _, l := range c.Lines {
+		left := fmt.Sprintf("%d × %s", l.Quantity, truncate(l.Name, 28))
+		if !l.Available {
+			pad := billWidth - len([]rune(left)) - len("sold out")
+			if pad < 1 {
+				pad = 1
+			}
+			fmt.Fprintf(out, "  %s%s%s\n", st.text(left), strings.Repeat(" ", pad), st.warn("sold out"))
+			continue
+		}
+		st.row(out, left, fmt.Sprintf("₹%d", l.Price*max1(l.Quantity)), rowItem)
+	}
+	st.rule(out)
+	st.row(out, "item total", fmt.Sprintf("₹%d", c.ItemTotal), rowLabel)
+	if c.Delivery != 0 {
+		st.row(out, "delivery", fmt.Sprintf("₹%d", c.Delivery), rowLabel)
+	}
+	if c.Handling != 0 {
+		st.row(out, "handling", fmt.Sprintf("₹%d", c.Handling), rowLabel)
+	}
+	if c.Taxes != 0 {
+		st.row(out, "taxes & charges", fmt.Sprintf("₹%d", c.Taxes), rowLabel)
+	}
+	st.rule(out)
+	st.row(out, "to pay", fmt.Sprintf("₹%d", c.Total), rowTotal)
+}

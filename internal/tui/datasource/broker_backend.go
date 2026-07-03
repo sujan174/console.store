@@ -24,6 +24,15 @@ type brokerRPC interface {
 	TrackOrder(accountID, orderID string) (api.Tracking, error)
 	ActiveFoodOrders(accountID, addressID string) ([]api.Order, error)
 	Logout(accountID string) error
+
+	IMSearch(accountID, addressID, query string) ([]api.IMProduct, error)
+	IMGoTo(accountID, addressID string) ([]api.IMProduct, error)
+	IMGetCart(accountID string) (api.IMCart, error)
+	IMUpdateCart(accountID, addressID string, items []api.IMCartItem) (api.IMCart, error)
+	IMClearCart(accountID string) error
+	IMPlaceOrder(accountID, addressID string) (api.Order, error)
+	IMOrders(accountID string, activeOnly bool) ([]api.IMOrder, error)
+	IMTrack(accountID, orderID string, lat, lng float64) (api.Tracking, error)
 }
 
 // BrokerBackend adapts the broker RPC client into a datasource.Backend, pinned
@@ -136,6 +145,45 @@ func (b *BrokerBackend) ActiveOrders(addressID string) ([]api.Order, error) {
 }
 
 func (b *BrokerBackend) Logout() error { return b.rpc.Logout(b.accountID) }
+
+func (b *BrokerBackend) IMSearch(addressID, query string) ([]api.IMProduct, error) {
+	r, err := b.rpc.IMSearch(b.accountID, addressID, query)
+	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) IMGoTo(addressID string) ([]api.IMProduct, error) {
+	r, err := b.rpc.IMGoTo(b.accountID, addressID)
+	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) IMGetCart() (api.IMCart, error) {
+	r, err := b.rpc.IMGetCart(b.accountID)
+	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) IMUpdateCart(addressID string, items []api.IMCartItem) (api.IMCart, error) {
+	r, err := b.rpc.IMUpdateCart(b.accountID, addressID, items)
+	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) IMClearCart() error {
+	return wrapAuthErr(b.rpc.IMClearCart(b.accountID))
+}
+
+func (b *BrokerBackend) IMPlaceOrder(addressID string) (api.Order, error) {
+	r, err := b.rpc.IMPlaceOrder(b.accountID, addressID)
+	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) IMOrders(activeOnly bool) ([]api.IMOrder, error) {
+	r, err := b.rpc.IMOrders(b.accountID, activeOnly)
+	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) IMTrack(orderID string, lat, lng float64) (api.Tracking, error) {
+	r, err := b.rpc.IMTrack(b.accountID, orderID, lat, lng)
+	return r, wrapAuthErr(err)
+}
 
 // sectionQuery maps a catalogue lane to a Swiggy restaurant-search query.
 func sectionQuery(s catalog.Section) string {

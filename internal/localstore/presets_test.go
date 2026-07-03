@@ -1,8 +1,19 @@
 package localstore
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+// writeFileHelper writes raw content to p, creating its parent directory —
+// used to plant a pre-Vertical presets.json to test back-compat loading.
+func writeFileHelper(p, content string) error {
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(p, []byte(content), 0o600)
+}
 
 func TestPresetsRoundTrip(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -56,6 +67,52 @@ func TestPresetsRemoveByIndex(t *testing.T) {
 	rest := ps.ByName("x")
 	if len(rest) != 1 || rest[0].RestaurantName != "B" {
 		t.Fatalf("wrong preset removed: %+v", rest)
+	}
+}
+
+func TestPresetsInstamartRoundTrip(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var ps Presets
+	if err := ps.Add(Preset{Name: "milk", AddrID: "a1", RestaurantID: "", RestaurantName: "Instamart",
+		Vertical: "instamart",
+		Lines:    []PresetLine{{ItemID: "spin-123", Name: "Amul Milk 500ml", Qty: 2}}}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if err := SavePresets(ps); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	got, err := LoadPresets()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ms := got.ByName("milk")
+	if len(ms) != 1 || !ms[0].IsInstamart() || ms[0].Vertical != "instamart" {
+		t.Fatalf("round-trip mismatch: %+v", ms)
+	}
+	items := PresetIMCartItems(ms[0])
+	if len(items) != 1 || items[0].SpinID != "spin-123" || items[0].Quantity != 2 {
+		t.Fatalf("PresetIMCartItems mismatch: %+v", items)
+	}
+}
+
+func TestPresetsOldJSONLoadsAsFood(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	// Simulate a presets.json written before Vertical existed — no "vertical" key.
+	old := `{"version":1,"items":[{"name":"lunch","addrId":"a1","addrLine":"HSR","restaurantId":"r1","restaurantName":"Blue Tokai","lines":[{"itemId":"i1","name":"Cold Coffee","qty":1}],"createdAt":1782550000}]}`
+	p, err := presetsPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFileHelper(p, old); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadPresets()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ls := got.ByName("lunch")
+	if len(ls) != 1 || ls[0].IsInstamart() || ls[0].Vertical != "" {
+		t.Fatalf("old preset should default to food: %+v", ls)
 	}
 }
 

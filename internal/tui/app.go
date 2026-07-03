@@ -191,7 +191,56 @@ type Model struct {
 
 	inst    screens.Instamart
 	imLines []screens.CartLine
-	imCart  screens.Cart
+	imCart  screens.Cart // legacy scrImCart render target; scrImCart is no longer navigated to
+
+	// Instamart live-data state (mirrors the food cart's confirmed/sync fields,
+	// kept separate since the two verticals never share a cart).
+	imQuery        string     // "" = your-usuals go-to list; non-empty = last submitted search
+	imCartPulled   bool       // PullIMCart has fired once this session (re-armed on address change)
+	imPending      bool       // an IMProducts load is in flight (shows "loading…")
+	imLiveCart     api.IMCart // last synced/fetched Instamart cart (real lines + pricing)
+	imCartSyncErr  string     // last Instamart cart-sync error; shown on the IM checkout
+	imOrderErr     string     // last Instamart order-placement error
+	imCartMutating bool       // true while an IM reduce/delete sync is in flight (freezes input)
+	imCartRebuilt  bool       // true after a one-shot cart-expired auto-rebuild, to avoid retry loops
+
+	// imConfirmed* is the last Instamart-cart-CONFIRMED state (mirrors
+	// confirmedLines/cartConfirmed for food) — the rollback target for a failed sync.
+	imConfirmedLines []screens.CartLine
+	imCartConfirmed  bool
+
+	// Instamart search (mirrors scrMenu's search fields, but submit-only — no
+	// live-typing filter; the rail's Search entry starts it the same way Food's does).
+	imSearchMode  bool
+	imSearchQuery string
+	imSearchCaret int
+
+	// Instamart cart-sync debounce (mirrors cartSyncPending/cartSyncFrame).
+	imCartSyncPending bool
+	imCartSyncFrame   int
+
+	// Instamart rail nav state — mirrors railActive/railFocus/railSettlePending/
+	// railSettleFrame exactly (own fields since Food and Instamart rails are
+	// independent columns with independent cursors). Index 0 = Search, 1 =
+	// Usuals (the go-to list, Food's Home equivalent), 2+ = categories.
+	imRailActive        int
+	imRailFocus         bool
+	imRailSettlePending bool
+	imRailSettleFrame   int
+	// imLoadedQueries marks queries that have received a LIVE IMProducts load
+	// this session (mirrors seededQueries/ensureQuery's live-loaded dedupe, but
+	// simpler: Instamart has no disk cache — see the design note on
+	// ensureIMQuery). Revisiting a loaded query renders instantly from the
+	// snapshot with no re-fetch.
+	imLoadedQueries map[string]bool
+	// imChips is the fixed, curated Instamart rail category set (no
+	// config.json override — unlike food's m.chips).
+	imChips []config.Category
+
+	// checkoutVertical routes the merged checkout page + confirmPlaceOrder: 0 =
+	// food (default), 1 = Instamart. Screens/keys that mutate "the cart" on
+	// scrCheckout must branch on this instead of assuming food.
+	checkoutVertical int
 
 	splash       screens.Splash
 	welcome      screens.Welcome // first-run onboarding screen (holds its own phase)
@@ -208,6 +257,16 @@ type Model struct {
 	nowUnix        int64                  // updated each tick — passed to tracking View for live elapsed
 	activeOrder    localstore.ActiveOrder // last placed order (persisted)
 	hasActiveOrder bool                   // true when activeOrder is set and not yet delivered/cleared
+
+	// altOrder is the OTHER vertical's live delivery when a restaurant order
+	// and an Instamart order are in flight at the same time. Session-discovered
+	// (never persisted — active-order.json holds only the primary); the splash
+	// "track order" entry becomes a picker while it is set, and the primary's
+	// delivery promotes it.
+	altOrder      localstore.ActiveOrder
+	hasAltOrder   bool
+	trackPickOpen bool
+	trackPick     screens.TrackPick
 
 	cmdOpen bool
 	cmd     screens.CmdBar
@@ -303,7 +362,7 @@ type Model struct {
 func New(caps render.Caps, opts ...Option) Model {
 	repo := mem.New()
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome, railFocus: true, addrGatePending: true, seededQueries: map[string]bool{}}
+	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome, railFocus: true, imRailActive: screens.RailHome, addrGatePending: true, seededQueries: map[string]bool{}, imLoadedQueries: map[string]bool{}}
 	for _, o := range opts {
 		o(&m)
 	}
@@ -318,6 +377,7 @@ func New(caps render.Caps, opts ...Option) Model {
 	if len(m.chips) == 0 {
 		m.chips = config.DefaultCategories()
 	}
+	m.imChips = config.DefaultIMCategories() // fixed set, no config.json override
 	m.splash = screens.NewSplash().WithCaps(caps)
 	m.welcome = screens.NewWelcome(screens.DefaultLearnURL).WithCaps(caps)
 	m.splashPhrase = screens.RandomPhrase("")
@@ -657,6 +717,20 @@ func (m *Model) searchInsert(s string) {
 	m.searchCaret = c + len([]rune(s))
 }
 
+// imSearchInsert inserts s into imSearchQuery at the caret and advances the caret.
+func (m *Model) imSearchInsert(s string) {
+	r := []rune(m.imSearchQuery)
+	c := m.imSearchCaret
+	if c < 0 {
+		c = 0
+	}
+	if c > len(r) {
+		c = len(r)
+	}
+	m.imSearchQuery = string(r[:c]) + s + string(r[c:])
+	m.imSearchCaret = c + len([]rune(s))
+}
+
 // loadForRail fires the (deduped) load for the currently-active rail entry, so
 // the main pane populates as the user arrows through the rail.
 func (m *Model) loadForRail(rail screens.Rail) tea.Cmd {
@@ -717,6 +791,81 @@ func (m *Model) settledRailLoad() tea.Cmd {
 	return cmd
 }
 
+// ensureIMQuery starts an IMProducts load for query if it hasn't been
+// live-loaded yet this session (imLoadedQueries), UNLESS the snapshot already
+// has items for it — a cache hit renders instantly via imBrowseItems() and
+// still gets marked loaded so a later revisit doesn't re-fetch either. This
+// mirrors ensureQuery's once-per-query semantics, simplified: Instamart skips
+// disk caching entirely (no seedPlacesFromCache equivalent) — the snapshot is
+// in-memory only for this session, so there's no seed/live-refresh split to
+// track, just "have we ever fetched this query live".
+func (m *Model) ensureIMQuery(query string) tea.Cmd {
+	if m.imLoadedQueries[query] {
+		return nil
+	}
+	m.imLoadedQueries[query] = true
+	return datasource.LoadIMProducts(m.backend, m.snap, m.addr.ID, query)
+}
+
+// loadForIMRail fires the (deduped) load for the currently-active IM rail
+// entry — mirrors loadForRail exactly, with RailHome mapped to the go-to
+// ("Usuals") list instead of the food Home sections.
+func (m *Model) loadForIMRail(rail screens.Rail) tea.Cmd {
+	switch m.imRailActive {
+	case screens.RailSearch:
+		return nil
+	case screens.RailHome:
+		m.imQuery = ""
+		cmd := m.ensureIMQuery("")
+		m.imPending = cmd != nil
+		return cmd
+	default:
+		if catIdx, isCat := rail.IsCategory(m.imRailActive); isCat && catIdx < len(m.imChips) {
+			q := m.imChips[catIdx].Query
+			m.imQuery = q
+			cmd := m.ensureIMQuery(q)
+			m.imPending = cmd != nil
+			return cmd
+		}
+	}
+	return nil
+}
+
+// armIMRailLoad defers the active IM rail entry's load until the cursor
+// settles — mirrors armRailLoad.
+func (m *Model) armIMRailLoad() {
+	m.imRailSettlePending = true
+	m.imRailSettleFrame = m.frame
+}
+
+// settledIMRailLoad fires the debounced IM rail load once the cursor has
+// rested long enough (and is still on the focused rail) — mirrors
+// settledRailLoad exactly.
+func (m *Model) settledIMRailLoad() tea.Cmd {
+	if !m.imRailSettlePending || m.frame-m.imRailSettleFrame < railSettleFrames {
+		return nil
+	}
+	m.imRailSettlePending = false
+	if !(m.screen == scrInstamart && m.imRailFocus) {
+		return nil // user opened a category / left the rail — don't load
+	}
+	cmd := m.loadForIMRail(m.imRail())
+	m.inst = m.buildInstamart()
+	return cmd
+}
+
+// syncIMSearchEntry mirrors syncSearchEntry: landing the IM rail cursor on
+// Search opens a fresh input; leaving it closes the input.
+func (m *Model) syncIMSearchEntry() {
+	if m.imRailActive == screens.RailSearch {
+		m.imSearchMode = true
+		m.imSearchQuery = ""
+		m.imSearchCaret = 0
+	} else {
+		m.imSearchMode = false
+	}
+}
+
 // cartSettleFrames is how long (in 60ms ticks ≈ 360ms) the cart waits after the
 // last qty edit before firing a single live sync — long enough to collapse a
 // burst of +/− mashes into one update_food_cart.
@@ -743,6 +892,29 @@ func (m *Model) settledCartSync() tea.Cmd {
 		return nil
 	}
 	return m.liveCartCmd()
+}
+
+// armIMCartSync defers the Instamart cart's live sync until qty edits settle —
+// same collapse-to-one-write rationale as armCartSync, kept on its own
+// pending/frame pair since the two carts never share a debounce window.
+func (m *Model) armIMCartSync() {
+	m.imCartSyncPending = true
+	m.imCartSyncFrame = m.frame
+}
+
+// settledIMCartSync fires the debounced Instamart cart sync once qty edits
+// have rested long enough, then clears the pending flag. Mirrors
+// settledCartSync; imCartMutating freezes input on the checkout reduce/delete
+// path, which serializes and reconciles on its own.
+func (m *Model) settledIMCartSync() tea.Cmd {
+	if !m.imCartSyncPending || m.frame-m.imCartSyncFrame < cartSettleFrames {
+		return nil
+	}
+	m.imCartSyncPending = false
+	if m.imCartMutating {
+		return nil
+	}
+	return m.imLiveCartCmd()
 }
 
 // homeNearbyQuery is the keyword used to populate Home's "popular near you"
@@ -957,6 +1129,18 @@ func (m Model) hasUnavailableLine() bool {
 	return false
 }
 
+// hasUnavailableIMLine reports whether any Instamart cart line is flagged out
+// of stock (Unavailable is stamped directly on the line by the IMCartSyncedMsg
+// handler — the IM cart has no separate id-set like unavailableItems).
+func (m Model) hasUnavailableIMLine() bool {
+	for _, l := range m.imLines {
+		if l.Unavailable {
+			return true
+		}
+	}
+	return false
+}
+
 // cloneCartLines returns a copy with its own backing array so a confirmed
 // snapshot is not mutated when later cart edits change qty in place
 // (appendOrInc/decLastByItem mutate lines[i].Qty). The per-line AddOns/Selections
@@ -1001,9 +1185,55 @@ func (m Model) rollbackCart() Model {
 	if m.screen == scrRestaurant {
 		m = m.refreshAfterAdd()
 	}
-	if m.screen == scrCheckout {
+	if m.screen == scrCheckout && m.checkoutVertical == 0 {
 		m.checkout = m.buildCheckout()
 	}
+	return m
+}
+
+// commitIMCartConfirmed records the current Instamart cart as the last
+// Swiggy-confirmed state — the rollback target for a future failed sync.
+// Mirrors commitCartConfirmed.
+func (m Model) commitIMCartConfirmed() Model {
+	m.imConfirmedLines = cloneCartLines(m.imLines)
+	m.imCartConfirmed = true
+	return m
+}
+
+// rollbackIMCart restores the Instamart cart to the last confirmed state
+// after a failed sync, then rebuilds the affected views. Mirrors rollbackCart.
+func (m Model) rollbackIMCart() Model {
+	if !m.imCartConfirmed {
+		m.imLines = nil
+	} else {
+		m.imLines = cloneCartLines(m.imConfirmedLines)
+	}
+	if m.screen == scrInstamart {
+		m = m.refreshInstamart()
+	}
+	if m.screen == scrCheckout && m.checkoutVertical == 1 {
+		m.checkout = m.buildIMCheckout()
+	}
+	return m
+}
+
+// clearPlacedCarts empties both verticals' carts and their live/sync state
+// after an order is placed and the confirm/tracking flow moves on — an
+// order-placed event always empties WHICHEVER vertical's cart it came from,
+// but both are reset defensively so a stray leftover from the other vertical
+// (e.g. a foreign-cart seed that never got placed) can't survive into the
+// next browse session looking like an active draft.
+func (m Model) clearPlacedCarts() Model {
+	m.lines = nil
+	m.cartRestaurant = ""
+	m.cartSection = ""
+	m.imLines = nil
+	m.imLiveCart = api.IMCart{}
+	m.imCartPulled = false
+	m.imCartSyncErr = ""
+	m.imOrderErr = ""
+	m.imCartConfirmed = false
+	m.checkoutVertical = 0
 	return m
 }
 
@@ -1490,6 +1720,26 @@ func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, sels []catal
 	return m
 }
 
+// imCommitAdd adds an Instamart product (with its chosen pack-size variant, if
+// any) to the Instamart cart. Instamart carts bind to the address, not a
+// restaurant — there is no cart-owner concept, so unlike commitAdd this never
+// raises the conflict modal. The chosen variant's Selection.ChoiceID IS the
+// spinId Swiggy expects on the wire; it REPLACES the item's default
+// SwiggyID/Price so the line syncs the exact pack size picked, and the
+// Selections are kept on the line so checkout can show the pack size.
+func (m Model) imCommitAdd(item catalog.Item, sels []catalog.Selection, price int) Model {
+	for _, s := range sels {
+		if s.Variant {
+			item.SwiggyID = s.ChoiceID
+			if s.Name != "" {
+				item.Name = item.Name + " (" + s.Name + ")"
+			}
+		}
+	}
+	m.imLines = appendOrInc(m.imLines, item, nil, sels, price)
+	return m
+}
+
 // addonsFromSelections returns the non-variant selections as flat AddOns for the
 // cart-line display (variant selections set the base price instead).
 func addonsFromSelections(sels []catalog.Selection) []catalog.AddOn {
@@ -1615,6 +1865,53 @@ func (m Model) imQtyMap() map[string]int {
 	return q
 }
 
+// imRail builds the Instamart rail descriptor from imChips — mirrors
+// railFromChips, with "Usuals" in the Home slot (the your-go-to-items list).
+func (m Model) imRail() screens.Rail {
+	cats := make([]string, len(m.imChips))
+	for i, c := range m.imChips {
+		cats[i] = c.Label
+	}
+	return screens.NewRailLabeled("Usuals", cats).WithActive(m.imRailActive)
+}
+
+// buildInstamart constructs the full two-pane Instamart screen (rail + main
+// product list) for the current imQuery/search state — mirrors buildMenu.
+// Live-only; Instamart has no mock single-pane path (it's always live once
+// entered, per the live-vertical rollout).
+func (m Model) buildInstamart() screens.Instamart {
+	rail := m.imRail().WithFocus(m.imRailFocus)
+	items := m.imBrowseItems()
+	inst := screens.NewInstamart(items, m.imQtyMap(), m.imCartChip()).
+		WithRail(rail).WithRailFocus(m.imRailFocus).
+		WithLoading(m.imPending)
+	if m.imSearchMode {
+		inst = inst.WithSearch(m.imSearchQuery, m.imSearchCaret, true)
+	}
+	return inst
+}
+
+// refreshInstamart rebuilds the Instamart screen from fresh snapshot data
+// while keeping the user's place in the list — mirrors refreshMenu (a page
+// landing must not yank a mid-scroll user back to the top). Genuine view
+// switches (rail move, search submit, esc back to the go-to list) rebuild via
+// buildInstamart directly, where the reset-to-top is correct.
+func (m Model) refreshInstamart() Model {
+	cur := m.inst.CursorIndex()
+	m.inst = m.buildInstamart().WithListCursor(cur)
+	return m
+}
+
+// imBrowseItems returns the product list for the CURRENT browse view. Live
+// reads are query-scoped through the snapshot (a raced slow search write can
+// never surface under the go-to view); mock falls back to the repository.
+func (m Model) imBrowseItems() []catalog.Item {
+	if m.live && m.snap != nil {
+		return m.snap.InstamartFor(m.addr.ID, m.imQuery)
+	}
+	return m.repo.InstamartItems(m.addr)
+}
+
 func orderID(lines []screens.CartLine) string {
 	sum := 0
 	for _, l := range lines {
@@ -1670,7 +1967,7 @@ func (m Model) onTick() (Model, tea.Cmd) {
 			m.screen = scrTracking
 			m.trackTick = 0
 			if m.backend != nil {
-				return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
+				return m, m.trackingPollCmd()
 			}
 		}
 	}
@@ -1681,18 +1978,40 @@ func (m Model) onTick() (Model, tea.Cmd) {
 		// refreshing while the screen is open, even if the delivery heuristic has
 		// cleared the active-order flag.
 		if m.trackTick%500 == 0 && m.activeOrder.OrderID != "" && m.backend != nil {
-			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
+			return m, m.trackingPollCmd()
 		}
 	}
 	// Fire the debounced rail-category load once the cursor has settled.
 	if cmd := m.settledRailLoad(); cmd != nil {
 		return m, cmd
 	}
+	// Fire the debounced Instamart rail-category load once the cursor has settled.
+	if cmd := m.settledIMRailLoad(); cmd != nil {
+		return m, cmd
+	}
 	// Fire the debounced cart sync once qty edits have settled.
 	if cmd := m.settledCartSync(); cmd != nil {
 		return m, cmd
 	}
+	// Fire the debounced Instamart cart sync once qty edits have settled.
+	if cmd := m.settledIMCartSync(); cmd != nil {
+		return m, cmd
+	}
 	return m, nil
+}
+
+// trackingPollCmd fires the right tracking poll for the active order's
+// vertical. Instamart's track_order needs lat/lng (harvested from
+// IMOrders/get_orders — get_addresses omits coordinates); until we have them,
+// fetch the active-orders list instead, which also refreshes status/ETA.
+func (m Model) trackingPollCmd() tea.Cmd {
+	if m.activeOrder.Vertical == "instamart" {
+		if m.activeOrder.Lat != 0 || m.activeOrder.Lng != 0 {
+			return datasource.PollIMTrackingCmd(m.backend, m.activeOrder.OrderID, m.activeOrder.Lat, m.activeOrder.Lng)
+		}
+		return datasource.LoadIMActiveOrdersCmd(m.backend)
+	}
+	return datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
 }
 
 // toSplash returns to the splash and replays the decode from the start. It is a
@@ -1718,7 +2037,10 @@ func (m Model) activeOrderCheckCmd() tea.Cmd {
 	if !m.live || m.backend == nil || m.addr.ID == "" {
 		return nil
 	}
-	return datasource.LoadActiveOrdersCmd(m.backend, m.addr.ID)
+	return tea.Batch(
+		datasource.LoadActiveOrdersCmd(m.backend, m.addr.ID),
+		datasource.LoadIMActiveOrdersCmd(m.backend),
+	)
 }
 
 // splashOrderLabel builds the splash track-order button label: a real live ETA
@@ -1733,6 +2055,75 @@ func splashOrderLabel(restaurant, status, liveETA string, etaHi int) string {
 		return fmt.Sprintf("%s · %s", restaurant, short)
 	}
 	return fmt.Sprintf("%s · ~%d min", restaurant, etaHi)
+}
+
+// splashOrder sets the splash track-order button label, appending a "+1 more"
+// marker while a second delivery is live (the entry opens a picker then).
+func (m Model) splashOrder(label string) Model {
+	if m.hasAltOrder {
+		label += " · +1 more"
+	}
+	m.splash = m.splash.WithOrder(label)
+	return m
+}
+
+// refreshSplashOrderLabel re-renders the splash button from the primary
+// order's stored estimate (the tracking polls overwrite it with live data).
+func (m Model) refreshSplashOrderLabel() Model {
+	if !m.hasActiveOrder {
+		m.splash = m.splash.WithOrder("")
+		return m
+	}
+	return m.splashOrder(splashOrderLabel(m.activeOrder.Restaurant, "", "", m.activeOrder.ETAHiMin))
+}
+
+// promoteAltOrder makes the alt order the primary after the primary's
+// delivery cleared the slot, so the second live delivery keeps its splash
+// button instead of vanishing with the first one. Returns the poll Cmd for
+// the promoted order (nil when there is nothing to promote).
+func (m Model) promoteAltOrder() (Model, tea.Cmd) {
+	if !m.hasAltOrder {
+		return m, nil
+	}
+	m.activeOrder = m.altOrder
+	m.altOrder = localstore.ActiveOrder{}
+	m.hasAltOrder = false
+	m.hasActiveOrder = true
+	_ = localstore.SaveActiveOrder(m.activeOrder)
+	m = m.refreshSplashOrderLabel()
+	var cmd tea.Cmd
+	if m.backend != nil {
+		cmd = m.trackingPollCmd()
+	}
+	return m, cmd
+}
+
+// swapTrackedOrder exchanges the primary and alt orders (both stay live) and
+// rebuilds the tracking page for the new primary. Persistence follows the
+// primary — active-order.json always holds the order the user is watching.
+func (m Model) swapTrackedOrder() (Model, tea.Cmd) {
+	if !m.hasAltOrder {
+		return m, nil
+	}
+	m.activeOrder, m.altOrder = m.altOrder, m.activeOrder
+	_ = localstore.SaveActiveOrder(m.activeOrder)
+	m.track = screens.NewTracking(
+		m.activeOrder.Restaurant, m.activeOrder.AddrLine, m.activeOrder.OrderID,
+		m.activeOrder.PlacedAt, m.activeOrder.ETALoMin, m.activeOrder.ETAHiMin,
+	).WithAlt(true)
+	m.trackTick = 0
+	m.screen = scrTracking
+	m = m.refreshSplashOrderLabel()
+	var cmd tea.Cmd
+	if m.backend != nil {
+		cmd = m.trackingPollCmd()
+	}
+	return m, cmd
+}
+
+// trackPickLabel is one row of the two-orders picker: place + rough ETA.
+func trackPickLabel(o localstore.ActiveOrder) string {
+	return splashOrderLabel(o.Restaurant, "", "", o.ETAHiMin)
 }
 
 func (m Model) spin() string { return spinFrames[m.frame%len(spinFrames)] }
@@ -2250,7 +2641,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.applyCartAvailability(dm.Cart)
 		m = m.commitCartConfirmed()
 		m.cartMutating = false // confirmed — unfreeze
-		if m.screen == scrCheckout {
+		// Vertical guard: a food sync landing while the INSTAMART checkout is
+		// on screen must not clobber it with the food cart's view.
+		if m.screen == scrCheckout && m.checkoutVertical == 0 {
 			m.checkout = m.buildCheckout()
 		}
 		return m, nil
@@ -2265,7 +2658,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.applyCartAvailability(dm.Cart)
 		// A successful load confirms the current lines as the Swiggy baseline.
 		m = m.commitCartConfirmed()
-		if m.screen == scrCheckout {
+		if m.screen == scrCheckout && m.checkoutVertical == 0 {
 			m.checkout = m.buildCheckout()
 		}
 		return m, nil
@@ -2282,6 +2675,120 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.applyCartAvailability(dm.Cart)
 		if len(m.lines) == 0 && m.cartRestaurant == "" && len(dm.Cart.Lines) > 0 {
 			m = m.seedCartFromLive(dm.Cart)
+		}
+		return m, nil
+	case datasource.IMProductsLoadedMsg:
+		if errIsNeedsAuth(dm.Err) {
+			m.needsAuth = true
+			return m, nil
+		}
+		if dm.Query != m.imQuery {
+			return m, nil // stale — a newer search/go-to load has since been submitted
+		}
+		m.imPending = false
+		if dm.Err != nil {
+			// Non-fatal: the go-to list legitimately errors on no order history
+			// ("Failed to fetch Your Go To Items…") — treat any load error the
+			// same way rather than nagging the status bar on a routine empty case.
+			m.inst = m.inst.WithLoading(false)
+			return m, nil
+		}
+		m = m.refreshInstamart()
+		m.inst = m.inst.WithLoading(false)
+		return m, nil
+	case datasource.IMCartPulledMsg:
+		// Launch-time account cart. Swallow errors quietly (don't nag at startup),
+		// and only seed when the local IM cart is empty so we never clobber a cart
+		// the user is already building in this session.
+		if dm.Err != nil {
+			dbgTUI("im cart pull: %v", dm.Err)
+			return m, nil
+		}
+		m.imLiveCart = dm.Cart
+		if len(m.imLines) == 0 && len(dm.Cart.Lines) > 0 {
+			var lines []screens.CartLine
+			for _, l := range dm.Cart.Lines {
+				// Seeded ids are prefixed "im-<spin>" so they never collide with a
+				// browse product's own catalog id — the steppers on the browse list
+				// won't reflect a seeded line until the item is re-added there, which
+				// is fine: the NEXT sync replaces the server cart wholesale with
+				// whatever the local lines are, seeded or not.
+				it := catalog.Item{ID: "im-" + l.SpinID, SwiggyID: l.SpinID, Name: l.Name, Price: l.Price, Section: catalog.SectionInstamart}
+				lines = append(lines, screens.CartLine{Item: it, Qty: l.Quantity, Price: l.Price, Unavailable: !l.Available})
+			}
+			m.imLines = lines
+			m = m.commitIMCartConfirmed()
+		}
+		return m, nil
+	case datasource.IMCartSyncedMsg:
+		if dm.Err != nil {
+			// The optimistic change did NOT reach Swiggy. Map the common failures to
+			// a friendly message; roll back to the last confirmed state so the local
+			// cart never shows an item Swiggy rejected.
+			m.imCartMutating = false
+			switch {
+			case strings.Contains(dm.Err.Error(), "store is currently unavailable or closed"):
+				m = m.rollbackIMCart()
+				m.imCartSyncErr = "store closed right now — try again later"
+			case strings.Contains(dm.Err.Error(), "Cart not found") || strings.Contains(dm.Err.Error(), "CART_EXPIRED"):
+				if !m.imCartRebuilt {
+					// One-shot auto-rebuild: resend the current lines against a fresh
+					// cart before surfacing anything to the user. Keep the input freeze
+					// held for the retry — the sync that just failed may have been a
+					// frozen reduce/delete, and unfreezing mid-rebuild would let edits
+					// race the in-flight replacement.
+					m.imCartRebuilt = true
+					m.imCartMutating = m.live
+					return m, m.imLiveCartCmd()
+				}
+				m = m.rollbackIMCart()
+				m.imCartSyncErr = dm.Err.Error()
+			default:
+				m = m.rollbackIMCart()
+				m.imCartSyncErr = "⚠ cart change didn't go through — reverted. try again"
+			}
+			if m.screen == scrCheckout && m.checkoutVertical == 1 {
+				m.checkout = m.buildIMCheckout()
+			}
+			return m, nil
+		}
+		m.imCartSyncErr = ""
+		m.imCartRebuilt = false
+		m.imLiveCart = dm.Cart
+		// Mark line availability straight on the lines (the IM cart has no
+		// separate id-set like unavailableItems — spinIds are line-scoped, not
+		// shared across lines the way a food menu_item_id can repeat).
+		for i := range m.imLines {
+			for _, l := range dm.Cart.Lines {
+				if l.SpinID == m.imLines[i].Item.SwiggyID {
+					m.imLines[i].Unavailable = !l.Available
+				}
+			}
+		}
+		m = m.commitIMCartConfirmed()
+		m.imCartMutating = false // confirmed — unfreeze
+		if m.screen == scrCheckout && m.checkoutVertical == 1 {
+			m.checkout = m.buildIMCheckout()
+		}
+		return m, nil
+	case datasource.IMCartLoadedMsg:
+		if dm.Err != nil {
+			m.imCartSyncErr = "cart: " + dm.Err.Error()
+			return m, nil
+		}
+		m.imCartSyncErr = ""
+		m.imLiveCart = dm.Cart
+		for i := range m.imLines {
+			for _, l := range dm.Cart.Lines {
+				if l.SpinID == m.imLines[i].Item.SwiggyID {
+					m.imLines[i].Unavailable = !l.Available
+				}
+			}
+		}
+		// A successful load confirms the current lines as the Swiggy baseline.
+		m = m.commitIMCartConfirmed()
+		if m.screen == scrCheckout && m.checkoutVertical == 1 {
+			m.checkout = m.buildIMCheckout()
 		}
 		return m, nil
 	case datasource.UsualsLoadedMsg:
@@ -2303,6 +2810,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cartSection = ""
 		m.liveCart = api.Cart{}
 		m.cartLoaded = false
+		m = m.clearPlacedCarts() // both verticals' carts belong to the dead session
+		m.altOrder = localstore.ActiveOrder{}
+		m.hasAltOrder = false
+		m.trackPickOpen = false
 		m.screen = scrSplash
 		// The browser is never auto-opened on the gate — the user reconnects by
 		// pressing Enter. (If still logged into Swiggy, an auto-open would silently
@@ -2325,7 +2836,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Surface the real Swiggy rejection on the checkout page, not just the
 			// status bar — the order did NOT go through.
 			m.orderErr = "order failed: " + dm.Err.Error()
-			if m.screen == scrCheckout {
+			if m.screen == scrCheckout && m.checkoutVertical == 0 {
 				m.checkout = m.buildCheckout()
 			}
 			return m, nil
@@ -2361,11 +2872,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// has the restaurant NAME here (not a Swiggy id), so restaurantID is left
 		// empty — bumpFavorite skips, and we never key a favorite by a name.
 		_ = localstore.RecordOrder(m.addr.ID, m.addr.Label, "", restaurant, placedAt)
+		if m.hasActiveOrder && m.activeOrder.Vertical == "instamart" {
+			// The other vertical's delivery is still live — keep it as the alt
+			// instead of silently dropping it from the splash/tracking.
+			m.altOrder = m.activeOrder
+			m.hasAltOrder = true
+		}
 		m.activeOrder = ao
 		m.hasActiveOrder = true
 		m.confirmTick = 0
 		m.track = screens.NewTracking(restaurant, m.addr.Line, dm.Order.ID, placedAt, etaLo, etaHi)
-		m.splash = m.splash.WithOrder(splashOrderLabel(restaurant, "", "", etaHi))
+		m = m.splashOrder(splashOrderLabel(restaurant, "", "", etaHi))
 		return m, nil
 	case datasource.TrackingPolledMsg:
 		if dm.Err != nil {
@@ -2381,16 +2898,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_ = localstore.ClearActiveOrder()
 				m.hasActiveOrder = false
 				m.splash = m.splash.WithOrder("")
+				// A second live delivery takes over the slot instead of vanishing
+				// with the finished one.
+				if pm, cmd := m.promoteAltOrder(); pm.hasActiveOrder {
+					return pm, cmd
+				}
 				m.homeSel = clampIdx(m.homeSel, len(screens.HomeItems(false)))
 			}
 		}
 		// Keep the splash track-order button's ETA in sync with the live ETA.
 		if m.hasActiveOrder {
-			m.splash = m.splash.WithOrder(splashOrderLabel(m.activeOrder.Restaurant, dm.Tracking.Status, dm.Tracking.ETA, m.activeOrder.ETAHiMin))
+			m = m.splashOrder(splashOrderLabel(m.activeOrder.Restaurant, dm.Tracking.Status, dm.Tracking.ETA, m.activeOrder.ETAHiMin))
 		}
 		return m, nil
 	case datasource.ActiveOrdersLoadedMsg:
 		if dm.Err != nil {
+			return m, nil
+		}
+		if m.hasActiveOrder && m.activeOrder.Vertical == "instamart" {
+			// An Instamart order owns the active-order slot — a live FOOD order
+			// found alongside it becomes the alt order (the splash "track order"
+			// entry turns into a picker; the food discovery never overrides).
+			for _, o := range dm.Orders {
+				if _, delivered, _ := screens.StageFromStatus(o.Status); delivered {
+					continue
+				}
+				etaLo, etaHi := localstore.ParseETAMinutes(o.ETA)
+				m.altOrder = localstore.ActiveOrder{
+					OrderID: o.ID, Restaurant: o.Restaurant, AddrLine: m.addr.Line,
+					ETALoMin: etaLo, ETAHiMin: etaHi, Total: o.Total, PlacedAt: time.Now().Unix(),
+				}
+				m.hasAltOrder = true
+				m = m.refreshSplashOrderLabel()
+				return m, nil
+			}
+			// The scan found NO live food order — a previously-set FOOD alt is
+			// stale (delivered/cancelled) and must not survive to be promoted or
+			// picked later.
+			if m.hasAltOrder && m.altOrder.Vertical != "instamart" {
+				m.altOrder = localstore.ActiveOrder{}
+				m.hasAltOrder = false
+				m = m.refreshSplashOrderLabel()
+			}
 			return m, nil
 		}
 		if !m.hasActiveOrder {
@@ -2415,7 +2964,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_ = localstore.SaveActiveOrder(ao)
 				m.activeOrder = ao
 				m.hasActiveOrder = true
-				m.splash = m.splash.WithOrder(splashOrderLabel(o.Restaurant, o.Status, "", etaHi))
+				m = m.splashOrder(splashOrderLabel(o.Restaurant, o.Status, "", etaHi))
 				// Pull the live ETA now so the splash button shows it, not just the
 				// initial estimate (TrackingPolledMsg updates the label).
 				return m, datasource.PollTrackingCmd(m.backend, ao.OrderID)
@@ -2435,14 +2984,205 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = localstore.ClearActiveOrder()
 			m.hasActiveOrder = false
 			m.splash = m.splash.WithOrder("")
+			if pm, cmd := m.promoteAltOrder(); pm.hasActiveOrder {
+				return pm, cmd
+			}
 			m.homeSel = clampIdx(m.homeSel, len(screens.HomeItems(false)))
 			return m, nil
 		}
 		if found {
 			// Order still live — refresh the splash label and pull the live ETA so
 			// the button stays in sync (TrackingPolledMsg applies the live ETA).
-			m.splash = m.splash.WithOrder(splashOrderLabel(m.activeOrder.Restaurant, "", "", m.activeOrder.ETAHiMin))
+			m = m.splashOrder(splashOrderLabel(m.activeOrder.Restaurant, "", "", m.activeOrder.ETAHiMin))
 			return m, datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
+		}
+		return m, nil
+	case datasource.IMOrderPlacedMsg:
+		m.placingOrder = false
+		if dm.Err != nil {
+			// Surface the real Swiggy rejection on the checkout page, not just the
+			// status bar — the order did NOT go through.
+			m.imOrderErr = "order failed: " + dm.Err.Error()
+			if m.screen == scrCheckout && m.checkoutVertical == 1 {
+				m.checkout = m.buildIMCheckout()
+			}
+			return m, nil
+		}
+		m.imOrderErr = ""
+		eta := dm.Order.ETA
+		if eta == "" {
+			eta = "10-20 mins"
+		}
+		m.checkout = m.checkout.Placed(dm.Order.ID, eta)
+		m.screen = scrConfirm
+		// Capture the total before the cart is cleared (Order.Total may be unset
+		// on some responses — the last synced IMCart is the fallback source).
+		total := dm.Order.Total
+		if total == 0 {
+			total = m.imLiveCart.Total
+		}
+		// The cart's selectedAddressDetails is the ONLY source of the delivery
+		// coordinates track_order requires (get_addresses/get_orders omit them,
+		// harvested 2026-07-03) — capture them before the cart state is cleared.
+		lat, lng := m.imLiveCart.AddrLat, m.imLiveCart.AddrLng
+		m.imLines = nil
+		m.imLiveCart = api.IMCart{}
+		// Persist the active order for crash-resume + splash liveness.
+		etaLo, etaHi := localstore.ParseETAMinutes(eta)
+		placedAt := time.Now().Unix()
+		ao := localstore.ActiveOrder{
+			OrderID:    dm.Order.ID,
+			Restaurant: "Instamart",
+			AddrLine:   m.addr.Line,
+			ETALoMin:   etaLo,
+			ETAHiMin:   etaHi,
+			Total:      total,
+			PlacedAt:   placedAt,
+			Vertical:   "instamart",
+			Lat:        lat,
+			Lng:        lng,
+		}
+		_ = localstore.SaveActiveOrder(ao)
+		_ = localstore.RecordOrder(m.addr.ID, m.addr.Label, "", "Instamart", placedAt)
+		if m.hasActiveOrder && m.activeOrder.Vertical != "instamart" {
+			// The other vertical's delivery is still live — keep it as the alt
+			// instead of silently dropping it from the splash/tracking.
+			m.altOrder = m.activeOrder
+			m.hasAltOrder = true
+		}
+		m.activeOrder = ao
+		m.hasActiveOrder = true
+		m.confirmTick = 0
+		m.track = screens.NewTracking("Instamart", m.addr.Line, dm.Order.ID, placedAt, etaLo, etaHi)
+		m = m.splashOrder(splashOrderLabel("Instamart", "", "", etaHi))
+		// Harvest lat/lng for tracking — track_order requires coordinates that
+		// only get_orders (IMOrders) carries; get_addresses omits them.
+		return m, datasource.LoadIMActiveOrdersCmd(m.backend)
+	case datasource.IMActiveOrdersLoadedMsg:
+		if dm.Err != nil {
+			return m, nil
+		}
+		if m.hasActiveOrder && m.activeOrder.Vertical == "instamart" {
+			// Refresh: find our order (by id, or adopt the first non-delivered one
+			// when we don't have an id yet) to harvest status/ETA.
+			found := false
+			for _, o := range dm.Orders {
+				if m.activeOrder.OrderID != "" && o.ID != m.activeOrder.OrderID {
+					continue
+				}
+				if m.activeOrder.OrderID == "" {
+					if _, delivered, _ := screens.StageFromStatus(o.Status); delivered {
+						continue
+					}
+					m.activeOrder.OrderID = o.ID
+				}
+				found = true
+				// The live get_orders payload carries NO coordinates — never let
+				// its zeros clobber the good ones persisted from the cart at
+				// placement time.
+				if o.Lat != 0 || o.Lng != 0 {
+					m.activeOrder.Lat = o.Lat
+					m.activeOrder.Lng = o.Lng
+				}
+				_ = localstore.SaveActiveOrder(m.activeOrder)
+				m.track = m.track.WithLive(o.Status, o.ETA).WithDetail(o.Detail)
+				m = m.splashOrder(splashOrderLabel("Instamart", o.Status, o.ETA, m.activeOrder.ETAHiMin))
+				break
+			}
+			// Delivered orders drop out of the active list immediately. A
+			// coords-less order polls THROUGH this handler (track_order needs
+			// coordinates), so this is its only clear path — mirror the food
+			// branch's not-found clear + promote the alt.
+			if !found && m.activeOrder.OrderID != "" && m.nowUnix-m.activeOrder.PlacedAt > 90 {
+				_ = localstore.ClearActiveOrder()
+				m.hasActiveOrder = false
+				m.splash = m.splash.WithOrder("")
+				if pm, cmd := m.promoteAltOrder(); pm.hasActiveOrder {
+					return pm, cmd
+				}
+				m.homeSel = clampIdx(m.homeSel, len(screens.HomeItems(false)))
+			}
+			return m, nil
+		}
+		if m.hasActiveOrder {
+			// A FOOD order owns the active-order slot — a live Instamart order
+			// found alongside it becomes the alt order for the splash picker.
+			for _, o := range dm.Orders {
+				if _, delivered, _ := screens.StageFromStatus(o.Status); delivered {
+					continue
+				}
+				etaLo, etaHi := localstore.ParseETAMinutes(o.ETA)
+				m.altOrder = localstore.ActiveOrder{
+					OrderID: o.ID, Restaurant: "Instamart", AddrLine: m.addr.Line,
+					ETALoMin: etaLo, ETAHiMin: etaHi, Total: o.Total, PlacedAt: time.Now().Unix(),
+					Vertical: "instamart", Lat: o.Lat, Lng: o.Lng,
+				}
+				m.hasAltOrder = true
+				m = m.refreshSplashOrderLabel()
+				return m, nil
+			}
+			// No live Instamart order left — drop a stale IM alt so it can't be
+			// promoted or picked after its delivery.
+			if m.hasAltOrder && m.altOrder.Vertical == "instamart" {
+				m.altOrder = localstore.ActiveOrder{}
+				m.hasAltOrder = false
+				m = m.refreshSplashOrderLabel()
+			}
+			return m, nil
+		}
+		if !m.hasActiveOrder {
+			// Discovery: the Start Screen check found a live Instamart order we
+			// didn't know about (placed on the Swiggy app, or after a fresh launch).
+			for _, o := range dm.Orders {
+				if _, delivered, _ := screens.StageFromStatus(o.Status); delivered {
+					continue // ignore already-delivered orders
+				}
+				etaLo, etaHi := localstore.ParseETAMinutes(o.ETA)
+				ao := localstore.ActiveOrder{
+					OrderID:    o.ID,
+					Restaurant: "Instamart",
+					AddrLine:   m.addr.Line,
+					ETALoMin:   etaLo,
+					ETAHiMin:   etaHi,
+					Total:      o.Total,
+					PlacedAt:   time.Now().Unix(),
+					Vertical:   "instamart",
+					Lat:        o.Lat,
+					Lng:        o.Lng,
+				}
+				_ = localstore.SaveActiveOrder(ao)
+				m.activeOrder = ao
+				m.hasActiveOrder = true
+				m = m.splashOrder(splashOrderLabel("Instamart", o.Status, "", etaHi))
+				return m, nil
+			}
+		}
+		return m, nil
+	case datasource.IMTrackingPolledMsg:
+		if dm.Err != nil {
+			// Non-fatal: keep the current tracking view as-is.
+			return m, nil
+		}
+		m.track = m.track.WithLive(dm.Tracking.Status, dm.Tracking.ETA).WithDetail(dm.Tracking.Detail)
+		// Check for delivery: active==false AND (elapsed >5min OR status == delivered).
+		if !dm.Tracking.Active && m.hasActiveOrder {
+			elapsedSec := m.nowUnix - m.activeOrder.PlacedAt
+			_, delivered, _ := screens.StageFromStatus(dm.Tracking.Status)
+			if delivered || elapsedSec > 90 {
+				_ = localstore.ClearActiveOrder()
+				m.hasActiveOrder = false
+				m.splash = m.splash.WithOrder("")
+				// A second live delivery takes over the slot instead of vanishing
+				// with the finished one.
+				if pm, cmd := m.promoteAltOrder(); pm.hasActiveOrder {
+					return pm, cmd
+				}
+				m.homeSel = clampIdx(m.homeSel, len(screens.HomeItems(false)))
+			}
+		}
+		// Keep the splash track-order button's ETA in sync with the live ETA.
+		if m.hasActiveOrder {
+			m = m.splashOrder(splashOrderLabel(m.activeOrder.Restaurant, dm.Tracking.Status, dm.Tracking.ETA, m.activeOrder.ETAHiMin))
 		}
 		return m, nil
 	case datasource.ReleaseNotesMsg:
@@ -2647,6 +3387,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.cartRestaurant = ""
 						m.cartSection = ""
 					}
+					m.imCartPulled = false                // address changed — Instamart cart binds to address, re-pull next entry
+					m.imLoadedQueries = map[string]bool{} // dedupe is per-address: the snapshot is keyed addr+query
 					m.screen = scrMenu
 					m.railActive = screens.RailHome
 					m.railFocus = true
@@ -2681,6 +3423,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// New address → its catalog is keyed separately; reload Home.
 					m.usualsLoaded = false
 					m.homePending = false
+					m.imCartPulled = false                // Instamart cart binds to address, re-pull next entry
+					m.imLoadedQueries = map[string]bool{} // dedupe is per-address: the snapshot is keyed addr+query
+					if m.screen == scrInstamart {
+						// Switched from inside Instamart — stay there: refetch the go-to
+						// list + re-pull the cart for the new address.
+						m.imSearchMode = false
+						m.menu = m.buildMenu()
+						return m, m.imEnterCmd()
+					}
 					m.screen = scrMenu
 					m.railActive = screens.RailHome
 					m.railFocus = true
@@ -2701,6 +3452,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// button. esc cancels (no order placed); ctrl+c quits. Default focus is
 		// "yes", so a reflexive Enter places the order — same as before this
 		// modal existed, just with one extra keypress to reach it.
+		if m.trackPickOpen {
+			switch k.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "up", "k", "down", "j":
+				m.trackPick = m.trackPick.WithFocus(1 - m.trackPick.Focus())
+			case "esc":
+				m.trackPickOpen = false
+			case "enter":
+				m.trackPickOpen = false
+				if m.trackPick.Focus() == 1 {
+					// Open the OTHER order: it becomes the primary (persisted),
+					// the current primary becomes the alt.
+					return m.swapTrackedOrder()
+				}
+				m.track = screens.NewTracking(
+					m.activeOrder.Restaurant, m.activeOrder.AddrLine, m.activeOrder.OrderID,
+					m.activeOrder.PlacedAt, m.activeOrder.ETALoMin, m.activeOrder.ETAHiMin,
+				).WithAlt(true)
+				m.trackTick = 0
+				m.screen = scrTracking
+				var pollCmd tea.Cmd
+				if m.backend != nil {
+					pollCmd = m.trackingPollCmd()
+				}
+				return m, pollCmd
+			}
+			return m, nil
+		}
+
 		if m.orderConfirmOpen {
 			switch k.String() {
 			case "ctrl+c":
@@ -2841,6 +3622,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				sels := m.customize.SelectedOptions()
 				price := m.customize.UnitPrice()
 				m.customizeOpen = false
+				if m.pendingSection == catalog.SectionInstamart {
+					// Instamart: the chosen variant's ChoiceID IS the spinId. No
+					// restaurant/cart-owner concept — multi-store carts are allowed,
+					// so there is no conflict modal to raise.
+					m = m.imCommitAdd(item, sels, price)
+					m = m.refreshInstamart()
+					if m.live {
+						m.armIMCartSync()
+					}
+					return m, nil
+				}
 				m = m.commitAdd(item, addons, sels, price, m.pendingRest, m.pendingSection)
 				if !m.conflictOpen { // committed directly (no restaurant clash)
 					m = m.refreshAfterAdd()
@@ -2965,6 +3757,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.settingsOpen = true
 					m.settingsSel = 0
 				} else if screens.IsTrack(m.homeSel, m.hasActiveOrder) {
+					if m.hasAltOrder {
+						// Two deliveries live at once (food + Instamart) — one
+						// tracking page shows one order, so ask which to open.
+						m.trackPick = screens.NewTrackPick(
+							trackPickLabel(m.activeOrder), trackPickLabel(m.altOrder))
+						m.trackPickOpen = true
+						return m, nil
+					}
 					// Restore tracking screen from persisted active order.
 					m.track = screens.NewTracking(
 						m.activeOrder.Restaurant,
@@ -2977,7 +3777,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.screen = scrTracking
 					var pollCmd tea.Cmd
 					if m.backend != nil {
-						pollCmd = datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
+						pollCmd = m.trackingPollCmd()
 					}
 					return m, pollCmd
 				} else {
@@ -3234,7 +4034,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.railFocus = false
 					m.vertical = 1
 					m.screen = scrInstamart
-					return m, nil
+					return m, m.imEnterCmd()
 				}
 				return m, nil
 			}
@@ -3283,7 +4083,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "tab":
 					m.vertical = 1
 					m.screen = scrInstamart
-					return m, nil
+					return m, m.imEnterCmd()
 				}
 				return m, nil
 			}
@@ -3406,6 +4206,85 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		case scrCheckout:
+			if m.checkoutVertical == 1 {
+				// Freeze: while a reduce/delete sync is in flight, ignore all keys
+				// until IMCartSyncedMsg clears imCartMutating (race guard).
+				if m.imCartMutating {
+					return m, nil
+				}
+				switch k.String() {
+				case "esc":
+					m.checkoutVertical = 0
+					m.screen = scrInstamart
+					return m, nil
+				case "up", "k":
+					m.checkout = m.checkout.Up()
+					return m, nil
+				case "down", "j":
+					m.checkout = m.checkout.Down()
+					return m, nil
+				case "+", "=", "right", "l":
+					// Optimistic increment of the focused line — no freeze.
+					i := m.checkout.Cursor()
+					if i >= 0 && i < len(m.imLines) {
+						m.imOrderErr = "" // editing clears a stale "can't order" message
+						m.imLines[i].Qty++
+						m.menu = m.menu.WithCartChip(m.cartChip())
+						m.checkout = m.buildIMCheckout()
+						m.armIMCartSync() // debounced: mashing + collapses to one update_cart
+						return m, nil
+					}
+					return m, nil
+				case "-", "_", "left", "h":
+					// Reduce (remove at qty 1) — freeze until confirmed.
+					i := m.checkout.Cursor()
+					if i < 0 || i >= len(m.imLines) {
+						return m, nil
+					}
+					if m.imLines[i].Qty <= 1 {
+						m.imLines = append(m.imLines[:i], m.imLines[i+1:]...)
+					} else {
+						m.imLines[i].Qty--
+					}
+					return m.afterIMCheckoutReduce()
+				case "delete", "backspace":
+					// Remove the whole line — freeze until confirmed.
+					i := m.checkout.Cursor()
+					if i < 0 || i >= len(m.imLines) {
+						return m, nil
+					}
+					m.imLines = append(m.imLines[:i], m.imLines[i+1:]...)
+					return m.afterIMCheckoutReduce()
+				case "enter":
+					if len(m.imLines) == 0 {
+						return m, nil // nothing to order — empty cart
+					}
+					if m.live && m.hasUnavailableIMLine() {
+						// Swiggy would reject the order — say which and don't fire it.
+						m.imOrderErr = "can't place order — remove the sold-out item(s) first"
+						m.checkout = m.buildIMCheckout()
+						return m, nil
+					}
+					if m.live && m.checkout.OverCap() {
+						// Swiggy's MCP beta rejects carts ≥ ₹1000. The page already shows
+						// the bordered cap notice + a disabled bar; refuse to fire.
+						return m, nil
+					}
+					if m.live {
+						if total := m.imCartTotal(); total < InstamartMin {
+							m.imOrderErr = fmt.Sprintf("₹99 minimum on instamart — add ₹%d more", InstamartMin-total)
+							m.checkout = m.buildIMCheckout()
+							return m, nil
+						}
+					}
+					if !m.placingOrder {
+						m.orderConfirmOpen = true
+						m.orderConfirmSel = 0 // default "yes" — a reflexive ↵ still places the order
+					}
+					return m, nil
+				}
+				return m, nil
+			}
 			// Freeze: while a reduce/delete sync is in flight, ignore all keys
 			// until CartSyncedMsg clears cartMutating (race guard).
 			if m.cartMutating {
@@ -3479,65 +4358,277 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// no going back to "unplace" an order).
 			m.screen = scrTracking
 			m.trackTick = 0
-			m.lines = nil
-			m.imLines = nil
-			m.cartRestaurant = ""
-			m.cartSection = ""
+			m = m.clearPlacedCarts()
 			var pollCmd tea.Cmd
 			if m.hasActiveOrder && m.backend != nil {
-				pollCmd = datasource.PollTrackingCmd(m.backend, m.activeOrder.OrderID)
+				pollCmd = m.trackingPollCmd()
 			}
 			return m, pollCmd
 		case scrTracking:
 			switch k.String() {
 			case "esc":
-				m.lines = nil
-				m.imLines = nil
-				m.cartRestaurant = ""
-				m.cartSection = ""
+				m = m.clearPlacedCarts()
 				m.screen = scrMenu
 				m.menu = m.buildMenu()
 				return m, nil
+			case "o":
+				// Switch the page to the OTHER live delivery (food ⟷ instamart).
+				if m.hasAltOrder {
+					return m.swapTrackedOrder()
+				}
+				return m, nil
 			case "d":
-				// Dismiss delivered order: clear persistence + go to menu.
+				// Dismiss delivered order: clear persistence + go to menu. A second
+				// live delivery (the alt) takes over the slot instead of vanishing.
 				_ = localstore.ClearActiveOrder()
 				m.hasActiveOrder = false
 				m.splash = m.splash.WithOrder("")
-				m.lines = nil
-				m.imLines = nil
-				m.cartRestaurant = ""
-				m.cartSection = ""
+				var promoteCmd tea.Cmd
+				m, promoteCmd = m.promoteAltOrder()
+				m = m.clearPlacedCarts()
 				m.screen = scrMenu
 				m.menu = m.buildMenu()
-				return m, nil
+				return m, promoteCmd
 			}
 		case scrInstamart:
+			// `/` jumps straight into search from anywhere on the browse screen —
+			// mirrors scrMenu's global shortcut.
+			if m.live && !m.imSearchMode && k.String() == "/" {
+				m.imRailActive = screens.RailSearch
+				m.imRailFocus = false
+				m.syncIMSearchEntry() // imSearchMode=true, fresh empty input
+				m.inst = m.buildInstamart()
+				return m, nil
+			}
+
+			// Live search mode captures all printable keys + backspace/enter/esc,
+			// submit-only (no per-keystroke filtering) — mirrors scrMenu's search
+			// box.
+			if m.live && m.imSearchMode && !m.imRailFocus {
+				if k.Type == tea.KeyRunes {
+					m.imSearchInsert(string(k.Runes))
+					m.inst = m.inst.WithSearch(m.imSearchQuery, m.imSearchCaret, true)
+					return m, nil
+				}
+				if k.Type == tea.KeySpace || k.String() == " " {
+					m.imSearchInsert(" ")
+					m.inst = m.inst.WithSearch(m.imSearchQuery, m.imSearchCaret, true)
+					return m, nil
+				}
+				switch k.String() {
+				case "esc":
+					// Esc leaves search for Usuals — move the rail selection there too
+					// (otherwise the rail keeps Search highlighted) and re-attach focus.
+					m.imSearchMode = false
+					m.imSearchQuery = ""
+					m.imSearchCaret = 0
+					m.imQuery = ""
+					m.imRailActive = screens.RailHome
+					m.imRailFocus = true
+					cmd := m.ensureIMQuery("")
+					m.imPending = cmd != nil
+					m.inst = m.buildInstamart()
+					return m, cmd
+				case "left":
+					if m.imSearchCaret > 0 {
+						m.imSearchCaret--
+						m.inst = m.inst.WithSearch(m.imSearchQuery, m.imSearchCaret, true)
+					}
+					return m, nil
+				case "right":
+					if r := []rune(m.imSearchQuery); m.imSearchCaret < len(r) {
+						m.imSearchCaret++
+					}
+					m.inst = m.inst.WithSearch(m.imSearchQuery, m.imSearchCaret, true)
+					return m, nil
+				case "up", "k":
+					if m.inst.CursorIndex() > 0 {
+						m.inst = m.inst.WithListCursor(m.inst.CursorIndex() - 1)
+					}
+					return m, nil
+				case "down", "j":
+					m.inst = m.inst.WithListCursor(m.inst.CursorIndex() + 1)
+					return m, nil
+				case "backspace":
+					if r := []rune(m.imSearchQuery); m.imSearchCaret > 0 && m.imSearchCaret <= len(r) {
+						m.imSearchQuery = string(r[:m.imSearchCaret-1]) + string(r[m.imSearchCaret:])
+						m.imSearchCaret--
+					}
+					m.inst = m.inst.WithSearch(m.imSearchQuery, m.imSearchCaret, true)
+					return m, nil
+				case "delete":
+					if r := []rune(m.imSearchQuery); m.imSearchCaret < len(r) {
+						m.imSearchQuery = string(r[:m.imSearchCaret]) + string(r[m.imSearchCaret+1:])
+					}
+					m.inst = m.inst.WithSearch(m.imSearchQuery, m.imSearchCaret, true)
+					return m, nil
+				case "enter":
+					if m.imSearchQuery == "" {
+						return m, nil
+					}
+					m.imQuery = m.imSearchQuery
+					m.imSearchMode = false
+					m.imPending = true
+					m.imLoadedQueries[m.imQuery] = true // search submit always fetches live
+					m.inst = m.inst.WithSearch("", 0, false).WithLoading(true)
+					return m, datasource.LoadIMProducts(m.backend, m.snap, m.addr.ID, m.imQuery)
+				}
+				return m, nil
+			}
+
+			// Rail-focused keys — mirrors scrMenu's rail-focused block exactly.
+			if m.live && m.imRailFocus {
+				rail := m.imRail()
+				// On the Search entry, typing starts searching immediately (no Enter).
+				if m.imRailActive == screens.RailSearch {
+					if k.Type == tea.KeyRunes || k.Type == tea.KeySpace {
+						m.imSearchMode = true
+						m.imRailFocus = false
+						if k.Type == tea.KeySpace {
+							m.imSearchInsert(" ")
+						} else {
+							m.imSearchInsert(string(k.Runes))
+						}
+						m.inst = m.buildInstamart()
+						return m, nil
+					}
+				}
+				switch k.String() {
+				case "right", "l", "enter":
+					m.imRailSettlePending = false // explicit pick → load now, not on settle
+					m.imRailFocus = false
+					switch m.imRailActive {
+					case screens.RailSearch:
+						m.imSearchMode = true
+						m.imSearchQuery = ""
+						m.imSearchCaret = 0
+					case screens.RailHome:
+						m.imSearchMode = false
+						cmd := m.loadForIMRail(rail)
+						m.inst = m.buildInstamart()
+						return m, cmd
+					default:
+						if _, isCat := rail.IsCategory(m.imRailActive); isCat {
+							m.imSearchMode = false
+							cmd := m.loadForIMRail(rail)
+							m.inst = m.buildInstamart()
+							return m, cmd
+						}
+					}
+					m.inst = m.buildInstamart()
+					return m, nil
+				case "esc":
+					m.imRailFocus = false
+					m.inst = m.buildInstamart()
+					return m, nil
+				case "up", "k":
+					if m.imRailActive > 0 {
+						m.imRailActive--
+					}
+					m.syncIMSearchEntry()
+					m.armIMRailLoad() // debounced — onTick loads once the cursor settles
+					m.inst = m.buildInstamart()
+					return m, nil
+				case "down", "j":
+					if m.imRailActive < rail.Len()-1 {
+						m.imRailActive++
+					}
+					m.syncIMSearchEntry()
+					m.armIMRailLoad() // debounced — onTick loads once the cursor settles
+					m.inst = m.buildInstamart()
+					return m, nil
+				case "c":
+					m.imRailFocus = false
+					m.inst = m.buildInstamart()
+					return m, m.openIMCheckoutCmd()
+				case "a":
+					m.imRailFocus = false
+					m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
+					m.addrOpen = true
+					return m, nil
+				case "tab":
+					m.imRailFocus = false
+					m.vertical = 0
+					m.screen = scrMenu
+					return m, nil
+				}
+				return m, nil
+			}
+
+			// Main-list mode (not rail-focused, not search). ← focuses the rail.
 			switch k.String() {
-			case "esc", "tab":
+			case "esc":
 				// esc always returns to Restaurants browse. When live and we entered
 				// via vertical toggle, also reset the vertical state.
 				m.vertical = 0
 				m.screen = scrMenu
+				return m, nil
+			case "tab":
+				m.vertical = 0
+				m.screen = scrMenu
+				return m, nil
+			case "left", "h":
+				if m.live {
+					// Live: ← at the list column returns focus to the rail.
+					m.imRailFocus = true
+					m.inst = m.buildInstamart()
+					return m, nil
+				}
+				// Mock (no rail): ← removes a unit, matching the pre-rail behavior.
+				it, ok := m.inst.Selected()
+				if !ok {
+					return m, nil
+				}
+				m.imLines = decLastByItem(m.imLines, it.ID)
+				m = m.refreshInstamart()
+				return m, nil
+			case "a":
+				// Address switcher, same as the restaurant browse. The Instamart
+				// cart binds to the address, so the switch path re-pulls it.
+				m.addrScreen = screens.NewAddress(m.repo.Addresses(), m.addr.ID)
+				m.addrOpen = true
 				return m, nil
 			case "enter", "right", "l":
 				it, ok := m.inst.Selected()
 				if !ok {
 					return m, nil
 				}
+				if it.OutOfStock {
+					// Swiggy would reject the add — say so instead of failing silently.
+					m.imCartSyncErr = "“" + it.Name + "” is sold out"
+					return m, nil
+				}
+				if m.live && it.Customizable {
+					// Options are pre-synthesized locally (toIMItems) — no network
+					// round-trip needed to open the picker.
+					m.pendingItem = it
+					m.pendingRest = "Instamart"
+					m.pendingSection = catalog.SectionInstamart
+					m.customize = screens.NewCustomize(it)
+					m.customizeOpen = true
+					return m, nil
+				}
 				m.imLines = appendOrInc(m.imLines, it, nil, nil, 0)
-				ci := m.inst.CursorIndex()
-				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartChip()).WithCursor(ci)
+				m = m.refreshInstamart()
+				if m.live {
+					m.armIMCartSync()
+				}
 				return m, nil
-			case "left", "h":
+			case "-", "_", "backspace":
 				it, ok := m.inst.Selected()
 				if !ok {
 					return m, nil
 				}
 				m.imLines = decLastByItem(m.imLines, it.ID)
-				ci := m.inst.CursorIndex()
-				m.inst = screens.NewInstamart(m.repo.InstamartItems(m.addr), m.imQtyMap(), m.imCartChip()).WithCursor(ci)
+				m = m.refreshInstamart()
+				if m.live {
+					m.armIMCartSync()
+				}
 				return m, nil
 			case "c":
+				if m.live {
+					return m, m.openIMCheckoutCmd()
+				}
 				m.imCart = screens.NewCart("Instamart", m.imLines).WithEta(screens.InstamartETA)
 				if m.imCartTotal() < InstamartMin {
 					m.imCart = m.imCart.WithMinNotice(fmt.Sprintf("add ₹%d more — ₹%d minimum on Instamart", InstamartMin-m.imCartTotal(), InstamartMin))
@@ -3550,6 +4641,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		case scrImCart:
+			// Legacy mock-only cart page — live nav goes straight from scrInstamart
+			// to the merged scrCheckout (see the 'c' case above). Kept only so a
+			// mock-mode session (which still routes here) compiles/behaves as before.
 			switch k.String() {
 			case "esc":
 				m.screen = scrInstamart
@@ -3617,6 +4711,14 @@ func (m Model) screenKeybinds() string {
 		return "↑↓ move · ↵/+ add · − remove · c cart · : cmd · ? help"
 	case scrCheckout:
 		return "↑↓ pick · + − qty · ⌫ remove · ↵ place · : cmd · ? help"
+	case scrInstamart:
+		if m.imSearchMode {
+			return "↑↓ move · ↵ open · esc usuals · : cmd"
+		}
+		if m.imRailFocus {
+			return "↑↓ move · ↵ open · / search · : cmd · ? help"
+		}
+		return "↑↓ move · ↵/+ add · − remove · ← rail · c cart · esc back"
 	default:
 		return "? help"
 	}
@@ -3724,6 +4826,16 @@ func (m Model) View() string {
 		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, v)
 	}
 
+	// Two-deliveries picker — opened from the splash "track order" entry, so it
+	// must render before the splash's own early return.
+	if m.trackPickOpen {
+		dialog := m.trackPick.View()
+		if m.w == 0 || m.h == 0 {
+			return dialog
+		}
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, dialog)
+	}
+
 	if m.screen == scrSplash {
 		sp := m.splash.WithDecode(m.decodeStep).WithFrame(m.frame).WithSplashTick(m.splashTick).
 			WithSelection(m.homeSel).WithPhrase(m.splashPhrase).View()
@@ -3802,16 +4914,12 @@ func (m Model) View() string {
 	case scrCheckout, scrConfirm:
 		body = m.checkout.WithPlacing(m.placingOrder).WithViewport(m.h).View(m.frame)
 	case scrTracking:
-		body = m.track.WithViewport(m.h).View(m.nowUnix, m.frame, m.spin())
+		body = m.track.WithViewport(m.h).WithAlt(m.hasAltOrder).View(m.nowUnix, m.frame, m.spin())
 	case scrInstamart:
-		if m.live {
-			// Live vertical: show "coming soon" placeholder until Instamart is built.
-			body = "  " + theme.BrandStyle.Render("Instamart") + "\n\n  " +
-				theme.DimStyle.Render("groceries in minutes — coming soon") + "\n\n" +
-				"  " + theme.FaintStyle.Render("tab · back to Restaurants")
-		} else {
-			body = m.inst.WithMaxRows(m.listRows(11 + screens.BrandHeaderLines)).View()
-		}
+		// Two-pane live layout mirrors scrMenu's chrome exactly (store switcher +
+		// footer); the mock single-pane path (no rail attached) uses its own
+		// fixed header instead, so this budget only matters when hasRail is true.
+		body = m.inst.WithMaxRows(m.listRows(8 + screens.BrandHeaderLines)).View()
 	case scrImCart:
 		body = m.imCart.View()
 	default: // scrMenu
@@ -3923,11 +5031,42 @@ func (m Model) afterCheckoutReduce() (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// afterIMCheckoutReduce finalizes a reduce/delete on the Instamart checkout.
+// Mirrors afterCheckoutReduce; unlike food's cart (bound to a restaurant, so
+// emptying it releases the binding), Instamart's cart is bound to the address
+// and there is no restaurant field to clear.
+func (m Model) afterIMCheckoutReduce() (tea.Model, tea.Cmd) {
+	m.imOrderErr = "" // editing the cart clears a stale "can't order" message
+	cmd := m.imLiveCartCmd()
+	// Freeze input only when a real sync is in flight. In mock mode
+	// imLiveCartCmd() is nil — no IMCartSyncedMsg would ever arrive to clear
+	// the freeze, so freezing here would hard-lock the screen.
+	m.imCartMutating = m.live && cmd != nil
+	m.menu = m.menu.WithCartChip(m.cartChip())
+	m.checkout = m.buildIMCheckout()
+	return m, cmd
+}
+
 // confirmPlaceOrder fires the actual order placement — the "yes" branch of
 // the order-confirm modal. This is the same logic checkout's ↵ ran directly
 // before the confirm modal existed.
 func (m Model) confirmPlaceOrder() (tea.Model, tea.Cmd) {
 	m.orderConfirmOpen = false
+	if m.checkoutVertical == 1 {
+		if m.live && !m.placingOrder {
+			m.placingOrder = true
+			m.imOrderErr = ""
+			m.imCartSyncPending = false // the Sequence syncs final lines; no trailing debounce after placing
+			return m, tea.Sequence(m.imLiveCartCmd(), datasource.PlaceIMOrderCmd(m.backend, m.addr.ID))
+		}
+		if !m.live {
+			oid := orderID(m.checkout.Lines())
+			m.checkout = m.checkout.Placed(oid, "~40 min")
+			m.screen = scrConfirm
+			m.track = screens.NewTracking("Instamart", m.addr.Line, oid, 0, 0, 0)
+		}
+		return m, nil
+	}
 	if m.live && !m.placingOrder {
 		m.placingOrder = true
 		m.orderErr = ""
@@ -3969,10 +5108,23 @@ func (m Model) buildCheckout() screens.Checkout {
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.cartScreenLines())))
 }
 
+// buildIMCheckout assembles the merged checkout screen for the Instamart
+// cart. Mirrors buildCheckout: the live item list is driven by the
+// authoritative m.imLines; imLiveCart feeds only the bill via imBillFromLive().
+func (m Model) buildIMCheckout() screens.Checkout {
+	return screens.NewCheckout("Instamart", m.addr, m.imLines, screens.InstamartETA).
+		WithBill(m.imBillFromLive()).
+		WithLiveSync(m.live, m.imCartSyncErr).
+		WithOrderErr(m.imOrderErr).
+		WithMutating(m.imCartMutating).
+		WithCursor(clampIdx(m.checkout.Cursor(), len(m.imLines)))
+}
+
 // openCartCmd opens the merged checkout screen and, in live mode, fetches the
 // real Swiggy cart so the bill reflects exactly what Place Order will charge.
 func (m *Model) openCartCmd() tea.Cmd {
 	m.cartLoaded = false
+	m.checkoutVertical = 0 // food
 	m.checkout = m.buildCheckout()
 	m.screen = scrCheckout
 	if !m.live {
@@ -3986,6 +5138,46 @@ func (m *Model) openCartCmd() tea.Cmd {
 		return nil
 	}
 	return datasource.LoadCart(m.backend, m.addr.ID, rest)
+}
+
+// openIMCheckoutCmd opens the merged checkout screen for the Instamart cart
+// and, in live mode, fetches the real Instamart cart so the bill reflects
+// exactly what Place Order will charge. Mirrors openCartCmd; Instamart's cart
+// binds to the ADDRESS (not a restaurant), so there is no restaurant guard.
+func (m *Model) openIMCheckoutCmd() tea.Cmd {
+	m.checkoutVertical = 1 // instamart
+	m.checkout = m.buildIMCheckout()
+	m.screen = scrCheckout
+	if !m.live {
+		return nil
+	}
+	return datasource.LoadIMCart(m.backend)
+}
+
+// imEnterCmd fires the Instamart entry loads: the go-to ("your usuals") list
+// always refreshes (cheap, address-scoped), and the account's Instamart cart
+// pulls once per session (re-armed on an address change, mirroring the food
+// cart pull) so a pre-existing Swiggy-app cart seeds the local lines.
+func (m *Model) imEnterCmd() tea.Cmd {
+	if !m.live {
+		return nil
+	}
+	m.imQuery = ""
+	m.imRailActive = screens.RailHome // lands on Usuals, matching Food's landing-on-Home
+	m.imRailFocus = true
+	m.imSearchMode = false
+	m.imPending = true
+	// The go-to list always refreshes on entry (cheap, address-scoped) even if
+	// already loaded this session — re-marking it loaded is a no-op for
+	// ensureIMQuery's dedupe on the NEXT revisit.
+	m.imLoadedQueries[""] = true
+	m.inst = m.buildInstamart() // paint the rail + "loading…" synchronously; the go-to list fills in when the load lands
+	cmds := []tea.Cmd{datasource.LoadIMProducts(m.backend, m.snap, m.addr.ID, m.imQuery)}
+	if !m.imCartPulled {
+		m.imCartPulled = true
+		cmds = append(cmds, datasource.PullIMCart(m.backend))
+	}
+	return tea.Batch(cmds...)
 }
 
 // billFromLive returns Swiggy's real pricing breakdown for the cart/checkout
@@ -4004,6 +5196,24 @@ func (m Model) billFromLive() screens.Bill {
 	}
 }
 
+// imBillFromLive returns Swiggy's real Instamart pricing breakdown for the
+// checkout bill. Instamart's handling fee is folded into the taxes&charges
+// row (screens.Bill has no separate handling field) so the checkout page
+// renders identically to food's — a design constraint, not a data loss:
+// imLiveCart.Handling is still available for anyone auditing the raw split.
+func (m Model) imBillFromLive() screens.Bill {
+	if !m.live || m.imLiveCart.Total == 0 {
+		return screens.Bill{}
+	}
+	return screens.Bill{
+		ItemTotal: m.imLiveCart.ItemTotal,
+		Delivery:  m.imLiveCart.Delivery,
+		Taxes:     m.imLiveCart.Handling + m.imLiveCart.Taxes,
+		ToPay:     m.imLiveCart.Total,
+		Live:      true,
+	}
+}
+
 // liveCartCmd syncs the Swiggy cart after any local cart mutation: an UpdateCart
 // when items remain, or a flush when the cart just went empty (UpdateCart can't
 // express an empty cart — it requires a restaurant id).
@@ -4015,6 +5225,38 @@ func (m Model) liveCartCmd() tea.Cmd {
 		return datasource.ClearCartCmd(m.backend)
 	}
 	return m.liveSyncCart()
+}
+
+// imItemsForLines converts the committed Instamart cart lines into
+// api.IMCartItems (the sync payload). Mirrors cartItemsForLines; lines
+// without a resolved spinId (SwiggyID) are skipped — they can't be
+// referenced by Swiggy.
+func (m Model) imItemsForLines() []api.IMCartItem {
+	items := make([]api.IMCartItem, 0, len(m.imLines))
+	for _, l := range m.imLines {
+		if l.Item.SwiggyID == "" {
+			continue
+		}
+		items = append(items, api.IMCartItem{SpinID: l.Item.SwiggyID, Quantity: l.Qty})
+	}
+	return items
+}
+
+// imLiveCartCmd syncs the Instamart cart after any local cart mutation: an
+// IMUpdateCart when items remain, or a flush when the cart just went empty.
+// Mirrors liveCartCmd.
+func (m Model) imLiveCartCmd() tea.Cmd {
+	if !m.live {
+		return nil
+	}
+	if len(m.imLines) == 0 {
+		return datasource.ClearIMCartCmd(m.backend)
+	}
+	items := m.imItemsForLines()
+	if len(items) == 0 {
+		return nil
+	}
+	return datasource.SyncIMCart(m.backend, m.addr.ID, items)
 }
 
 func (m Model) liveSyncCart() tea.Cmd {
@@ -4064,6 +5306,9 @@ func (m *Model) runAliasCommand(rest string) []screens.CmdLine {
 	case "set":
 		if len(fields) < 2 {
 			return []screens.CmdLine{{Text: "usage: alias set <name>", Color: theme.Fav}}
+		}
+		if m.screen == scrInstamart || (m.screen == scrCheckout && m.checkoutVertical == 1) {
+			return m.imAliasSet(fields[1])
 		}
 		return m.aliasSet(fields[1])
 	case "list", "ls":
@@ -4127,6 +5372,46 @@ func (m *Model) aliasSet(name string) []screens.CmdLine {
 	}
 	return []screens.CmdLine{
 		{Text: fmt.Sprintf("saved preset %q — %d item(s) from %s", name, len(plines), m.cartRestaurant), Color: theme.Green},
+		{Text: fmt.Sprintf("run it from your shell: console order %s", name), Color: theme.Dim},
+	}
+}
+
+// imAliasSet saves the current Instamart cart as a named preset. Mirrors
+// aliasSet; Instamart presets have no restaurant/selections concept — lines
+// carry only the spinId + qty (PresetLine.Sels stays empty).
+func (m *Model) imAliasSet(name string) []screens.CmdLine {
+	if localstore.ReservedPresetName(name) {
+		return []screens.CmdLine{{Text: fmt.Sprintf("alias: %q is reserved", name), Color: theme.Fav}}
+	}
+	if len(m.imLines) == 0 {
+		return []screens.CmdLine{{Text: "alias: instamart cart is empty — add items first", Color: theme.Fav}}
+	}
+	var plines []localstore.PresetLine
+	for _, l := range m.imLines {
+		if l.Item.SwiggyID == "" {
+			continue
+		}
+		plines = append(plines, localstore.PresetLine{ItemID: l.Item.SwiggyID, Name: l.Item.Name, Qty: l.Qty})
+	}
+	if len(plines) == 0 {
+		return []screens.CmdLine{{Text: "alias: no live items to save (mock cart?)", Color: theme.Fav}}
+	}
+	ps, err := localstore.LoadPresets()
+	if err != nil {
+		return []screens.CmdLine{{Text: "alias: " + err.Error(), Color: theme.Fav}}
+	}
+	if err := ps.Add(localstore.Preset{
+		Name: name, AddrID: m.addr.ID, AddrLine: m.addr.Line,
+		RestaurantName: "Instamart", Vertical: "instamart",
+		Lines: plines, CreatedAt: time.Now().Unix(),
+	}); err != nil {
+		return []screens.CmdLine{{Text: "alias: " + err.Error(), Color: theme.Fav}}
+	}
+	if err := localstore.SavePresets(ps); err != nil {
+		return []screens.CmdLine{{Text: "alias: " + err.Error(), Color: theme.Fav}}
+	}
+	return []screens.CmdLine{
+		{Text: fmt.Sprintf("saved preset %q — %d item(s) from Instamart", name, len(plines)), Color: theme.Green},
 		{Text: fmt.Sprintf("run it from your shell: console order %s", name), Color: theme.Dim},
 	}
 }

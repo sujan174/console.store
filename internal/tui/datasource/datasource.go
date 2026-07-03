@@ -42,6 +42,17 @@ type Backend interface {
 	TrackOrder(orderID string) (api.Tracking, error)
 	ActiveOrders(addressID string) ([]api.Order, error)
 	Logout() error
+
+	// Instamart (grocery) vertical — a separate address-bound cart, keyed by
+	// SKU-level spinIds instead of menu_item_ids. See catalog.SectionInstamart.
+	IMSearch(addressID, query string) ([]api.IMProduct, error)
+	IMGoTo(addressID string) ([]api.IMProduct, error)
+	IMGetCart() (api.IMCart, error)
+	IMUpdateCart(addressID string, items []api.IMCartItem) (api.IMCart, error)
+	IMClearCart() error
+	IMPlaceOrder(addressID string) (api.Order, error)
+	IMOrders(activeOnly bool) ([]api.IMOrder, error)
+	IMTrack(orderID string, lat, lng float64) (api.Tracking, error)
 }
 
 type (
@@ -124,6 +135,50 @@ type (
 	ActiveOrdersLoadedMsg struct {
 		Orders []api.Order
 		Err    error
+	}
+	// IMProductsLoadedMsg reports an Instamart browse/search load merged into the
+	// snapshot (under the address). Query is empty for the go-to ("your usuals")
+	// list, non-empty for a search — the root matches it against the live query
+	// to guard against a stale response.
+	IMProductsLoadedMsg struct {
+		Query string
+		Err   error
+	}
+	// IMCartSyncedMsg carries the result of an Instamart cart write (update or
+	// clear) — Swiggy's real bill breakdown so checkout shows accurate numbers.
+	IMCartSyncedMsg struct {
+		Cart api.IMCart
+		Err  error
+	}
+	// IMCartPulledMsg carries the account's Instamart cart fetched once at
+	// launch, to seed the local cart from anything already built on the Swiggy
+	// app/website. Distinct from IMCartLoadedMsg so launch-time errors stay
+	// silent and only this path seeds.
+	IMCartPulledMsg struct {
+		Cart api.IMCart
+		Err  error
+	}
+	// IMCartLoadedMsg carries the live Instamart cart fetched on cart/checkout
+	// screen entry — the source of truth for the displayed lines + bill.
+	IMCartLoadedMsg struct {
+		Cart api.IMCart
+		Err  error
+	}
+	// IMOrderPlacedMsg carries the result of placing an Instamart order.
+	IMOrderPlacedMsg struct {
+		Order api.Order
+		Err   error
+	}
+	// IMActiveOrdersLoadedMsg carries the account's currently-active Instamart
+	// orders, or an error if the fetch failed.
+	IMActiveOrdersLoadedMsg struct {
+		Orders []api.IMOrder
+		Err    error
+	}
+	// IMTrackingPolledMsg carries the live status + ETA for an Instamart order.
+	IMTrackingPolledMsg struct {
+		Tracking api.Tracking
+		Err      error
 	}
 )
 
@@ -327,5 +382,98 @@ func LoadActiveOrdersCmd(b Backend, addressID string) tea.Cmd {
 	return func() tea.Msg {
 		os, err := b.ActiveOrders(addressID)
 		return ActiveOrdersLoadedMsg{Orders: os, Err: err}
+	}
+}
+
+// LoadIMProducts fetches an Instamart browse/search page and writes it into the
+// snapshot under {addressID, query}. An empty query fetches the go-to ("your
+// usuals") list (IMGoTo); a non-empty query runs a search (IMSearch). The Msg
+// carries the query back so the root can guard a stale response against the
+// live one — and the query-scoped snapshot key means even a raced write can't
+// surface under a different query's view.
+func LoadIMProducts(b Backend, snap *swiggysnap.Snapshot, addressID, query string) tea.Cmd {
+	return func() tea.Msg {
+		var (
+			got []api.IMProduct
+			err error
+		)
+		if query == "" {
+			got, err = b.IMGoTo(addressID)
+		} else {
+			got, err = b.IMSearch(addressID, query)
+		}
+		if err != nil {
+			return IMProductsLoadedMsg{Query: query, Err: err}
+		}
+		snap.SetInstamart(addressID, query, toIMItems(got))
+		return IMProductsLoadedMsg{Query: query}
+	}
+}
+
+// SyncIMCart calls IMUpdateCart on the backend with the current Instamart cart
+// contents (update_cart REPLACES the whole cart) and returns Swiggy's real bill
+// breakdown so checkout can show accurate numbers. Errors are non-fatal: the
+// TUI shows them and continues.
+func SyncIMCart(b Backend, addressID string, items []api.IMCartItem) tea.Cmd {
+	return func() tea.Msg {
+		cart, err := b.IMUpdateCart(addressID, items)
+		return IMCartSyncedMsg{Cart: cart, Err: err}
+	}
+}
+
+// PullIMCart fetches the account's Instamart cart once at launch so the TUI can
+// seed the local cart from anything already built on the Swiggy app/website.
+func PullIMCart(b Backend) tea.Cmd {
+	return func() tea.Msg {
+		cart, err := b.IMGetCart()
+		return IMCartPulledMsg{Cart: cart, Err: err}
+	}
+}
+
+// LoadIMCart fetches the live Instamart cart (get_cart) so the cart/checkout
+// screens render Swiggy's real items + pricing rather than the local
+// in-memory approximation.
+func LoadIMCart(b Backend) tea.Cmd {
+	return func() tea.Msg {
+		cart, err := b.IMGetCart()
+		return IMCartLoadedMsg{Cart: cart, Err: err}
+	}
+}
+
+// ClearIMCartCmd empties the Instamart cart. Used when the TUI cart goes empty
+// — IMUpdateCart can't express an empty cart cleanly (it always replaces with
+// the given items).
+func ClearIMCartCmd(b Backend) tea.Cmd {
+	return func() tea.Msg {
+		return IMCartSyncedMsg{Err: b.IMClearCart()}
+	}
+}
+
+// PlaceIMOrderCmd submits the Instamart order through the broker (COD
+// checkout). The TUI must have already synced the cart via SyncIMCart before
+// calling this. On success the broker returns the placed order; on failure the
+// TUI shows the error and stays on scrCheckout.
+func PlaceIMOrderCmd(b Backend, addressID string) tea.Cmd {
+	return func() tea.Msg {
+		order, err := b.IMPlaceOrder(addressID)
+		return IMOrderPlacedMsg{Order: order, Err: err}
+	}
+}
+
+// LoadIMActiveOrdersCmd fetches the account's currently-active Instamart
+// orders (the real "is an order live?" signal for the splash).
+func LoadIMActiveOrdersCmd(b Backend) tea.Cmd {
+	return func() tea.Msg {
+		os, err := b.IMOrders(true)
+		return IMActiveOrdersLoadedMsg{Orders: os, Err: err}
+	}
+}
+
+// PollIMTrackingCmd fetches the live status + ETA for an Instamart order.
+// lat/lng come from IMOrders (get_orders) — track_order requires coordinates.
+func PollIMTrackingCmd(b Backend, orderID string, lat, lng float64) tea.Cmd {
+	return func() tea.Msg {
+		t, err := b.IMTrack(orderID, lat, lng)
+		return IMTrackingPolledMsg{Tracking: t, Err: err}
 	}
 }
