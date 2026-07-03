@@ -231,6 +231,12 @@ type Model struct {
 	// once IMCartSyncedMsg lands — so the confirmed total is always Swiggy's
 	// authoritative bill for exactly the lines being ordered, never a stale one.
 	imConfirmPending bool
+	// imConfirmChase counts convergence re-fires for ONE deferred confirm. If
+	// Swiggy clamps a quantity server-side, the response can never match the
+	// local lines — without a budget the chase would re-write forever and
+	// burn the 30/min write allowance. After the budget, the SERVER cart is
+	// adopted as truth and the user re-reviews.
+	imConfirmChase int
 
 	// imSyncInFlight — see cartSyncInFlight; the Instamart cart has the same
 	// replace-semantics write race, serialized the same way.
@@ -1942,6 +1948,20 @@ func (m Model) imQtyMap() map[string]int {
 	return q
 }
 
+// imLinesFromCart converts a live Instamart cart into local cart lines.
+// Seeded ids are prefixed "im-<spin>" so they never collide with a browse
+// product's own catalog id — the steppers on the browse list won't reflect a
+// seeded line until the item is re-added there, which is fine: the NEXT sync
+// replaces the server cart wholesale with whatever the local lines are.
+func imLinesFromCart(c api.IMCart) []screens.CartLine {
+	var lines []screens.CartLine
+	for _, l := range c.Lines {
+		it := catalog.Item{ID: "im-" + l.SpinID, SwiggyID: l.SpinID, Name: l.Name, Price: l.Price, Section: catalog.SectionInstamart}
+		lines = append(lines, screens.CartLine{Item: it, Qty: l.Quantity, Price: l.Price, Unavailable: !l.Available})
+	}
+	return lines
+}
+
 // imRail builds the Instamart rail descriptor from imChips: a Home-less rail
 // (Search + curated categories), so browsing lands straight on products —
 // there is no "Usuals"/go-to slot.
@@ -2256,15 +2276,30 @@ func cartChipStr(count, total int) string {
 // count + grand total (item subtotal + delivery + taxes) so every page agrees
 // with what Place Order will charge. Before any live cart exists it falls back
 // to the local optimistic lines (instant feedback on the first add).
+// cartSyncing / imCartSyncing report an unsettled write chain: an edit is
+// debouncing or a cart write is in flight. The cart chip carries a spinner
+// while true, so every screen shows WHEN the cart is still updating — and
+// when it's safe to trust the numbers for the next change.
+func (m Model) cartSyncing() bool {
+	return m.live && (m.cartSyncPending || m.cartSyncInFlight)
+}
+func (m Model) imCartSyncing() bool {
+	return m.live && (m.imCartSyncPending || m.imSyncInFlight)
+}
+
 func (m Model) cartChip() string {
-	if m.live && len(m.liveCart.Lines) > 0 {
+	chip := cartChipStr(m.cartCount(), m.cartTotal())
+	if m.live && len(m.liveCart.Lines) > 0 && !m.cartSyncing() {
 		n := 0
 		for _, l := range m.liveCart.Lines {
 			n += l.Quantity
 		}
-		return cartChipStr(n, m.liveCart.Total)
+		chip = cartChipStr(n, m.liveCart.Total)
 	}
-	return cartChipStr(m.cartCount(), m.cartTotal())
+	if m.cartSyncing() {
+		chip += " " + m.spin()
+	}
+	return chip
 }
 func (m Model) imCartChip() string {
 	// Prefer Swiggy's confirmed cart (accurate count + fee-inclusive total) —
@@ -2275,14 +2310,18 @@ func (m Model) imCartChip() string {
 	// didn't show, bill was the old item" bug. While a change is still settling,
 	// fall back to the optimistic local lines so the indicator moves instantly,
 	// then converges to the server total when the sync lands.
+	chip := cartChipStr(m.imCartCount(), m.imCartTotal())
 	if m.live && len(m.imLiveCart.Lines) > 0 && m.imLiveMatchesLines() {
 		n := 0
 		for _, l := range m.imLiveCart.Lines {
 			n += l.Quantity
 		}
-		return cartChipStr(n, m.imLiveCart.Total)
+		chip = cartChipStr(n, m.imLiveCart.Total)
 	}
-	return cartChipStr(m.imCartCount(), m.imCartTotal())
+	if m.imCartSyncing() {
+		chip += " " + m.spin()
+	}
+	return chip
 }
 
 // imLiveMatchesLines reports whether Swiggy's last-confirmed cart (imLiveCart)
@@ -2879,17 +2918,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.imLiveCart = dm.Cart
 		m.imCartFetched = true
 		if len(m.imLines) == 0 && len(dm.Cart.Lines) > 0 {
-			var lines []screens.CartLine
-			for _, l := range dm.Cart.Lines {
-				// Seeded ids are prefixed "im-<spin>" so they never collide with a
-				// browse product's own catalog id — the steppers on the browse list
-				// won't reflect a seeded line until the item is re-added there, which
-				// is fine: the NEXT sync replaces the server cart wholesale with
-				// whatever the local lines are, seeded or not.
-				it := catalog.Item{ID: "im-" + l.SpinID, SwiggyID: l.SpinID, Name: l.Name, Price: l.Price, Section: catalog.SectionInstamart}
-				lines = append(lines, screens.CartLine{Item: it, Qty: l.Quantity, Price: l.Price, Unavailable: !l.Available})
-			}
-			m.imLines = lines
+			m.imLines = imLinesFromCart(dm.Cart)
 			m = m.commitIMCartConfirmed()
 		}
 		if m.screen == scrCheckout && m.checkoutVertical == 1 {
@@ -2958,12 +2987,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.refreshInstamart()
 		}
 		if m.imConfirmPending {
-			if m.imCartSyncPending || !m.imLiveMatchesLines() {
+			if (m.imCartSyncPending || !m.imLiveMatchesLines()) && m.imConfirmChase < 2 {
 				// Edits landed while this write flew (or the response is stale) —
 				// chase them before confirming, so the modal total is for the
-				// final lines. Single-flight keeps the chain ordered.
+				// final lines. Single-flight keeps the chain ordered; the budget
+				// keeps a server-side clamp from turning this into a write loop.
+				m.imConfirmChase++
 				m.imCartMutating = m.live
 				return m, m.fireIMSyncNow()
+			}
+			if !m.imLiveMatchesLines() {
+				// Chase budget spent and Swiggy still disagrees (it clamped or
+				// dropped something). The server is the authority — adopt ITS
+				// cart as the local lines and ask the user to re-review instead
+				// of writing again.
+				m.imLines = imLinesFromCart(m.imLiveCart)
+				m = m.commitIMCartConfirmed()
+				m.imCartSyncPending = false
+				m.imConfirmPending = false
+				m.imOrderErr = "the store adjusted your cart — review and press ↵ again"
+				if m.screen == scrCheckout && m.checkoutVertical == 1 {
+					m.checkout = m.buildIMCheckout()
+				}
+				return m, nil
 			}
 			// The pre-confirm flush landed: the bill now reflects exactly these
 			// lines. Open the order-confirm modal on the fresh, authoritative total.
@@ -4500,6 +4546,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// total the user approves is Swiggy's real bill for these lines.
 					if m.live && (m.imCartSyncPending || m.imSyncInFlight || !m.imLiveMatchesLines()) {
 						m.imConfirmPending = true
+						m.imConfirmChase = 0
 						m.imCartMutating = true // freeze input until the chain lands (then the modal opens)
 						return m, m.fireIMSyncNow()
 					}

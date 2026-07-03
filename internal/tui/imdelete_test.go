@@ -511,3 +511,72 @@ func TestIMCheckoutFlushesPendingAddsBeforeBill(t *testing.T) {
 		t.Fatalf("bill must show the live 7-item total 880; got:\n%s", v)
 	}
 }
+
+// The cart chip carries a spinner while the write chain is unsettled — the
+// "it's updating, hold on" indicator — and drops it once converged.
+func TestIMChipShowsSyncingSpinner(t *testing.T) {
+	be := &liveFake{}
+	m := imModel(t, be)
+	m.imLines = imTwoLines()
+	m.imCartSyncPending = true
+	if got := m.imCartChip(); !strings.Contains(got, spinFrames[m.frame%len(spinFrames)]) {
+		t.Fatalf("chip must carry the spinner while a write is pending; got %q", got)
+	}
+	m.imCartSyncPending = false
+	m.imSyncInFlight = true
+	if got := m.imCartChip(); !strings.Contains(got, spinFrames[m.frame%len(spinFrames)]) {
+		t.Fatalf("chip must carry the spinner while a write is in flight; got %q", got)
+	}
+	m.imSyncInFlight = false
+	if got := m.imCartChip(); strings.Contains(got, spinFrames[m.frame%len(spinFrames)]) {
+		t.Fatalf("settled chip must drop the spinner; got %q", got)
+	}
+}
+
+// If Swiggy keeps disagreeing with the local lines (server-side clamp), the
+// deferred-confirm chase must stop after its budget and ADOPT the server cart
+// instead of writing forever — the write chain can never loop.
+func TestIMConfirmChaseBudgetAdoptsServerCart(t *testing.T) {
+	be := &liveFake{}
+	m := imModel(t, be)
+	m.imLines = []screens.CartLine{
+		{Item: catalog.Item{ID: "p1", SwiggyID: "sp1", Name: "Red Bull", Price: 125, Section: catalog.SectionInstamart}, Qty: 7, Price: 125},
+	}
+	m.screen = scrCheckout
+	m.checkoutVertical = 1
+	m.checkout = m.buildIMCheckout()
+
+	// Swiggy clamps to 5 no matter what we send.
+	clamped := api.IMCart{ItemTotal: 625, Total: 630,
+		Lines: []api.IMCartLine{{SpinID: "sp1", Name: "Red Bull", Quantity: 5, Price: 125, Available: true}}}
+	be.imCart = clamped
+	m.imLiveCart = api.IMCart{} // stale — forces the Enter gate to flush
+
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if !m.imConfirmPending || cmd == nil {
+		t.Fatal("Enter with a stale cart must defer and flush")
+	}
+	// Each delivery returns the clamped cart; the chase must stop within its
+	// budget (2 re-fires) and never spin.
+	for i := 0; i < 4 && cmd != nil; i++ {
+		m = deliver(t, m, cmd)
+		cmd = nil
+		if m.imConfirmPending && m.imSyncInFlight {
+			// the handler re-fired — synthesize the next clamped response
+			cmd = func() tea.Msg { return datasource.IMCartSyncedMsg{Cart: clamped} }
+		}
+	}
+	if m.imConfirmPending {
+		t.Fatal("chase must terminate within its budget")
+	}
+	if m.orderConfirmOpen {
+		t.Fatal("a clamped cart must NOT open the confirm modal — user re-reviews")
+	}
+	if len(m.imLines) != 1 || m.imLines[0].Qty != 5 {
+		t.Fatalf("terminal state must ADOPT the server cart (qty 5), got %+v", m.imLines)
+	}
+	if m.imOrderErr == "" {
+		t.Fatal("the adjustment must be surfaced to the user")
+	}
+}
