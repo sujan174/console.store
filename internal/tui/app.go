@@ -1948,16 +1948,32 @@ func (m Model) imQtyMap() map[string]int {
 	return q
 }
 
-// imLinesFromCart converts a live Instamart cart into local cart lines.
-// Seeded ids are prefixed "im-<spin>" so they never collide with a browse
-// product's own catalog id — the steppers on the browse list won't reflect a
-// seeded line until the item is re-added there, which is fine: the NEXT sync
-// replaces the server cart wholesale with whatever the local lines are.
-func imLinesFromCart(c api.IMCart) []screens.CartLine {
+// imLinesFromCart converts a live Instamart cart into local cart lines,
+// RECONCILING against the existing local lines: a server line whose spinId
+// matches a local line keeps that line's Item identity (catalog id, chosen
+// pack-size name, price) and takes the SERVER's quantity — so a clamp shows
+// up on the exact browse stepper the user was pressing. Server lines with no
+// local match become seeded stubs (ids prefixed "im-<spin>" so they never
+// collide with a browse product's catalog id); local lines absent from the
+// server are dropped (they were never really added).
+func imLinesFromCart(local []screens.CartLine, c api.IMCart) []screens.CartLine {
 	var lines []screens.CartLine
 	for _, l := range c.Lines {
-		it := catalog.Item{ID: "im-" + l.SpinID, SwiggyID: l.SpinID, Name: l.Name, Price: l.Price, Section: catalog.SectionInstamart}
-		lines = append(lines, screens.CartLine{Item: it, Qty: l.Quantity, Price: l.Price, Unavailable: !l.Available})
+		line := screens.CartLine{
+			Item:        catalog.Item{ID: "im-" + l.SpinID, SwiggyID: l.SpinID, Name: l.Name, Price: l.Price, Section: catalog.SectionInstamart},
+			Qty:         l.Quantity,
+			Price:       l.Price,
+			Unavailable: !l.Available,
+		}
+		for _, ll := range local {
+			if ll.Item.SwiggyID == l.SpinID {
+				line.Item = ll.Item
+				line.Price = ll.Price
+				line.Selections = ll.Selections
+				break
+			}
+		}
+		lines = append(lines, line)
 	}
 	return lines
 }
@@ -2918,7 +2934,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.imLiveCart = dm.Cart
 		m.imCartFetched = true
 		if len(m.imLines) == 0 && len(dm.Cart.Lines) > 0 {
-			m.imLines = imLinesFromCart(dm.Cart)
+			m.imLines = imLinesFromCart(m.imLines, dm.Cart)
 			m = m.commitIMCartConfirmed()
 		}
 		if m.screen == scrCheckout && m.checkoutVertical == 1 {
@@ -2977,14 +2993,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+		// The write chain is QUIET (no newer edits pending) yet Swiggy's answer
+		// disagrees with the lines we sent — it clamped or dropped something
+		// (per-item quantity caps). The server owns the cart: adopt ITS lines so
+		// every screen — browse steppers included — shows what was ACTUALLY
+		// added, never what was merely pressed. (With edits still pending, skip:
+		// the next write is about to supersede this answer anyway.)
+		adjusted := false
+		if m.live && !m.imCartSyncPending && !m.imLiveMatchesLines() {
+			m.imLines = imLinesFromCart(m.imLines, dm.Cart)
+			adjusted = true
+		}
 		m = m.commitIMCartConfirmed()
 		m.imCartMutating = false // confirmed — unfreeze
 		if m.screen == scrCheckout && m.checkoutVertical == 1 {
 			m.checkout = m.buildIMCheckout()
 		}
 		if m.screen == scrInstamart {
-			// Repaint so the cart chip picks up Swiggy's confirmed count/total.
+			// Repaint so the steppers + chip pick up Swiggy's confirmed state.
 			m = m.refreshInstamart()
+		}
+		if adjusted {
+			m.imCartSyncErr = "the store adjusted your cart to what it allows"
+			if m.imConfirmPending {
+				// Don't confirm an order the user hasn't seen — surface the
+				// adjustment and let them review + ↵ again.
+				m.imConfirmPending = false
+				m.imOrderErr = "the store adjusted your cart — review and press ↵ again"
+			}
+			if m.screen == scrCheckout && m.checkoutVertical == 1 {
+				m.checkout = m.buildIMCheckout()
+			}
+			return m, nil
 		}
 		if m.imConfirmPending {
 			if (m.imCartSyncPending || !m.imLiveMatchesLines()) && m.imConfirmChase < 2 {
@@ -3001,7 +3041,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// dropped something). The server is the authority — adopt ITS
 				// cart as the local lines and ask the user to re-review instead
 				// of writing again.
-				m.imLines = imLinesFromCart(m.imLiveCart)
+				m.imLines = imLinesFromCart(m.imLines, m.imLiveCart)
 				m = m.commitIMCartConfirmed()
 				m.imCartSyncPending = false
 				m.imConfirmPending = false
@@ -3036,6 +3076,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if l.SpinID == m.imLines[i].Item.SwiggyID {
 					m.imLines[i].Unavailable = !l.Available
 				}
+			}
+		}
+		// Quiet chain + a read that disagrees with the local lines: the cart was
+		// changed somewhere we can't see (the Swiggy app, a clamp on a write
+		// whose response we missed). Adopt the server's lines — same authority
+		// rule as the write path — so no screen keeps a phantom quantity.
+		if m.live && !m.imCartSyncPending && !m.imSyncInFlight && !m.imLiveMatchesLines() {
+			m.imLines = imLinesFromCart(m.imLines, dm.Cart)
+			if m.screen == scrInstamart {
+				m = m.refreshInstamart()
 			}
 		}
 		// A successful load confirms the current lines as the Swiggy baseline.
@@ -4476,6 +4526,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "esc":
 					m.checkoutVertical = 0
 					m.screen = scrInstamart
+					// The cart may have been reconciled to the server while on the
+					// checkout (clamped quantities) — repaint the browse steppers.
+					m = m.refreshInstamart()
 					return m, nil
 				case "up", "k":
 					m.checkout = m.checkout.Up()

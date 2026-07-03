@@ -580,3 +580,88 @@ func TestIMConfirmChaseBudgetAdoptsServerCart(t *testing.T) {
 		t.Fatal("the adjustment must be surfaced to the user")
 	}
 }
+
+// The user's clamp scenario end-to-end: 8 rapid adds on the browse list,
+// Swiggy clamps the write to 3 — once the chain settles, the BROWSE steppers
+// must show ×3 (what was actually added), not ×8 (what was pressed), and the
+// adjustment must be surfaced.
+func TestIMBrowseSteppersAdoptServerClamp(t *testing.T) {
+	be := &liveFake{}
+	m := imModel(t, be)
+	m.imRailFocus = false
+	m.imQuery = ""
+	m.snap.SetInstamart(m.addr.ID, "", []catalog.Item{
+		{ID: "p1", SwiggyID: "sp1", Name: "Red Bull", Price: 125, Section: catalog.SectionInstamart},
+	})
+	m.inst = m.buildInstamart()
+
+	for i := 0; i < 8; i++ {
+		nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = nm.(Model)
+	}
+	if m.imLines[0].Qty != 8 {
+		t.Fatalf("precondition: local qty = %d, want 8", m.imLines[0].Qty)
+	}
+	if v := m.inst.View(); !strings.Contains(v, "×8") {
+		t.Fatalf("precondition: browse stepper must show the optimistic ×8; got:\n%s", v)
+	}
+
+	// The settled write fires; Swiggy clamps to 3.
+	var sync tea.Cmd
+	for i := 0; i < cartSettleFrames+2 && sync == nil; i++ {
+		m.frame++
+		var c tea.Cmd
+		m, c = m.onTick()
+		sync = c
+	}
+	if sync == nil {
+		t.Fatal("settled debounce must fire the write")
+	}
+	be.imCart = api.IMCart{ItemTotal: 375, Total: 380,
+		Lines: []api.IMCartLine{{SpinID: "sp1", Name: "Red Bull", Quantity: 3, Price: 125, Available: true}}}
+	m = deliver(t, m, sync)
+
+	// Chain is quiet + server disagrees → adopt: lines, steppers, chip all 3.
+	if len(m.imLines) != 1 || m.imLines[0].Qty != 3 {
+		t.Fatalf("lines must adopt the server's clamped qty 3, got %+v", m.imLines)
+	}
+	if v := m.inst.View(); !strings.Contains(v, "×3") || strings.Contains(v, "×8") {
+		t.Fatalf("browse stepper must show the ACTUAL ×3, not the pressed ×8; got:\n%s", v)
+	}
+	if got := m.imCartChip(); !strings.Contains(got, "· 3 · ₹380") {
+		t.Fatalf("chip must show the adopted server cart; got %q", got)
+	}
+	if m.imCartSyncErr == "" {
+		t.Fatal("the adjustment must be surfaced to the user")
+	}
+}
+
+// Esc from the IM checkout repaints the browse list, so a cart reconciled
+// while on the checkout can't leave stale steppers behind.
+func TestIMEscFromCheckoutRefreshesBrowse(t *testing.T) {
+	be := &liveFake{}
+	m := imModel(t, be)
+	m.imQuery = ""
+	m.snap.SetInstamart(m.addr.ID, "", []catalog.Item{
+		{ID: "p1", SwiggyID: "sp1", Name: "Red Bull", Price: 125, Section: catalog.SectionInstamart},
+	})
+	m.imLines = []screens.CartLine{
+		{Item: catalog.Item{ID: "p1", SwiggyID: "sp1", Name: "Red Bull", Price: 125, Section: catalog.SectionInstamart}, Qty: 8, Price: 125},
+	}
+	m.inst = m.buildInstamart() // browse painted with ×8
+	m.screen = scrCheckout
+	m.checkoutVertical = 1
+	m.checkout = m.buildIMCheckout()
+
+	// While on the checkout the cart got reconciled down to 3.
+	m.imLines[0].Qty = 3
+
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = nm.(Model)
+	if m.screen != scrInstamart {
+		t.Fatalf("esc must return to the browse, got %v", m.screen)
+	}
+	if v := m.inst.View(); !strings.Contains(v, "×3") || strings.Contains(v, "×8") {
+		t.Fatalf("esc must repaint the browse with the reconciled qty; got:\n%s", v)
+	}
+}
