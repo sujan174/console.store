@@ -16,9 +16,12 @@ type Rail struct {
 	active  int
 	focus   bool
 	height  int
+	noHome  bool // built without the Home slot (Search + categories only)
 }
 
-// Fixed rail entry indices. Category entries begin at railCatBase.
+// Fixed rail entry indices. Category entries begin at railCatBase for a
+// Home-slot rail (Food); a Home-less rail (Instamart) starts categories at
+// RailHome instead — use CatBase()/IsCategory() rather than the raw const.
 const (
 	RailSearch  = 0
 	RailHome    = 1
@@ -33,14 +36,35 @@ func NewRail(categories []string) Rail {
 }
 
 // NewRailLabeled builds the rail entries with a custom label for the second
-// slot (index RailHome) — Food uses "Home", Instamart uses "Usuals" for its
-// your-go-to-items list. Same layout/behavior otherwise.
+// slot (index RailHome) — Food uses "Home". Same layout/behavior otherwise.
 func NewRailLabeled(homeLabel string, categories []string) Rail {
 	entries := make([]string, 0, len(categories)+2)
 	entries = append(entries, "⌕ Search", homeLabel)
 	entries = append(entries, categories...)
 	return Rail{entries: entries, active: RailHome}
 }
+
+// NewRailCategories builds a Home-less rail: just Search then the categories,
+// landing on the first category (index RailHome). Instamart uses this — it has
+// no "Home"/go-to list, so browsing starts straight on a product category.
+func NewRailCategories(categories []string) Rail {
+	entries := make([]string, 0, len(categories)+1)
+	entries = append(entries, "⌕ Search")
+	entries = append(entries, categories...)
+	return Rail{entries: entries, active: RailHome, noHome: true}
+}
+
+// CatBase is the index of the first category entry: 2 on a Home-slot rail,
+// 1 on a Home-less one.
+func (r Rail) CatBase() int {
+	if r.noHome {
+		return RailHome
+	}
+	return railCatBase
+}
+
+// HasHome reports whether the rail carries a Home/Usuals slot at RailHome.
+func (r Rail) HasHome() bool { return !r.noHome }
 
 func (r Rail) WithActive(i int) Rail { r.active = i; return r.clamp() }
 func (r Rail) WithFocus(f bool) Rail { r.focus = f; return r }
@@ -70,8 +94,8 @@ func (r Rail) EntryLabel(i int) string {
 // IsCategory reports whether entry i is a cuisine category (vs Search/Home), and
 // returns its 0-based category index.
 func (r Rail) IsCategory(i int) (int, bool) {
-	if i >= railCatBase && i < len(r.entries) {
-		return i - railCatBase, true
+	if base := r.CatBase(); i >= base && i < len(r.entries) {
+		return i - base, true
 	}
 	return 0, false
 }

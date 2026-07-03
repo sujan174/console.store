@@ -2,8 +2,9 @@ package tui
 
 // Tests for the Instamart rail: navigation/debounce mirrors the Food rail
 // exactly (armIMRailLoad/settledIMRailLoad), category loads dedupe against
-// the snapshot (ensureIMQuery/imLoadedQueries), and the rail's Search/Usuals
-// entries route into search mode / the go-to list.
+// the snapshot (ensureIMQuery/imLoadedQueries), and the rail's Search entry
+// routes into search mode. The IM rail is Home-less: it lands straight on the
+// first product category (Energy Drinks) — there is no Usuals/go-to list.
 
 import (
 	"strings"
@@ -19,8 +20,8 @@ import (
 )
 
 // imRailModel builds a live model already on scrInstamart with the rail
-// focused on Usuals (the state imEnterCmd leaves it in), ready for key-driven
-// rail tests.
+// focused on the first category (the state imEnterCmd leaves it in), ready for
+// key-driven rail tests.
 func imRailModel(t *testing.T, be *liveFake) Model {
 	t.Helper()
 	snap := swiggysnap.NewSnapshot()
@@ -37,7 +38,7 @@ func imRailModel(t *testing.T, be *liveFake) Model {
 }
 
 // TestIMRailShowsEnergyDrinksFirst: entering Instamart renders the rail with
-// "Energy Drinks" as the first curated category (after Search/Usuals).
+// "Energy Drinks" as the first (landed) category, and NO Usuals slot.
 func TestIMRailShowsEnergyDrinksFirst(t *testing.T) {
 	be := &liveFake{}
 	m := imRailModel(t, be)
@@ -45,29 +46,35 @@ func TestIMRailShowsEnergyDrinksFirst(t *testing.T) {
 		t.Fatalf("screen = %v, want scrInstamart", m.screen)
 	}
 	v := m.inst.View()
-	for _, want := range []string{"INSTAMART", "Usuals", "Energy Drinks"} {
+	for _, want := range []string{"INSTAMART", "Energy Drinks"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("instamart rail view missing %q:\n%s", want, v)
 		}
+	}
+	if strings.Contains(v, "Usuals") {
+		t.Fatalf("instamart rail must not show a Usuals slot:\n%s", v)
 	}
 	if len(m.imChips) == 0 || m.imChips[0].Label != "Energy Drinks" {
 		t.Fatalf("imChips[0] = %+v, want Energy Drinks first", m.imChips)
 	}
 }
 
-// TestIMEnterLandsOnUsualsWithRailFocus: imEnterCmd starts on Usuals with the
-// rail focused, matching Food's landing-on-Home.
-func TestIMEnterLandsOnUsualsWithRailFocus(t *testing.T) {
+// TestIMEnterLandsOnFirstCategory: imEnterCmd lands on the first category with
+// the rail focused, its query loaded — no go-to/Usuals landing.
+func TestIMEnterLandsOnFirstCategory(t *testing.T) {
 	be := &liveFake{}
 	m := imRailModel(t, be)
 	if !m.imRailFocus {
 		t.Fatal("entering Instamart must land with the rail focused")
 	}
-	if m.imRailActive != screens.RailHome {
-		t.Fatalf("imRailActive = %d, want RailHome (Usuals slot)", m.imRailActive)
+	if want := m.imRail().CatBase(); m.imRailActive != want {
+		t.Fatalf("imRailActive = %d, want %d (first category)", m.imRailActive, want)
 	}
-	if m.imQuery != "" {
-		t.Fatalf("imQuery = %q, want empty (Usuals/go-to list)", m.imQuery)
+	if m.imQuery != "energy drink" {
+		t.Fatalf("imQuery = %q, want energy drink (first category)", m.imQuery)
+	}
+	if be.imSearchQuery != "energy drink" {
+		t.Fatalf("entry must load the first category; backend query = %q", be.imSearchQuery)
 	}
 }
 
@@ -81,7 +88,7 @@ func TestIMRailArrowToCategoryDebouncesThenFires(t *testing.T) {
 	}}
 	m := imRailModel(t, be)
 
-	// Usuals → Energy Drinks (one down-arrow).
+	// Landed on Energy Drinks; arrow down to Chips (one down-arrow).
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = nm.(Model)
 	if cmd != nil {
@@ -101,15 +108,12 @@ func TestIMRailArrowToCategoryDebouncesThenFires(t *testing.T) {
 	if loadCmd == nil {
 		t.Fatal("settled debounce must fire the IM category load")
 	}
-	if m.imQuery != "energy drink" {
-		t.Fatalf("imQuery = %q, want energy drink", m.imQuery)
+	if m.imQuery != "chips" {
+		t.Fatalf("imQuery = %q, want chips", m.imQuery)
 	}
 	m = deliver(t, m, loadCmd)
-	if be.imSearchCalls != 1 {
-		t.Fatalf("IMSearch call count = %d, want 1", be.imSearchCalls)
-	}
-	if be.imSearchQuery != "energy drink" {
-		t.Fatalf("backend received query %q, want energy drink", be.imSearchQuery)
+	if be.imSearchQuery != "chips" {
+		t.Fatalf("backend received query %q, want chips", be.imSearchQuery)
 	}
 	v := m.inst.View()
 	if !strings.Contains(v, "Red Bull") {
@@ -128,11 +132,13 @@ func TestIMRailRevisitCategoryRendersFromSnapshot(t *testing.T) {
 			Variants: []api.IMVariantSel{{SpinID: "sp1", Label: "52 g", Price: 20, InStock: true}}},
 	}}
 	m := imRailModel(t, be)
+	// Entry already loaded the landed category (Energy Drinks) once.
+	if be.imSearchCalls != 1 {
+		t.Fatalf("entry must load the first category once, got %d", be.imSearchCalls)
+	}
 
-	// Enter loads the category immediately (no settle wait needed).
-	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown}) // Energy Drinks
-	m = nm.(Model)
-	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // Chips
+	// Down to Chips, Enter → its first (and only) load.
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown}) // Chips
 	m = nm.(Model)
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = nm.(Model)
@@ -140,28 +146,24 @@ func TestIMRailRevisitCategoryRendersFromSnapshot(t *testing.T) {
 		t.Fatal("Enter on a rail category must load immediately")
 	}
 	m = deliver(t, m, cmd)
-	if be.imSearchCalls != 1 {
-		t.Fatalf("IMSearch call count after first visit = %d, want 1", be.imSearchCalls)
+	if be.imSearchCalls != 2 {
+		t.Fatalf("IMSearch calls after Chips = %d, want 2 (energy drink + chips)", be.imSearchCalls)
 	}
 
-	// Leave to Usuals, then come back to Chips — must render from the
-	// snapshot with NO second IMSearch call.
-	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft}) // back to rail focus (list had focus after Enter)
-	m = nm.(Model)
-	// Re-focus the rail explicitly in case Enter already dropped focus there.
+	// Back to the rail, up to Energy Drinks (already loaded), down to Chips
+	// again — must render from the snapshot with NO third IMSearch call.
 	m.imRailFocus = true
-	m.imRailActive = screens.RailHome
-	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // Energy Drinks
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // Chips → Energy Drinks
 	m = nm.(Model)
-	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // Chips
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // Energy Drinks → Chips
 	m = nm.(Model)
 	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = nm.(Model)
 	if cmd != nil {
 		m = deliver(t, m, cmd)
 	}
-	if be.imSearchCalls != 1 {
-		t.Fatalf("IMSearch call count after revisit = %d, want still 1 (cache hit)", be.imSearchCalls)
+	if be.imSearchCalls != 2 {
+		t.Fatalf("IMSearch calls after revisit = %d, want still 2 (cache hit)", be.imSearchCalls)
 	}
 	v := m.inst.View()
 	if !strings.Contains(v, "Lays Chips") {
@@ -175,7 +177,7 @@ func TestIMRailSearchEntryEntersSearchMode(t *testing.T) {
 	be := &liveFake{}
 	m := imRailModel(t, be)
 
-	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp}) // Usuals → Search
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp}) // first category → Search
 	m = nm.(Model)
 	if m.imRailActive != screens.RailSearch {
 		t.Fatalf("imRailActive = %d, want RailSearch", m.imRailActive)
@@ -187,39 +189,23 @@ func TestIMRailSearchEntryEntersSearchMode(t *testing.T) {
 	}
 }
 
-// TestIMRailUsualsEntryReturnsToGoToList: from a category, selecting Usuals
-// on the rail returns to the go-to list (imQuery reset to ""). The go-to list
-// was already loaded once on entry (imEnterCmd), so re-selecting it dedupes
-// like Food's Home entry (ensureHomeLoaded) — no second fetch, just an
-// instant render from the snapshot already holding the go-to items.
-func TestIMRailUsualsEntryReturnsToGoToList(t *testing.T) {
+// TestIMRailHasNoUsualsSlot: the rail is Home-less — up from the landed first
+// category reaches Search directly (no Usuals slot in between), and IMGoTo is
+// never called.
+func TestIMRailHasNoUsualsSlot(t *testing.T) {
 	be := &liveFake{imGoTo: []api.IMProduct{{ID: "p0", Name: "Bread", InStock: true,
 		Variants: []api.IMVariantSel{{SpinID: "sp0", Label: "400 g", Price: 45, InStock: true}}}}}
 	m := imRailModel(t, be)
-	if be.imGoToCalls != 1 {
-		t.Fatalf("precondition: entering Instamart must fetch the go-to list once, got %d", be.imGoToCalls)
+	if be.imGoToCalls != 0 {
+		t.Fatalf("the Home-less IM rail must never fetch the go-to list, got %d calls", be.imGoToCalls)
 	}
-	m.imQuery = "energy drink" // simulate being on a category
-	m.imRailActive = 2         // first category slot
-
-	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp}) // category → Usuals
+	// Landed on the first category (index CatBase); one Up must reach Search.
+	if want := m.imRail().CatBase(); m.imRailActive != want {
+		t.Fatalf("imRailActive = %d, want %d (first category)", m.imRailActive, want)
+	}
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	m = nm.(Model)
-	if m.imRailActive != screens.RailHome {
-		t.Fatalf("imRailActive = %d, want RailHome (Usuals)", m.imRailActive)
-	}
-	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = nm.(Model)
-	if m.imQuery != "" {
-		t.Fatalf("imQuery = %q, want empty after selecting Usuals", m.imQuery)
-	}
-	if cmd != nil {
-		m = deliver(t, m, cmd)
-	}
-	if be.imGoToCalls != 1 {
-		t.Fatalf("IMGoTo call count = %d, want still 1 (session dedupe, like ensureHomeLoaded)", be.imGoToCalls)
-	}
-	v := m.inst.View()
-	if !strings.Contains(v, "Bread") {
-		t.Fatalf("Usuals must render the go-to list from the snapshot; got:\n%s", v)
+	if m.imRailActive != screens.RailSearch {
+		t.Fatalf("one Up from the first category must land on Search (no Usuals slot); got %d", m.imRailActive)
 	}
 }

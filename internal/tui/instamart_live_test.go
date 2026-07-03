@@ -33,12 +33,13 @@ func imModel(t *testing.T, be *liveFake) Model {
 	return m
 }
 
-// TestIMGoToRendersProducts: tab → instamart renders products from the
-// your_go_to_items ("IMGoTo") fixture.
-func TestIMGoToRendersProducts(t *testing.T) {
-	be := &liveFake{imGoTo: []api.IMProduct{
-		{ID: "p1", Name: "Amul Milk", Brand: "Amul", InStock: true,
-			Variants: []api.IMVariantSel{{SpinID: "sp1", Label: "500 ml", Price: 30, InStock: true}}},
+// TestIMEntryRendersFirstCategory: tab → instamart lands on the first category
+// (Energy Drinks) and renders its products from the search fixture — there is
+// no go-to/Usuals list.
+func TestIMEntryRendersFirstCategory(t *testing.T) {
+	be := &liveFake{imSearch: []api.IMProduct{
+		{ID: "p1", Name: "Red Bull", Brand: "Red Bull", InStock: true,
+			Variants: []api.IMVariantSel{{SpinID: "sp1", Label: "250 ml", Price: 125, InStock: true}}},
 	}}
 	// Start on the live menu (rail-focused, as a fresh browse landing is) and
 	// press tab to enter Instamart — the real key-routing path.
@@ -56,12 +57,18 @@ func TestIMGoToRendersProducts(t *testing.T) {
 		t.Fatalf("tab from menu must land on scrInstamart, got %v", m.screen)
 	}
 	if cmd == nil {
-		t.Fatal("entering instamart must fire the go-to load")
+		t.Fatal("entering instamart must fire the first category's load")
 	}
 	m = deliver(t, m, cmd)
+	if be.imSearchQuery != "energy drink" {
+		t.Fatalf("entry must load the first category; backend query = %q", be.imSearchQuery)
+	}
 	v := m.inst.View()
-	if !strings.Contains(v, "Amul Milk") {
-		t.Fatalf("instamart view must render go-to product; got:\n%s", v)
+	if !strings.Contains(v, "Red Bull") {
+		t.Fatalf("instamart view must render the landed category's products; got:\n%s", v)
+	}
+	if be.imGoToCalls != 0 {
+		t.Fatalf("no go-to list any more — IMGoTo must not be called, got %d", be.imGoToCalls)
 	}
 }
 
@@ -448,17 +455,18 @@ func TestIMSelectedRowSeamlessHighlight(t *testing.T) {
 	}
 }
 
-// On a relaunch, entering Instamart paints the disk-cached go-to list instantly
-// (no "loading…" flash) while the live refresh streams over it.
+// On a relaunch, entering Instamart paints the disk-cached first-category list
+// instantly (no loading flash) while the live refresh streams over it.
 func TestIMEntryPaintsFromDiskCache(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	// A prior session persisted the go-to list.
-	localstore.SaveCachedInstamart("a1", "", []localstore.CachedIMProduct{{
+	// A prior session persisted the landed category's list (Energy Drinks =
+	// "energy drink"), which is what entry now paints.
+	localstore.SaveCachedInstamart("a1", "energy drink", []localstore.CachedIMProduct{{
 		ID: "p9", Name: "Sleepy Owl Cold Brew", Brand: "Sleepy Owl", InStock: true,
 		Variants: []localstore.CachedIMVariant{{SpinID: "sp9", Label: "200 ml", Price: 99, InStock: true}},
 	}})
 
-	be := &liveFake{} // live IMGoTo returns nothing yet (slow network)
+	be := &liveFake{} // live search returns nothing yet (slow network)
 	m := imModel(t, be)
 	// Enter Instamart via the real key path (Tab from the menu browse).
 	m.screen = scrMenu
@@ -473,7 +481,7 @@ func TestIMEntryPaintsFromDiskCache(t *testing.T) {
 		t.Fatal("a cache hit must not leave the screen in the loading state")
 	}
 	if v := m.inst.View(); !strings.Contains(v, "Sleepy Owl Cold Brew") {
-		t.Fatalf("entry must paint the cached go-to list instantly:\n%s", v)
+		t.Fatalf("entry must paint the cached category list instantly:\n%s", v)
 	}
 	// The live refresh still fires.
 	if cmd == nil {

@@ -110,10 +110,10 @@ func (s Instamart) WithSearch(query string, caret int, active bool) Instamart {
 
 // WithSubmittedSearch marks that the list is showing the results of a submitted
 // search (editor closed) so a persistent "⌕ query · / edit" chip renders above
-// the rows. "" clears it (browsing Usuals or a category).
+// the rows. "" clears it (browsing a category).
 func (s Instamart) WithSubmittedSearch(query string) Instamart { s.submitted = query; return s }
 
-// WithRail attaches the left rail (Search, Usuals, categories) enabling the
+// WithRail attaches the left rail (Search, categories) enabling the
 // two-pane render path — mirrors Menu.WithRail exactly.
 func (s Instamart) WithRail(r Rail) Instamart { s.rail = r; s.hasRail = true; return s }
 
@@ -224,7 +224,7 @@ func (s Instamart) browseRows(budget int) string {
 		if s.submitted != "" {
 			return chip + "  " + theme.DimStyle.Render(fmt.Sprintf("no products for %q", s.submitted)) + "\n"
 		}
-		return "  " + theme.DimStyle.Render("no usuals yet — press / to search") + "\n"
+		return "  " + theme.DimStyle.Render("press / to search instamart") + "\n"
 	}
 	start, end, above, below := windowRange(s.list.Cursor, len(s.items), budget)
 
@@ -392,7 +392,7 @@ func (s Instamart) View() string {
 	case s.loading:
 		b.WriteString(IMLoading(s.animFrame, s.animHour, s.paneW(), 0))
 	case len(s.items) == 0:
-		b.WriteString("  " + theme.DimStyle.Render("no usuals yet — press / to search") + "\n")
+		b.WriteString("  " + theme.DimStyle.Render("press / to search instamart") + "\n")
 	default:
 		b.WriteString(s.list.View())
 	}

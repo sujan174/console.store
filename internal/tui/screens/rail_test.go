@@ -37,3 +37,31 @@ func TestRailFixedWidth(t *testing.T) {
 		t.Fatalf("rail width should be a sensible fixed column, got %d", r.Width())
 	}
 }
+
+// A Home-less rail (Instamart): ⌕ Search then categories, no Home slot. The
+// first category lands at RailHome and CatBase()/IsCategory account for the
+// missing Home so category lookups stay correct.
+func TestRailCategoriesHomeless(t *testing.T) {
+	r := NewRailCategories([]string{"Energy Drinks", "Chips"})
+	if r.Len() != 3 {
+		t.Fatalf("expected 3 entries (Search + 2 cats), got %d", r.Len())
+	}
+	if r.HasHome() {
+		t.Fatal("NewRailCategories must not carry a Home slot")
+	}
+	if r.CatBase() != RailHome {
+		t.Fatalf("Home-less CatBase must be %d (categories start where Home would), got %d", RailHome, r.CatBase())
+	}
+	if r.EntryLabel(RailHome) != "Energy Drinks" {
+		t.Errorf("first category must land at index %d: %q", RailHome, r.EntryLabel(RailHome))
+	}
+	if idx, ok := r.IsCategory(RailHome); !ok || idx != 0 {
+		t.Errorf("IsCategory(%d) = (%d,%v), want (0,true)", RailHome, idx, ok)
+	}
+	if idx, ok := r.IsCategory(2); !ok || idx != 1 {
+		t.Errorf("IsCategory(2) = (%d,%v), want (1,true)", idx, ok)
+	}
+	if v := r.WithActive(RailHome).WithHeight(6).View(); strings.Contains(v, "Home") || strings.Contains(v, "Usuals") {
+		t.Errorf("Home-less rail view must not show Home/Usuals:\n%s", v)
+	}
+}

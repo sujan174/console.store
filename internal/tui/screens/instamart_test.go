@@ -36,7 +36,7 @@ func TestInstamartInCartStepper(t *testing.T) {
 // rail has been attached (live mode).
 func liveInstamart() screens.Instamart {
 	return screens.NewInstamart(nil, nil, "🛒 empty").
-		WithRail(screens.NewRailLabeled("Usuals", []string{"Energy Drinks", "Chips"})).
+		WithRail(screens.NewRailCategories([]string{"Energy Drinks", "Chips"})).
 		WithRailFocus(true).WithMaxRows(20)
 }
 
@@ -55,13 +55,17 @@ func TestInstamartTwoPaneShowsStoreSwitcher(t *testing.T) {
 	}
 }
 
-// TestInstamartRailShowsSearchAndUsuals: the rail's fixed slots are Search
-// then Usuals (the go-to list — Food's Home equivalent), ahead of categories.
-func TestInstamartRailShowsSearchAndUsuals(t *testing.T) {
+// TestInstamartRailIsHomeless: the IM rail is Search then categories — no
+// "Usuals"/go-to slot, so browsing starts straight on a product category.
+func TestInstamartRailIsHomeless(t *testing.T) {
 	v := liveInstamart().View()
-	for _, want := range []string{"Search", "Usuals"} {
-		if !strings.Contains(v, want) {
-			t.Fatalf("instamart rail missing %q:\n%s", want, v)
-		}
+	if !strings.Contains(v, "Search") {
+		t.Fatalf("instamart rail must show Search:\n%s", v)
+	}
+	if strings.Contains(v, "Usuals") {
+		t.Fatalf("instamart rail must NOT show a Usuals slot:\n%s", v)
+	}
+	if !strings.Contains(v, "Energy Drinks") {
+		t.Fatalf("instamart rail must show the first category:\n%s", v)
 	}
 }
