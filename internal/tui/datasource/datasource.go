@@ -12,6 +12,7 @@ import (
 	"consolestore/internal/broker/api"
 	"consolestore/internal/catalog"
 	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/localstore"
 )
 
 // ErrNeedsAuth signals the account has no usable token; the Model shows the
@@ -406,6 +407,9 @@ func LoadIMProducts(b Backend, snap *swiggysnap.Snapshot, addressID, query strin
 			return IMProductsLoadedMsg{Query: query, Err: err}
 		}
 		snap.SetInstamart(addressID, query, toIMItems(got))
+		// Persist for instant first paint on a later relaunch (best-effort;
+		// stale-while-revalidate, mirrors the food places/menu cache).
+		localstore.SaveCachedInstamart(addressID, query, toCachedIM(got))
 		return IMProductsLoadedMsg{Query: query}
 	}
 }

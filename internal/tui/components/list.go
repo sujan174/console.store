@@ -15,6 +15,13 @@ var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 // stripANSI removes SGR colour codes (used only for display-width maths).
 func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
 
+// RowHighlight paints a seamless selected-row background behind an
+// already-coloured string (see withBg). Exported so the two-pane list rows
+// (menu/instamart) get the SAME continuous highlight as the single-pane list
+// instead of a torn background that leaves the right-column price on the plain
+// canvas.
+func RowHighlight(s, hex string) string { return withBg(s, hex) }
+
 // withBg paints a continuous background behind an already-coloured string
 // WITHOUT changing any foreground colours. Naively wrapping styled text in a
 // Background tears at each inner reset (which clears the bg); here we re-assert

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -91,5 +92,54 @@ func TestMenuCachePrunesPastCap(t *testing.T) {
 	}
 	if menus > menuCacheCap {
 		t.Fatalf("menu cache holds %d files, cap is %d", menus, menuCacheCap)
+	}
+}
+
+func TestInstamartCacheRoundtripWithVariants(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	SaveCachedInstamart("a1", "red bull", []CachedIMProduct{{
+		ID: "RB1", Name: "Red Bull", Brand: "Red Bull", InStock: true,
+		Variants: []CachedIMVariant{
+			{SpinID: "sp250", Label: "250 ml", Price: 112, MRP: 125, InStock: true},
+			{SpinID: "sp4", Label: "250 ml x 4", Price: 433, InStock: false},
+		},
+	}})
+	got, ok := LoadCachedInstamart("a1", "red bull")
+	if !ok || len(got) != 1 || got[0].Name != "Red Bull" || len(got[0].Variants) != 2 {
+		t.Fatalf("roundtrip = %+v ok=%v", got, ok)
+	}
+	if got[0].Variants[0].SpinID != "sp250" || got[0].Variants[0].Price != 112 || !got[0].Variants[0].InStock {
+		t.Fatalf("variant not preserved: %+v", got[0].Variants[0])
+	}
+	// Keyed by address AND query, like places.
+	if _, ok := LoadCachedInstamart("a2", "red bull"); ok {
+		t.Fatal("different address must miss")
+	}
+	if _, ok := LoadCachedInstamart("a1", ""); ok {
+		t.Fatal("different query (go-to list) must miss")
+	}
+}
+
+func TestInstamartCachePrunesPastCap(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	for i := 0; i < imCacheCap+8; i++ {
+		q := "q" + string(rune('a'+i%26)) + string(rune('0'+i/26))
+		SaveCachedInstamart("a1", q, []CachedIMProduct{{ID: "p", Name: "x", InStock: true}})
+	}
+	dir, _ := catalogCacheDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ims := 0
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "im-") {
+			ims++
+		}
+	}
+	if ims > imCacheCap {
+		t.Fatalf("instamart cache holds %d files, cap is %d", ims, imCacheCap)
 	}
 }

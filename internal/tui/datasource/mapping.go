@@ -6,6 +6,8 @@ import (
 
 	"consolestore/internal/broker/api"
 	"consolestore/internal/catalog"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/localstore"
 )
 
 // cleanAddrLine strips a short, digit-free "<name>: " prefix that Swiggy prepends
@@ -106,6 +108,56 @@ func toIMItems(ps []api.IMProduct) []catalog.Item {
 // in-stock one, else the first overall (so an out-of-stock product still shows
 // a representative price). hasInStock reports whether any variant was in
 // stock — toIMItems uses it to mark the item OutOfStock when none are.
+// toCachedIM projects live products into the disk-cache shape (mirrors
+// api.IMProduct so the reverse round-trips through toIMItems).
+func toCachedIM(ps []api.IMProduct) []localstore.CachedIMProduct {
+	out := make([]localstore.CachedIMProduct, len(ps))
+	for i, p := range ps {
+		cp := localstore.CachedIMProduct{ID: p.ID, Name: p.Name, Brand: p.Brand, InStock: p.InStock}
+		for _, v := range p.Variants {
+			cp.Variants = append(cp.Variants, localstore.CachedIMVariant{
+				SpinID: v.SpinID, Label: v.Label, Price: v.Price, MRP: v.MRP, InStock: v.InStock,
+			})
+		}
+		out[i] = cp
+	}
+	return out
+}
+
+// fromCachedIM rebuilds live products from the disk cache so the SAME toIMItems
+// synthesis reconstructs identical catalog rows.
+func fromCachedIM(cs []localstore.CachedIMProduct) []api.IMProduct {
+	out := make([]api.IMProduct, len(cs))
+	for i, c := range cs {
+		p := api.IMProduct{ID: c.ID, Name: c.Name, Brand: c.Brand, InStock: c.InStock}
+		for _, v := range c.Variants {
+			p.Variants = append(p.Variants, api.IMVariantSel{
+				SpinID: v.SpinID, Label: v.Label, Price: v.Price, MRP: v.MRP, InStock: v.InStock,
+			})
+		}
+		out[i] = p
+	}
+	return out
+}
+
+// SeedIMFromCache paints the last-known Instamart product list for
+// (addressID, query) from disk into the snapshot, so a relaunched browse shows
+// results instantly instead of "loading…" while the live fetch streams over it
+// (stale-while-revalidate). Returns true when it seeded. Best-effort: a miss or
+// stale entry is a silent no-op. The live cart sync at prepare/checkout is
+// always the money authority, so a stale cached price/stock can never mis-bill.
+func SeedIMFromCache(snap *swiggysnap.Snapshot, addressID, query string) bool {
+	if snap == nil || addressID == "" {
+		return false
+	}
+	cached, ok := localstore.LoadCachedInstamart(addressID, query)
+	if !ok {
+		return false
+	}
+	snap.SetInstamart(addressID, query, toIMItems(fromCachedIM(cached)))
+	return true
+}
+
 func defaultIMVariant(p api.IMProduct) (v api.IMVariantSel, hasInStock bool) {
 	for _, cand := range p.Variants {
 		if cand.InStock {

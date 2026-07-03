@@ -372,3 +372,111 @@ func TestAliasSetInstamartSavesVerticalPreset(t *testing.T) {
 		t.Fatalf("preset lines not captured: %+v", got[0].Lines)
 	}
 }
+
+// After a search submits, the editor closes but the query stays reachable: a
+// persistent "⌕ query · / edit" chip renders, and pressing / re-opens the
+// editor PRE-FILLED with the last query (not blank) so it can be edited.
+func TestIMSearchReentryPrefillsAndKeepsChip(t *testing.T) {
+	be := &liveFake{imSearch: []api.IMProduct{
+		{ID: "p2", Name: "Maggi Noodles", Brand: "Nestle", InStock: true,
+			Variants: []api.IMVariantSel{{SpinID: "sp2", Label: "70 g", Price: 14, InStock: true}}},
+	}}
+	m := imModel(t, be)
+
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m = nm.(Model)
+	for _, r := range "maggi" {
+		nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = nm.(Model)
+	}
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	m = deliver(t, m, cmd)
+
+	// Editor closed, but the submitted query is remembered and the chip shows.
+	if m.imSearchMode {
+		t.Fatal("editor must close on submit so the result list takes focus")
+	}
+	if m.imSearchSubmitted != "maggi" {
+		t.Fatalf("imSearchSubmitted = %q, want maggi", m.imSearchSubmitted)
+	}
+	if v := m.inst.View(); !strings.Contains(v, "⌕ maggi") || !strings.Contains(v, "/ edit") {
+		t.Fatalf("submitted-search chip must render; got:\n%s", v)
+	}
+
+	// / re-opens PRE-FILLED with the prior query, caret at the end (editable).
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m = nm.(Model)
+	if !m.imSearchMode || m.imSearchQuery != "maggi" || m.imSearchCaret != len("maggi") {
+		t.Fatalf("re-entry must prefill: mode=%v query=%q caret=%d", m.imSearchMode, m.imSearchQuery, m.imSearchCaret)
+	}
+
+	// Editing to a new query and re-submitting fetches the new term.
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = nm.(Model)
+	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	m = deliver(t, m, cmd)
+	if m.imQuery != "magg" || be.imSearchQuery != "magg" {
+		t.Fatalf("edited re-search: imQuery=%q backend=%q, want magg", m.imQuery, be.imSearchQuery)
+	}
+}
+
+// The selected Instamart product row is highlighted as ONE continuous line
+// (name through price) — the highlight must not tear at the price's reset and
+// leave the ₹price on the plain canvas.
+func TestIMSelectedRowSeamlessHighlight(t *testing.T) {
+	m := imModel(t, &liveFake{})
+	m.imQuery = ""
+	m.imRailFocus = false // list has focus so the selected row highlights
+	m.inst = m.buildInstamart()
+	m.snap.SetInstamart(m.addr.ID, "", []catalog.Item{
+		{ID: "p1", SwiggyID: "sp1", Name: "Amul Milk", Price: 30, Section: catalog.SectionInstamart},
+	})
+	m.inst = m.buildInstamart().WithRailFocus(false)
+
+	row := m.inst.View()
+	// The selected-row background SGR must be re-asserted right before the
+	// price (…m₹30), i.e. the price sits on the highlight, not a torn gap.
+	bg := "\x1b[48;2;31;35;53m" // theme.SelRowBg as a truecolor bg
+	if !strings.Contains(row, "₹30") {
+		t.Fatalf("price must render:\n%q", row)
+	}
+	idx := strings.Index(row, "₹30")
+	if idx < 0 || !strings.Contains(row[:idx], bg) {
+		t.Fatalf("selected row must carry a continuous highlight bg through the price:\n%q", row)
+	}
+}
+
+// On a relaunch, entering Instamart paints the disk-cached go-to list instantly
+// (no "loading…" flash) while the live refresh streams over it.
+func TestIMEntryPaintsFromDiskCache(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	// A prior session persisted the go-to list.
+	localstore.SaveCachedInstamart("a1", "", []localstore.CachedIMProduct{{
+		ID: "p9", Name: "Sleepy Owl Cold Brew", Brand: "Sleepy Owl", InStock: true,
+		Variants: []localstore.CachedIMVariant{{SpinID: "sp9", Label: "200 ml", Price: 99, InStock: true}},
+	}})
+
+	be := &liveFake{} // live IMGoTo returns nothing yet (slow network)
+	m := imModel(t, be)
+	// Enter Instamart via the real key path (Tab from the menu browse).
+	m.screen = scrMenu
+	m.railFocus = true
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = nm.(Model)
+	if m.screen != scrInstamart {
+		t.Fatalf("tab must enter instamart, got %v", m.screen)
+	}
+	// Cached list is on screen immediately, before the live cmd is delivered.
+	if m.imPending {
+		t.Fatal("a cache hit must not leave the screen in the loading state")
+	}
+	if v := m.inst.View(); !strings.Contains(v, "Sleepy Owl Cold Brew") {
+		t.Fatalf("entry must paint the cached go-to list instantly:\n%s", v)
+	}
+	// The live refresh still fires.
+	if cmd == nil {
+		t.Fatal("entry must still fire the live refresh over the cache")
+	}
+}

@@ -26,6 +26,10 @@ type Instamart struct {
 	searchActive bool
 	searchQuery  string
 	searchCaret  int
+	// submitted is the last SEARCHED query while browsing its results with the
+	// editor closed — rendered as a persistent "⌕ query · / edit" chip so a
+	// search never vanishes without a way back to it.
+	submitted string
 
 	// two-pane rail fields — mirror Menu's hasRail/rail/railFocus exactly, so
 	// the Instamart browse is visually and behaviorally identical to Food.
@@ -84,6 +88,11 @@ func (s Instamart) WithSearch(query string, caret int, active bool) Instamart {
 	s.searchActive = active
 	return s
 }
+
+// WithSubmittedSearch marks that the list is showing the results of a submitted
+// search (editor closed) so a persistent "⌕ query · / edit" chip renders above
+// the rows. "" clears it (browsing Usuals or a category).
+func (s Instamart) WithSubmittedSearch(query string) Instamart { s.submitted = query; return s }
 
 // WithRail attaches the left rail (Search, Usuals, categories) enabling the
 // two-pane render path — mirrors Menu.WithRail exactly.
@@ -168,18 +177,40 @@ func (s Instamart) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return s, nil
 }
 
+// submittedChip renders the persistent "⌕ query · / edit" line shown while
+// browsing a submitted search's results with the editor closed, so the search
+// stays visible and there's an obvious way back into it.
+func (s Instamart) submittedChip() string {
+	if s.submitted == "" {
+		return ""
+	}
+	return "  " + theme.CursorStyle.Render("⌕ "+s.submitted) +
+		theme.FaintStyle.Render("   / edit") + "\n\n"
+}
+
 // browseRows renders the windowed product rows, capped to budget rows so the
 // page never overflows the viewport — mirrors Menu.browseRows.
 func (s Instamart) browseRows(budget int) string {
+	chip := s.submittedChip()
+	if chip != "" && budget > 0 {
+		budget -= 2 // the chip + its blank line
+		if budget < 3 {
+			budget = 3
+		}
+	}
 	if len(s.items) == 0 {
 		if s.loading {
-			return "  " + theme.GoldStyle.Render("loading…") + "\n"
+			return chip + "  " + theme.GoldStyle.Render("loading…") + "\n"
+		}
+		if s.submitted != "" {
+			return chip + "  " + theme.DimStyle.Render(fmt.Sprintf("no products for %q", s.submitted)) + "\n"
 		}
 		return "  " + theme.DimStyle.Render("no usuals yet — press / to search") + "\n"
 	}
 	start, end, above, below := windowRange(s.list.Cursor, len(s.items), budget)
 
 	var b strings.Builder
+	b.WriteString(chip)
 	if above > 0 {
 		b.WriteString("  " + theme.FaintStyle.Render(fmt.Sprintf("↑ %d more", above)) + "\n")
 	}
@@ -233,7 +264,12 @@ func (s Instamart) productRow(it catalog.Item, selected bool) string {
 	}
 	content := lead + styledName + strings.Repeat(" ", pad) + base.Right
 	if selected && !s.railFocus {
-		return lipgloss.NewStyle().Background(lipgloss.Color(theme.SelRowBg)).Render(content)
+		// Seamless full-line highlight: a naive Background().Render tears at the
+		// price's ANSI reset, leaving the ₹price on the plain canvas at the far
+		// right (the readability complaint). RowHighlight re-asserts the bg after
+		// every reset so the WHOLE row — name through price — is one highlight,
+		// matching the single-pane menu list.
+		return components.RowHighlight(content, theme.SelRowBg)
 	}
 	return content
 }

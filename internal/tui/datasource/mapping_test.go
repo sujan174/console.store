@@ -5,6 +5,8 @@ import "testing"
 import (
 	"consolestore/internal/broker/api"
 	"consolestore/internal/catalog"
+	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/localstore"
 )
 
 // toPlaces drops restaurants Swiggy flags as unavailable (closed/unserviceable)
@@ -225,5 +227,47 @@ func TestCleanAddrLineStripsNamePrefix(t *testing.T) {
 		if got := cleanAddrLine(in); got != want {
 			t.Errorf("cleanAddrLine(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// SeedIMFromCache reconstructs identical catalog rows from the disk cache
+// through the SAME toIMItems synthesis the live path uses — a relaunched
+// browse paints instantly instead of showing "loading…".
+func TestSeedIMFromCacheReconstructsItems(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	// A live load persists the cache.
+	live := []api.IMProduct{{
+		ID: "RB1", Name: "Red Bull", Brand: "Red Bull", InStock: true,
+		Variants: []api.IMVariantSel{
+			{SpinID: "sp250", Label: "250 ml", Price: 112, InStock: true},
+			{SpinID: "sp4", Label: "250 ml x 4", Price: 433, InStock: true},
+		},
+	}}
+	localstore.SaveCachedInstamart("a1", "red bull", toCachedIM(live))
+
+	// A fresh snapshot (relaunch) seeds from disk.
+	snap := swiggysnap.NewSnapshot()
+	if !SeedIMFromCache(snap, "a1", "red bull") {
+		t.Fatal("SeedIMFromCache must report a hit")
+	}
+	got := snap.InstamartFor("a1", "red bull")
+	want := toIMItems(live)
+	if len(got) != len(want) || len(got) != 1 {
+		t.Fatalf("seeded %d items, want %d", len(got), len(want))
+	}
+	// The multi-variant product must reconstruct as customizable with its
+	// spinId-keyed options intact — i.e. it stays orderable from the cache.
+	g := got[0]
+	if g.ID != want[0].ID || g.SwiggyID != want[0].SwiggyID || g.Price != want[0].Price ||
+		g.Customizable != want[0].Customizable || len(g.Options) != len(want[0].Options) {
+		t.Fatalf("seeded item != live item:\n seed=%+v\n live=%+v", g, want[0])
+	}
+	if len(g.Options) == 1 && len(g.Options[0].Choices) != 2 {
+		t.Fatalf("variant choices lost: %+v", g.Options[0].Choices)
+	}
+	// A miss is a clean no-op.
+	if SeedIMFromCache(snap, "a1", "nonexistent") {
+		t.Fatal("miss must return false")
 	}
 }

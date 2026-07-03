@@ -109,10 +109,20 @@ Instamart is a **second, fully separate vertical** next to Food: its own MCP end
 - **Presets are uniform across verticals**: `Preset.Vertical == "instamart"` routes
   `console order <name>`, the TUI `:alias set`, and the MCP `order_preset` through the
   Instamart cart + checkout; food presets are unchanged (empty Vertical).
-- TUI: `Tab` toggles Restaurants ⟷ Instamart; browse = your-go-to items, `/` search;
-  multi-pack products open the customize sheet with a synthesized "pack size" variant
-  group (options are local — no network fetch). The checkout is the same merged page
-  with the handling fee folded into the "taxes & charges" row.
+- TUI: `Tab` toggles Restaurants ⟷ Instamart; identical two-pane browse (rail of
+  Search / Usuals / 13 dev-focused categories from `config.DefaultIMCategories`, `/`
+  search that stays editable via a persistent chip); multi-pack products open the
+  customize sheet with a synthesized "pack size" variant group (options are local —
+  no network fetch). The checkout is the same merged page with the handling fee
+  folded into the "taxes & charges" row.
+- Production-hardening is at full parity with Food: the IM `swiggy.Client` shares the
+  same `WithMinInterval` rate limiter + 429/5xx backoff (`checkout` non-retryable),
+  debounced cart sync (`settledIMCartSync`) and rail-category load (`settledIMRailLoad`)
+  on the one 60ms tick, windowed row rendering (`windowRange`), per-`{addr,query}`
+  snapshot keys + once-per-query dedupe (`imLoadedQueries`, reset on address change),
+  AND a disk cache (`localstore.LoadCachedInstamart`/`SaveCachedInstamart`,
+  `datasource.SeedIMFromCache`) for instant first paint on relaunch — stale-while-
+  revalidate, and the live cart sync at prepare/checkout is always the money authority.
 
 ## Headless CLI + order presets (`internal/cli`, `internal/localstore/presets.go`)
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -27,6 +28,11 @@ const catalogCacheTTL = 7 * 24 * time.Hour
 // menuCacheCap bounds the number of cached menus (LRU by write time) so the
 // cache dir can't grow without bound for a heavy browser.
 const menuCacheCap = 24
+
+// imCacheCap bounds the number of cached Instamart product lists. Higher than
+// menus: it covers 13 fixed categories + the go-to list + arbitrary searches,
+// all keyed per address.
+const imCacheCap = 48
 
 // CachedMenuItem is the persisted slice of a catalog.Item — only what the
 // menu list renders. localstore must not import catalog (it sits below it),
@@ -54,9 +60,38 @@ type CachedPlace struct {
 	Offer       string  `json:"offer,omitempty"`
 }
 
+// CachedIMVariant is the persisted slice of one Instamart pack-size choice —
+// enough to re-add it to the cart from a cached list without a live fetch (the
+// spinId is the cart key). Prices/stock are a first paint only; the live cart
+// sync at prepare/checkout is always the money authority.
+type CachedIMVariant struct {
+	SpinID  string `json:"spinId"`
+	Label   string `json:"label,omitempty"`
+	Price   int    `json:"price"`
+	MRP     int    `json:"mrp,omitempty"`
+	InStock bool   `json:"inStock"`
+}
+
+// CachedIMProduct is the persisted slice of an Instamart product — it mirrors
+// the live api.IMProduct shape (name, brand, stock, variants) so the datasource
+// can reconstruct catalog items through the SAME toIMItems synthesis the live
+// path uses, keeping cached and live rows byte-identical.
+type CachedIMProduct struct {
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	Brand    string            `json:"brand,omitempty"`
+	InStock  bool              `json:"inStock"`
+	Variants []CachedIMVariant `json:"variants,omitempty"`
+}
+
 type cachedMenu struct {
 	SavedAt int64            `json:"saved_at"`
 	Items   []CachedMenuItem `json:"items"`
+}
+
+type cachedInstamart struct {
+	SavedAt  int64             `json:"saved_at"`
+	Products []CachedIMProduct `json:"products"`
 }
 
 type cachedPlaces struct {
@@ -172,8 +207,47 @@ func SaveCachedPlaces(addressID, query string, places []CachedPlace) {
 	})
 }
 
+// LoadCachedInstamart returns the last-saved Instamart product list for an
+// (addressID, query) pair ("" query = the go-to/Usuals list), or ok=false on
+// miss/stale/corrupt — the mirror of LoadCachedPlaces for the grocery vertical,
+// so a relaunched Instamart browse paints instantly instead of showing
+// "loading…". Stale-while-revalidate: the live fetch always streams over it.
+func LoadCachedInstamart(addressID, query string) ([]CachedIMProduct, bool) {
+	dir, err := catalogCacheDir()
+	if err != nil || addressID == "" {
+		return nil, false
+	}
+	var im cachedInstamart
+	if !readCacheFile(filepath.Join(dir, "im-"+cacheKey(addressID, query)+".json"), &im) {
+		return nil, false
+	}
+	if !fresh(im.SavedAt) || len(im.Products) == 0 {
+		return nil, false
+	}
+	return im.Products, true
+}
+
+// SaveCachedInstamart persists an Instamart product list for an (addressID,
+// query) pair.
+func SaveCachedInstamart(addressID, query string, products []CachedIMProduct) {
+	dir, err := catalogCacheDir()
+	if err != nil || addressID == "" || len(products) == 0 {
+		return
+	}
+	writeCacheFile(filepath.Join(dir, "im-"+cacheKey(addressID, query)+".json"), cachedInstamart{
+		SavedAt:  time.Now().Unix(),
+		Products: products,
+	})
+	pruneCache(dir, "im-", imCacheCap)
+}
+
 // pruneMenuCache deletes the oldest menu files past menuCacheCap.
-func pruneMenuCache(dir string) {
+func pruneMenuCache(dir string) { pruneCache(dir, "menu-", menuCacheCap) }
+
+// pruneCache deletes the oldest files (by mtime) with the given filename prefix
+// past cap, bounding the cache dir for a heavy browser. Shared by the menu and
+// Instamart caches (search-keyed lists accumulate one file per distinct query).
+func pruneCache(dir, prefix string, cap int) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -182,23 +256,23 @@ func pruneMenuCache(dir string) {
 		path string
 		mod  time.Time
 	}
-	var menus []stamped
+	var files []stamped
 	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".json" || len(e.Name()) < 5 || e.Name()[:5] != "menu-" {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" || !strings.HasPrefix(e.Name(), prefix) {
 			continue
 		}
 		info, ierr := e.Info()
 		if ierr != nil {
 			continue
 		}
-		menus = append(menus, stamped{filepath.Join(dir, e.Name()), info.ModTime()})
+		files = append(files, stamped{filepath.Join(dir, e.Name()), info.ModTime()})
 	}
-	if len(menus) <= menuCacheCap {
+	if len(files) <= cap {
 		return
 	}
-	sort.Slice(menus, func(a, b int) bool { return menus[a].mod.Before(menus[b].mod) })
-	for _, m := range menus[:len(menus)-menuCacheCap] {
-		if err := os.Remove(m.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	sort.Slice(files, func(a, b int) bool { return files[a].mod.Before(files[b].mod) })
+	for _, f := range files[:len(files)-cap] {
+		if err := os.Remove(f.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return
 		}
 	}

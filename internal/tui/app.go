@@ -214,6 +214,11 @@ type Model struct {
 	imSearchMode  bool
 	imSearchQuery string
 	imSearchCaret int
+	// imSearchSubmitted is the last query actually submitted via search (not a
+	// rail category). While imQuery == imSearchSubmitted the results carry a
+	// persistent search chip, and `/` re-opens the editor PRE-FILLED with it so
+	// a search can always be edited instead of retyped.
+	imSearchSubmitted string
 
 	// Instamart cart-sync debounce (mirrors cartSyncPending/cartSyncFrame).
 	imCartSyncPending bool
@@ -792,18 +797,20 @@ func (m *Model) settledRailLoad() tea.Cmd {
 }
 
 // ensureIMQuery starts an IMProducts load for query if it hasn't been
-// live-loaded yet this session (imLoadedQueries), UNLESS the snapshot already
-// has items for it — a cache hit renders instantly via imBrowseItems() and
-// still gets marked loaded so a later revisit doesn't re-fetch either. This
-// mirrors ensureQuery's once-per-query semantics, simplified: Instamart skips
-// disk caching entirely (no seedPlacesFromCache equivalent) — the snapshot is
-// in-memory only for this session, so there's no seed/live-refresh split to
-// track, just "have we ever fetched this query live".
+// live-loaded yet this session (imLoadedQueries); a query already loaded this
+// session renders from the snapshot with no re-fetch. On the first load of a
+// query it seeds the last-known list from disk (SeedIMFromCache) for an instant
+// paint while the live fetch streams over it — mirroring ensureQuery's
+// once-per-query semantics AND the food places/menu disk cache.
 func (m *Model) ensureIMQuery(query string) tea.Cmd {
 	if m.imLoadedQueries[query] {
+		m.imPending = false // already have live data in the snapshot this session
 		return nil
 	}
 	m.imLoadedQueries[query] = true
+	// Paint the last-known list from disk instantly; the live fetch streams over
+	// it (stale-while-revalidate). Only show "loading…" when nothing is cached.
+	m.imPending = !datasource.SeedIMFromCache(m.snap, m.addr.ID, query)
 	return datasource.LoadIMProducts(m.backend, m.snap, m.addr.ID, query)
 }
 
@@ -811,21 +818,20 @@ func (m *Model) ensureIMQuery(query string) tea.Cmd {
 // entry — mirrors loadForRail exactly, with RailHome mapped to the go-to
 // ("Usuals") list instead of the food Home sections.
 func (m *Model) loadForIMRail(rail screens.Rail) tea.Cmd {
+	// Leaving Search for Usuals or a category ends the search context — drop the
+	// submitted query so its chip clears and `/` opens fresh.
+	m.imSearchSubmitted = ""
 	switch m.imRailActive {
 	case screens.RailSearch:
 		return nil
 	case screens.RailHome:
 		m.imQuery = ""
-		cmd := m.ensureIMQuery("")
-		m.imPending = cmd != nil
-		return cmd
+		return m.ensureIMQuery("") // owns m.imPending (cache-seed aware)
 	default:
 		if catIdx, isCat := rail.IsCategory(m.imRailActive); isCat && catIdx < len(m.imChips) {
 			q := m.imChips[catIdx].Query
 			m.imQuery = q
-			cmd := m.ensureIMQuery(q)
-			m.imPending = cmd != nil
-			return cmd
+			return m.ensureIMQuery(q) // owns m.imPending (cache-seed aware)
 		}
 	}
 	return nil
@@ -1887,6 +1893,10 @@ func (m Model) buildInstamart() screens.Instamart {
 		WithLoading(m.imPending)
 	if m.imSearchMode {
 		inst = inst.WithSearch(m.imSearchQuery, m.imSearchCaret, true)
+	} else if m.imSearchSubmitted != "" && m.imQuery == m.imSearchSubmitted {
+		// Editor closed but the list is a search's results — show the persistent
+		// "⌕ query · / edit" chip so the search doesn't silently vanish.
+		inst = inst.WithSubmittedSearch(m.imSearchSubmitted)
 	}
 	return inst
 }
@@ -4392,11 +4402,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case scrInstamart:
 			// `/` jumps straight into search from anywhere on the browse screen —
-			// mirrors scrMenu's global shortcut.
+			// mirrors scrMenu's global shortcut. Re-opening after a search
+			// PRE-FILLS the editor with the last submitted query (caret at end) so
+			// it can be edited rather than retyped.
 			if m.live && !m.imSearchMode && k.String() == "/" {
 				m.imRailActive = screens.RailSearch
 				m.imRailFocus = false
-				m.syncIMSearchEntry() // imSearchMode=true, fresh empty input
+				m.imSearchMode = true
+				m.imSearchQuery = m.imSearchSubmitted
+				m.imSearchCaret = len([]rune(m.imSearchQuery))
 				m.inst = m.buildInstamart()
 				return m, nil
 			}
@@ -4422,6 +4436,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.imSearchMode = false
 					m.imSearchQuery = ""
 					m.imSearchCaret = 0
+					m.imSearchSubmitted = ""
 					m.imQuery = ""
 					m.imRailActive = screens.RailHome
 					m.imRailFocus = true
@@ -4466,11 +4481,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.imSearchQuery == "" {
 						return m, nil
 					}
+					// Submit: close the editor so the result list takes focus (↑↓
+					// move, ↵/→ add, ← remove all work on products) but remember the
+					// query so a persistent chip shows and `/` re-opens it to edit.
 					m.imQuery = m.imSearchQuery
+					m.imSearchSubmitted = m.imSearchQuery
 					m.imSearchMode = false
-					m.imPending = true
 					m.imLoadedQueries[m.imQuery] = true // search submit always fetches live
-					m.inst = m.inst.WithSearch("", 0, false).WithLoading(true)
+					// Seed the same query from disk for an instant re-search paint;
+					// the live fetch streams over it.
+					m.imPending = !datasource.SeedIMFromCache(m.snap, m.addr.ID, m.imQuery)
+					m.inst = m.buildInstamart().WithLoading(m.imPending)
 					return m, datasource.LoadIMProducts(m.backend, m.snap, m.addr.ID, m.imQuery)
 				}
 				return m, nil
@@ -5166,12 +5187,15 @@ func (m *Model) imEnterCmd() tea.Cmd {
 	m.imRailActive = screens.RailHome // lands on Usuals, matching Food's landing-on-Home
 	m.imRailFocus = true
 	m.imSearchMode = false
-	m.imPending = true
+	m.imSearchSubmitted = ""
 	// The go-to list always refreshes on entry (cheap, address-scoped) even if
 	// already loaded this session — re-marking it loaded is a no-op for
 	// ensureIMQuery's dedupe on the NEXT revisit.
 	m.imLoadedQueries[""] = true
-	m.inst = m.buildInstamart() // paint the rail + "loading…" synchronously; the go-to list fills in when the load lands
+	// Disk-seed the go-to list so entry paints instantly on a relaunch; the live
+	// refresh streams over it. "loading…" only when nothing is cached.
+	m.imPending = !datasource.SeedIMFromCache(m.snap, m.addr.ID, "")
+	m.inst = m.buildInstamart() // paint rail + cached/loading list synchronously; the live go-to list fills in when the load lands
 	cmds := []tea.Cmd{datasource.LoadIMProducts(m.backend, m.snap, m.addr.ID, m.imQuery)}
 	if !m.imCartPulled {
 		m.imCartPulled = true
