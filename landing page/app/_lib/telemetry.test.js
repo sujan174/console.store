@@ -35,19 +35,24 @@ test("rateLimited trips after the cap", () => {
   assert.equal(rateLimited("9.9.9.9", now), false); // other IP unaffected
 });
 
-test("shapeStats aggregates totals + per-channel", () => {
+test("shapeStats aggregates totals + weekly deltas + growth series", () => {
   const out = shapeStats({
     installs: 10,
     active_installs: 4,
+    installs_week: 3,
     orders: 7,
-    by_channel: [
-      { channel: "alpha", installs: 6, orders: 5 },
-      { channel: "stable", installs: 4, orders: 2 },
+    orders_week: 2,
+    series: [
+      { week: "2026-06-22", installs: "6", orders: "4" },
+      { week: "2026-06-29", installs: "10", orders: "7" },
     ],
   });
   assert.equal(out.orders, 7);
   assert.equal(out.installs, 10);
   assert.equal(out.active_installs, 4);
-  assert.equal(out.by_channel.alpha.orders, 5);
-  assert.equal(out.by_channel.stable.installs, 4);
+  assert.equal(out.installs_week, 3);
+  assert.equal(out.orders_week, 2);
+  assert.equal(out.series.length, 2);
+  assert.equal(out.series[1].installs, 10); // strings coerced to numbers
+  assert.equal(out.series[0].orders, 4);
 });

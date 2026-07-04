@@ -32,7 +32,9 @@ export function mount(root) {
     statsback: root.querySelector('[data-ref="statsback"]'),
     statsdrawer: root.querySelector('[data-ref="statsdrawer"]'),
     statsclose: root.querySelector('[data-ref="statsclose"]'),
-    statschan: root.querySelector('[data-ref="statschan"]'),
+    statschart: root.querySelector('[data-ref="statschart"]'),
+    chipspark: root.querySelector('[data-ref="chipspark"]'),
+    chipval: root.querySelector('[data-ref="chipval"]'),
   };
 
   // OS detection
@@ -342,43 +344,134 @@ export function mount(root) {
       requestAnimationFrame(step);
     };
 
-    // ----- right tab + drawer -----
+    // ----- readout chip + drawer -----
     const tab = refs.statstab,
       drawer = refs.statsdrawer,
       back = refs.statsback;
-    const CHAN = [
-      { key: "alpha", color: "#b08cf5" },
-      { key: "beta", color: "#7fe0ff" },
-      { key: "stable", color: "#8ee08a" },
-    ];
+    const SVGNS = "http://www.w3.org/2000/svg";
     const drawerEls = {};
     if (drawer)
       ["orders", "installs", "active"].forEach(
         (k) => (drawerEls[k] = drawer.querySelector('[data-dstat="' + k + '"]'))
       );
+    const deltaEls = {};
+    if (drawer)
+      ["orders", "installs"].forEach(
+        (k) => (deltaEls[k] = drawer.querySelector('[data-ddelta="' + k + '"]'))
+      );
 
-    const renderChannels = (byChan) => {
-      const host = refs.statschan;
-      if (!host) return;
-      host.innerHTML = "";
-      const present = CHAN.filter((c) => byChan && byChan[c.key]);
-      if (!present.length) {
-        const e = document.createElement("div");
-        e.className = "stats-chan-empty";
-        e.textContent = "no channel data yet";
-        host.appendChild(e);
+    // svgPath builds a smooth-ish polyline path from values normalized into a
+    // WxH box with padding; returns { line, area } d-strings.
+    const svgPath = (vals, w, h, pad, maxOverride) => {
+      const n = vals.length;
+      if (n < 2) return { line: "", area: "" };
+      const max = Math.max(1, maxOverride || 0, ...vals);
+      const x = (i) => pad + (i * (w - 2 * pad)) / (n - 1);
+      const y = (v) => h - pad - (v / max) * (h - 2 * pad);
+      let line = "M " + x(0) + " " + y(vals[0]);
+      for (let i = 1; i < n; i++) line += " L " + x(i) + " " + y(vals[i]);
+      const area = line + " L " + x(n - 1) + " " + (h - pad) + " L " + x(0) + " " + (h - pad) + " Z";
+      return { line, area, x, y };
+    };
+
+    // renderChart draws the cumulative installs + orders growth chart into the
+    // drawer's SVG. Two area+line series (installs = blue, orders = gold) share
+    // one vertical scale so their relative growth reads honestly.
+    const renderChart = (series) => {
+      const svg = refs.statschart;
+      if (!svg) return;
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      if (!series || series.length < 2) {
+        const t = document.createElementNS(SVGNS, "text");
+        t.setAttribute("x", "160"); t.setAttribute("y", "70");
+        t.setAttribute("text-anchor", "middle"); t.setAttribute("fill", "#2d2f48");
+        t.setAttribute("font-size", "12"); t.setAttribute("font-family", "JetBrains Mono, monospace");
+        t.textContent = "growth data warming up…";
+        svg.appendChild(t);
         return;
       }
-      present.forEach((c) => {
-        const v = byChan[c.key] || {};
-        const row = document.createElement("div");
-        row.className = "stats-chan-row";
-        row.innerHTML =
-          '<span class="stats-chan-name"><i style="background:' + c.color + '"></i>' + c.key + "</span>" +
-          '<span class="stats-chan-num">' + fmt(+v.installs || 0) + "<small>installs</small></span>" +
-          '<span class="stats-chan-num">' + fmt(+v.orders || 0) + "<small>orders</small></span>";
-        host.appendChild(row);
-      });
+      const W = 320, H = 132, PAD = 10;
+      const installs = series.map((s) => s.installs);
+      const orders = series.map((s) => s.orders);
+
+      // faint baseline
+      const base = document.createElementNS(SVGNS, "line");
+      base.setAttribute("x1", PAD); base.setAttribute("x2", W - PAD);
+      base.setAttribute("y1", H - PAD); base.setAttribute("y2", H - PAD);
+      base.setAttribute("stroke", "rgba(147,168,255,0.1)"); base.setAttribute("stroke-width", "1");
+      svg.appendChild(base);
+
+      const defs = document.createElementNS(SVGNS, "defs");
+      defs.innerHTML =
+        '<linearGradient id="gi" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0" stop-color="#93a8ff" stop-opacity="0.28"/>' +
+        '<stop offset="1" stop-color="#93a8ff" stop-opacity="0"/></linearGradient>' +
+        '<linearGradient id="go" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0" stop-color="#eab560" stop-opacity="0.22"/>' +
+        '<stop offset="1" stop-color="#eab560" stop-opacity="0"/></linearGradient>';
+      svg.appendChild(defs);
+
+      const shared = Math.max(1, ...installs, ...orders); // one scale for both series
+      const draw = (vals, stroke, fill) => {
+        const p = svgPath(vals, W, H, PAD, shared);
+        const area = document.createElementNS(SVGNS, "path");
+        area.setAttribute("d", p.area); area.setAttribute("fill", fill); area.setAttribute("stroke", "none");
+        svg.appendChild(area);
+        const line = document.createElementNS(SVGNS, "path");
+        line.setAttribute("d", p.line); line.setAttribute("fill", "none");
+        line.setAttribute("stroke", stroke); line.setAttribute("stroke-width", "2");
+        line.setAttribute("stroke-linejoin", "round"); line.setAttribute("stroke-linecap", "round");
+        if (!reduce) {
+          const len = line.getTotalLength ? line.getTotalLength() : 400;
+          line.style.strokeDasharray = len; line.style.strokeDashoffset = len;
+          line.style.transition = "stroke-dashoffset .9s ease";
+          requestAnimationFrame(() => { line.style.strokeDashoffset = "0"; });
+        }
+        svg.appendChild(line);
+        // endpoint dot
+        const dot = document.createElementNS(SVGNS, "circle");
+        dot.setAttribute("cx", p.x(vals.length - 1)); dot.setAttribute("cy", p.y(vals[vals.length - 1]));
+        dot.setAttribute("r", "3"); dot.setAttribute("fill", stroke);
+        dot.setAttribute("class", "chart-dot");
+        svg.appendChild(dot);
+      };
+      draw(installs, "#93a8ff", "url(#gi)");
+      draw(orders, "#eab560", "url(#go)");
+    };
+
+    // renderChipSpark draws the mini installs sparkline inside the chip.
+    const renderChipSpark = (series) => {
+      const svg = refs.chipspark;
+      if (!svg) return;
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      if (!series || series.length < 2) return;
+      const p = svgPath(series.map((s) => s.installs), 64, 20, 3);
+      const area = document.createElementNS(SVGNS, "path");
+      area.setAttribute("d", p.area); area.setAttribute("fill", "rgba(127,224,255,0.16)");
+      svg.appendChild(area);
+      const line = document.createElementNS(SVGNS, "path");
+      line.setAttribute("d", p.line); line.setAttribute("fill", "none");
+      line.setAttribute("stroke", "#7fe0ff"); line.setAttribute("stroke-width", "1.6");
+      line.setAttribute("stroke-linejoin", "round"); line.setAttribute("stroke-linecap", "round");
+      svg.appendChild(line);
+    };
+
+    const renderDeltas = (vals) => {
+      const put = (el, n, unit) => {
+        if (!el) return;
+        if (n > 0) { el.textContent = "+" + fmt(n) + " " + unit; el.hidden = false; }
+        else el.hidden = true;
+      };
+      put(deltaEls.installs, vals.installs_week, "this week");
+      put(deltaEls.orders, vals.orders_week, "this week");
+    };
+
+    // The chip's headline: install count + a "this week" hint once data lands.
+    const renderChip = (vals) => {
+      if (refs.chipval) {
+        refs.chipval.innerHTML = fmt(vals.installs) + " <small>installs</small>";
+      }
+      renderChipSpark(vals.series);
     };
 
     let lastFocus = null;
@@ -389,8 +482,9 @@ export function mount(root) {
       drawer.classList.add("open");
       drawer.setAttribute("aria-hidden", "false");
       if (tab) tab.setAttribute("aria-expanded", "true");
-      const vals = statsState.data || { orders: 0, installs: 0, active: 0, by_channel: {} };
-      renderChannels(vals.by_channel);
+      const vals = statsState.data || EMPTY_STATS;
+      renderChart(vals.series);
+      renderDeltas(vals);
       ["orders", "installs", "active"].forEach((k) => {
         if (!drawerEls[k]) return;
         if (reduce) drawerEls[k].textContent = fmt(vals[k]);
@@ -429,9 +523,11 @@ export function mount(root) {
       S.timers.push(setTimeout(show, reduce ? 250 : 2600));
     };
 
-    // ----- fetch feeds the drawer -----
-    // The right-edge tab is always revealed (persistent affordance). The fetched
-    // data populates the drawer on open; an empty/failed fetch just shows zeros.
+    // ----- fetch feeds the chip preview + the drawer -----
+    // The chip is always revealed (persistent affordance); when /stats lands it
+    // fills the chip's mini sparkline + install count. The drawer renders the
+    // full growth chart + weekly deltas on open. A failed/empty fetch just
+    // leaves zeros and a "warming up" chart.
     revealTab();
     fetch("/stats", { headers: { accept: "application/json" } })
       .then((r) => (r.ok ? r.json() : null))
@@ -441,13 +537,22 @@ export function mount(root) {
           orders: +d.orders || 0,
           installs: +d.installs || 0,
           active: +d.active_installs || 0,
-          by_channel: d.by_channel || {},
+          orders_week: +d.orders_week || 0,
+          installs_week: +d.installs_week || 0,
+          series: Array.isArray(d.series) ? d.series : [],
         };
+        renderChip(statsState.data);
+        // If the drawer is already open (opened before data landed), refresh it.
+        if (S.statsIsOpen && S.statsIsOpen()) {
+          renderChart(statsState.data.series);
+          renderDeltas(statsState.data);
+        }
       })
       .catch(() => {});
 
     S.statsCleanup = () => statsHandlers.forEach(([el, ev, h]) => el.removeEventListener(ev, h));
   };
+  const EMPTY_STATS = { orders: 0, installs: 0, active: 0, orders_week: 0, installs_week: 0, series: [] };
   const statsState = { data: null };
 
   // ---- keyboard navigation: terminal-style section paging. ↑/↓ (or PageUp/Down)

@@ -172,14 +172,17 @@ export const MARKUP = String.raw`
     <span style="color:#eab560">●</span><span data-toast-msg>coming soon — the install isn't live yet.</span>
   </div>
 
-  <!-- LIVE-STATS right tab + pop-out drawer — the single home for live stats.
-       The tab is always shown (revealed by logic.js after the wordmark settles);
-       the drawer holds totals + the per-channel breakdown. -->
-  <button data-ref="statstab" class="stats-tab" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="open live stats" hidden>
-    <span class="stats-tab-arrow" aria-hidden="true">‹</span>
-    <span class="stats-tab-dot"></span>
-    <span class="stats-tab-label">live stats</span>
-    <span class="stats-tab-key" aria-hidden="true">⇥</span>
+  <!-- LIVE-STATS readout chip + pop-out drawer — the single home for live stats.
+       The chip is a bottom-right terminal status segment: a live dot, a mini
+       growth sparkline, and the headline install count. It previews the data
+       it opens. Revealed by logic.js after the wordmark settles; the mini
+       sparkline + number are filled once /stats lands. -->
+  <button data-ref="statstab" class="stats-chip" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="open live stats" hidden>
+    <span class="stats-chip-dot" aria-hidden="true"></span>
+    <span class="stats-chip-live">LIVE</span>
+    <svg data-ref="chipspark" class="stats-chip-spark" viewBox="0 0 64 20" preserveAspectRatio="none" aria-hidden="true"></svg>
+    <span class="stats-chip-val" data-ref="chipval">stats</span>
+    <span class="stats-chip-key" aria-hidden="true">⇥</span>
   </button>
 
   <!-- keyboard legend (desktop): always-visible controls so the nav + the live
@@ -196,19 +199,38 @@ export const MARKUP = String.raw`
 
   <aside data-ref="statsdrawer" class="stats-drawer" role="dialog" aria-modal="true" aria-label="live stats" aria-hidden="true">
     <div class="stats-drawer-head">
-      <span class="stats-drawer-title"><span class="stats-tab-dot"></span>live stats</span>
+      <span class="stats-drawer-title"><span class="stats-chip-dot"></span>live stats</span>
       <button data-ref="statsclose" class="stats-drawer-x" type="button" aria-label="close live stats">×</button>
     </div>
     <div class="stats-drawer-body">
       <div class="stats-big">
-        <div class="stats-big-row"><b class="gold" data-dstat="orders">0</b><span>orders placed</span></div>
-        <div class="stats-big-row"><b data-dstat="installs">0</b><span>installs</span></div>
-        <div class="stats-big-row"><b data-dstat="active">0</b><span>active this week</span></div>
+        <div class="stats-big-row">
+          <b data-dstat="installs">0</b>
+          <span class="stats-big-meta">installs<i class="stats-delta" data-ddelta="installs" hidden></i></span>
+        </div>
+        <div class="stats-big-row">
+          <b class="gold" data-dstat="orders">0</b>
+          <span class="stats-big-meta">orders placed<i class="stats-delta gold" data-ddelta="orders" hidden></i></span>
+        </div>
+        <div class="stats-big-row stats-big-row--sm">
+          <b data-dstat="active">0</b>
+          <span class="stats-big-meta">active this week</span>
+        </div>
       </div>
-      <div class="stats-chan">
-        <div class="stats-chan-head">by channel</div>
-        <div data-ref="statschan" class="stats-chan-rows"></div>
+
+      <!-- growth chart: cumulative installs + orders over the last 8 weeks -->
+      <div class="stats-graph">
+        <div class="stats-graph-head">
+          <span class="stats-graph-title">growth</span>
+          <span class="stats-graph-legend">
+            <span class="stats-lg stats-lg--i"><i></i>installs</span>
+            <span class="stats-lg stats-lg--o"><i></i>orders</span>
+          </span>
+        </div>
+        <svg data-ref="statschart" class="stats-chart" viewBox="0 0 320 132" preserveAspectRatio="none" role="img" aria-label="cumulative installs and orders over the last 8 weeks"></svg>
+        <div class="stats-graph-axis"><span>8 weeks ago</span><span>now</span></div>
       </div>
+
       <div class="stats-foot">anonymous · counted since launch · unified across alpha · beta · stable</div>
     </div>
   </aside>

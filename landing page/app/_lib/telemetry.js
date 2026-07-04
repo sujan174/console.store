@@ -35,14 +35,17 @@ export function rateLimited(ip, now = Date.now()) {
 
 // shapeStats normalizes the SQL aggregate into the public /stats JSON shape.
 export function shapeStats(agg) {
-  const by_channel = {};
-  for (const row of agg.by_channel || []) {
-    by_channel[row.channel] = { installs: Number(row.installs) || 0, orders: Number(row.orders) || 0 };
-  }
+  const series = (agg.series || []).map((r) => ({
+    week: r.week,
+    installs: Number(r.installs) || 0,
+    orders: Number(r.orders) || 0,
+  }));
   return {
     orders: Number(agg.orders) || 0,
     installs: Number(agg.installs) || 0,
     active_installs: Number(agg.active_installs) || 0,
-    by_channel,
+    orders_week: Number(agg.orders_week) || 0,
+    installs_week: Number(agg.installs_week) || 0,
+    series,
   };
 }
