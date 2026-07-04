@@ -14,6 +14,13 @@ export function mount(root) {
     typeof window !== "undefined" &&
     window.matchMedia &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Phone-width: the ASCII particle wordmark can't resolve at this size (the
+  // sample grid is coarser than the glyph strokes) — use the styled wordmark
+  // with the scramble reveal instead, and thin the ambient field.
+  const smallHero =
+    typeof window !== "undefined" &&
+    window.matchMedia &&
+    window.matchMedia("(max-width: 700px)").matches;
 
   const refs = {
     root,
@@ -87,6 +94,22 @@ export function mount(root) {
   };
   const copyEls = Array.from(root.querySelectorAll('[data-action="copy"]'));
   copyEls.forEach((el) => el.addEventListener("click", copyInstall));
+
+  // Phone CTA: you can't run curl on the phone you opened Instagram with — the
+  // share sheet sends the install command to your computer (AirDrop, notes,
+  // email, whatever the OS offers). Only shown where navigator.share exists.
+  const shareBtn = root.querySelector('[data-action="share"]');
+  if (shareBtn && navigator.share && detectOS() === "mobile") {
+    const doShare = () => {
+      navigator
+        .share({ title: "consolestore", text: INSTALL.cmd + "\n\nconsolestore — order food from your terminal.", url: "https://consolestore.in" })
+        .catch(() => {});
+    };
+    shareBtn.hidden = false;
+    shareBtn.style.display = "flex";
+    shareBtn.addEventListener("click", doShare);
+    S.shareCleanup = () => shareBtn.removeEventListener("click", doShare);
+  }
 
   // ===== SCRAMBLE REVEAL =====
   const GLYPHS = "abcdefghijklmnopqrstuvwxyz0123456789·:>_/".split("");
@@ -731,7 +754,7 @@ export function mount(root) {
     let W = 0, H = 0;
     const cols = ["#3a4476", "#4a3f78", "#54467e", "#5a4a32", "#3f4a86"];
     const pts = [];
-    for (let i = 0; i < 78; i++)
+    for (let i = 0; i < (smallHero ? 44 : 78); i++)
       pts.push({ x: Math.random() * 2 - 1, y: Math.random() * 2 - 1, z: Math.random() * 2 - 1, col: cols[(Math.random() * cols.length) | 0], ph: Math.random() * Math.PI * 2, star: Math.random() < 0.14 });
     const resize = () => { const r = cv.getBoundingClientRect(); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
     resize();
@@ -1204,11 +1227,16 @@ export function mount(root) {
     // environments leave document.fonts.ready pending indefinitely, which would
     // otherwise mean the wordmark never appears. Race it against a short timeout
     // so the hero always starts; if JetBrains Mono lands later we re-measure.
-    let started = false;
-    const startHero = () => { if (started || S.dead) return; started = true; tryHero(0); };
-    const fontTimeout = new Promise((res) => S.timers.push(setTimeout(res, 1500)));
-    Promise.race([fontsReady, fontTimeout]).then(startHero);
-    fontsReady.then(() => { if (!S.dead && S.heroRebuild) S.heroRebuild(); });
+    if (smallHero) {
+      // phone: no canvas to measure — scramble the styled wordmark right away
+      bail();
+    } else {
+      let started = false;
+      const startHero = () => { if (started || S.dead) return; started = true; tryHero(0); };
+      const fontTimeout = new Promise((res) => S.timers.push(setTimeout(res, 1500)));
+      Promise.race([fontsReady, fontTimeout]).then(startHero);
+      fontsReady.then(() => { if (!S.dead && S.heroRebuild) S.heroRebuild(); });
+    }
   } else {
     showWordmarkFallback();
     startWordmark();
@@ -1224,7 +1252,8 @@ export function mount(root) {
     cancelAnimationFrame(S.ambRaf);
     S.timers.forEach(clearTimeout);
     if (S.ambResize) window.removeEventListener("resize", S.ambResize);
-    installEls.forEach((el) => el.removeEventListener("click", pingInstall));
+    copyEls.forEach((el) => el.removeEventListener("click", copyInstall));
+    if (S.shareCleanup) S.shareCleanup();
     faqHandlers.forEach(([q, h]) => q.removeEventListener("click", h));
     cmdHandlers.forEach(([el, h]) => el.removeEventListener("click", h));
     wmHandlers.forEach(([el, h]) => el.removeEventListener("click", h));

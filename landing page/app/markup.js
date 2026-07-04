@@ -36,12 +36,12 @@ export const MARKUP = String.raw`
       </svg>
       <span style="font-weight:800;font-size:14px;letter-spacing:-.02em"><span style="background:linear-gradient(170deg,#a6b8ff 0%,#ad8cf2 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">console</span><span style="color:#eab560">store</span></span>
     </a>
-    <div style="display:flex;align-items:center;gap:26px;font-size:12.5px;color:#565b80">
-      <a href="#run" class="lnk">run</a>
-      <a href="#keys" class="lnk">terminal &amp; agent</a>
+    <div class="nav-links" style="display:flex;align-items:center;gap:26px;font-size:12.5px;color:#565b80">
+      <a href="#run" class="lnk lnk-desk">run</a>
+      <a href="#keys" class="lnk lnk-desk">terminal &amp; agent</a>
       <a href="/features" class="lnk">features</a>
       <a href="/how-to" class="lnk">how-to</a>
-      <a href="#faq" class="lnk">faq</a>
+      <a href="#faq" class="lnk lnk-desk">faq</a>
       <a href="https://github.com/sujan174/console.store" class="lnk" target="_blank" rel="noopener noreferrer" aria-label="consolestore on GitHub" title="View source on GitHub" style="display:inline-flex;align-items:center">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="display:block"><path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.49 5.93.43.37.81 1.1.81 2.22 0 1.6-.01 2.9-.01 3.29 0 .32.22.7.83.58A12.01 12.01 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z"></path></svg>
       </a>
@@ -66,22 +66,27 @@ export const MARKUP = String.raw`
       <div style="margin-top:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;font-size:12px;color:#565b80;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .66s">
         <span>one binary</span><span style="color:#2d2f48">·</span>
         <span>no mouse</span><span style="color:#2d2f48">·</span>
-        <span>no cookie walls</span><span style="color:#2d2f48">·</span>
-        <span>no checkout forms</span><span style="color:#2d2f48">·</span>
+        <span class="chip-x">no cookie walls</span><span class="chip-x" style="color:#2d2f48">·</span>
+        <span class="chip-x">no checkout forms</span><span class="chip-x" style="color:#2d2f48">·</span>
         <span>agent = your AI assistant</span><span style="color:#2d2f48">·</span>
         <span style="color:#e9ebf7">just&nbsp;<span style="color:#93a8ff">↵</span></span>
       </div>
 
       <!-- install command (OS-aware text set in logic.js; live stats live in the right drawer) -->
       <div style="margin-top:28px;display:flex;flex-direction:column;align-items:center;gap:11px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .8s">
-        <div data-action="copy" title="click to copy" class="install-hero" style="display:inline-flex;align-items:stretch;border:1px solid rgba(147,168,255,.15);border-radius:10px;background:#09090f;box-shadow:0 0 48px rgba(147,168,255,.05),0 24px 64px rgba(0,0,0,.55);cursor:pointer;overflow:hidden;font-size:13.5px">
-          <div style="display:flex;align-items:center;gap:11px;padding:14px 20px">
+        <div class="install-hero" style="display:inline-flex;align-items:stretch;border:1px solid rgba(147,168,255,.15);border-radius:10px;background:#09090f;box-shadow:0 0 48px rgba(147,168,255,.05),0 24px 64px rgba(0,0,0,.55);overflow:hidden;font-size:13.5px">
+          <div data-action="copy" title="click to copy" class="install-cmdrow" style="display:flex;align-items:center;gap:11px;padding:14px 20px;cursor:pointer">
             <span data-install-prompt style="color:#2d2f48">$</span>
             <span data-ref="install" data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh -s -- --beta</span>
             <span style="margin-left:3px;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7fe0ff;border:1px solid rgba(127,224,255,.32);border-radius:99px;padding:2px 8px;flex:none">beta</span>
           </div>
-          <div style="display:flex;align-items:center;gap:7px;padding:0 16px;background:rgba(147,168,255,.08);border-left:1px solid rgba(147,168,255,.2);color:#93a8ff;font-size:11.5px;flex:none">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.8"/></svg><span data-copy-label>copy</span>
+          <div class="install-actions" style="display:flex;align-items:stretch;flex:none">
+            <div data-action="copy" title="click to copy" class="install-act" style="display:flex;align-items:center;justify-content:center;gap:7px;padding:0 16px;background:rgba(147,168,255,.08);border-left:1px solid rgba(147,168,255,.2);color:#93a8ff;font-size:11.5px;flex:none;cursor:pointer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.8"/></svg><span data-copy-label>copy</span>
+            </div>
+            <button data-action="share" class="install-act install-share" type="button" hidden style="display:none;align-items:center;justify-content:center;gap:7px;padding:0 16px;background:rgba(176,140,245,.1);border:0;border-left:1px solid rgba(176,140,245,.24);color:#b08cf5;font-size:11.5px;font-family:inherit;flex:none;cursor:pointer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M12 15V3m0 0L7 8m5-5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>send to your computer</span>
+            </button>
           </div>
         </div>
         <div data-install-hint style="font-size:11.5px;color:#2d2f48">beta channel · armed builds place real orders, the default stays safe.</div>
@@ -255,7 +260,7 @@ export const MARKUP = String.raw`
           <span style="font-size:12px;color:#8a8fb4">consolestore.in ~ %</span>
           <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:#7fe0ff"><span style="width:5px;height:5px;border-radius:99px;background:#7fe0ff;animation:pulseDot 1.6s ease-in-out infinite;flex:none"></span>live preview</span>
         </div>
-        <div style="position:relative;padding:20px 22px;min-height:380px">
+        <div class="demo-body" style="position:relative;padding:20px 22px;min-height:380px">
           <div style="position:absolute;left:0;right:0;top:0;height:56px;pointer-events:none;background:linear-gradient(180deg,rgba(147,168,255,.04),transparent);animation:scan 5.5s linear infinite;z-index:0"></div>
           <div data-ref="term" style="position:relative;z-index:1;font-size:13px;line-height:1.65;color:#a9b1d6;white-space:pre-wrap"></div>
           <div data-ref="key" style="position:absolute;right:16px;bottom:12px;z-index:2;font-size:10.5px;color:#565b80;border:1px solid rgba(147,168,255,.12);border-radius:7px;padding:4px 10px;background:#0a0a12;min-width:72px;text-align:center"></div>
