@@ -3959,8 +3959,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch k.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
 			return m, tea.Quit
+		case "q":
+			// A bare `q` quits only from resting screens — never mid-order
+			// (checkout/confirm) and never while a search input is active,
+			// where it falls through and stays an ordinary letter. Ctrl-C
+			// remains the universal quit.
+			if m.qQuitAllowed() {
+				return m, tea.Quit
+			}
 		}
 		// Double-Esc (two quick taps) returns to the splash and replays the loading
 		// animation — a deliberate "home" gesture recognised from ANY screen.
@@ -5127,6 +5135,26 @@ func (m Model) helpTriggerable() bool {
 		return false
 	}
 	return true
+}
+
+// qQuitAllowed reports whether a bare `q` may exit the app right now. Quit is
+// confined to the resting screens — the splash (which advertises "q quit"),
+// the browse list, a restaurant menu, and order tracking — so a stray `q` can
+// never abandon a checkout or confirm mid-order. On the allowed screens it
+// still yields while a search box is typing or an info modal is open, where
+// `q` is real input for the handlers further down.
+func (m Model) qQuitAllowed() bool {
+	switch m.screen {
+	case scrSplash:
+		return !m.settingsOpen
+	case scrMenu:
+		return !m.menu.Searching() && !m.searchMode && !m.restInfoOpen
+	case scrRestaurant:
+		return !m.rest.Searching() && !m.rest.InfoOpen()
+	case scrTracking:
+		return true
+	}
+	return false
 }
 
 func (m Model) View() string {
