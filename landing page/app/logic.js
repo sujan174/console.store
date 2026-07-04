@@ -745,37 +745,111 @@ export function mount(root) {
     S.snapCleanup = () => { window.removeEventListener("scroll", onScroll); clearTimeout(idleTimer); };
   };
 
-  // ambient particle field
+  // Cinematic "console city" backdrop — a bespoke generative Tokyo-Night
+  // skyline rendered on the single fixed [data-ref=ambient] canvas (replaces the
+  // old rotating starfield). Three parallax depth bands of towers built from
+  // lit terminal "windows", drifting embers, an aurora sky wash and a gold
+  // horizon glow. Everything rides the shared rAF slot (S.ambRaf) + resize slot
+  // (S.ambResize); pointer parallax eases and honours reduced-motion / phone.
   const startAmbient = () => {
     const cv = refs.ambient;
     if (!cv) return;
     const ctx = cv.getContext("2d");
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     let W = 0, H = 0;
-    const cols = ["#3a4476", "#4a3f78", "#54467e", "#5a4a32", "#3f4a86"];
-    const pts = [];
-    for (let i = 0; i < (smallHero ? 44 : 78); i++)
-      pts.push({ x: Math.random() * 2 - 1, y: Math.random() * 2 - 1, z: Math.random() * 2 - 1, col: cols[(Math.random() * cols.length) | 0], ph: Math.random() * Math.PI * 2, star: Math.random() < 0.14 });
-    const resize = () => { const r = cv.getBoundingClientRect(); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+
+    const hex = (h, a) => { const n = parseInt(h.slice(1), 16); return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")"; };
+    // seeded PRNG so the skyline is stable frame-to-frame (rebuilt only on resize).
+    const mulberry = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+
+    // depth bands, far → near. base = fraction of H where a tower's foot sits;
+    // hCap = tallest a tower may reach as a fraction of H; win = lit-window hue.
+    const BANDS = [
+      { seed: 11, col: "#222a55", win: "#4a5aa8", hCap: 0.12, base: 0.78, par: 26, alpha: 0.5 },
+      { seed: 29, col: "#191634", win: "#7a5fd0", hCap: 0.2, base: 0.9, par: 62, alpha: 0.8 },
+      { seed: 47, col: "#0b0916", win: "#eab560", hCap: 0.3, base: 1.04, par: 116, alpha: 1 },
+    ];
+    let towers = [];
+    const buildTowers = () => {
+      towers = BANDS.map((b) => {
+        const rnd = mulberry(b.seed), list = [];
+        const wBase = 44 + b.hCap * 130, gap = 10 + b.hCap * 22;
+        let x = -wBase * 2;
+        while (x < W + wBase * 3) {
+          const tw = wBase * (0.6 + rnd() * 0.9), th = H * b.hCap * (0.4 + rnd() * 0.6);
+          const cell = 9, pad = 7, cols = Math.max(1, Math.floor((tw - pad * 2) / cell)), rows = Math.max(1, Math.floor((th - pad * 2) / cell)), lit = [];
+          for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (rnd() < 0.4) lit.push({ c, r, ph: rnd() * 6.28 });
+          list.push({ x, tw, th, cell, pad, lit });
+          x += tw + gap + rnd() * gap * 1.5;
+        }
+        return list;
+      });
+    };
+
+    const ecol = ["#3f4a86", "#54467e", "#5a4a32", "#4a3f78"];
+    let embers = [];
+    const buildEmbers = () => { embers = []; const n = smallHero ? 24 : 52; for (let i = 0; i < n; i++) embers.push({ x: Math.random(), y: Math.random(), z: Math.random(), col: ecol[(Math.random() * ecol.length) | 0], ph: Math.random() * 6.28, star: Math.random() < 0.16 }); };
+
+    const resize = () => { const r = cv.getBoundingClientRect(); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); buildTowers(); if (!embers.length) buildEmbers(); };
     resize();
     S.ambResize = resize;
     window.addEventListener("resize", resize);
-    let ang = 0;
+
+    // eased pointer parallax (off under reduced-motion / phone)
+    let tx = 0, ty = 0, cxp = 0, cyp = 0;
+    const onPointer = (e) => { tx = (e.clientX / window.innerWidth) * 2 - 1; ty = (e.clientY / window.innerHeight) * 2 - 1; };
+    if (!reduce && !smallHero) window.addEventListener("pointermove", onPointer, { passive: true });
+    S.ambPointerCleanup = () => window.removeEventListener("pointermove", onPointer);
+
+    let t = 0;
     const tick = () => {
       if (S.dead) return;
-      ang += 0.0009;
+      t += 1;
+      cxp += (tx - cxp) * 0.05; cyp += (ty - cyp) * 0.05;
       ctx.clearRect(0, 0, W, H);
-      const cx = W / 2, cy = H / 2, focal = Math.max(W, H) * 0.9, cos = Math.cos(ang), sin = Math.sin(ang);
-      for (const p of pts) {
-        const rx = p.x * cos - p.z * sin, rz = p.x * sin + p.z * cos, yy = p.y + Math.sin(ang * 1.4 + p.ph) * 0.05;
-        const sc = focal / ((rz + 2.4) * 2.0), X = cx + rx * sc * 1.3, Y = cy + yy * sc * 1.3, depth = (rz + 1) / 2, rad = 1 + depth * 2.6;
-        ctx.globalAlpha = 0.06 + depth * 0.22;
-        ctx.fillStyle = p.col;
-        if (p.star) { const a = rad * 1.6; ctx.fillRect(X - a, Y - rad * 0.4, a * 2, rad * 0.8); ctx.fillRect(X - rad * 0.4, Y - a, rad * 0.8, a * 2); }
-        else { const s = Math.max(1, Math.round(rad * 1.7)); ctx.fillRect(Math.round(X), Math.round(Y), s, s); }
+      const lift = Math.min((window.scrollY || 0) * 0.14, H * 0.42);
+
+      // aurora sky wash
+      for (const a of [{ x: W * 0.74, y: H * 0.0, c: "#93a8ff", al: 0.07 }, { x: W * 0.1, y: H * 0.22, c: "#b08cf5", al: 0.055 }]) {
+        const g = ctx.createRadialGradient(a.x + cxp * 22, a.y, 0, a.x, a.y, Math.max(W, H) * 0.6);
+        g.addColorStop(0, hex(a.c, a.al)); g.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      }
+
+      // embers drifting up
+      for (const e of embers) {
+        let ey = (e.y - t * 0.00006 * (0.4 + e.z)) % 1; if (ey < 0) ey += 1;
+        const yy = ey * H, xx = e.x * W + Math.sin(t * 0.01 + e.ph) * 12 + cxp * (6 + e.z * 12), tw = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.03 + e.ph)), rad = 1 + e.z * 2.2;
+        ctx.globalAlpha = (0.05 + e.z * 0.22) * tw; ctx.fillStyle = e.col;
+        if (e.star) { const s = rad * 1.7; ctx.fillRect(xx - s, yy - rad * 0.4, s * 2, rad * 0.8); ctx.fillRect(xx - rad * 0.4, yy - s, rad * 0.8, s * 2); }
+        else { const s = Math.max(1, Math.round(rad * 1.6)); ctx.fillRect(xx | 0, yy | 0, s, s); }
       }
       ctx.globalAlpha = 1;
-      S.ambRaf = requestAnimationFrame(tick);
+
+      // skyline bands (far → near); near occludes far for real depth
+      for (let bi = 0; bi < BANDS.length; bi++) {
+        const b = BANDS[bi], list = towers[bi], baseY = H * b.base - lift * (0.25 + bi * 0.3), ox = -cxp * b.par;
+        for (const tw of list) {
+          const x = tw.x + ox; if (x + tw.tw < -30 || x > W + 30) continue;
+          const topY = baseY - tw.th;
+          ctx.globalAlpha = b.alpha; ctx.fillStyle = b.col; ctx.fillRect(x, topY, tw.tw, tw.th + 80);
+          ctx.fillStyle = b.win;
+          for (const w of tw.lit) { const wa = 0.22 + 0.78 * (0.5 + 0.5 * Math.sin(t * 0.02 + w.ph)); ctx.globalAlpha = b.alpha * wa * 0.85; ctx.fillRect(x + tw.pad + w.c * tw.cell, topY + tw.pad + w.r * tw.cell, tw.cell - 3, tw.cell - 3); }
+        }
+      }
+      ctx.globalAlpha = 1;
+
+      // dark scrim across the lower third so the install pill + cue read cleanly
+      // over the skyline (like zo's vignetted foreground), then a gold horizon glow.
+      const sy = H * 0.6, sc = ctx.createLinearGradient(0, sy, 0, H);
+      sc.addColorStop(0, "rgba(3,3,7,0)"); sc.addColorStop(0.55, "rgba(3,3,7,.55)"); sc.addColorStop(1, "rgba(3,3,7,.9)");
+      ctx.fillStyle = sc; ctx.fillRect(0, sy, W, H - sy);
+
+      const hy = H * BANDS[1].base - lift * 0.4, hg = ctx.createLinearGradient(0, hy - 130, 0, hy + 30);
+      hg.addColorStop(0, "rgba(0,0,0,0)"); hg.addColorStop(0.72, hex("#eab560", 0.05)); hg.addColorStop(1, hex("#eab560", 0.13));
+      ctx.fillStyle = hg; ctx.fillRect(0, hy - 130, W, 160);
+
+      if (!reduce) S.ambRaf = requestAnimationFrame(tick);
     };
     tick();
   };
@@ -1252,6 +1326,7 @@ export function mount(root) {
     cancelAnimationFrame(S.ambRaf);
     S.timers.forEach(clearTimeout);
     if (S.ambResize) window.removeEventListener("resize", S.ambResize);
+    if (S.ambPointerCleanup) S.ambPointerCleanup();
     copyEls.forEach((el) => el.removeEventListener("click", copyInstall));
     if (S.shareCleanup) S.shareCleanup();
     faqHandlers.forEach(([q, h]) => q.removeEventListener("click", h));
