@@ -10,6 +10,22 @@ export const MARKUP = String.raw`
 
   <canvas data-ref="ambient" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0"></canvas>
 
+  <!-- Full-bleed cinematic hero video (zo.house-style). Sits over the ambient
+       canvas; logic.js fades it in on canplay and stops the starfield to save
+       CPU. If the asset is missing / errors / on reduced-motion it hides and the
+       starfield stays. Drop the files at /public/hero.mp4 (+ /public/hero.webm)
+       and /public/hero-poster.jpg. -->
+  <video data-ref="herovid" muted loop playsinline autoplay preload="auto" aria-hidden="true"
+    poster="/hero-poster.jpg"
+    style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;z-index:0;opacity:0;transition:opacity 1.1s ease">
+    <source data-ref="herovidwebm" src="/hero.webm" type="video/webm">
+    <source data-ref="herovidmp4" src="/hero.mp4" type="video/mp4">
+  </video>
+
+  <!-- legibility scrim tuned for a bright video: dark top (nav) + dark bottom
+       (install), clear middle so the art shows. Harmless over the starfield. -->
+  <div style="position:fixed;inset:0;pointer-events:none;z-index:1;background:linear-gradient(180deg,rgba(3,3,7,.74) 0%,rgba(3,3,7,.14) 22%,rgba(3,3,7,0) 46%,rgba(3,3,7,.34) 72%,rgba(3,3,7,.86) 100%)"></div>
+
   <div style="position:fixed;left:-8vw;top:-6vh;width:42vw;height:42vw;border-radius:50%;pointer-events:none;z-index:0;background:radial-gradient(circle,rgba(147,168,255,.09),transparent 60%);filter:blur(42px);animation:orbA 22s ease-in-out infinite"></div>
   <div style="position:fixed;right:-8vw;top:22vh;width:36vw;height:36vw;border-radius:50%;pointer-events:none;z-index:0;background:radial-gradient(circle,rgba(176,140,245,.08),transparent 60%);filter:blur(46px);animation:orbB 28s ease-in-out infinite"></div>
 

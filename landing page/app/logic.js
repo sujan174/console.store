@@ -25,6 +25,7 @@ export function mount(root) {
   const refs = {
     root,
     ambient: root.querySelector('[data-ref="ambient"]'),
+    herovid: root.querySelector('[data-ref="herovid"]'),
     hero3dwrap: root.querySelector('[data-ref="hero3dwrap"]'),
     hero3d: root.querySelector('[data-ref="hero3d"]'),
     wordmark: root.querySelector('[data-ref="wordmark"]'),
@@ -745,6 +746,32 @@ export function mount(root) {
     S.snapCleanup = () => { window.removeEventListener("scroll", onScroll); clearTimeout(idleTimer); };
   };
 
+  // Full-bleed cinematic hero video. Fades in only once real frame data lands
+  // (canplay/loadeddata), then stops the starfield rAF to save CPU. If the asset
+  // is missing / errors / doesn't decode within the grace window it hides itself
+  // and the ambient starfield stays as the fallback. Reduced-motion shows the
+  // poster frame paused (no playback), never black.
+  const startHeroVideo = () => {
+    const v = refs.herovid;
+    if (!v) return;
+    if (reduce) v.removeAttribute("autoplay");
+    let shown = false;
+    const reveal = () => {
+      if (shown || S.dead) return;
+      shown = true;
+      v.style.opacity = "1";
+      cancelAnimationFrame(S.ambRaf); // video is the backdrop now — drop the starfield
+      if (reduce) { try { v.pause(); } catch (e) {} }
+    };
+    const fail = () => { if (shown) return; v.style.display = "none"; }; // keep starfield
+    v.addEventListener("loadeddata", () => { if (v.readyState >= 2) reveal(); });
+    v.addEventListener("canplay", reveal);
+    v.addEventListener("error", fail);
+    v.querySelectorAll("source").forEach((s) => s.addEventListener("error", () => { if (v.networkState === 3 /* NO_SOURCE */) fail(); }));
+    // no event fires when every source 404s on some browsers — bail after a grace window.
+    S.timers.push(setTimeout(() => { if (!shown && !S.dead) fail(); }, 2600));
+  };
+
   // ambient particle field
   const startAmbient = () => {
     const cv = refs.ambient;
@@ -1201,6 +1228,11 @@ export function mount(root) {
   initStats();
   initKeyboardNav();
   initScrollSnap();
+
+  // hero video runs in both motion modes (it pauses on the poster under reduce);
+  // this also stops an invisible autoplay from burning CPU when the block below
+  // is skipped for reduced-motion.
+  startHeroVideo();
 
   if (!reduce) {
     initFooterWordmark();
