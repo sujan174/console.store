@@ -665,3 +665,107 @@ func TestIMEscFromCheckoutRefreshesBrowse(t *testing.T) {
 		t.Fatalf("esc must repaint the browse with the reconciled qty; got:\n%s", v)
 	}
 }
+
+// + on a cart line whose product has pack-size variants opens the variant
+// picker (the store may cap one size while another is open) instead of a
+// blind bump; confirming adds the chosen variant as its own line.
+func TestIMCheckoutPlusOpensVariantPicker(t *testing.T) {
+	be := &liveFake{}
+	m := imModel(t, be)
+	multi := catalog.Item{
+		ID: "p3", SwiggyID: "sp-small", Name: "Coke", Price: 20, Section: catalog.SectionInstamart,
+		Customizable: true,
+		Options: []catalog.OptionGroup{{
+			ID: "im-size", Name: "pack size", Min: 1, Max: 1, Variant: true, Absolute: true,
+			Choices: []catalog.Choice{
+				{ID: "sp-small", Name: "250 ml", Price: 20, InStock: true},
+				{ID: "sp-big", Name: "1 L", Price: 60, InStock: true},
+			},
+		}},
+	}
+	m.imLines = []screens.CartLine{{Item: multi, Qty: 3, Price: 20}}
+	m.screen = scrCheckout
+	m.checkoutVertical = 1
+	m.checkout = m.buildIMCheckout()
+
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("+")})
+	m = nm.(Model)
+	if !m.customizeOpen {
+		t.Fatal("+ on a multi-variant line must open the pack-size picker")
+	}
+	if m.imLines[0].Qty != 3 {
+		t.Fatalf("+ must not blind-bump a multi-variant line; qty = %d", m.imLines[0].Qty)
+	}
+
+	// Pick the 1 L variant and confirm.
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = nm.(Model)
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+	m = nm.(Model)
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if m.customizeOpen {
+		t.Fatal("confirming must close the picker")
+	}
+	if len(m.imLines) != 2 || m.imLines[1].Item.SwiggyID != "sp-big" {
+		t.Fatalf("confirm must add the chosen variant as its own line, got %+v", m.imLines)
+	}
+	if !m.imCartSyncPending {
+		t.Fatal("the variant add must arm the cart sync")
+	}
+	if v := m.checkout.WithViewport(m.h).View(m.frame); !strings.Contains(v, "1 L") {
+		t.Fatalf("the checkout must show the new variant line; got:\n%s", v)
+	}
+}
+
+// A single-variant line keeps the plain optimistic bump.
+func TestIMCheckoutPlusBumpsPlainLine(t *testing.T) {
+	be := &liveFake{}
+	m := imModel(t, be)
+	m.imLines = imTwoLines()
+	m.screen = scrCheckout
+	m.checkoutVertical = 1
+	m.checkout = m.buildIMCheckout()
+
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("+")})
+	m = nm.(Model)
+	if m.customizeOpen {
+		t.Fatal("a plain line must not open the picker")
+	}
+	if m.imLines[0].Qty != 2 {
+		t.Fatalf("+ must bump the plain line, qty = %d", m.imLines[0].Qty)
+	}
+}
+
+// A server clamp must be VISIBLE on the checkout: the adoption sets the
+// prominent order-error line, not just the (bill-hidden) sync error.
+func TestIMClampNoticeVisibleOnCheckout(t *testing.T) {
+	be := &liveFake{}
+	m := imModel(t, be)
+	m.imLines = []screens.CartLine{
+		{Item: catalog.Item{ID: "p1", SwiggyID: "sp1", Name: "Red Bull", Price: 125, Section: catalog.SectionInstamart}, Qty: 9, Price: 125},
+	}
+	m.screen = scrCheckout
+	m.checkoutVertical = 1
+	m.checkout = m.buildIMCheckout()
+	m.imCartSyncPending = true
+	m.imCartSyncFrame = m.frame - cartSettleFrames
+
+	var sync tea.Cmd
+	m.frame++
+	m, sync = m.onTick()
+	if sync == nil {
+		t.Fatal("pending sync must fire")
+	}
+	be.imCart = api.IMCart{ItemTotal: 375, Total: 380,
+		Lines: []api.IMCartLine{{SpinID: "sp1", Name: "Red Bull", Quantity: 3, Price: 125, Available: true}}}
+	m = deliver(t, m, sync)
+
+	if m.imLines[0].Qty != 3 {
+		t.Fatalf("adoption must take the clamped qty, got %d", m.imLines[0].Qty)
+	}
+	v := m.checkout.WithViewport(m.h).View(m.frame)
+	if !strings.Contains(v, "capped a quantity") {
+		t.Fatalf("the clamp must be visible on the checkout; got:\n%s", v)
+	}
+}

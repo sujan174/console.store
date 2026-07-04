@@ -2653,7 +2653,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.commitAdd(it, nil, nil, 0, m.pendingRest, m.pendingSection)
 			if !m.conflictOpen {
 				m = m.refreshAfterAdd()
-				return m, m.liveCartCmd()
+				return m, m.fireSyncNow() // single-flight: never race an in-flight write
 			}
 			return m, nil
 		}
@@ -3015,6 +3015,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if adjusted {
 			m.imCartSyncErr = "the store adjusted your cart to what it allows"
+			m.imOrderErr = "⚠ the store capped a quantity — cart updated to what it allows"
 			if m.imConfirmPending {
 				// Don't confirm an order the user hasn't seen — surface the
 				// adjustment and let them review + ↵ again.
@@ -3838,7 +3839,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m = m.startNewCart(m.pendingItem, m.pendingAddOns, m.pendingSelections, m.pendingPrice, m.pendingRest, m.pendingSection)
 					m = m.refreshAfterAdd()
-					syncCmd = m.liveCartCmd()
+					syncCmd = m.fireSyncNow() // single-flight: never race an in-flight write
 				}
 				m.conflictOpen = false
 				return m, syncCmd
@@ -3857,7 +3858,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// committed lines without it), then close. If nothing was sent
 				// yet it's a pure local close.
 				m.wizardOpen = false
-				return m, m.liveCartCmd()
+				return m, m.fireSyncNow()
 			case "up", "k":
 				m.wizard = m.wizard.Up()
 			case "down", "j":
@@ -3938,6 +3939,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// so there is no conflict modal to raise.
 					m = m.imCommitAdd(item, sels, price)
 					m = m.refreshInstamart()
+					if m.screen == scrCheckout && m.checkoutVertical == 1 {
+						// Sheet was opened from the checkout's + (pick a pack size):
+						// show the new/bumped line right there.
+						m.checkout = m.buildIMCheckout()
+					}
 					if m.live {
 						m.armIMCartSync()
 					}
@@ -3946,7 +3952,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m = m.commitAdd(item, addons, sels, price, m.pendingRest, m.pendingSection)
 				if !m.conflictOpen { // committed directly (no restaurant clash)
 					m = m.refreshAfterAdd()
-					return m, m.liveCartCmd()
+					return m, m.fireSyncNow() // single-flight: never race an in-flight write
 				}
 			}
 			return m, nil
@@ -4537,10 +4543,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.checkout = m.checkout.Down()
 					return m, nil
 				case "+", "=", "right", "l":
-					// Optimistic increment of the focused line — no freeze.
 					i := m.checkout.Cursor()
 					if i >= 0 && i < len(m.imLines) {
 						m.imOrderErr = "" // editing clears a stale "can't order" message
+						// A product with pack-size variants opens the picker instead
+						// of a blind bump — the user chooses WHICH variant to add
+						// (the store may cap one size while another is open).
+						if it := m.imLines[i].Item; len(it.Options) > 0 {
+							m.pendingItem = it
+							m.pendingRest = "Instamart"
+							m.pendingSection = catalog.SectionInstamart
+							m.customize = screens.NewCustomize(it)
+							m.customizeOpen = true
+							return m, nil
+						}
+						// Optimistic increment of the focused line — no freeze.
 						m.imLines[i].Qty++
 						m.menu = m.menu.WithCartChip(m.cartChip())
 						m.checkout = m.buildIMCheckout()
@@ -5076,6 +5093,8 @@ func (m Model) statusBar() string {
 		hint = m.orderErr
 	} else if m.cartSyncErr != "" {
 		hint = m.cartSyncErr
+	} else if m.imCartSyncErr != "" && (m.screen == scrInstamart || (m.screen == scrCheckout && m.checkoutVertical == 1)) {
+		hint = m.imCartSyncErr
 	}
 	return components.StatusBar(m.addr.Line, m.screenLabel(), hint, "12.4", m.blinkOn())
 }
