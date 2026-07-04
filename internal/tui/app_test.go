@@ -360,6 +360,87 @@ func TestAppQuits(t *testing.T) {
 	}
 }
 
+// isQuit reports whether a returned command is tea.Quit.
+func isQuit(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(tea.QuitMsg)
+	return ok
+}
+
+func sendQ(m Model) (Model, tea.Cmd) {
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	return updated.(Model), cmd
+}
+
+// `q` quits only from the resting screens: browse list, restaurant menu,
+// tracking (and the splash, whose hint advertises it). Everywhere else —
+// notably checkout/confirm mid-order — it must be inert.
+func TestQKeyQuitScreens(t *testing.T) {
+	allowed := []screen{scrSplash, scrMenu, scrRestaurant, scrTracking}
+	for _, s := range allowed {
+		m := newAtMenu()
+		m.screen = s
+		if _, cmd := sendQ(m); !isQuit(cmd) {
+			t.Errorf("q on screen %d should quit", s)
+		}
+	}
+	blocked := []screen{scrCheckout, scrConfirm, scrAddress, scrInstamart}
+	for _, s := range blocked {
+		m := newAtMenu()
+		m.screen = s
+		if _, cmd := sendQ(m); isQuit(cmd) {
+			t.Errorf("q on screen %d must NOT quit", s)
+		}
+	}
+}
+
+// While a search box is capturing input, `q` is a typed letter, never quit.
+func TestQKeyIsInputWhileSearching(t *testing.T) {
+	m := newAtMenu()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m = updated.(Model)
+	if !m.menu.Searching() {
+		t.Fatal("/ should enter menu search")
+	}
+	m2, cmd := sendQ(m)
+	if isQuit(cmd) {
+		t.Fatal("q while searching must not quit")
+	}
+	if !strings.Contains(m2.View(), "/q") {
+		t.Errorf("q should be typed into the search filter:\n%s", m2.View())
+	}
+
+	// Live-rail search input (searchMode) must swallow q the same way.
+	lm := newAtMenu()
+	lm.searchMode = true
+	if _, cmd := sendQ(lm); isQuit(cmd) {
+		t.Fatal("q in live search mode must not quit")
+	}
+
+	// Restaurant dish search: q is a typed letter, never quit.
+	rm := newAtMenu()
+	updated, _ = rm.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open first restaurant
+	rm = updated.(Model)
+	updated, _ = rm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	rm = updated.(Model)
+	if rm.screen != scrRestaurant || !rm.rest.Searching() {
+		t.Fatalf("/ should enter dish search (screen=%d searching=%v)", rm.screen, rm.rest.Searching())
+	}
+	if _, cmd := sendQ(rm); isQuit(cmd) {
+		t.Fatal("q in dish search must not quit")
+	}
+
+	// Instamart search: q must never quit, searching or not.
+	im := newAtMenu()
+	im.screen = scrInstamart
+	im.imSearchMode = true
+	if _, cmd := sendQ(im); isQuit(cmd) {
+		t.Fatal("q in instamart search must not quit")
+	}
+}
+
 // TestAddToCartPreservesCursor ensures that adding an item to the cart does not
 // reset the restaurant list cursor back to 0. This would fail against the old
 // NewRestaurant rebuild behavior.

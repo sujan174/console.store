@@ -28,6 +28,9 @@ func TestFlowMenuToCart(t *testing.T) {
 		return bytes.Contains(b, []byte("to pay (COD)")) && bytes.Contains(b, []byte("Cold Coffee"))
 	}, teatest.WithDuration(3*time.Second))
 
+	// `q` must NOT quit from the checkout (quit is confined to resting
+	// screens); ctrl+c is the universal quit.
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	tm.Send(tea.KeyMsg{Type: tea.KeyCtrlC})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
 }
