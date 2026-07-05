@@ -611,7 +611,7 @@ func (c *Client) TrackIMOrder(ctx context.Context, orderID string, lat, lng floa
 		// Unrecognized payload — treat it as human-readable status text rather
 		// than failing the poll (the raw is already debug-logged for harvesting).
 		txt := strings.TrimSpace(strings.Trim(string(raw), `"`))
-		return Tracking{OrderID: orderID, Status: txt, Active: !imDelivered(txt)}, nil
+		return Tracking{OrderID: orderID, Status: txt, Active: !imDelivered(txt), Known: true}, nil
 	}
 	return Tracking{
 		OrderID: orderID,
@@ -619,6 +619,7 @@ func (c *Client) TrackIMOrder(ctx context.Context, orderID string, lat, lng floa
 		Detail:  t.Status.SubStatusMessage,
 		ETA:     t.Status.EtaText,
 		Active:  !imDelivered(t.Status.StatusMessage),
+		Known:   true,
 	}, nil
 }
 

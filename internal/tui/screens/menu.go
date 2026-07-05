@@ -114,9 +114,13 @@ func (m Menu) WithListCursor(i int) Menu {
 	if i < 0 {
 		i = 0
 	}
-	places := m.mainPlaces()
-	if len(places) > 0 && i >= len(places) {
+	// Clamp unconditionally: an empty list must leave the cursor at 0, never a
+	// stale out-of-range index that a later windowRange would read past.
+	if places := m.mainPlaces(); i >= len(places) {
 		i = len(places) - 1
+	}
+	if i < 0 {
+		i = 0
 	}
 	m.list.Cursor = i
 	return m

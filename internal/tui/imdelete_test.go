@@ -173,7 +173,11 @@ func TestIMPlaceOrderForceClearsCart(t *testing.T) {
 	}
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 	m = nm.(Model)
-	m = deliver(t, m, cmd)
+	// Confirm fires the final pre-place sync; its price-matched success fires the
+	// actual place command — chase that (deliver drops follow-up cmds).
+	nm, placeCmd := m.Update(cmd())
+	m = nm.(Model)
+	m = deliver(t, m, placeCmd)
 	if be.imPlacedAddr != "a1" {
 		t.Fatalf("order not placed, addr=%q", be.imPlacedAddr)
 	}

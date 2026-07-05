@@ -175,8 +175,12 @@ func (s Instamart) WithListCursor(i int) Instamart {
 	if i < 0 {
 		i = 0
 	}
-	if len(s.items) > 0 && i >= len(s.items) {
+	// Clamp unconditionally — an empty item list must not retain a stale cursor.
+	if i >= len(s.items) {
 		i = len(s.items) - 1
+	}
+	if i < 0 {
+		i = 0
 	}
 	s.list.Cursor = i
 	return s

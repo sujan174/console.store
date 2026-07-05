@@ -89,7 +89,9 @@ func flatten(s string) string { return strings.ReplaceAll(strings.ToLower(s), " 
 // SelectedIndex returns the index into Rows of the currently selected visible row.
 func (l List) SelectedIndex() int {
 	vis := l.VisibleRows()
-	if len(vis) == 0 {
+	// Guard Cursor locally: exported setters (WithCursor/WithListCursor) can write
+	// it raw, and an active filter can shrink vis below a previously-valid cursor.
+	if l.Cursor < 0 || l.Cursor >= len(vis) {
 		return -1
 	}
 	sel := vis[l.Cursor]

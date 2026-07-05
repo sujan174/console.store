@@ -55,11 +55,20 @@ func wrapAuthErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	s := err.Error()
-	if strings.Contains(s, "token expired") ||
-		strings.Contains(s, "account not authorized") ||
-		strings.Contains(s, "session revoked") {
-		return fmt.Errorf("%w: %v", ErrNeedsAuth, err)
+	s := strings.ToLower(err.Error())
+	// Matched case-insensitively and broadened to the phrasings Swiggy actually
+	// returns — a 401/403 insufficient_scope from the account-restriction path was
+	// previously shown as a dead-end red status line instead of the authorize
+	// gate. (Numeric-only codes are avoided to prevent false positives from
+	// prices/ids; "http 401/403" is specific enough.)
+	for _, needle := range []string{
+		"token expired", "account not authorized", "session revoked",
+		"insufficient_scope", "unauthenticated", "unauthorized",
+		"invalid_token", "invalid token", "http 401", "http 403",
+	} {
+		if strings.Contains(s, needle) {
+			return fmt.Errorf("%w: %v", ErrNeedsAuth, err)
+		}
 	}
 	return err
 }

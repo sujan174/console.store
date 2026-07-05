@@ -73,10 +73,14 @@ func pickPhrase(pool []string, prev string) string {
 	case 1:
 		return pool[0]
 	}
-	for {
+	// Try a bounded number of times to draw a phrase different from prev; if the
+	// pool happens to be all-duplicates we must NOT spin forever (it would wedge
+	// the render tick), so fall back to any draw.
+	for i := 0; i < 2*len(pool); i++ {
 		p := pool[rand.Intn(len(pool))]
 		if p != prev {
 			return p
 		}
 	}
+	return pool[rand.Intn(len(pool))]
 }

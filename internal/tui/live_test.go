@@ -42,6 +42,7 @@ type liveFake struct {
 	imPlacedAddr  string           // last addressID sent to IMPlaceOrder
 	imSearchCalls int              // count of IMSearch calls (rail-load dedupe tests)
 	imGoToCalls   int              // count of IMGoTo calls (rail-load dedupe tests)
+	placeCalls    int              // count of PlaceOrder calls (place-safety gate tests)
 }
 
 func (f *liveFake) Addresses() ([]api.Address, error) { return f.addrs, f.err }
@@ -68,7 +69,7 @@ func (f *liveFake) UpdateCart(string, string, string, []api.CartItem) (api.Cart,
 }
 func (f *liveFake) GetCart(string, string) (api.Cart, error) { return api.Cart{}, f.err }
 func (f *liveFake) ClearCart() error                         { return f.err }
-func (f *liveFake) PlaceOrder(string) (api.Order, error)     { return api.Order{}, f.err }
+func (f *liveFake) PlaceOrder(string) (api.Order, error)     { f.placeCalls++; return api.Order{}, f.err }
 func (f *liveFake) TrackOrder(string) (api.Tracking, error)  { return api.Tracking{}, f.err }
 func (f *liveFake) ActiveOrders(string) ([]api.Order, error) { return f.orders, f.err }
 
@@ -239,46 +240,51 @@ func TestCartPlaceIDResolvesNonCoffeeChip(t *testing.T) {
 }
 
 func TestLivePlaceOrderTransitionsToConfirm(t *testing.T) {
-	snap := swiggysnap.NewSnapshot()
-	snap.SetAddresses([]catalog.Address{{ID: "a1", Label: "home"}})
-	be := &liveFake{}
-	m := New(render.Caps{},
-		WithLiveBackend(be, snap, "acct-1", ""),
-		WithSeededSnapshot(),
-	)
-	// Put model on scrCheckout with a line in the cart.
-	m.screen = scrCheckout
-	m.lines = []screens.CartLine{{Item: catalog.Item{ID: "i1", Name: "Latte", Price: 250}, Qty: 1}}
-	m.cartRestaurant = "Blue Tokai"
-	m.checkout = screens.NewCheckout("Blue Tokai", m.addr, m.lines, "~35 min")
+	m := checkoutModel(t) // seeded Blue Tokai / Latte — a syncable live cart
+	// Establish Swiggy's authoritative bill so the confirm modal shows a real total.
+	syncedCart := api.Cart{Total: 500, ItemTotal: 500, Lines: []api.CartLine{
+		{ItemID: "swiggy-i1", Name: "Latte", Quantity: 2, Price: 250, Available: true},
+	}}
+	out, _ := m.Update(datasource.CartSyncedMsg{Cart: syncedCart})
+	m = out.(Model)
 
 	// Press enter → opens the order-confirm modal (default focus "yes").
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	um := updated.(Model)
-	if !um.orderConfirmOpen {
+	out, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = out.(Model)
+	if !m.orderConfirmOpen {
 		t.Fatal("expected orderConfirmOpen=true after checkout enter in live mode")
 	}
 
-	// Press enter again (confirm "yes") → should set placingOrder=true and
-	// return a PlaceOrderCmd.
-	updated, cmd := um.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	um = updated.(Model)
-	if !um.placingOrder {
+	// Press enter again (confirm "yes") → fires the FINAL pre-place sync, not the
+	// placement itself. placingOrder latches; the place waits on the sync result.
+	out, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = out.(Model)
+	if !m.placingOrder {
 		t.Fatal("expected placingOrder=true after confirming order")
 	}
 	if cmd == nil {
-		t.Fatal("expected PlaceOrderCmd to be returned")
+		t.Fatal("expected the final pre-place sync command")
+	}
+
+	// The pre-place sync lands re-priced to the confirmed total → NOW it places.
+	out, placeCmd := m.Update(datasource.CartSyncedMsg{Cart: syncedCart})
+	m = out.(Model)
+	if placeCmd == nil {
+		t.Fatal("a price-matched final sync must fire the place command")
+	}
+	if _, ok := placeCmd().(datasource.OrderPlacedMsg); !ok {
+		t.Fatal("expected the place command to place the order")
 	}
 
 	// Simulate OrderPlacedMsg success.
-	updated2, _ := um.Update(datasource.OrderPlacedMsg{
+	out, _ = m.Update(datasource.OrderPlacedMsg{
 		Order: api.Order{ID: "order-99", Status: "placed"},
 	})
-	um2 := updated2.(Model)
-	if um2.screen != scrConfirm {
-		t.Fatalf("screen = %v after OrderPlacedMsg; want scrConfirm", um2.screen)
+	m = out.(Model)
+	if m.screen != scrConfirm {
+		t.Fatalf("screen = %v after OrderPlacedMsg; want scrConfirm", m.screen)
 	}
-	if um2.placingOrder {
+	if m.placingOrder {
 		t.Fatal("placingOrder must be cleared after success")
 	}
 }

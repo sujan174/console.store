@@ -63,26 +63,31 @@ func TestUnavailableItemBlocksOrder(t *testing.T) {
 
 // An all-available cart clears the unavailable set and allows the order.
 func TestAvailableCartAllowsOrder(t *testing.T) {
-	snap := swiggysnap.NewSnapshot()
-	m := New(render.Caps{}, WithLiveBackend(&liveFake{}, snap, "acct-1", ""))
-	m.addr = catalog.Address{ID: "a1"}
-	m.screen = scrCheckout
-	m.lines = []screens.CartLine{{Item: catalog.Item{ID: "1", SwiggyID: "1", Name: "Fine"}, Qty: 1, Price: 100}}
-	m.cartRestaurant = "Diner"
+	m := checkoutModel(t) // seeded Blue Tokai / Latte — a syncable live cart
+	availCart := api.Cart{Total: 500, ItemTotal: 500, Lines: []api.CartLine{
+		{ItemID: "swiggy-i1", Name: "Latte", Quantity: 2, Price: 250, Available: true},
+	}}
 
-	out, _ := m.Update(datasource.CartSyncedMsg{Cart: api.Cart{Total: 100, Lines: []api.CartLine{
-		{ItemID: "1", Name: "Fine", Quantity: 1, Price: 100, Available: true},
-	}}})
+	out, _ := m.Update(datasource.CartSyncedMsg{Cart: availCart})
 	m = out.(Model)
 	if m.hasUnavailableLine() {
 		t.Fatal("no line should be unavailable")
 	}
 	out, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // opens order-confirm modal
 	m = out.(Model)
-	out, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm (default "yes")
+	out, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm (default "yes") → final pre-place sync
 	m = out.(Model)
 	if !m.placingOrder || cmd == nil {
-		t.Fatal("an all-available cart should place the order")
+		t.Fatal("an all-available cart should begin placing (fire the pre-place sync)")
+	}
+	// The price-matched sync completes → the order actually places.
+	out, placeCmd := m.Update(datasource.CartSyncedMsg{Cart: availCart})
+	m = out.(Model)
+	if placeCmd == nil {
+		t.Fatal("an all-available, price-matched cart should place the order")
+	}
+	if _, ok := placeCmd().(datasource.OrderPlacedMsg); !ok {
+		t.Fatal("expected the order to be placed")
 	}
 }
 

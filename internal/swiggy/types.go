@@ -319,4 +319,9 @@ type Tracking struct {
 	Detail string
 	ETA    string
 	Active bool
+	// Known reports whether this is a DEFINITIVE tracking state — a status the
+	// parser recognized, or an explicit "no tracking information" (order done/
+	// gone). It is false when the response text couldn't be parsed at all; an
+	// unknown reply must never be treated as a delivery/clear signal.
+	Known bool
 }

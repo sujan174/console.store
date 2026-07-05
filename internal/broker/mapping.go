@@ -107,7 +107,7 @@ func mapCartItems(in []api.CartItem) []swiggy.CartItem {
 }
 
 func mapTracking(t swiggy.Tracking) api.Tracking {
-	return api.Tracking{OrderID: t.OrderID, Status: t.Status, Detail: t.Detail, ETA: t.ETA, Active: t.Active}
+	return api.Tracking{OrderID: t.OrderID, Status: t.Status, Detail: t.Detail, ETA: t.ETA, Active: t.Active, Known: t.Known}
 }
 
 func mapOptions(in []swiggy.OptionGroup) []api.OptionGroup {

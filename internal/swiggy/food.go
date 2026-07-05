@@ -223,13 +223,16 @@ func toolText(raw json.RawMessage, err error) (string, error) {
 func parseTrackText(s string) Tracking {
 	s = strings.TrimSpace(s)
 	if strings.Contains(strings.ToLower(s), "no tracking information") {
-		return Tracking{Active: false}
+		// Definitive: Swiggy no longer has tracking for this order (done/gone).
+		return Tracking{Active: false, Known: true}
 	}
 	m := reTrack.FindStringSubmatch(s)
 	if m == nil {
-		return Tracking{Active: false}
+		// The response didn't match any shape we recognize — treat as UNKNOWN,
+		// never as "not active". The caller must keep the order, not clear it.
+		return Tracking{Active: false, Known: false}
 	}
-	return Tracking{OrderID: m[1], Status: m[2], ETA: m[4], Active: true}
+	return Tracking{OrderID: m[1], Status: m[2], ETA: m[4], Active: true, Known: true}
 }
 
 func parseOrdersText(s string) []Order {

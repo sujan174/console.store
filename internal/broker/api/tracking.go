@@ -9,4 +9,8 @@ type Tracking struct {
 	Detail string
 	ETA    string
 	Active bool
+	// Known is false when the tracking text couldn't be parsed at all — an
+	// unknown reply must never be treated as a delivery signal that clears a
+	// still-live order.
+	Known bool
 }

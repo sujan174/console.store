@@ -365,17 +365,26 @@ type Model struct {
 	// with unflushed/in-flight edits defers the confirm modal until the cart
 	// write converges, so the total the user approves is the real bill.
 	cartConfirmPending bool
-	restInfoOpen       bool // restaurant-info modal ('i' on the browse list) is open
-	addrOpen           bool // address switcher modal ('a') is open
-	addrForced         bool // true while addrOpen is the forced entry gate (non-dismissible)
-	addrGatePending    bool // true from launch until the forced pick is satisfied
-	addressesLoaded    bool // true once AddressesLoadedMsg has been handled
-	settingsOpen       bool // settings modal (from the splash) is open
-	settingsSel        int  // selected row in the settings modal
-	helpOpen           bool // help & controls modal (? / H / :help) is open
-	helpScroll         int  // scroll offset within the help modal
-	helpPage           int  // current page in the paginated help modal (0-indexed)
-	wantOnboarding     bool // set by WithOnboarding(true); starts the session on the welcome screen
+	// placePending (and imPlacePending) gate the ACTUAL order placement on the
+	// result of the final pre-place cart sync: confirmPlaceOrder fires only the
+	// sync, and the CartSyncedMsg/IMCartSyncedMsg handler fires the place command
+	// iff that sync succeeded AND re-priced to confirmedTotal with no line gone
+	// sold out. A failed/re-priced/sold-out sync aborts — never place blind
+	// against whatever cart Swiggy currently holds.
+	placePending    bool
+	imPlacePending  bool
+	confirmedTotal  int  // the ₹ total shown in the order-confirm modal the user approved
+	restInfoOpen    bool // restaurant-info modal ('i' on the browse list) is open
+	addrOpen        bool // address switcher modal ('a') is open
+	addrForced      bool // true while addrOpen is the forced entry gate (non-dismissible)
+	addrGatePending bool // true from launch until the forced pick is satisfied
+	addressesLoaded bool // true once AddressesLoadedMsg has been handled
+	settingsOpen    bool // settings modal (from the splash) is open
+	settingsSel     int  // selected row in the settings modal
+	helpOpen        bool // help & controls modal (? / H / :help) is open
+	helpScroll      int  // scroll offset within the help modal
+	helpPage        int  // current page in the paginated help modal (0-indexed)
+	wantOnboarding  bool // set by WithOnboarding(true); starts the session on the welcome screen
 
 	// what's-new modal: shows release notes after an update.
 	whatsnewOpen   bool     // true while the what's-new modal is showing
@@ -2094,10 +2103,13 @@ func (m Model) onTick() (Model, tea.Cmd) {
 	}
 	if m.screen == scrConfirm {
 		m.confirmTick++
-		if m.confirmTick >= 42 && m.hasActiveOrder {
+		if m.confirmTick >= 42 {
+			// Auto-advance off the confirm screen. With an active order we go to
+			// tracking and poll; without one (e.g. a disarmed "placed" flow) we
+			// still leave — never leave the user stuck ticking on scrConfirm.
 			m.screen = scrTracking
 			m.trackTick = 0
-			if m.backend != nil {
+			if m.hasActiveOrder && m.backend != nil {
 				return m, m.trackingPollCmd()
 			}
 		}
@@ -2845,6 +2857,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cartSyncInFlight = false
 			m.cartConfirmPending = false // a failed write must not open the confirm modal
 			m.cartMutating = false
+			if m.placePending {
+				// The final pre-place sync failed — abort the placement. Never let
+				// PlaceOrder fire against the stale server cart.
+				m.placePending = false
+				m.placingOrder = false
+				m.orderErr = "cart didn't sync — order not placed. try again."
+			}
 			m = m.rollbackCart()
 			m.cartSyncErr = "⚠ cart change didn't go through — reverted. try again"
 			return m, nil
@@ -2860,6 +2879,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// on screen must not clobber it with the food cart's view.
 		if m.screen == scrCheckout && m.checkoutVertical == 0 {
 			m.checkout = m.buildCheckout()
+		}
+		if m.placePending {
+			// This is the final pre-place sync for a confirmed order. Place ONLY
+			// if the sync re-priced to exactly what the user approved and nothing
+			// went sold out; otherwise abort so they re-review the real bill.
+			m.placePending = false
+			switch {
+			case m.hasUnavailableLine():
+				m.placingOrder = false
+				m.orderErr = "can't place order — an item went sold out. review your cart."
+				m.checkout = m.buildCheckout()
+				return m, nil
+			case m.liveCart.Total != m.confirmedTotal:
+				m.placingOrder = false
+				m.orderErr = fmt.Sprintf("price changed to ₹%d — review your bill and confirm again", m.liveCart.Total)
+				m.checkout = m.buildCheckout()
+				return m, nil
+			default:
+				return m, datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID)
+			}
 		}
 		if m.cartConfirmPending {
 			if m.cartSyncPending {
@@ -2975,6 +3014,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.imSyncInFlight = false
 			m.imCartMutating = false
 			m.imConfirmPending = false // a failed sync must not open the confirm modal
+			if m.imPlacePending {
+				// The final pre-place sync failed — abort. Never let IMPlaceOrder
+				// fire against the stale server cart.
+				m.imPlacePending = false
+				m.placingOrder = false
+				m.imOrderErr = "cart didn't sync — order not placed. try again."
+			}
 			switch {
 			case strings.Contains(dm.Err.Error(), "store is currently unavailable or closed"):
 				m = m.rollbackIMCart()
@@ -3032,6 +3078,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.imCartMutating = false // confirmed — unfreeze
 		if m.screen == scrCheckout && m.checkoutVertical == 1 {
 			m.checkout = m.buildIMCheckout()
+		}
+		if m.imPlacePending {
+			// Final pre-place sync for a confirmed IM order. Place ONLY if the sync
+			// re-priced to exactly what the user approved and nothing went sold out
+			// (a store-side clamp changes the total → falls through to abort).
+			m.imPlacePending = false
+			switch {
+			case m.hasUnavailableIMLine():
+				m.placingOrder = false
+				m.imOrderErr = "can't place order — an item went sold out. review your cart."
+				m.checkout = m.buildIMCheckout()
+				return m, nil
+			case m.imLiveCart.Total != m.confirmedTotal:
+				m.placingOrder = false
+				m.imOrderErr = fmt.Sprintf("price changed to ₹%d — review your bill and confirm again", m.imLiveCart.Total)
+				m.checkout = m.buildIMCheckout()
+				return m, nil
+			default:
+				return m, datasource.PlaceIMOrderCmd(m.backend, m.addr.ID)
+			}
 		}
 		if m.screen == scrInstamart {
 			// Repaint so the steppers + chip pick up Swiggy's confirmed state.
@@ -3128,8 +3194,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case datasource.LoggedOutMsg:
 		// Token purged → drop the cart/session state and re-authorize in place:
-		// start a fresh OAuth flow and show the gate (which auto-opens the browser
-		// and polls for completion). dm.Err is logged; the gate shows regardless.
+		// show the authorize gate. The browser is NEVER auto-opened — reconnect is
+		// Enter-to-connect only (see below). dm.Err is logged; the gate shows regardless.
 		if dm.Err != nil {
 			dbgTUI("logout: %v", dm.Err)
 		}
@@ -3217,12 +3283,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Non-fatal: keep the current tracking view as-is.
 			return m, nil
 		}
+		// Drop a late poll for an order we've since swapped away from — applying
+		// order A's status/delivery to the order B now on screen would corrupt or
+		// clear the wrong order.
+		if dm.OrderID != "" && (!m.hasActiveOrder || dm.OrderID != m.activeOrder.OrderID) {
+			return m, nil
+		}
 		m.track = m.track.WithLive(dm.Tracking.Status, dm.Tracking.ETA)
-		// Check for delivery: active==false AND (elapsed >5min OR status == delivered).
-		if !dm.Tracking.Active && m.hasActiveOrder {
+		// Clear the order ONLY on a definitive tracking state (Known) that is
+		// either an explicit delivery, or a not-active reply well past the ETA.
+		// A parse the tracker couldn't read (Known==false) is NOT a delivery
+		// signal — dropping a live order on it would hide an in-progress meal.
+		if !dm.Tracking.Active && dm.Tracking.Known && m.hasActiveOrder {
 			elapsedSec := m.nowUnix - m.activeOrder.PlacedAt
 			_, delivered, _ := screens.StageFromStatus(dm.Tracking.Status)
-			if delivered || elapsedSec > 90 {
+			if delivered || elapsedSec > trackingClearGraceSec(m.activeOrder.ETAHiMin) {
 				_ = localstore.ClearActiveOrder()
 				m.hasActiveOrder = false
 				m.splash = m.splash.WithOrder("")
@@ -3498,12 +3573,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Non-fatal: keep the current tracking view as-is.
 			return m, nil
 		}
+		// Drop a late poll for a swapped-away order (see the food handler above).
+		if dm.OrderID != "" && (!m.hasActiveOrder || dm.OrderID != m.activeOrder.OrderID) {
+			return m, nil
+		}
 		m.track = m.track.WithLive(dm.Tracking.Status, dm.Tracking.ETA).WithDetail(dm.Tracking.Detail)
-		// Check for delivery: active==false AND (elapsed >5min OR status == delivered).
-		if !dm.Tracking.Active && m.hasActiveOrder {
+		// Clear ONLY on a definitive (Known) delivery or a not-active reply past
+		// the ETA — never on an unparseable poll (see the food handler above).
+		if !dm.Tracking.Active && dm.Tracking.Known && m.hasActiveOrder {
 			elapsedSec := m.nowUnix - m.activeOrder.PlacedAt
 			_, delivered, _ := screens.StageFromStatus(dm.Tracking.Status)
-			if delivered || elapsedSec > 90 {
+			if delivered || elapsedSec > trackingClearGraceSec(m.activeOrder.ETAHiMin) {
 				_ = localstore.ClearActiveOrder()
 				m.hasActiveOrder = false
 				m.splash = m.splash.WithOrder("")
@@ -4145,8 +4225,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		// `:` opens the palette from any in-app screen (design line 760).
-		if k.String() == ":" && m.screen != scrSplash {
+		// `:` opens the palette from any in-app screen (design line 760) — but not
+		// while a search box is focused, where `:` is a literal query character.
+		if k.String() == ":" && m.screen != scrSplash && !m.typingInSearch() {
 			m.cmdOpen = true
 			m.cmd = screens.NewCmdBar()
 			return m, nil
@@ -5152,13 +5233,21 @@ func (m Model) helpTriggerable() bool {
 	if m.helpOpen || m.cmdOpen || m.settingsOpen || m.addrOpen || m.conflictOpen || m.customizeOpen || m.wizardOpen || m.restInfoOpen || m.orderConfirmOpen {
 		return false
 	}
-	if m.searchMode || m.menu.Searching() {
+	if m.searchMode || m.imSearchMode || m.menu.Searching() {
 		return false
 	}
 	if m.screen == scrRestaurant && (m.rest.Searching() || m.rest.InfoOpen()) {
 		return false
 	}
 	return true
+}
+
+// typingInSearch reports whether an editable search box currently has focus, so
+// global single-key shortcuts (`?`/`H` help, `:` palette) don't swallow a typed
+// character the user meant to enter into their query.
+func (m Model) typingInSearch() bool {
+	return m.searchMode || m.imSearchMode || m.menu.Searching() ||
+		(m.screen == scrRestaurant && m.rest.Searching())
 }
 
 // qQuitAllowed reports whether a bare `q` may exit the app right now. Quit is
@@ -5479,10 +5568,19 @@ func (m Model) confirmPlaceOrder() (tea.Model, tea.Cmd) {
 		if m.live && !m.placingOrder {
 			m.placingOrder = true
 			m.imOrderErr = ""
-			m.imCartSyncPending = false // the Sequence syncs final lines; no trailing debounce after placing
+			m.imCartSyncPending = false // the final sync writes these lines; no trailing debounce
+			m.confirmedTotal = m.checkout.PayAmount()
 			sync := m.imLiveCartCmd()
-			m.imSyncInFlight = sync != nil // single-flight: this is the final pre-place write
-			return m, tea.Sequence(sync, datasource.PlaceIMOrderCmd(m.backend, m.addr.ID))
+			if sync == nil {
+				// Can't resolve the cart for a final authoritative sync — never
+				// place blind against whatever the server happens to hold.
+				m.placingOrder = false
+				m.imOrderErr = "couldn't confirm your cart — please try again"
+				return m, nil
+			}
+			m.imSyncInFlight = true // single-flight: this is the final pre-place write
+			m.imPlacePending = true // IMCartSyncedMsg places iff this sync succeeds & the total holds
+			return m, sync
 		}
 		if !m.live {
 			oid := orderID(m.checkout.Lines())
@@ -5495,10 +5593,19 @@ func (m Model) confirmPlaceOrder() (tea.Model, tea.Cmd) {
 	if m.live && !m.placingOrder {
 		m.placingOrder = true
 		m.orderErr = ""
-		m.cartSyncPending = false // the Sequence syncs final lines; no trailing debounce after placing
+		m.cartSyncPending = false // the final sync writes these lines; no trailing debounce
+		m.confirmedTotal = m.checkout.PayAmount()
 		sync := m.liveSyncCart()
-		m.cartSyncInFlight = sync != nil // single-flight: this is the final pre-place write
-		return m, tea.Sequence(sync, datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID))
+		if sync == nil {
+			// Can't resolve the cart for a final authoritative sync — never place
+			// blind against whatever the server happens to hold.
+			m.placingOrder = false
+			m.orderErr = "couldn't confirm your cart — please try again"
+			return m, nil
+		}
+		m.cartSyncInFlight = true // single-flight: this is the final pre-place write
+		m.placePending = true     // CartSyncedMsg places iff this sync succeeds & the total holds
+		return m, sync
 	}
 	if !m.live {
 		oid := orderID(m.checkout.Lines())
@@ -5507,6 +5614,18 @@ func (m Model) confirmPlaceOrder() (tea.Model, tea.Cmd) {
 		m.track = screens.NewTracking(m.checkout.Place(), m.addr.Line, oid, 0, 0, 0)
 	}
 	return m, nil
+}
+
+// trackingClearGraceSec is how long after placement an order may be cleared on a
+// definitive not-active tracking reply that isn't an explicit "delivered". It is
+// set past the quoted ETA (plus a buffer) so a still-in-progress delivery is
+// never dropped early — the old flat 90-second window cleared live orders.
+func trackingClearGraceSec(etaHiMin int) int64 {
+	grace := etaHiMin + 20
+	if grace < 45 {
+		grace = 45
+	}
+	return int64(grace) * 60
 }
 
 // clampIdx clamps a cursor index into [0, n-1], or 0 when n==0.

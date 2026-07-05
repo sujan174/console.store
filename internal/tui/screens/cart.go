@@ -156,7 +156,12 @@ func billToPay(itemTotal int) int {
 	if itemTotal <= 0 {
 		return 0
 	}
-	return itemTotal + DeliveryFee - CouponAmount
+	// A large coupon must never drive the amount due negative (a sub-₹21 cart
+	// would otherwise render a negative "to pay").
+	if total := itemTotal + DeliveryFee - CouponAmount; total > 0 {
+		return total
+	}
+	return 0
 }
 
 // toPay applies the design bill to the cart's item total.
@@ -184,21 +189,21 @@ func (c Cart) Up() Cart   { c.cursor--; return c.clampCursor() }
 func (c Cart) Down() Cart { c.cursor++; return c.clampCursor() }
 
 func (c Cart) Inc() Cart {
-	if len(c.lines) > 0 {
+	if c.cursor >= 0 && c.cursor < len(c.lines) {
 		c.lines[c.cursor].Qty++
 	}
 	return c
 }
 
 func (c Cart) Dec() Cart {
-	if len(c.lines) > 0 && c.lines[c.cursor].Qty > 1 {
+	if c.cursor >= 0 && c.cursor < len(c.lines) && c.lines[c.cursor].Qty > 1 {
 		c.lines[c.cursor].Qty--
 	}
 	return c
 }
 
 func (c Cart) Remove() Cart {
-	if len(c.lines) == 0 {
+	if c.cursor < 0 || c.cursor >= len(c.lines) {
 		return c
 	}
 	c.lines = append(c.lines[:c.cursor], c.lines[c.cursor+1:]...)

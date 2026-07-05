@@ -126,8 +126,10 @@ type (
 	// (purging the stored token). Err is non-nil if the purge failed.
 	LoggedOutMsg struct{ Err error }
 	// TrackingPolledMsg carries the live status + ETA for an order, or an error
-	// if the poll failed.
+	// if the poll failed. OrderID echoes the polled order so the root can drop a
+	// late response for an order it has since navigated away from / swapped out.
 	TrackingPolledMsg struct {
+		OrderID  string
 		Tracking api.Tracking
 		Err      error
 	}
@@ -177,7 +179,10 @@ type (
 		Err    error
 	}
 	// IMTrackingPolledMsg carries the live status + ETA for an Instamart order.
+	// OrderID echoes the polled order so a late response for a swapped-out order
+	// can be dropped.
 	IMTrackingPolledMsg struct {
+		OrderID  string
 		Tracking api.Tracking
 		Err      error
 	}
@@ -373,7 +378,7 @@ func PlaceOrderCmd(b Backend, snap *swiggysnap.Snapshot, addressID string) tea.C
 func PollTrackingCmd(b Backend, orderID string) tea.Cmd {
 	return func() tea.Msg {
 		t, err := b.TrackOrder(orderID)
-		return TrackingPolledMsg{Tracking: t, Err: err}
+		return TrackingPolledMsg{OrderID: orderID, Tracking: t, Err: err}
 	}
 }
 
@@ -408,8 +413,12 @@ func LoadIMProducts(b Backend, snap *swiggysnap.Snapshot, addressID, query strin
 		}
 		snap.SetInstamart(addressID, query, toIMItems(got))
 		// Persist for instant first paint on a later relaunch (best-effort;
-		// stale-while-revalidate, mirrors the food places/menu cache).
-		localstore.SaveCachedInstamart(addressID, query, toCachedIM(got))
+		// stale-while-revalidate, mirrors the food places/menu cache). Skip empty
+		// results: a transient no-results reply must not overwrite a good cache
+		// and paint an empty list as "last known" next launch.
+		if len(got) > 0 {
+			localstore.SaveCachedInstamart(addressID, query, toCachedIM(got))
+		}
 		return IMProductsLoadedMsg{Query: query}
 	}
 }
@@ -478,6 +487,6 @@ func LoadIMActiveOrdersCmd(b Backend) tea.Cmd {
 func PollIMTrackingCmd(b Backend, orderID string, lat, lng float64) tea.Cmd {
 	return func() tea.Msg {
 		t, err := b.IMTrack(orderID, lat, lng)
-		return IMTrackingPolledMsg{Tracking: t, Err: err}
+		return IMTrackingPolledMsg{OrderID: orderID, Tracking: t, Err: err}
 	}
 }

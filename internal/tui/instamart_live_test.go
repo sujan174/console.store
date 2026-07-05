@@ -266,9 +266,13 @@ func TestIMCheckoutBillAndPlaceOrder(t *testing.T) {
 		t.Fatal("confirming must set placingOrder=true")
 	}
 	if cmd == nil {
-		t.Fatal("confirming must return the place-order sequence")
+		t.Fatal("confirming must return the final pre-place sync")
 	}
-	m = deliver(t, m, cmd)
+	// Confirm fires the final pre-place sync; its price-matched success fires the
+	// actual place command — chase that (deliver drops follow-up cmds).
+	nm, placeCmd := m.Update(cmd())
+	m = nm.(Model)
+	m = deliver(t, m, placeCmd)
 	if be.imPlacedAddr != "a1" {
 		t.Fatalf("IMPlaceOrder must be called with the address id, got %q", be.imPlacedAddr)
 	}

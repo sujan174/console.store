@@ -83,7 +83,9 @@ func FetchReleaseNotesCmd(channel, version, code string) tea.Cmd {
 			return ReleaseNotesMsg{Err: fmt.Errorf("release notes: HTTP %d", resp.StatusCode)}
 		}
 
-		body, err := io.ReadAll(resp.Body)
+		// Cap the read: release notes are a few KB, and an overridable base
+		// (CONSOLE_NOTES_BASE) or compromised CDN must not be able to OOM us.
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		if err != nil {
 			return ReleaseNotesMsg{Err: err}
 		}
