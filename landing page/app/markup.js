@@ -96,12 +96,28 @@ export const MARKUP = String.raw`
 
   <!-- PITCH — one full screen: what it is + install (rises up on scroll) -->
   <section id="pitch" data-pitch style="position:relative;z-index:2;min-height:calc(100vh - 40px);display:flex;align-items:center;justify-content:center;padding:48px clamp(24px,6vw,56px)">
-    <div class="pitch-grid" data-pitch-grid style="width:100%;max-width:760px">
+    <div class="pitch-grid" data-pitch-grid style="display:grid;grid-template-columns:1.02fr .98fr;gap:clamp(32px,5vw,60px);align-items:center;width:100%;max-width:1100px">
       <div class="pitch-left" style="text-align:left">
         <div data-pitch-item style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:6px">// what it is</div>
         <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:16ch">dinner, piped through your <span style="color:#93a8ff">terminal</span> — or your <span style="color:#93a8ff">agent</span>.</h1>
         <p data-pitch-item style="max-width:52ch;color:#b6bce0;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI <span style="color:#cdd3f0">(type commands)</span> and full TUI <span style="color:#cdd3f0">(a keyboard-only menu)</span> for ordering real food through Swiggy without leaving your shell — plus an MCP server <span style="color:#cdd3f0">(a plug-in your AI agent talks to)</span> that lets it order for you. authorize once, then reorder a saved favourite with a keystroke, or just tell your agent <span style="color:#cdd3f0">“order my usual.”</span></p>
         <a href="/features" data-pitch-item class="pitch-cta" aria-label="explore all features" style="display:inline-flex;align-items:center;gap:10px;margin-top:32px;padding:14px 24px;border-radius:11px;border:1px solid rgba(147,168,255,.32);background:rgba(147,168,255,.09);color:#aebcff;font-weight:600;font-size:14px;letter-spacing:.2px;text-decoration:none">explore all 18 features <span style="font-size:16px;line-height:1">→</span></a>
+      </div>
+      <div data-pitch-item class="pitch-demo">
+        <div class="demo-win" style="border:1px solid rgba(147,168,255,.14);border-radius:12px;background:linear-gradient(180deg,#0c0d18,#09090f);box-shadow:0 30px 90px rgba(0,0,0,.6);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;padding:11px 15px;border-bottom:1px solid rgba(147,168,255,.07);background:#0e0f1c">
+            <span class="win-mark">❯</span>
+            <span style="font-size:11px;color:#b6bce0">zsh — one command, dinner's on the way</span>
+          </div>
+          <div style="padding:20px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.95;color:#a9b1d6;white-space:pre-wrap">
+            <div><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console order</span> <span style="color:#93a8ff">dinner</span></div>
+            <div style="color:#565b80">  ↳ pushing preset <span style="color:#8ee08a">✓</span> · pulling the real bill…</div>
+            <div style="margin:2px 0"><span style="color:#565b80">  bill</span>  Meghana Foods · <span style="color:#e9ebf7">₹438</span>   <span style="color:#565b80">confirm</span> <span style="color:#eab560">↵</span></div>
+            <div><span style="color:#8ee08a">  ✓ order placed</span> <span style="color:#565b80">· ETA 35 min</span></div>
+            <div style="margin-top:16px"><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console status</span></div>
+            <div style="color:#565b80">  » on the way · 12 min away</div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -194,6 +210,39 @@ export const MARKUP = String.raw`
     </div>
   </section>
 
+  <!-- AGENT — order from wherever you already work -->
+  <section id="agent" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:48px clamp(24px,6vw,56px) 32px" data-reveal>
+    <div class="run-grid">
+      <div>
+        <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// wherever you work</div>
+        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">order without leaving<br>your <span style="color:#93a8ff">editor</span>.</h2>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">consolestore drops an <span style="color:#e9ebf7">MCP server + skills</span> into the agent you already use — <span style="color:#e9ebf7">Claude, Cursor, Windsurf, Zed, VS Code</span>. ask in plain language, right in your editor or chat: it searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places the order <span style="color:#e9ebf7">only after you say yes</span>.</p>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">food or Instamart, same flow — <span style="color:#e9ebf7">"grab me an energy drink"</span> and it's on the way. never a charge you didn't approve.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">Claude · Cursor · Zed · VS Code</span>
+          <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">plain language</span>
+          <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">you approve every order</span>
+        </div>
+      </div>
+      <div class="demo-win" style="border:1px solid rgba(176,140,245,.2);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid rgba(147,168,255,.07);background:#0e0f1c">
+          <span style="color:#b08cf5;font-size:13px">✳</span>
+          <span style="font-size:11px;color:#565b80">your agent · consolestore mcp</span>
+          <span style="margin-left:auto;width:7px;height:7px;border-radius:99px;background:#8ee08a;box-shadow:0 0 8px #8ee08a"></span>
+        </div>
+        <div style="padding:18px;font-size:12.5px;min-height:280px">
+          <div style="margin:0 0 12px;text-align:right"><span style="display:inline-block;background:#14162a;border:1px solid rgba(147,168,255,.16);border-radius:12px 12px 3px 12px;padding:8px 13px;color:#e9ebf7">grab me an energy drink from instamart</span></div>
+          <div style="margin:0 0 7px;color:#565b80;font-size:11.5px"><span style="color:#b08cf5">●</span> consolestore · <span style="color:#9aa0c4">im_search_products</span> <span style="color:#8ee08a">✓</span></div>
+          <div style="margin:0 0 13px;color:#565b80;font-size:11.5px"><span style="color:#b08cf5">●</span> consolestore · <span style="color:#9aa0c4">im_prepare_order</span> <span style="color:#8ee08a">✓</span></div>
+          <div style="margin:0 0 13px;display:flex;gap:8px;align-items:flex-start"><span style="color:#b08cf5;font-size:12px;flex:none;margin-top:1px">✳</span><span style="color:#cdd3f0;line-height:1.6">Red Bull ×4 · Instamart — <span style="color:#e9ebf7">₹460</span> to pay. place it?</span></div>
+          <div style="margin:0 0 13px;text-align:right"><span style="display:inline-block;background:#14162a;border:1px solid rgba(147,168,255,.16);border-radius:12px 12px 3px 12px;padding:8px 13px;color:#e9ebf7">yes, go</span></div>
+          <div style="margin:0 0 13px;color:#565b80;font-size:11.5px"><span style="color:#b08cf5">●</span> consolestore · <span style="color:#9aa0c4">place_order</span> <span style="color:#8ee08a">✓</span></div>
+          <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:#b08cf5;font-size:12px;flex:none;margin-top:1px">✳</span><span style="color:#cdd3f0;line-height:1.6">placed <span style="color:#8ee08a">✓</span> · on its way</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- TUI / CLI SCROLL-DRIVEN TOGGLE -->
   <section id="keys" class="keys-scrolly" style="position:relative;z-index:2;padding:0 clamp(24px,6vw,56px)">
     <div class="keys-sticky">
@@ -214,13 +263,13 @@ export const MARKUP = String.raw`
             <div class="keys-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center">
               <div>
                 <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// you, at the prompt</div>
-                <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 16px;background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1">order without<br>the app.</h2>
-                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">save a cart once as a <span style="color:#e9ebf7">preset</span> and you never open the app to eat again. <span style="color:#e9ebf7">console order dinner</span> pushes it to your cart, pulls the <span style="color:#e9ebf7">real bill</span>, and waits for a single <span style="color:#93a8ff">↵</span> — two keystrokes, a few seconds.</p>
-                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">checking a live order? <span style="color:#e9ebf7">console status</span> — one command, live ETA, done. the shortest path from craving to confirmed: no app, no browser, no broken flow.</p>
+                <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 16px;color:#e9ebf7;line-height:1.1">order in <span style="color:#93a8ff">one command</span>.</h2>
+                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">set an <span style="color:#e9ebf7">alias</span> once — <span style="color:#e9ebf7">:alias set</span> saves any cart, food <span style="color:#e9ebf7">or</span> Instamart — then it's <span style="color:#93a8ff">one command</span> forever. <span style="color:#e9ebf7">console order coffee</span> from your usual café, <span style="color:#e9ebf7">console order energy-drinks</span> from a specific Instamart, <span style="color:#e9ebf7">console order dinner</span> from your favourite kitchen.</p>
+                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">each one pushes the cart, pulls the <span style="color:#e9ebf7">real bill</span>, and waits for a single <span style="color:#93a8ff">↵</span>. checking a live order? <span style="color:#e9ebf7">console status</span> — one command, live ETA, done.</p>
                 <div style="display:flex;flex-wrap:wrap;gap:8px">
-                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">reorder in ~8s</span>
-                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">status in one command</span>
-                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">no app · no browser</span>
+                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">aliases · one command</span>
+                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">food + instamart</span>
+                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">real bill · one ↵</span>
                 </div>
               </div>
               <div class="demo-win" style="border:1px solid rgba(147,168,255,.14);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
@@ -239,7 +288,7 @@ export const MARKUP = String.raw`
               <div>
                 <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.28);border-radius:999px;padding:5px 12px;margin-bottom:18px">NEW · MCP + SKILLS</span>
                 <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// hand it to your agent</div>
-                <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 16px;background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1">let your agent<br>order dinner.</h2>
+                <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 16px;color:#e9ebf7;line-height:1.1">let your <span style="color:#b08cf5">agent</span><br>order dinner.</h2>
                 <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">consolestore installs an <span style="color:#e9ebf7">MCP server + skills</span> into your AI agent — Claude, Cursor, Windsurf, Zed, VS Code. ask in plain language; it searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places the order <span style="color:#e9ebf7">only after you say yes</span>.</p>
                 <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">your usual, hands-free — but never a charge you didn't approve. the agent proposes; <span style="color:#93a8ff">you</span> confirm.</p>
                 <div style="display:flex;flex-wrap:wrap;gap:8px">

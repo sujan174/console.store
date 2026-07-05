@@ -198,9 +198,9 @@ export function mount(root) {
       if (btn.tui) btn.tui.style.color = which === "tui" ? "#e9ebf7" : "#565b80";
       if (btn.cli) btn.cli.style.color = which === "cli" ? "#e9ebf7" : "#565b80";
     };
-    // Click-only toggle at every width (the scroll-driven cross-fade was removed
-    // with the rest of the auto-scroll assistance). Buttons swap the panels.
-    {
+    // Mobile: plain click toggle (no room for a scroll-driven cross-fade).
+    const desktop = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 821px)").matches;
+    if (!desktop) {
       const show = (which) => {
         panel.tui.style.display = which === "tui" ? "block" : "none";
         panel.cli.style.display = which === "cli" ? "block" : "none";
@@ -211,10 +211,14 @@ export function mount(root) {
       Object.keys(btn).forEach((k) => { if (!btn[k]) return; const h = () => show(k); btn[k].addEventListener("click", h); handlers.push([btn[k], h]); });
       show("tui");
       requestAnimationFrame(() => placeInd(0));
-      if (hint) hint.textContent = "click to switch — order it yourself at the prompt, or hand it to your agent.";
+      if (hint) hint.textContent = "tap to switch — order it yourself at the prompt, or hand it to your agent.";
       cleanupKeys = () => handlers.forEach(([b, h]) => b.removeEventListener("click", h));
       return;
     }
+    // Desktop: scroll through the section to cross-fade TERMINAL -> AGENT; the
+    // pills also jump to a phase on click. (This is the one scroll-driven touch
+    // kept by request; it doesn't snap the page.)
+    if (hint) hint.textContent = "scroll — or click — to switch between the terminal and your agent.";
     wrap.style.position = "relative";
     [panel.tui, panel.cli].forEach((p) => {
       p.style.position = "absolute";
@@ -905,8 +909,9 @@ export function mount(root) {
       for (let i = 0; i <= aliasCmd.length; i++) { if (S.dead) return; set("<div>" + prompt + '<span style="color:' + B + '">' + aliasCmd.slice(0, i) + "</span>" + cur + "</div>"); await wait(46); }
       let acc = "<div>" + prompt + '<span style="color:' + B + '">' + aliasCmd + "</span></div>";
       await wait(340);
-      acc += rowB("dinner", "Meghana Foods · 3 items", V);
-      acc += rowB("coffee", "Blue Tokai · 1 item", V);
+      acc += rowB("dinner", "Meghana Foods · food · 3 items", V);
+      acc += rowB("coffee", "Blue Tokai · food · 1 item", V);
+      acc += rowB("energy-drinks", "Instamart · 4 items", V);
       set(acc);
       await wait(1100);
       acc += '<div style="height:12px"></div>';
