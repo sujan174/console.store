@@ -1002,6 +1002,31 @@ export function mount(root) {
     const row = (l, r, bg) => '<div style="display:flex;justify-content:space-between;gap:24px' + (bg ? ";background:" + C.sel + ";margin:0 -10px;padding:0 10px" : "") + '">' + l + "<span>" + r + "</span></div>";
     const gap = (h) => '<div style="height:' + h + 'px"></div>';
     const div = (label) => line(sp(C.faint, "──────────") + " " + sp(C.dim, label) + " " + sp(C.faint, "──────────"));
+    // ---- real-TUI chrome (top status bar, FOOD/Instamart tabs, category rail) ----
+    const dense = (h) => '<div style="font-size:11.5px;line-height:1.62">' + h + "</div>";
+    const goldTab = (t) => '<span style="background:' + C.gold + ';color:#1a1408;font-weight:700;padding:1px 8px;border-radius:3px">' + t + "</span>";
+    const chrome = (cart) =>
+      '<div style="display:flex;align-items:center;padding-bottom:7px;border-bottom:1px solid ' + C.faint + '">' +
+      sp(C.bright, "consolestore", true) + sp(C.gold, ".in", true) + sp(C.dim, "&nbsp; v0.1.0-beta.20") +
+      '<span style="margin-left:auto">' + sp(C.dim, "deliver to ") + sp(C.gold, "⊕ ") + sp(C.text, "Home") + sp(C.faint, " ⌄") + sp(C.faint, " &nbsp;·&nbsp; ") + cart + "</span></div>";
+    const tabsRow = (which) =>
+      '<div style="display:flex;align-items:center;padding:7px 0 9px">' +
+      (which === "food" ? goldTab("FOOD") : sp(C.dim, "FOOD")) + "&nbsp;&nbsp;&nbsp;" +
+      (which === "im" ? goldTab("Instamart") : sp(C.dim, "Instamart")) +
+      '<span style="margin-left:auto">' + sp(C.dim, "tab ") + sp(C.faint, "switch") + "</span></div>";
+    const hintBar = (t) => '<div style="margin-top:12px">' + sp(C.faint, t) + "</div>";
+    const CATS = ["Home", "Coffee", "Burgers", "Pizza", "Sandwich", "Rolls", "Momos", "North Indian", "South Indian", "Chinese", "Biryani", "Shawarma", "Cake", "Shakes"];
+    const rail = (sel) => {
+      const items = CATS.map((c, i) => i === sel
+        ? '<div style="display:flex"><span style="color:' + C.gold + '">▌ </span>' + sp(C.bright, c, true) + "</div>"
+        : '<div style="padding-left:11px">' + sp(C.item, c) + "</div>").join("");
+      return '<div style="flex:none;width:116px;padding-right:12px;border-right:1px solid ' + C.faint + '">' +
+        sp(C.dim, "explore") + '<div style="height:3px"></div>' + sp(C.dim, "⌕ Search") + '<div style="height:7px"></div>' +
+        '<div style="line-height:1.72">' + items + "</div></div>";
+    };
+    const twoPane = (sel, content) => '<div style="display:flex;padding-top:9px">' + rail(sel) + '<div style="flex:1;padding-left:15px;min-width:0">' + content + "</div></div>";
+    const COFFEE = ["Blue Tokai Coffee Roasters", "abcoffee", "Theobroma", "Third Wave Coffee", "Chaayos", "Starbucks Coffee", "Kink Coffee", "Namaste", "Krispy Kreme", "McDonald's", "Subko Coffee Roasters", "Chai Point"];
+    const MENU = [["Hot Espresso", "5.0", "139"], ["Hot Americano", "4.9", "139"], ["Hot Cappuccino", "4.6", "149"], ["Iced Americano", "4.4", "169"], ["Hot Latte", "4.2", "159"], ["Iced Vanilla Latte", "4.4", "209"], ["Iced Irish Latte", "5.0", "209"], ["Signature Cold Coffee", "4.4", "199"], ["Strawberry Milkshake", "5.0", "199"], ["Iced Mocha", "4.3", "199"], ["Hot Flat White", "5.0", "169"]];
     const splash = () =>
       [
         line(sp(C.dim, "~ % ") + sp(C.text, "store")),
@@ -1015,18 +1040,19 @@ export function mount(root) {
         gap(10),
         line(sp(C.faint, "&nbsp;&nbsp;q quit")),
       ].join("");
-    const browse = (cur) => {
-      const places = [["Meghana Foods", "28 min"], ["Third Wave Coffee", "19 min"], ["Empire Restaurant", "24 min"]];
-      const rows = places.map((p, i) => (i === cur ? row(sp(C.blue, "▌ ", true) + sp("#ffffff", "> " + p[0], true), sp(C.dim, p[1]), true) : row(sp(C.item, "&nbsp;&nbsp;&nbsp;&nbsp;" + p[0]), sp(C.dim, p[1]), false))).join("");
-      return [
-        row(sp(C.dim, "deliver to ") + sp(C.blue, "⊕ ") + sp(C.bright, "4th Cross, Indiranagar") + sp(C.dim, " · home") + sp(C.faint, " ⌄"), ""),
-        gap(10),
-        row(sp(C.gold, "coffee") + sp(C.dim, " 4") + sp(C.faint, " │ ") + sp(C.gold, "food", true) + sp(C.dim, " 5") + sp(C.faint, " │ ") + sp(C.dim, "quick snacks 5"), sp(C.dim, "🛒 cart empty")),
-        gap(10),
-        rows,
-        gap(14),
-        line(sp(C.faint, "↑↓ move   ←→ category   ↵ open   / search   c cart   ") + sp(C.purple, ":") + sp(C.faint, " cmd")),
-      ].join("");
+    const browse = (catSel) => {
+      const showList = catSel === 1; // Coffee → restaurants; Home → empty state
+      let content;
+      if (!showList) {
+        content = '<div style="color:' + C.dim + ';padding-top:4px">no restaurants nearby</div>';
+      } else {
+        const detail = "<div>" + sp(C.bright, "abcoffee", true) + sp(C.faint, "&nbsp;&nbsp;") + sp(C.gold, "4.3 ★") + sp(C.faint, "&nbsp;&nbsp;") + sp(C.dim, "35-40 MINS") + sp(C.faint, "&nbsp;&nbsp;") + sp(C.gold, "60% OFF") + "</div>";
+        const rows = COFFEE.map((r, i) => i === 1
+          ? '<div style="display:flex;background:' + C.sel + ';margin:0 -8px;padding:0 8px"><span style="color:' + C.gold + '">▌ </span>' + sp("#ffffff", "> " + r, true) + "</div>"
+          : '<div style="padding-left:13px">' + sp(C.item, r) + "</div>").join("");
+        content = detail + '<div style="text-align:center;margin:3px 0">' + sp(C.gold, "Coffee") + "</div>" + '<div style="line-height:1.68">' + rows + "</div>";
+      }
+      return dense(chrome(sp(C.dim, "🛒 cart empty")) + tabsRow("food") + twoPane(catSel, content) + hintBar("↑↓ move   ↵ open   / search   i info   c cart   : cmd"));
     };
     const search = (q) => {
       const res = [["Meghana Foods", "★4.4 · 28 min"], ["Biryani Blues", "★4.2 · 31 min"], ["Paradise", "★4.5 · 26 min"]];
@@ -1035,30 +1061,38 @@ export function mount(root) {
       return [line(sp(C.blue, "⌕ " + q) + caret), gap(6), line(sp(C.dim, "3 results")), gap(10), rows, gap(14), line(sp(C.faint, "↑↓ move   ↵ open   esc back"))].join("");
     };
     const resto = (added) => {
-      const dishes = [["Chicken Biryani", "₹326"], ["Mutton Biryani", "₹389"], ["Paneer Biryani", "₹289"]];
-      const rows = dishes.map((p, i) => (i === 0 ? row(sp(C.blue, "▌ ", true) + sp("#ffffff", "> " + p[0], true), sp(C.green, p[1]), true) : row(sp(C.item, "&nbsp;&nbsp;&nbsp;&nbsp;" + p[0]), sp(C.green, p[1]), false))).join("");
-      return [
-        line(sp(C.blue, "‹ ") + sp(C.bright, "Meghana Foods", true) + sp(C.faint, "  ·  ") + sp(C.gold, "★ 4.4") + sp(C.faint, "  ·  ") + sp(C.dim, "28 min")),
-        gap(10),
-        div("biryani"),
-        rows,
-        gap(14),
-        row(sp(C.faint, "↵ add   c cart   esc back"), added ? sp(C.gold, "🛒 1 · ₹326") : sp(C.dim, "🛒 cart empty")),
-      ].join("");
+      const qty = added ? 1 : 0;
+      const rows = MENU.map((m, i) => {
+        const rating = sp(C.gold, m[1] + " ★");
+        const price = sp(C.text, "₹" + m[2]);
+        if (i === 0) {
+          const step = qty > 0 ? sp(C.gold, "-") + sp(C.bright, " ×" + qty + " ", true) + sp(C.gold, "+") : sp(C.faint, "- ×0 +");
+          return '<div style="display:flex;align-items:center;background:' + C.sel + ';margin:0 -8px;padding:1px 8px"><span style="color:' + C.gold + '">▌ </span>' + sp("#ffffff", "> " + m[0], true) + '<span style="margin-left:auto;display:flex;gap:13px;align-items:center">' + step + rating + price + "</span></div>";
+        }
+        return '<div style="display:flex;align-items:center;padding-left:13px">' + sp(C.item, m[0]) + '<span style="margin-left:auto;display:flex;gap:13px">' + rating + price + "</span></div>";
+      }).join("");
+      const cartTxt = qty > 0 ? sp(C.gold, "🛒 cart · 1 · ₹139") : sp(C.dim, "🛒 cart empty");
+      return dense(
+        chrome(cartTxt) +
+        '<div style="padding:7px 0 4px">' + sp(C.blue, "esc ") + sp(C.bright, "abcoffee", true) + sp(C.faint, "&nbsp;&nbsp;") + sp(C.gold, "4.3 ★") + sp(C.faint, "&nbsp;·&nbsp;") + sp(C.dim, "35-40 MINS") + "</div>" +
+        '<div style="padding-bottom:6px">' + sp(C.bright, "All", true) + sp(C.faint, " · ") + sp(C.dim, "99 Store") + sp(C.faint, " · ") + sp(C.dim, "Items at 169") + sp(C.faint, " · ") + sp(C.dim, "Recommended ›") + "</div>" +
+        '<div style="line-height:1.72">' + rows + "</div>" +
+        hintBar("↑↓ move   ↵/+ add   - remove   c cart   esc back")
+      );
     };
     const checkout = () =>
       [
         line(sp(C.bright, "cart · checkout", true)),
         gap(8),
-        line(sp(C.dim, "Meghana Foods")),
-        row(sp(C.item, "Chicken Biryani ") + sp(C.dim, "×1"), sp(C.green, "₹326")),
+        line(sp(C.dim, "abcoffee")),
+        row(sp(C.item, "Hot Espresso ") + sp(C.dim, "×1"), sp(C.green, "₹139")),
         gap(6),
         line(sp(C.faint, "─────────────────────────────")),
-        row(sp(C.dim, "item total"), sp(C.text, "₹326")),
+        row(sp(C.dim, "item total"), sp(C.text, "₹139")),
         row(sp(C.dim, "delivery"), sp(C.text, "₹39")),
         row(sp(C.dim, "coupon ") + sp(C.purple, "WELCOME50"), sp(C.green, "-₹50")),
         line(sp(C.faint, "─────────────────────────────")),
-        row(sp(C.bright, "to pay", true), sp(C.cyan, "₹315", true)),
+        row(sp(C.bright, "to pay", true), sp(C.cyan, "₹128", true)),
         gap(12),
         line(sp(C.red, "▌", true) + '<span style="background:rgba(224,175,104,.14);color:' + C.gold + ';padding:0 7px"> place order </span>' + sp(C.faint, "  armed")),
         gap(10),
@@ -1076,7 +1110,7 @@ export function mount(root) {
         })
         .join("");
       const filled = Math.round((step / 3) * 28);
-      return [line(sp(C.green, "✓ ") + sp(C.bright, "order placed", true) + sp(C.dim, " · Meghana Foods")), gap(12), rows, gap(12), line(sp(C.green, "█".repeat(filled)) + sp(C.faint, "░".repeat(28 - filled)))].join("");
+      return [line(sp(C.green, "✓ ") + sp(C.bright, "order placed", true) + sp(C.dim, " · abcoffee")), gap(12), rows, gap(12), line(sp(C.green, "█".repeat(filled)) + sp(C.faint, "░".repeat(28 - filled)))].join("");
     };
     return { splash, browse, search, resto, checkout, track };
   };
@@ -1101,14 +1135,11 @@ export function mount(root) {
     while (!S.dead) {
       setKey("run"); await typeSsh(); if (S.dead) return;
       set(Sc.splash()); setKey("boot"); await wait(2100); if (S.dead) return;
-      setKey("↵ enter"); set(Sc.browse(0)); await wait(900); if (S.dead) return;
-      setKey("j move"); set(Sc.browse(1)); await wait(750); if (S.dead) return;
-      set(Sc.browse(2)); await wait(850); if (S.dead) return;
-      setKey("/ search"); await typeSearch(); if (S.dead) return;
-      set(Sc.search("biryani")); await wait(1400); if (S.dead) return;
-      setKey("↵ open"); set(Sc.resto(false)); await wait(1100); if (S.dead) return;
-      setKey("↵ add"); set(Sc.resto(true)); await wait(1300); if (S.dead) return;
-      setKey(": checkout"); set(Sc.checkout()); await wait(2200); if (S.dead) return;
+      setKey("↵ enter"); set(Sc.browse(0)); await wait(1100); if (S.dead) return;
+      setKey("↓ Coffee"); set(Sc.browse(1)); await wait(1500); if (S.dead) return;
+      setKey("↵ open"); set(Sc.resto(false)); await wait(1400); if (S.dead) return;
+      setKey("+ add"); set(Sc.resto(true)); await wait(1500); if (S.dead) return;
+      setKey("c cart"); set(Sc.checkout()); await wait(2200); if (S.dead) return;
       setKey("↵ confirm");
       for (let st = 0; st <= 3; st++) { if (S.dead) return; set(Sc.track(st)); await wait(820); }
       setKey("✓ done"); await wait(1800); if (S.dead) return;
