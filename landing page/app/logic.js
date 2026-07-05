@@ -1346,8 +1346,10 @@ export function mount(root) {
     // environments leave document.fonts.ready pending indefinitely, which would
     // otherwise mean the wordmark never appears. Race it against a short timeout
     // so the hero always starts; if JetBrains Mono lands later we re-measure.
-    if (smallHero) {
-      // phone: no canvas to measure — scramble the styled wordmark right away
+    if (smallHero || !refs.hero3d) {
+      // No hero canvas to measure (phone width, or the brand is the nav
+      // wordmark lockup with no canvas) — reveal + scramble the styled
+      // wordmark right away instead of waiting on font metrics.
       bail();
     } else {
       let started = false;

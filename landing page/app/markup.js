@@ -25,8 +25,13 @@ export const MARKUP = String.raw`
 
   <!-- NAV -->
   <nav class="site-nav" style="position:relative;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:20px;max-width:1100px;margin:0 auto;padding:22px clamp(24px,6vw,56px);animation:introFade .7s ease both">
-    <a href="#top" style="display:inline-flex;align-items:center;gap:10px">
-      <svg width="24" height="24" viewBox="0 0 64 64" fill="none" shape-rendering="crispEdges" style="display:block;flex:none;filter:drop-shadow(0 0 5px rgba(147,168,255,.35))">
+    <!-- brand lockup: pixel mark + scramble-reveal wordmark. This IS the only
+         brand on the page. logic.js finds [data-ref=hero3dwrap] has no canvas
+         inside it, so it reveals + scrambles [data-ref=wordmark] right away.
+         Lives inside the nav flex so it stays aligned with the centered content
+         column on every viewport — no absolute corner element to drift. -->
+    <a href="#top" data-ref="hero3dwrap" title="click to replay" class="nav-brand" style="display:inline-flex;align-items:center;gap:11px;flex:none;cursor:pointer;user-select:none">
+      <svg width="22" height="22" viewBox="0 0 64 64" fill="none" shape-rendering="crispEdges" style="display:block;flex:none;filter:drop-shadow(0 0 5px rgba(147,168,255,.35))">
         <rect x="20" y="18" width="6" height="6" fill="#93a8ff"></rect><rect x="26" y="18" width="6" height="6" fill="#93a8ff"></rect>
         <rect x="26" y="24" width="6" height="6" fill="#9c9af4"></rect><rect x="32" y="24" width="6" height="6" fill="#9c9af4"></rect>
         <rect x="32" y="30" width="6" height="6" fill="#b08cf5"></rect><rect x="38" y="30" width="6" height="6" fill="#b08cf5"></rect>
@@ -34,6 +39,9 @@ export const MARKUP = String.raw`
         <rect x="20" y="42" width="6" height="6" fill="#b08cf5"></rect><rect x="26" y="42" width="6" height="6" fill="#b08cf5"></rect>
         <rect x="30" y="48" width="18" height="5" fill="#eab560"></rect>
       </svg>
+      <div data-ref="wordmark" class="nav-wordmark" style="display:flex;align-items:flex-end;font-weight:800;font-size:clamp(18px,1.85vw,22px);letter-spacing:-.035em;line-height:.92">
+        <span data-wm-console style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 50%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">console</span><span data-wm-store style="color:#eab560;font-size:.58em;align-self:flex-end;margin:0 0 .14em .05em">store</span>
+      </div>
     </a>
     <div class="nav-links" style="display:flex;align-items:center;gap:26px;font-size:12.5px;color:#565b80">
       <a href="#run" class="lnk lnk-desk">run</a>
@@ -47,19 +55,10 @@ export const MARKUP = String.raw`
     </div>
   </nav>
 
-  <!-- HERO — editorial screen: serif headline + explainer + install. The
-       animated ASCII wordmark is relocated to the top-left corner (brand
-       signature); the name is explained by the headline + paragraph copy. -->
+  <!-- HERO — editorial screen: mono headline + explainer + install. The brand
+       wordmark lives in the nav lockup above; the name is reinforced by the
+       headline + paragraph copy. -->
   <header id="top" style="position:relative;z-index:2;min-height:calc(100vh - 72px);display:flex;flex-direction:column">
-
-    <!-- corner brand signature — plain SOLID wordmark with the footer's
-         scramble-reveal. No canvas, no gradient: logic.js bails on the missing
-         hero canvas and drives [data-ref=wordmark] via startWordmark (scramble). -->
-    <div data-ref="hero3dwrap" title="click to replay" style="position:absolute;left:clamp(20px,5vw,54px);top:15px;z-index:4;cursor:pointer;user-select:none;animation:introFade .9s ease both .2s">
-      <div data-ref="wordmark" style="display:none;align-items:flex-end;font-weight:800;font-size:clamp(21px,2.7vw,28px);letter-spacing:-.035em;line-height:.92">
-        <span data-wm-console style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 50%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">console</span><span data-wm-store style="color:#eab560;font-size:.58em;align-self:flex-end;margin:0 0 .14em .05em">store</span>
-      </div>
-    </div>
 
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:100%;max-width:1100px;margin:0 auto;padding:18px clamp(24px,6vw,56px) 0">
       <h1 class="hero-head" style="font-weight:700;font-size:clamp(32px,5.8vw,66px);line-height:1.1;letter-spacing:-.025em;color:#e9ebf7;margin:0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .24s">Great food is now just<br>a <span class="hero-cmd">command<span class="hero-caret" aria-hidden="true"></span></span> away.</h1>

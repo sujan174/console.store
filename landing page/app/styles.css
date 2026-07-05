@@ -139,13 +139,10 @@ a {
    logic.js skips it) for the styled wordmark + scramble reveal, and the
    install card stacks into a scrollable command line + an actions row. ---- */
 @media (max-width: 700px) {
-  /* corner brand signature: small plain wordmark, top-left, auto-sized. */
-  [data-ref="hero3dwrap"] {
-    top: 12px !important;
-    margin: 0 !important;
-  }
-  [data-ref="wordmark"] {
-    font-size: clamp(17px, 5vw, 22px) !important;
+  /* nav brand lockup: keep the wordmark legible but compact next to the
+     phone nav links so the row never overflows. */
+  .nav-wordmark {
+    font-size: clamp(16px, 4.6vw, 20px) !important;
   }
   /* badge fits one line on phones */
   .hero-badge {
