@@ -198,8 +198,9 @@ export function mount(root) {
       if (btn.tui) btn.tui.style.color = which === "tui" ? "#e9ebf7" : "#565b80";
       if (btn.cli) btn.cli.style.color = which === "cli" ? "#e9ebf7" : "#565b80";
     };
-    const desktop = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 821px)").matches;
-    if (!desktop) {
+    // Click-only toggle at every width (the scroll-driven cross-fade was removed
+    // with the rest of the auto-scroll assistance). Buttons swap the panels.
+    {
       const show = (which) => {
         panel.tui.style.display = which === "tui" ? "block" : "none";
         panel.cli.style.display = which === "cli" ? "block" : "none";
@@ -210,7 +211,7 @@ export function mount(root) {
       Object.keys(btn).forEach((k) => { if (!btn[k]) return; const h = () => show(k); btn[k].addEventListener("click", h); handlers.push([btn[k], h]); });
       show("tui");
       requestAnimationFrame(() => placeInd(0));
-      if (hint) hint.textContent = "tap to switch — order it yourself at the prompt, or hand it to your agent.";
+      if (hint) hint.textContent = "click to switch — order it yourself at the prompt, or hand it to your agent.";
       cleanupKeys = () => handlers.forEach(([b, h]) => b.removeEventListener("click", h));
       return;
     }
@@ -812,9 +813,9 @@ export function mount(root) {
       ctx.clearRect(0, 0, W, H);
       const scrollNow = window.scrollY || 0, vh = window.innerHeight || H;
       const lift = Math.min(scrollNow * 0.14, H * 0.42);
-      // the cityscape is a HERO backdrop: fade it out as the hero scrolls away
-      // so the content sections below keep full text contrast.
-      cv.style.opacity = String(Math.max(0, Math.min(1, 1 - (scrollNow - vh * 0.5) / (vh * 0.65))));
+      // the cityscape stays visible the whole scroll (the animation must be seen)
+      // but dims to a floor past the hero so content sections keep text contrast.
+      cv.style.opacity = String(Math.max(0.42, Math.min(1, 1 - (scrollNow - vh * 0.5) / (vh * 0.9))));
 
       // aurora sky wash
       for (const a of [{ x: W * 0.74, y: H * 0.0, c: "#93a8ff", al: 0.07 }, { x: W * 0.1, y: H * 0.22, c: "#b08cf5", al: 0.055 }]) {
@@ -1280,8 +1281,9 @@ export function mount(root) {
   initCmdClicks();
   initFeaturesZoom();
   initStats();
-  initKeyboardNav();
-  initScrollSnap();
+  // Auto-scroll assistance removed by request: no keyboard section-paging, no
+  // scroll-snap, no enter-to-explore jump. The page is a plain free-scroll page.
+  // (initKeyboardNav / initScrollSnap intentionally not called.)
 
   if (!reduce) {
     initFooterWordmark();

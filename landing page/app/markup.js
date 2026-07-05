@@ -57,13 +57,11 @@ export const MARKUP = String.raw`
          hero canvas and drives [data-ref=wordmark] via startWordmark (scramble). -->
     <div data-ref="hero3dwrap" title="click to replay" style="position:absolute;left:clamp(20px,5vw,54px);top:15px;z-index:4;cursor:pointer;user-select:none;animation:introFade .9s ease both .2s">
       <div data-ref="wordmark" style="display:none;align-items:baseline;font-weight:800;font-size:clamp(19px,2.5vw,26px);letter-spacing:-.02em;line-height:1">
-        <span data-wm-console style="color:#e9ebf7">console</span><span data-wm-store style="color:#eab560;margin-left:.03em">store</span>
+        <span data-wm-console style="color:#93a8ff">console</span><span data-wm-store style="color:#eab560;margin-left:.03em">store</span>
       </div>
     </div>
 
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:100%;max-width:1100px;margin:0 auto;padding:18px clamp(24px,6vw,56px) 0">
-      <div class="hero-badge" style="display:inline-flex;align-items:center;gap:9px;font-size:11px;letter-spacing:2.5px;color:#eab560;text-transform:uppercase;margin-bottom:26px;border:1px solid rgba(234,181,96,.34);background:rgba(234,181,96,.045);border-radius:99px;padding:8px 18px;animation:introUp .7s cubic-bezier(.22,1,.36,1) both .1s">real food<span style="color:rgba(234,181,96,.5)">·</span>real orders<span style="color:rgba(234,181,96,.5)">·</span>via swiggy</div>
-
       <h1 class="hero-head" style="font-weight:700;font-size:clamp(32px,5.8vw,66px);line-height:1.1;letter-spacing:-.025em;color:#e9ebf7;margin:0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .24s">Great food is just<br>a <em style="font-style:italic;color:#eab560">command</em> away.</h1>
 
       <p style="margin:28px 0 0;max-width:56ch;font-size:15px;line-height:1.75;color:#8a8fb4;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">consolestore orders real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — straight from your terminal, or through your AI agent. No browser tabs, no forms, no cookie walls. <span style="color:#cdd3f0">You type, you eat.</span></p>
@@ -94,15 +92,6 @@ export const MARKUP = String.raw`
         <div data-install-hint style="font-size:11px;color:#2d2f48">beta channel · armed builds place real orders, the default stays safe.</div>
       </div>
     </div>
-
-    <!-- keyboard cue: press ↵ to begin (teaches the nav; fades once used). on
-         touch it collapses to a tappable scroll chevron. -->
-    <button data-ref="enterCue" class="enter-cue" type="button" aria-label="press Enter to explore">
-      <span class="enter-cue-keys"><span class="kbd kbd-wide">↵</span><span class="enter-cue-text">press <b>enter</b> to explore</span></span>
-      <span class="enter-cue-arrow" aria-hidden="true">
-        <svg width="15" height="22" viewBox="0 0 15 22" fill="none"><path d="M7.5 1 V20 M1.5 14 L7.5 20 L13.5 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-      </span>
-    </button>
   </header>
 
   <!-- PITCH — one full screen: what it is + install (rises up on scroll) -->
@@ -192,16 +181,6 @@ export const MARKUP = String.raw`
     <span class="stats-chip-key" aria-hidden="true">⇥</span>
   </button>
 
-  <!-- keyboard legend (desktop): always-visible controls so the nav + the live
-       drawer are discoverable. The stats chip is also a mouse affordance. -->
-  <div data-ref="keyhint" class="key-legend" aria-hidden="true">
-    <span class="key-legend-item"><span class="kbd">↑</span><span class="kbd">↓</span>&nbsp;sections</span>
-    <span class="key-legend-sep">·</span>
-    <span class="key-legend-item"><span class="kbd">↵</span>&nbsp;next</span>
-    <span class="key-legend-sep">·</span>
-    <button data-open-stats class="key-legend-item key-legend-btn" type="button"><span class="kbd">⇥</span>&nbsp;live stats</button>
-  </div>
-
   <div data-ref="statsback" class="stats-backdrop"></div>
 
   <aside data-ref="statsdrawer" class="stats-drawer" role="dialog" aria-modal="true" aria-label="live stats" aria-hidden="true">
@@ -282,7 +261,7 @@ export const MARKUP = String.raw`
             <button data-toggle="tui" style="position:relative;z-index:1;border:0;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;letter-spacing:2px;padding:9px 22px;border-radius:999px;background:transparent;color:#e9ebf7;transition:color .25s">TERMINAL</button>
             <button data-toggle="cli" style="position:relative;z-index:1;border:0;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;letter-spacing:2px;padding:9px 22px;border-radius:999px;background:transparent;color:#565b80;transition:color .25s">AGENT</button>
           </div>
-          <div data-keys-hint style="font-size:11.5px;color:#565b80;margin-top:14px">scroll to switch — order it yourself at the prompt, or hand it to your agent.</div>
+          <div data-keys-hint style="font-size:11.5px;color:#565b80;margin-top:14px">click to switch — order it yourself at the prompt, or hand it to your agent.</div>
         </div>
         <div data-panel-wrap style="position:relative;width:100%">
 
