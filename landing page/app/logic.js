@@ -928,7 +928,7 @@ export function mount(root) {
       await wait(1500);
       acc += '<div style="height:12px"></div>';
       // 3) check status
-      const statusCmd = "console status";
+      const statusCmd = "console order status";
       for (let i = 0; i <= statusCmd.length; i++) { if (S.dead) return; set(acc + "<div>" + prompt + '<span style="color:' + B + '">' + statusCmd.slice(0, i) + "</span>" + cur + "</div>"); await wait(52); }
       acc += "<div>" + prompt + '<span style="color:' + B + '">' + statusCmd + "</span></div>";
       await wait(340);
@@ -948,7 +948,7 @@ export function mount(root) {
       '<div style="display:flex;justify-content:space-between"><span style="color:' + A + '">&nbsp;&nbsp;to pay</span><span style="color:' + Cy + '">₹438</span></div>' +
       '<div style="color:' + G + '">&nbsp;&nbsp;✓ order placed</div>' +
       '<div style="height:14px"></div>' +
-      '<div><span style="color:' + A + '">~ %</span> <span style="color:' + B + '">console status</span></div>' +
+      '<div><span style="color:' + A + '">~ %</span> <span style="color:' + B + '">console order status</span></div>' +
       '<div><span style="color:' + Cy + '">&nbsp;&nbsp;◐ on the way to you</span><span style="color:' + V + '"> · 6 mins</span></div>';
   };
 

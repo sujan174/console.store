@@ -109,12 +109,12 @@ export const MARKUP = String.raw`
             <span class="win-mark">❯</span>
             <span style="font-size:11px;color:#b6bce0">zsh — one command, dinner's on the way</span>
           </div>
-          <div style="padding:20px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.95;color:#a9b1d6;white-space:pre-wrap">
+          <div style="padding:18px 20px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.55;color:#a9b1d6;white-space:pre-wrap">
             <div><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console order</span> <span style="color:#93a8ff">dinner</span></div>
             <div style="color:#565b80">  ↳ pushing preset <span style="color:#8ee08a">✓</span> · pulling the real bill…</div>
-            <div style="margin:2px 0"><span style="color:#565b80">  bill</span>  Meghana Foods · <span style="color:#e9ebf7">₹438</span>   <span style="color:#565b80">confirm</span> <span style="color:#eab560">↵</span></div>
+            <div><span style="color:#565b80">  bill</span>  Meghana Foods · <span style="color:#e9ebf7">₹438</span>   <span style="color:#565b80">confirm</span> <span style="color:#eab560">↵</span></div>
             <div><span style="color:#8ee08a">  ✓ order placed</span> <span style="color:#565b80">· ETA 35 min</span></div>
-            <div style="margin-top:16px"><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console status</span></div>
+            <div style="margin-top:20px"><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console order status</span></div>
             <div style="color:#565b80">  » on the way · 12 min away</div>
           </div>
         </div>
@@ -214,9 +214,10 @@ export const MARKUP = String.raw`
   <section id="agent" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:48px clamp(24px,6vw,56px) 32px" data-reveal>
     <div class="run-grid">
       <div>
-        <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// wherever you work</div>
-        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">order without leaving<br>your <span style="color:#93a8ff">editor</span>.</h2>
-        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">consolestore drops an <span style="color:#e9ebf7">MCP server + skills</span> into the agent you already use — <span style="color:#e9ebf7">Claude, Cursor, Windsurf, Zed, VS Code</span>. ask in plain language, right in your editor or chat: it searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places the order <span style="color:#e9ebf7">only after you say yes</span>.</p>
+        <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.3);border-radius:999px;padding:5px 13px;margin-bottom:16px">✳ AI AGENT · MCP + SKILLS</span>
+        <div style="font-size:11px;letter-spacing:2px;color:#b08cf5;margin-bottom:14px">// hand it to your ai</div>
+        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">just tell your<br><span style="color:#b08cf5">AI agent</span>.</h2>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">already use an <span style="color:#e9ebf7">AI assistant</span> — Claude, Cursor, Windsurf, Zed, VS Code? consolestore plugs straight into it. <span style="color:#e9ebf7">"order my usual dinner"</span> or <span style="color:#e9ebf7">"grab me an energy drink"</span> — in plain words. your agent searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places it <span style="color:#e9ebf7">only after you say yes</span>.</p>
         <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">food or Instamart, same flow — <span style="color:#e9ebf7">"grab me an energy drink"</span> and it's on the way. never a charge you didn't approve.</p>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
           <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">Claude · Cursor · Zed · VS Code</span>

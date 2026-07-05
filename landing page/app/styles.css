@@ -72,19 +72,16 @@ a {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-style: normal;
   color: #eab560;
-  background: rgba(234, 181, 96, 0.09);
-  border: 1px solid rgba(234, 181, 96, 0.3);
-  border-radius: 0.22em;
-  padding: 0.02em 0.28em 0.06em;
-  box-shadow: 0 0 26px rgba(234, 181, 96, 0.1);
+  border-bottom: 0.055em solid rgba(234, 181, 96, 0.55);
+  padding-bottom: 0.04em;
   white-space: nowrap;
 }
 .hero-caret {
   display: inline-block;
-  width: 0.5em;
-  height: 0.98em;
-  margin-left: 0.14em;
-  vertical-align: -0.1em;
+  width: 0.34em;
+  height: 0.78em;
+  margin-left: 0.07em;
+  vertical-align: -0.02em;
   background: #eab560;
   border-radius: 1px;
   animation: blink 1.05s step-end infinite;
