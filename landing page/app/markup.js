@@ -34,7 +34,6 @@ export const MARKUP = String.raw`
         <rect x="20" y="42" width="6" height="6" fill="#b08cf5"></rect><rect x="26" y="42" width="6" height="6" fill="#b08cf5"></rect>
         <rect x="30" y="48" width="18" height="5" fill="#eab560"></rect>
       </svg>
-      <span style="font-weight:800;font-size:14px;letter-spacing:-.02em"><span style="background:linear-gradient(170deg,#a6b8ff 0%,#ad8cf2 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">console</span><span style="color:#eab560">store</span></span>
     </a>
     <div class="nav-links" style="display:flex;align-items:center;gap:26px;font-size:12.5px;color:#565b80">
       <a href="#run" class="lnk lnk-desk">run</a>
@@ -48,32 +47,29 @@ export const MARKUP = String.raw`
     </div>
   </nav>
 
-  <!-- HERO — brand screen: wordmark + one-line gist + keyword chips -->
+  <!-- HERO — editorial screen: serif headline + explainer + install. The
+       animated ASCII wordmark is relocated to the top-left corner (brand
+       signature); the name is explained by the headline + paragraph copy. -->
   <header id="top" style="position:relative;z-index:2;min-height:calc(100vh - 72px);display:flex;flex-direction:column">
+
+    <!-- relocated ASCII particle wordmark — corner brand signature (keeps the
+         scramble-assembly animation; logic.js drives it via the same refs). -->
+    <div data-ref="hero3dwrap" title="click to replay" style="position:absolute;left:clamp(20px,5vw,54px);top:6px;width:clamp(190px,25vw,300px);height:74px;user-select:none;z-index:4;cursor:pointer;animation:introFade 1s ease both .2s">
+      <canvas data-ref="hero3d" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
+      <div data-ref="wordmark" style="display:none;position:absolute;inset:0;flex-wrap:wrap;justify-content:flex-start;align-items:center;font-weight:800;font-size:clamp(22px,3.4vw,34px);letter-spacing:-.03em;line-height:.9">
+        <span data-wm-console style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 50%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">console</span><span data-wm-store style="color:#eab560;font-size:.58em;align-self:flex-end;margin:0 0 .12em .05em">store</span>
+      </div>
+    </div>
+
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:100%;max-width:1100px;margin:0 auto;padding:18px clamp(24px,6vw,56px) 0">
-      <div style="display:inline-flex;align-items:center;gap:9px;font-size:11px;letter-spacing:2px;color:#93a8ff;text-transform:lowercase;margin-bottom:12px;animation:introUp .7s cubic-bezier(.22,1,.36,1) both .1s"><span style="width:3px;height:14px;background:#93a8ff;flex:none;box-shadow:0 0 9px #93a8ff;animation:blink 1.05s step-end infinite"></span>order food in ~9 seconds</div>
+      <div class="hero-badge" style="display:inline-flex;align-items:center;gap:9px;font-size:11px;letter-spacing:2.5px;color:#eab560;text-transform:uppercase;margin-bottom:26px;border:1px solid rgba(234,181,96,.34);background:rgba(234,181,96,.045);border-radius:99px;padding:8px 18px;animation:introUp .7s cubic-bezier(.22,1,.36,1) both .1s">real food<span style="color:rgba(234,181,96,.5)">·</span>real orders<span style="color:rgba(234,181,96,.5)">·</span>via swiggy</div>
 
-      <!-- ASCII particle wordmark -->
-      <div data-ref="hero3dwrap" style="position:relative;width:100%;max-width:1120px;height:clamp(240px,42vh,480px);margin:-4px 0 -4px;user-select:none;animation:introFade 1s ease both">
-        <canvas data-ref="hero3d" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
-        <div data-ref="wordmark" title="click to replay" style="display:none;position:absolute;inset:0;flex-wrap:wrap;justify-content:center;align-items:center;font-weight:800;font-size:clamp(40px,9.4vw,118px);letter-spacing:-.035em;line-height:.9;cursor:pointer">
-          <span data-wm-console style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 50%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">console</span><span data-wm-store style="color:#eab560;font-size:.58em;align-self:flex-end;margin:0 0 .14em .05em">store</span>
-        </div>
-      </div>
+      <h1 class="hero-head" style="font-family:'Newsreader',Georgia,serif;font-weight:400;font-size:clamp(42px,8vw,94px);line-height:1.03;letter-spacing:-.012em;color:#f4f1ea;margin:0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .24s">Great food is just<br>a <em style="font-style:italic;color:#eab560">command</em> away.</h1>
 
-      <p style="margin:8px 0 0;font-size:14.5px;color:#8a8fb4;letter-spacing:.2px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">order real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — with a command you type, or a sentence to your agent.</p>
-
-      <div style="margin-top:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;font-size:12px;color:#565b80;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .66s">
-        <span>one binary</span><span style="color:#2d2f48">·</span>
-        <span>no mouse</span><span style="color:#2d2f48">·</span>
-        <span class="chip-x">no cookie walls</span><span class="chip-x" style="color:#2d2f48">·</span>
-        <span class="chip-x">no checkout forms</span><span class="chip-x" style="color:#2d2f48">·</span>
-        <span>agent = your AI assistant</span><span style="color:#2d2f48">·</span>
-        <span style="color:#e9ebf7">just&nbsp;<span style="color:#93a8ff">↵</span></span>
-      </div>
+      <p style="margin:28px 0 0;max-width:56ch;font-size:15px;line-height:1.75;color:#8a8fb4;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">consolestore orders real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — straight from your terminal, or through your AI agent. No browser tabs, no forms, no cookie walls. <span style="color:#cdd3f0">You type, you eat.</span></p>
 
       <!-- install command (OS-aware text set in logic.js; live stats live in the right drawer) -->
-      <div style="margin-top:28px;display:flex;flex-direction:column;align-items:center;gap:11px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .8s">
+      <div style="margin-top:34px;display:flex;flex-direction:column;align-items:center;gap:13px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .7s">
         <div class="install-hero" style="display:inline-flex;align-items:stretch;border:1px solid rgba(147,168,255,.15);border-radius:10px;background:#09090f;box-shadow:0 0 48px rgba(147,168,255,.05),0 24px 64px rgba(0,0,0,.55);overflow:hidden;font-size:13.5px">
           <div data-action="copy" title="click to copy" class="install-cmdrow" style="display:flex;align-items:center;gap:11px;padding:14px 20px;cursor:pointer">
             <span data-install-prompt style="color:#2d2f48">$</span>
@@ -81,7 +77,7 @@ export const MARKUP = String.raw`
             <span style="margin-left:3px;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7fe0ff;border:1px solid rgba(127,224,255,.32);border-radius:99px;padding:2px 8px;flex:none">beta</span>
           </div>
           <div class="install-actions" style="display:flex;align-items:stretch;flex:none">
-            <div data-action="copy" title="click to copy" class="install-act" style="display:flex;align-items:center;justify-content:center;gap:7px;padding:0 16px;background:rgba(147,168,255,.08);border-left:1px solid rgba(147,168,255,.2);color:#93a8ff;font-size:11.5px;flex:none;cursor:pointer">
+            <div data-action="copy" title="click to copy" class="install-act install-act-gold" style="display:flex;align-items:center;justify-content:center;gap:7px;padding:0 18px;background:#eab560;border-left:1px solid rgba(234,181,96,.4);color:#1a1408;font-weight:600;font-size:11.5px;flex:none;cursor:pointer">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.8"/></svg><span data-copy-label>copy</span>
             </div>
             <button data-action="share" class="install-act install-share" type="button" hidden style="display:none;align-items:center;justify-content:center;gap:7px;padding:0 16px;background:rgba(176,140,245,.1);border:0;border-left:1px solid rgba(176,140,245,.24);color:#b08cf5;font-size:11.5px;font-family:inherit;flex:none;cursor:pointer">
@@ -89,7 +85,13 @@ export const MARKUP = String.raw`
             </button>
           </div>
         </div>
-        <div data-install-hint style="font-size:11.5px;color:#2d2f48">beta channel · armed builds place real orders, the default stays safe.</div>
+        <div style="display:flex;align-items:center;gap:11px;font-size:12px;color:#565b80;letter-spacing:.3px">
+          <span>one binary</span><span style="color:#2d2f48">·</span>
+          <span>macOS</span><span style="color:#2d2f48">·</span>
+          <span>Linux</span><span style="color:#2d2f48">·</span>
+          <span>Windows</span>
+        </div>
+        <div data-install-hint style="font-size:11px;color:#2d2f48">beta channel · armed builds place real orders, the default stays safe.</div>
       </div>
     </div>
 
