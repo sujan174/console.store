@@ -52,19 +52,19 @@ export const MARKUP = String.raw`
        signature); the name is explained by the headline + paragraph copy. -->
   <header id="top" style="position:relative;z-index:2;min-height:calc(100vh - 72px);display:flex;flex-direction:column">
 
-    <!-- relocated ASCII particle wordmark — corner brand signature (keeps the
-         scramble-assembly animation; logic.js drives it via the same refs). -->
-    <div data-ref="hero3dwrap" title="click to replay" style="position:absolute;left:clamp(20px,5vw,54px);top:6px;width:clamp(190px,25vw,300px);height:74px;user-select:none;z-index:4;cursor:pointer;animation:introFade 1s ease both .2s">
-      <canvas data-ref="hero3d" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
-      <div data-ref="wordmark" style="display:none;position:absolute;inset:0;flex-wrap:wrap;justify-content:flex-start;align-items:center;font-weight:800;font-size:clamp(22px,3.4vw,34px);letter-spacing:-.03em;line-height:.9">
-        <span data-wm-console style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 50%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">console</span><span data-wm-store style="color:#eab560;font-size:.58em;align-self:flex-end;margin:0 0 .12em .05em">store</span>
+    <!-- corner brand signature — plain SOLID wordmark with the footer's
+         scramble-reveal. No canvas, no gradient: logic.js bails on the missing
+         hero canvas and drives [data-ref=wordmark] via startWordmark (scramble). -->
+    <div data-ref="hero3dwrap" title="click to replay" style="position:absolute;left:clamp(20px,5vw,54px);top:15px;z-index:4;cursor:pointer;user-select:none;animation:introFade .9s ease both .2s">
+      <div data-ref="wordmark" style="display:none;align-items:baseline;font-weight:800;font-size:clamp(19px,2.5vw,26px);letter-spacing:-.02em;line-height:1">
+        <span data-wm-console style="color:#e9ebf7">console</span><span data-wm-store style="color:#eab560;margin-left:.03em">store</span>
       </div>
     </div>
 
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:100%;max-width:1100px;margin:0 auto;padding:18px clamp(24px,6vw,56px) 0">
       <div class="hero-badge" style="display:inline-flex;align-items:center;gap:9px;font-size:11px;letter-spacing:2.5px;color:#eab560;text-transform:uppercase;margin-bottom:26px;border:1px solid rgba(234,181,96,.34);background:rgba(234,181,96,.045);border-radius:99px;padding:8px 18px;animation:introUp .7s cubic-bezier(.22,1,.36,1) both .1s">real food<span style="color:rgba(234,181,96,.5)">·</span>real orders<span style="color:rgba(234,181,96,.5)">·</span>via swiggy</div>
 
-      <h1 class="hero-head" style="font-family:'Newsreader',Georgia,serif;font-weight:400;font-size:clamp(42px,8vw,94px);line-height:1.03;letter-spacing:-.012em;color:#f4f1ea;margin:0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .24s">Great food is just<br>a <em style="font-style:italic;color:#eab560">command</em> away.</h1>
+      <h1 class="hero-head" style="font-weight:700;font-size:clamp(32px,5.8vw,66px);line-height:1.1;letter-spacing:-.025em;color:#e9ebf7;margin:0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .24s">Great food is just<br>a <em style="font-style:italic;color:#eab560">command</em> away.</h1>
 
       <p style="margin:28px 0 0;max-width:56ch;font-size:15px;line-height:1.75;color:#8a8fb4;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">consolestore orders real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — straight from your terminal, or through your AI agent. No browser tabs, no forms, no cookie walls. <span style="color:#cdd3f0">You type, you eat.</span></p>
 

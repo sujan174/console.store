@@ -109,18 +109,13 @@ a {
    logic.js skips it) for the styled wordmark + scramble reveal, and the
    install card stacks into a scrollable command line + an actions row. ---- */
 @media (max-width: 700px) {
-  /* corner brand signature stays a small top-left mark on phones (the editorial
-     headline is the hero); keep it absolute so it doesn't shove the column. */
+  /* corner brand signature: small plain wordmark, top-left, auto-sized. */
   [data-ref="hero3dwrap"] {
-    width: clamp(150px, 44vw, 200px) !important;
-    height: 56px !important;
-    top: 10px !important;
+    top: 12px !important;
     margin: 0 !important;
   }
   [data-ref="wordmark"] {
-    font-size: clamp(22px, 6.4vw, 30px) !important;
-    justify-content: flex-start !important;
-    filter: drop-shadow(0 0 18px rgba(147, 168, 255, 0.28));
+    font-size: clamp(17px, 5vw, 22px) !important;
   }
   /* badge fits one line on phones */
   .hero-badge {
@@ -129,9 +124,9 @@ a {
     padding: 7px 13px !important;
     gap: 6px !important;
   }
-  /* headline breathes a little tighter to the top on phones */
+  /* mono headline is wider than the old serif — size down a touch on phones */
   .hero-head {
-    font-size: clamp(40px, 12.5vw, 60px) !important;
+    font-size: clamp(28px, 8.4vw, 44px) !important;
   }
   /* trim the keyword chip row to the essentials */
   .chip-x {
