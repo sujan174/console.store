@@ -99,7 +99,7 @@ export const MARKUP = String.raw`
     <div class="pitch-grid" data-pitch-grid style="width:100%;max-width:760px">
       <div class="pitch-left" style="text-align:left">
         <div data-pitch-item style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:6px">// what it is</div>
-        <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:16ch">dinner, piped through your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">terminal</span> — or your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">agent</span>.</h1>
+        <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:16ch">dinner, piped through your <span style="color:#93a8ff">terminal</span> — or your <span style="color:#93a8ff">agent</span>.</h1>
         <p data-pitch-item style="max-width:52ch;color:#b6bce0;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI <span style="color:#cdd3f0">(type commands)</span> and full TUI <span style="color:#cdd3f0">(a keyboard-only menu)</span> for ordering real food through Swiggy without leaving your shell — plus an MCP server <span style="color:#cdd3f0">(a plug-in your AI agent talks to)</span> that lets it order for you. authorize once, then reorder a saved favourite with a keystroke, or just tell your agent <span style="color:#cdd3f0">“order my usual.”</span></p>
         <a href="/features" data-pitch-item class="pitch-cta" aria-label="explore all features" style="display:inline-flex;align-items:center;gap:10px;margin-top:32px;padding:14px 24px;border-radius:11px;border:1px solid rgba(147,168,255,.32);background:rgba(147,168,255,.09);color:#aebcff;font-weight:600;font-size:14px;letter-spacing:.2px;text-decoration:none">explore all 18 features <span style="font-size:16px;line-height:1">→</span></a>
       </div>
@@ -170,7 +170,7 @@ export const MARKUP = String.raw`
     <div class="run-grid">
       <div>
         <div style="font-size:11px;letter-spacing:2px;color:#eab560;margin-bottom:14px">// watch it run</div>
-        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;background:linear-gradient(168deg,#f5d493 0%,#eab560 52%,#d68f36 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1">the whole shop<br>is a tui.</h2>
+        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">the whole shop<br>is a <span style="color:#eab560">tui</span>.</h2>
         <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 28px">recreated frame-by-frame from the real bubbletea app. live demo videos land at launch.</p>
         <div style="display:flex;flex-direction:column;gap:11px">
           <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#8ee08a;border-radius:1px"></span>browse restaurants &amp; menus</div>
@@ -284,7 +284,7 @@ export const MARKUP = String.raw`
   <section id="why" style="position:relative;z-index:2;max-width:820px;margin:0 auto;padding:64px clamp(24px,6vw,56px)" data-reveal>
     <div style="font-size:11px;letter-spacing:2px;color:#eab560;margin-bottom:24px;text-align:center">// why it's different</div>
     <p style="font-weight:800;font-size:clamp(24px,3.8vw,46px);line-height:1.18;letter-spacing:-.02em;text-align:center;margin:0">
-      <span style="background:linear-gradient(168deg,#f5d493 0%,#eab560 52%,#d68f36 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">your terminal is open. your agent is listening.</span><br>
+      <span style="color:#e9ebf7">your terminal is open. your agent is listening.</span><br>
       <span style="color:#3a3d5c">why open a browser</span> <span style="color:#eab560">to get dinner?</span>
     </p>
     <p style="max-width:54ch;margin:30px auto 0;text-align:center;color:#b6bce0;font-size:13.5px;line-height:1.78">no tab-hunting, no cookie banners, no context switch — whether you type the command or your agent does. every order is a real Swiggy bill you approve before a rupee moves. the site can be loud because the product underneath is intentionally strict.</p>
