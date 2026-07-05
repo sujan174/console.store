@@ -67,6 +67,29 @@ a {
   align-items: center;
 }
 
+/* hero headline "command" — an evident terminal command token */
+.hero-cmd {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-style: normal;
+  color: #eab560;
+  background: rgba(234, 181, 96, 0.09);
+  border: 1px solid rgba(234, 181, 96, 0.3);
+  border-radius: 0.22em;
+  padding: 0.02em 0.28em 0.06em;
+  box-shadow: 0 0 26px rgba(234, 181, 96, 0.1);
+  white-space: nowrap;
+}
+.hero-caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.98em;
+  margin-left: 0.14em;
+  vertical-align: -0.1em;
+  background: #eab560;
+  border-radius: 1px;
+  animation: blink 1.05s step-end infinite;
+}
+
 .pitch-cta {
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }

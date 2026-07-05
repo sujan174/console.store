@@ -62,7 +62,7 @@ export const MARKUP = String.raw`
     </div>
 
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:100%;max-width:1100px;margin:0 auto;padding:18px clamp(24px,6vw,56px) 0">
-      <h1 class="hero-head" style="font-weight:700;font-size:clamp(32px,5.8vw,66px);line-height:1.1;letter-spacing:-.025em;color:#e9ebf7;margin:0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .24s">Great food is just<br>a <em style="font-style:italic;color:#eab560">command</em> away.</h1>
+      <h1 class="hero-head" style="font-weight:700;font-size:clamp(32px,5.8vw,66px);line-height:1.1;letter-spacing:-.025em;color:#e9ebf7;margin:0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .24s">Great food is just<br>a <span class="hero-cmd">command<span class="hero-caret" aria-hidden="true"></span></span> away.</h1>
 
       <p style="margin:28px 0 0;max-width:54ch;font-size:16.5px;line-height:1.8;color:#b6bce0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">consolestore orders real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — straight from your terminal, or through your AI agent. No browser tabs, no forms, no cookie walls. <span style="color:#cdd3f0">You type, you eat.</span></p>
 

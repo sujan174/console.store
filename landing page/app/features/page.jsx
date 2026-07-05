@@ -150,70 +150,47 @@ function SvgMark() {
 
 // ─── card component ───────────────────────────────────────────────────────────
 
-function FeatureCard({ card, accent, borderAccent, glowColor, index }) {
+// A clean feature ROW — number + title + plain-language line, separated by a
+// hairline rule. No boxes: the page reads as one calm list, not a wall of cards.
+function FeatureRow({ card, accent }) {
   return (
     <div
-      className={`feat-card feat-card--${accent === "#93a8ff" ? "blue" : "violet"}`}
+      className="feat-row"
       style={{
-        background: "#0a0a12",
-        border: `1px solid ${borderAccent}`,
-        borderRadius: "12px",
-        padding: "22px",
-        borderLeft: `3px solid ${accent}`,
         display: "flex",
-        flexDirection: "column",
-        gap: "10px",
-        animationDelay: `${index * 60}ms`
+        gap: "18px",
+        padding: "24px 4px",
+        borderTop: "1px solid rgba(147,168,255,.08)"
       }}
     >
       <span
         style={{
           color: accent,
-          fontSize: "11px",
-          letterSpacing: "1.5px",
-          fontWeight: 700
+          fontSize: "12.5px",
+          fontWeight: 700,
+          flex: "none",
+          width: "24px",
+          lineHeight: 1.5,
+          fontVariantNumeric: "tabular-nums"
         }}
       >
         {card.n}
       </span>
-      <h3
-        style={{
-          margin: 0,
-          fontSize: "16px",
-          fontWeight: 700,
-          color: "#e9ebf7",
-          lineHeight: 1.3
-        }}
-      >
-        {card.title}
-      </h3>
-      <p
-        style={{
-          margin: 0,
-          fontSize: "13px",
-          color: "#8a8fb4",
-          lineHeight: 1.7,
-          flex: 1
-        }}
-      >
-        {card.desc}
-      </p>
-      <div style={{ marginTop: "6px" }}>
-        <span
+      <div>
+        <h3
           style={{
-            display: "inline-block",
-            fontSize: "10px",
-            letterSpacing: "1.2px",
-            textTransform: "uppercase",
-            color: accent,
-            border: `1px solid ${borderAccent}`,
-            borderRadius: "5px",
-            padding: "3px 8px",
-            background: "rgba(0,0,0,.25)"
+            margin: "0 0 7px",
+            fontSize: "16px",
+            fontWeight: 700,
+            color: "#e9ebf7",
+            lineHeight: 1.3
           }}
         >
-          {card.tag}
-        </span>
+          {card.title}
+        </h3>
+        <p style={{ margin: 0, fontSize: "13.5px", color: "#b6bce0", lineHeight: 1.72 }}>
+          {card.desc}
+        </p>
       </div>
     </div>
   );
@@ -442,26 +419,24 @@ export default function FeaturesPage() {
               fontSize: "clamp(30px,5vw,58px)",
               letterSpacing: "-.02em",
               lineHeight: 1.1,
-              background:
-                "linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
+              color: "#e9ebf7"
             }}
           >
-            one binary. two ways. every feature.
+            one download. <span style={{ color: "#93a8ff" }}>two ways</span> to order.
           </h1>
           <p
             style={{
-              maxWidth: "58ch",
+              maxWidth: "56ch",
               margin: "0 auto",
-              fontSize: "14.5px",
-              color: "#8a8fb4",
-              lineHeight: 1.75
+              fontSize: "15px",
+              color: "#b6bce0",
+              lineHeight: 1.8
             }}
           >
-            consolestore is a terminal app, a command, and an MCP server for your AI
-            agent — all in one download. here&apos;s everything you can do with it.
+            consolestore lets you order real food — and groceries from Instamart —
+            without leaving your keyboard. Type a short command, or just ask your AI
+            assistant to do it. No app, no browser, no forms. Here&apos;s everything
+            it does, in plain terms.
           </p>
         </header>
 
@@ -529,28 +504,22 @@ export default function FeaturesPage() {
                 lineHeight: 1.7
               }}
             >
-              Full TUI and headless CLI. Browse, order, track, and reorder — without
-              leaving your shell.
+              You type; it orders. Browse real restaurants, build a cart, pay, and
+              track the delivery — all with the keyboard, right in your terminal. No
+              app, no browser.
             </p>
           </div>
 
-          {/* card grid */}
+          {/* feature rows */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))",
-              gap: "20px"
+              gridTemplateColumns: "repeat(auto-fit,minmax(330px,1fr))",
+              columnGap: "48px"
             }}
           >
-            {TERMINAL_CARDS.map((card, i) => (
-              <FeatureCard
-                key={card.n}
-                card={card}
-                accent="#93a8ff"
-                borderAccent="rgba(147,168,255,.10)"
-                glowColor="rgba(147,168,255,.10)"
-                index={i}
-              />
+            {TERMINAL_CARDS.map((card) => (
+              <FeatureRow key={card.n} card={card} accent="#93a8ff" />
             ))}
           </div>
         </section>
@@ -636,28 +605,22 @@ export default function FeaturesPage() {
                 lineHeight: 1.7
               }}
             >
-              An MCP server + skills that wire into every major AI tool. Say the
-              word; your agent builds the cart and waits for your yes.
+              Already using an AI assistant like Claude, Cursor or VS Code? Just ask
+              it — in plain words — to order for you. It finds the food, builds the
+              cart, shows the price, and only orders once you say yes.
             </p>
           </div>
 
-          {/* card grid */}
+          {/* feature rows */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))",
-              gap: "20px"
+              gridTemplateColumns: "repeat(auto-fit,minmax(330px,1fr))",
+              columnGap: "48px"
             }}
           >
-            {AGENT_CARDS.map((card, i) => (
-              <FeatureCard
-                key={card.n}
-                card={card}
-                accent="#b08cf5"
-                borderAccent="rgba(176,140,245,.12)"
-                glowColor="rgba(176,140,245,.12)"
-                index={i}
-              />
+            {AGENT_CARDS.map((card) => (
+              <FeatureRow key={card.n} card={card} accent="#b08cf5" />
             ))}
           </div>
         </section>
