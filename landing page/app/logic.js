@@ -188,7 +188,10 @@ export function mount(root) {
     const smooth = (x, a, b) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
     const placeInd = (t) => {
       if (!ind || !btn.tui || !btn.cli) return;
-      ind.style.width = btn.tui.offsetWidth + "px";
+      // interpolate BOTH width and x between the two pills — AGENT is narrower
+      // than TERMINAL, so a fixed width overflowed the track on the right.
+      const w = btn.tui.offsetWidth + (btn.cli.offsetWidth - btn.tui.offsetWidth) * t;
+      ind.style.width = w + "px";
       ind.style.transform = "translateX(" + (btn.cli.offsetLeft - btn.tui.offsetLeft) * t + "px)";
     };
     const colorBtns = (which) => {
@@ -807,7 +810,11 @@ export function mount(root) {
       t += 1;
       cxp += (tx - cxp) * 0.05; cyp += (ty - cyp) * 0.05;
       ctx.clearRect(0, 0, W, H);
-      const lift = Math.min((window.scrollY || 0) * 0.14, H * 0.42);
+      const scrollNow = window.scrollY || 0, vh = window.innerHeight || H;
+      const lift = Math.min(scrollNow * 0.14, H * 0.42);
+      // the cityscape is a HERO backdrop: fade it out as the hero scrolls away
+      // so the content sections below keep full text contrast.
+      cv.style.opacity = String(Math.max(0, Math.min(1, 1 - (scrollNow - vh * 0.5) / (vh * 0.65))));
 
       // aurora sky wash
       for (const a of [{ x: W * 0.74, y: H * 0.0, c: "#93a8ff", al: 0.07 }, { x: W * 0.1, y: H * 0.22, c: "#b08cf5", al: 0.055 }]) {
