@@ -119,6 +119,16 @@ export default function RootLayout({ children }) {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        {/* Always open/reload at the top of the page. Disabling the browser's
+            scroll restoration means a refresh (or a fresh visit) never lands
+            mid-page; shared #anchor links still work because we only force the
+            top when there's no hash. Runs on every route (home, features, how-to). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{if('scrollRestoration' in history){history.scrollRestoration='manual';}window.addEventListener('load',function(){if(!location.hash){window.scrollTo(0,0);}});}catch(e){}"
+          }}
+        />
       </head>
       <body>{children}</body>
     </html>

@@ -24,13 +24,15 @@ export const MARKUP = String.raw`
   <div class="scroll-bar"></div>
 
   <!-- NAV -->
-  <nav class="site-nav" style="position:relative;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:20px;max-width:1100px;margin:0 auto;padding:22px clamp(24px,6vw,56px);animation:introFade .7s ease both">
+  <nav class="site-nav">
+   <div class="site-nav-inner" style="animation:introFade .7s ease both">
     <!-- brand lockup: pixel mark + scramble-reveal wordmark. This IS the only
          brand on the page. logic.js finds [data-ref=hero3dwrap] has no canvas
          inside it, so it reveals + scrambles [data-ref=wordmark] right away.
          Lives inside the nav flex so it stays aligned with the centered content
-         column on every viewport — no absolute corner element to drift. -->
-    <a href="#top" data-ref="hero3dwrap" title="click to replay" class="nav-brand" style="display:inline-flex;align-items:center;gap:11px;flex:none;cursor:pointer;user-select:none">
+         column on every viewport — no absolute corner element to drift.
+         Clicking it scrolls to the very top (logic.js) + replays the scramble. -->
+    <a href="#top" data-ref="hero3dwrap" title="back to top" class="nav-brand" style="display:inline-flex;align-items:center;gap:11px;flex:none;cursor:pointer;user-select:none">
       <svg width="22" height="22" viewBox="0 0 64 64" fill="none" shape-rendering="crispEdges" style="display:block;flex:none;filter:drop-shadow(0 0 5px rgba(147,168,255,.35))">
         <rect x="20" y="18" width="6" height="6" fill="#93a8ff"></rect><rect x="26" y="18" width="6" height="6" fill="#93a8ff"></rect>
         <rect x="26" y="24" width="6" height="6" fill="#9c9af4"></rect><rect x="32" y="24" width="6" height="6" fill="#9c9af4"></rect>
@@ -43,16 +45,18 @@ export const MARKUP = String.raw`
         <span data-wm-console style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 50%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">console</span><span data-wm-store style="color:#eab560;font-size:.58em;align-self:flex-end;margin:0 0 .14em .05em">store</span>
       </div>
     </a>
-    <div class="nav-links" style="display:flex;align-items:center;gap:26px;font-size:12.5px;color:#565b80">
+    <div class="nav-links">
       <a href="#run" class="lnk lnk-desk">run</a>
       <a href="#keys" class="lnk lnk-desk">terminal &amp; agent</a>
-      <a href="/features" class="lnk">features</a>
-      <a href="/how-to" class="lnk">how-to</a>
       <a href="#faq" class="lnk lnk-desk">faq</a>
-      <a href="https://github.com/sujan174/console.store" class="lnk" target="_blank" rel="noopener noreferrer" aria-label="consolestore on GitHub" title="View source on GitHub" style="display:inline-flex;align-items:center">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="display:block"><path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.49 5.93.43.37.81 1.1.81 2.22 0 1.6-.01 2.9-.01 3.29 0 .32.22.7.83.58A12.01 12.01 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z"></path></svg>
+      <span class="nav-divider lnk-desk" aria-hidden="true"></span>
+      <a href="/features" class="lnk nav-page">features</a>
+      <a href="/how-to" class="lnk nav-page">how-to</a>
+      <a href="https://github.com/sujan174/console.store" class="lnk nav-gh" target="_blank" rel="noopener noreferrer" aria-label="consolestore on GitHub" title="View source on GitHub" style="display:inline-flex;align-items:center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="display:block"><path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.49 5.93.43.37.81 1.1.81 2.22 0 1.6-.01 2.9-.01 3.29 0 .32.22.7.83.58A12.01 12.01 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z"></path></svg>
       </a>
     </div>
+   </div>
   </nav>
 
   <!-- HERO — editorial screen: mono headline + explainer + install. The brand

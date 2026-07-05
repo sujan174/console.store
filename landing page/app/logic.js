@@ -1317,6 +1317,19 @@ export function mount(root) {
   initCmdClicks();
   initFeaturesZoom();
   initStats();
+
+  // Brand lockup → back to the very top of the page (y=0, so the whole hero +
+  // nav are in frame). Overrides the #top anchor, which would otherwise land a
+  // hair below the sticky nav. The scramble replay is wired separately in
+  // startWordmark(), and still fires on the same click.
+  if (refs.hero3dwrap) {
+    const toTop = (e) => {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+    };
+    refs.hero3dwrap.addEventListener("click", toTop);
+    wmHandlers.push([refs.hero3dwrap, toTop]);
+  }
   // Auto-scroll assistance removed by request: no keyboard section-paging, no
   // scroll-snap, no enter-to-explore jump. The page is a plain free-scroll page.
   // (initKeyboardNav / initScrollSnap intentionally not called.)

@@ -481,64 +481,42 @@ export default function HowToPage() {
         />
 
         {/* ── NAV ── */}
-        <nav
-          className="howto-nav site-nav"
-          style={{
-            position: "relative",
-            zIndex: 5,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "20px",
-            maxWidth: "1100px",
-            margin: "0 auto",
-            padding: "22px clamp(24px,6vw,56px)"
-          }}
-        >
-          {/* wordmark → home */}
-          <a
-            href="/"
-            style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}
-          >
-            <SvgMark />
-            <span style={{ fontWeight: 800, fontSize: "14px", letterSpacing: "-.02em" }}>
-              <span
-                style={{
-                  background: "linear-gradient(170deg,#a6b8ff 0%,#ad8cf2 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text"
-                }}
-              >
-                console
-              </span>
-              <span style={{ color: "#eab560" }}>store</span>
-            </span>
-          </a>
-
-          {/* links */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "26px",
-              fontSize: "13px",
-              color: "#565b80"
-            }}
-          >
-            <a href="/#run" className="lnk">run</a>
-            <a href="/#keys" className="lnk">terminal &amp; agent</a>
-            <a href="/features" className="lnk">features</a>
-            {/* active: how-to */}
+        <nav className="howto-nav site-nav">
+          <div className="site-nav-inner">
+            {/* wordmark → home (the "start" for a sub-page) */}
             <a
-              href="/how-to"
-              className="lnk"
-              style={{ color: "#e9ebf7" }}
-              aria-current="page"
+              href="/"
+              title="back to home"
+              style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}
             >
-              how-to
+              <SvgMark />
+              <span style={{ fontWeight: 800, fontSize: "14px", letterSpacing: "-.02em" }}>
+                <span
+                  style={{
+                    background: "linear-gradient(170deg,#a6b8ff 0%,#ad8cf2 100%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text"
+                  }}
+                >
+                  console
+                </span>
+                <span style={{ color: "#eab560" }}>store</span>
+              </span>
             </a>
-            <a href="/#faq" className="lnk">faq</a>
+
+            {/* links: in-page section anchors, then a divider, then the page tabs */}
+            <div className="nav-links">
+              <a href="/#run" className="lnk">run</a>
+              <a href="/#keys" className="lnk">terminal &amp; agent</a>
+              <a href="/#faq" className="lnk">faq</a>
+              <span className="nav-divider" aria-hidden="true" />
+              <a href="/features" className="lnk nav-page">features</a>
+              {/* active: how-to */}
+              <a href="/how-to" className="lnk nav-page" aria-current="page">
+                how-to
+              </a>
+            </div>
           </div>
         </nav>
 
