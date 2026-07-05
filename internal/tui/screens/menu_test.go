@@ -227,6 +227,58 @@ func TestSearchRowsKeepRating(t *testing.T) {
 	}
 }
 
+func TestBrowseEmptyBeforeLoadShowsLoaderNotNote(t *testing.T) {
+	// Empty list that hasn't finished a load yet: the pane must show the loader,
+	// never flash the "nothing here" note in the corner before the first fetch.
+	m := liveMenu().WithSections(nil, nil).WithLoaded(false).WithAnim(0, 13) // 1 pm → day copy
+	v := m.View()
+	if strings.Contains(v, "no restaurants deliver") {
+		t.Fatalf("must not show the empty note before a load completes:\n%s", v)
+	}
+	if !strings.Contains(v, "warming the tandoor…") { // foodLines[0] at frame 0
+		t.Fatalf("empty-not-loaded pane must show the loader:\n%s", v)
+	}
+}
+
+func TestBrowseEmptyAfterLoadShowsCenteredNote(t *testing.T) {
+	// Load finished with zero results: the note replaces the loader, centered.
+	m := liveMenu().WithSections(nil, nil).WithLoaded(true)
+	v := m.View()
+	if !strings.Contains(v, "no restaurants deliver here right now") {
+		t.Fatalf("loaded-empty pane must show the centered note:\n%s", v)
+	}
+	// Centered, not flush-left: the note line carries leading padding.
+	for _, ln := range strings.Split(v, "\n") {
+		if strings.Contains(ln, "no restaurants deliver here right now") && !strings.HasPrefix(ln, "  ") {
+			t.Fatalf("empty note must be centered (leading padding), got flush-left:\n%q", ln)
+		}
+	}
+}
+
+func TestBrowseLoadingMoreShowsSpinner(t *testing.T) {
+	m := liveMenu().WithCategoryHeader("Coffee").WithLoadingMore(true)
+	m.places = []catalog.Place{{Name: "Blue Tokai"}}
+	v := m.View()
+	if !strings.Contains(v, "loading more…") {
+		t.Fatalf("a still-paginating list must show the foot-of-list spinner:\n%s", v)
+	}
+	if strings.Contains(v, "that's all") {
+		t.Fatalf("must not mark the end while more is still loading:\n%s", v)
+	}
+}
+
+func TestBrowseSettledShowsEndMarker(t *testing.T) {
+	m := liveMenu().WithCategoryHeader("Coffee").WithLoaded(true).WithLoadingMore(false)
+	m.places = []catalog.Place{{Name: "Blue Tokai"}}
+	v := m.View()
+	if !strings.Contains(v, "that's all") {
+		t.Fatalf("a settled list must mark its end:\n%s", v)
+	}
+	if strings.Contains(v, "loading more…") {
+		t.Fatalf("settled list must not show the more-spinner:\n%s", v)
+	}
+}
+
 func TestTwoPaneShowsStoreSwitcher(t *testing.T) {
 	v := liveMenu().WithSections(nil, []catalog.Place{{Name: "Blue Tokai"}}).View()
 	for _, want := range []string{"FOOD", "Instamart", "tab", "switch"} {

@@ -392,12 +392,21 @@ type Model struct {
 
 	homePending  bool // Home's "popular near you" load is in flight (shows "loading…")
 	usualsLoaded bool // true once LoadUsuals has been fired for the current addr
+
+	// loadedQueries marks place-list queries whose progressive load has reached a
+	// terminal state this session (done paginating, or errored). Until a query is
+	// in here, an empty browse list stays a loader rather than flashing a "nothing
+	// here" note before the first fetch has even landed.
+	loadedQueries map[string]bool
+	// placesMorePending is true while the browse-list page chain is still fetching
+	// more rows below what's already painted (drives the foot-of-list spinner).
+	placesMorePending bool
 }
 
 func New(caps render.Caps, opts ...Option) Model {
 	repo := mem.New()
 	section := catalog.SectionCoffee
-	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome, railFocus: true, imRailActive: screens.RailHome, addrGatePending: true, seededQueries: map[string]bool{}, imLoadedQueries: map[string]bool{}}
+	m := Model{repo: repo, section: section, screen: scrSplash, caps: caps, lastEscFrame: -escDoubleWindow - 1, railActive: screens.RailHome, railFocus: true, imRailActive: screens.RailHome, addrGatePending: true, seededQueries: map[string]bool{}, imLoadedQueries: map[string]bool{}, loadedQueries: map[string]bool{}}
 	for _, o := range opts {
 		o(&m)
 	}
@@ -516,10 +525,13 @@ func (m Model) buildMenu() screens.Menu {
 			// name) so it reads consistently with Home's "popular near you" divider.
 			menu = menu.WithLoading(m.catPending)
 			if catIdx < len(m.chips) {
-				menu = menu.WithCategoryHeader(m.chips[catIdx].Label)
+				q := m.chips[catIdx].Query
+				menu = menu.WithLoaded(m.loadedQueries[q]).WithLoadingMore(m.placesMorePending).
+					WithCategoryHeader(m.chips[catIdx].Label)
 			}
 		} else {
-			menu = menu.WithSections(usuals, nearby).WithLoading(m.homePending)
+			menu = menu.WithSections(usuals, nearby).WithLoading(m.homePending).
+				WithLoaded(m.loadedQueries[m.homeNearbyQuery()]).WithLoadingMore(m.placesMorePending)
 		}
 
 		return menu
@@ -770,6 +782,7 @@ func (m *Model) imSearchInsert(s string) {
 // the main pane populates as the user arrows through the rail.
 func (m *Model) loadForRail(rail screens.Rail) tea.Cmd {
 	m.catPending = false
+	m.placesMorePending = false // a fresh view isn't mid-pagination until its stream says so
 	switch m.railActive {
 	case screens.RailSearch:
 		return nil
@@ -2510,6 +2523,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.homePending && dm.Query == m.homeNearbyQuery() {
 			m.homePending = false // Home's "popular near you" landed
 		}
+		m.loadedQueries[dm.Query] = true // single-shot load: terminal on arrival
+		m.placesMorePending = false
 		m.refreshMenu() // data refresh — keep the user's scroll position
 		return m, nil
 	case datasource.PlacesPageLoadedMsg:
@@ -2537,17 +2552,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if dm.Err == nil && dm.Page == 1 {
 			delete(m.seededQueries, dm.Query) // live data replaced the disk seed
 		}
+		// Decide whether the chain continues BEFORE repainting, so the list shows
+		// the right foot state: more pages coming → spinner; settled/errored → end
+		// marker. Same cap as the old barrier loop (~12 restaurants / 2 pages).
+		more := false
+		if dm.Err == nil {
+			count := 0
+			if r := m.liveRepo(); r != nil {
+				count = len(r.PlacesByQuery(m.addr, dm.Query))
+			}
+			more = !dm.Done && dm.Page < 2 && count < 12
+		}
+		m.placesMorePending = more
+		if !more {
+			m.loadedQueries[dm.Query] = true // terminal: done paginating or errored
+		}
 		m.refreshMenu() // data refresh — keep the user's scroll position
 		if dm.Err != nil {
 			return m, tea.Batch(cmds...) // keep whatever pages already painted
 		}
-		// Continue the chain under the same cap as the old barrier loop
-		// (~12 restaurants / 2 pages) so streaming never increases call volume.
-		count := 0
-		if r := m.liveRepo(); r != nil {
-			count = len(r.PlacesByQuery(m.addr, dm.Query))
-		}
-		if !dm.Done && dm.Page < 2 && count < 12 {
+		if more {
 			cmds = append(cmds, datasource.LoadPlacesPage(m.backend, m.snap, m.addr.ID, dm.Query, dm.NextOffset, dm.Page+1, m.placesGen))
 		} else {
 			m.savePlacesCache(dm.Query) // list settled — persist for instant next launch

@@ -105,6 +105,41 @@ func pulse(frame int) string {
 	return strings.Join(cells, " ")
 }
 
+// ringSpin is the rotating-circle spinner for the foot-of-list "more coming"
+// wait — a quarter-circle sweeping around, distinct from the pulse (initial
+// full-pane wait) and the braille micro-spinner (inline single-line waits).
+var ringSpin = []string{"◐", "◓", "◑", "◒"}
+
+// ringAt advances one step every 2 ticks (~7 turns a minute) — a calm spin.
+func ringAt(frame int) string { return ringSpin[(frame/2)%len(ringSpin)] }
+
+// LoadingMore renders the centered foot-of-list spinner shown while more list
+// pages stream in below what's already painted — so a partial list reads as
+// "still filling", not "this is everything".
+func LoadingMore(frame, w int) string {
+	line := theme.GoldStyle.Render(ringAt(frame)) + theme.DimStyle.Render("  loading more…")
+	return "\n" + centerTo(line, w) + "\n"
+}
+
+// ListEnd renders the centered end-of-list marker shown once a streaming list
+// has loaded everything — closure, so the last page never looks cut off.
+func ListEnd(w int) string {
+	return "\n" + centerTo(theme.FaintStyle.Render("— that's all —"), w) + "\n"
+}
+
+// CenteredNote renders one dim line centered horizontally in w and vertically
+// in budget rows — the "nothing to show / couldn't load" state, placed where
+// the loader sat (middle of the pane) rather than the top-left corner.
+func CenteredNote(msg string, w, budget int) string {
+	body := centerTo(theme.DimStyle.Render(msg), w)
+	var b strings.Builder
+	if above := (budget - 1) / 2; above > 0 {
+		b.WriteString(strings.Repeat("\n", above))
+	}
+	b.WriteString(body + "\n")
+	return b.String()
+}
+
 // centerTo left-pads s so its display width sits centered in w.
 func centerTo(s string, w int) string {
 	if pad := (w - lipgloss.Width(s)) / 2; pad > 0 {

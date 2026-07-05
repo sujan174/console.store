@@ -46,7 +46,9 @@ type Menu struct {
 	usuals          []catalog.Place
 	nearby          []catalog.Place
 	hasSections     bool
-	loading         bool
+	loading         bool // an initial load is in flight (list empty → full-pane loader)
+	loaded          bool // a load for this view has reached a terminal state at least once
+	loadingMore     bool // pagination is still fetching more rows below (foot-of-list spinner)
 	searchMode      bool
 	searchPending   bool
 	searchQuery     string
@@ -187,6 +189,15 @@ func (m Menu) WithSearchMode(active bool, query string, results []catalog.Place,
 // WithLoading marks the flat (category) list as still loading, so an empty list
 // shows a "loading…" cue instead of "no restaurants" while results stream in.
 func (m Menu) WithLoading(loading bool) Menu { m.loading = loading; return m }
+
+// WithLoaded marks that a load for this view has completed at least once (ok or
+// error). Until then an empty list stays a loader — never a "nothing here"
+// flash before the first fetch has even landed.
+func (m Menu) WithLoaded(loaded bool) Menu { m.loaded = loaded; return m }
+
+// WithLoadingMore marks that more rows are still streaming in below the ones
+// already painted, so a non-empty list shows the foot-of-list spinner.
+func (m Menu) WithLoadingMore(more bool) Menu { m.loadingMore = more; return m }
 
 // WithAnim carries the global frame + local hour into the loading scenes.
 // Chained at render time by the root (like WithMaxRows).
@@ -393,10 +404,13 @@ func (m Menu) sectionHeaderCount() int {
 func (m Menu) browseRows(budget int) string {
 	places := m.mainPlaces()
 	if len(places) == 0 {
-		if m.loading {
+		// Empty list: keep the loader up until a fetch has actually completed, so
+		// "no restaurants" never flashes in the corner before the first load lands.
+		// Once loaded-and-still-empty, the note sits centered where the loader was.
+		if m.loading || !m.loaded {
 			return FoodLoading(m.animFrame, m.animHour, m.paneW(), budget)
 		}
-		return "  " + theme.DimStyle.Render("no restaurants nearby") + "\n"
+		return CenteredNote("no restaurants deliver here right now", m.paneW(), budget)
 	}
 	rowBudget := budget
 	if rowBudget > 0 {
@@ -419,7 +433,14 @@ func (m Menu) browseRows(budget int) string {
 		b.WriteString(m.placeRow(places[i], i == m.list.Cursor) + "\n")
 	}
 	if below > 0 {
+		// More rows exist below the viewport — scroll cue, not a fetch state.
 		b.WriteString("  " + theme.FaintStyle.Render(fmt.Sprintf("↓ %d more", below)) + "\n")
+	} else if m.loadingMore {
+		// At the foot of everything painted, but more pages are still streaming in.
+		b.WriteString(LoadingMore(m.animFrame, m.paneW()))
+	} else if m.loaded {
+		// Nothing more coming — mark the end so the last page never looks cut off.
+		b.WriteString(ListEnd(m.paneW()))
 	}
 	return b.String()
 }
