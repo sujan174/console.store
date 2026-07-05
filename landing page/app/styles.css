@@ -67,6 +67,15 @@ a {
   align-items: center;
 }
 
+.pitch-cta {
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.pitch-cta:hover {
+  background: rgba(147, 168, 255, 0.15) !important;
+  border-color: rgba(147, 168, 255, 0.5) !important;
+  transform: translateY(-1px);
+}
+
 @media (min-width: 821px) {
   /* click-only toggle now — the section is normal flow, not a 180vh scrolly. */
   .keys-scrolly {

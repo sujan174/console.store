@@ -96,72 +96,16 @@ export const MARKUP = String.raw`
 
   <!-- PITCH — one full screen: what it is + install (rises up on scroll) -->
   <section id="pitch" data-pitch style="position:relative;z-index:2;min-height:calc(100vh - 40px);display:flex;align-items:center;justify-content:center;padding:48px clamp(24px,6vw,56px)">
-    <div class="pitch-grid" data-pitch-grid style="display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(32px,5vw,64px);align-items:center;width:100%;max-width:1100px">
+    <div class="pitch-grid" data-pitch-grid style="width:100%;max-width:760px">
       <div class="pitch-left" style="text-align:left">
         <div data-pitch-item style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:6px">// what it is</div>
         <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:16ch">dinner, piped through your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">terminal</span> — or your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">agent</span>.</h1>
         <p data-pitch-item style="max-width:52ch;color:#b6bce0;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI <span style="color:#cdd3f0">(type commands)</span> and full TUI <span style="color:#cdd3f0">(a keyboard-only menu)</span> for ordering real food through Swiggy without leaving your shell — plus an MCP server <span style="color:#cdd3f0">(a plug-in your AI agent talks to)</span> that lets it order for you. authorize once, then reorder a saved favourite with a keystroke, or just tell your agent <span style="color:#cdd3f0">“order my usual.”</span></p>
-      </div>
-      <div data-pitch-item style="perspective:1200px">
-        <a href="/features" data-action="features-zoom" class="feat-window" aria-label="open the full feature map">
-          <div class="feat-window-bar">
-            <span class="win-mark">❯</span>
-            <span style="font-size:11px;color:#b6bce0">the feature map</span>
-            <span class="feat-window-hint" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#93a8ff"><span style="width:6px;height:6px;border-radius:99px;background:#93a8ff;box-shadow:0 0 8px #93a8ff"></span>click to explore</span>
-          </div>
-          <div style="padding:22px">
-            <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:12px">// everything it does</div>
-            <div style="font-weight:800;font-size:clamp(22px,2.6vw,30px);line-height:1.12;letter-spacing:-.02em;color:#e9ebf7;margin-bottom:20px">18 features.<br><span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">terminal + agent.</span></div>
-            <div style="display:flex;flex-direction:column;gap:12px;font-size:12.5px;line-height:1.5">
-              <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#93a8ff;flex:none">◆</span><span style="color:#b6bce0"><span style="color:#cdd3f0">the terminal</span> — browse, order, track, presets, the <span style="color:#b08cf5">:</span> palette</span></div>
-              <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#b08cf5;flex:none">✳</span><span style="color:#b6bce0"><span style="color:#cdd3f0">the agent</span> — chat, real bill, you approve, remembers you</span></div>
-            </div>
-            <div style="margin-top:22px;border-top:1px solid rgba(147,168,255,.09);padding-top:18px">
-              <span class="feat-cta">open the full feature map <span class="feat-window-arrow" style="font-size:15px">→</span></span>
-            </div>
-          </div>
-        </a>
+        <a href="/features" data-pitch-item class="pitch-cta" aria-label="explore all features" style="display:inline-flex;align-items:center;gap:10px;margin-top:32px;padding:14px 24px;border-radius:11px;border:1px solid rgba(147,168,255,.32);background:rgba(147,168,255,.09);color:#aebcff;font-weight:600;font-size:14px;letter-spacing:.2px;text-decoration:none">explore all 18 features <span style="font-size:16px;line-height:1">→</span></a>
       </div>
     </div>
   </section>
 
-  <!-- FEATURES -->
-  <section id="features" style="position:relative;z-index:2;max-width:980px;margin:0 auto;padding:60px clamp(24px,6vw,56px) 48px" data-reveal>
-    <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:20px">// the same order, three ways</div>
-    <h2 style="font-weight:800;font-size:clamp(26px,4vw,46px);letter-spacing:-.025em;line-height:1.1;margin:0">
-      <span style="color:#3a3d5c">a browser order is a chore.</span><br>
-      <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">this is a command — or a sentence.</span>
-    </h2>
-
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:36px 56px;margin-top:40px">
-      <div>
-        <div style="font-size:10.5px;letter-spacing:1.5px;color:#ff7d96;margin-bottom:20px">THE BROWSER WAY</div>
-        <div style="display:flex;flex-direction:column;gap:13px;font-size:13.5px;line-height:1.5;color:#4c4f6e;text-decoration:line-through;text-decoration-color:rgba(255,125,150,.4)">
-          <span>open a tab, log in, clear a captcha</span>
-          <span>re-pick your delivery address</span>
-          <span>scroll past the "sponsored" rows</span>
-          <span>pay, then dismiss the pop-ups</span>
-        </div>
-        <div style="margin-top:24px;font-size:11.5px;color:#565b80">~14 clicks · ~2 min · mouse</div>
-      </div>
-      <div>
-        <div style="font-size:10.5px;letter-spacing:1.5px;color:#93a8ff;margin-bottom:20px">YOU, IN THE TERMINAL</div>
-        <div style="border-left:2px solid rgba(147,168,255,.45);padding-left:18px;display:flex;flex-direction:column;gap:12px;font-size:13.5px;line-height:1.45">
-          <div><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console order</span> <span style="color:#eab560">dinner</span></div>
-          <div><span style="color:#93a8ff">↵</span> <span style="color:#8ee08a">order placed · 35 min</span></div>
-        </div>
-        <div style="margin-top:24px;font-size:11.5px;color:#93a8ff">3 keystrokes · ~9 seconds</div>
-      </div>
-      <div>
-        <div style="font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;margin-bottom:20px">YOUR AGENT, HANDS-FREE</div>
-        <div style="border-left:2px solid rgba(176,140,245,.45);padding-left:18px;display:flex;flex-direction:column;gap:12px;font-size:13.5px;line-height:1.45">
-          <div><span style="color:#565b80">you:</span> <span style="color:#e9ebf7">order my usual dinner</span></div>
-          <div><span style="color:#b08cf5">✳</span> <span style="color:#8ee08a">placed ✓ · on its way</span></div>
-        </div>
-        <div style="margin-top:24px;font-size:11.5px;color:#b08cf5">1 message · you approve</div>
-      </div>
-    </div>
-  </section>
 
   <!-- TOAST -->
   <div data-ref="toast" style="display:none;position:fixed;left:50%;bottom:34px;transform:translateX(-50%);z-index:50;align-items:center;gap:10px;background:#0c0c18;border:1px solid rgba(234,181,96,.28);border-radius:10px;padding:13px 18px;font-size:13px;color:#e9ebf7;box-shadow:0 20px 60px rgba(0,0,0,.6)">
@@ -225,8 +169,8 @@ export const MARKUP = String.raw`
   <section id="run" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:48px clamp(24px,6vw,56px) 32px" data-reveal>
     <div class="run-grid">
       <div>
-        <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// watch it run</div>
-        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1">the whole shop<br>is a tui.</h2>
+        <div style="font-size:11px;letter-spacing:2px;color:#eab560;margin-bottom:14px">// watch it run</div>
+        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;background:linear-gradient(168deg,#f5d493 0%,#eab560 52%,#d68f36 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1">the whole shop<br>is a tui.</h2>
         <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 28px">recreated frame-by-frame from the real bubbletea app. live demo videos land at launch.</p>
         <div style="display:flex;flex-direction:column;gap:11px">
           <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#8ee08a;border-radius:1px"></span>browse restaurants &amp; menus</div>
@@ -338,9 +282,9 @@ export const MARKUP = String.raw`
 
   <!-- MANIFESTO -->
   <section id="why" style="position:relative;z-index:2;max-width:820px;margin:0 auto;padding:64px clamp(24px,6vw,56px)" data-reveal>
-    <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:24px;text-align:center">// why it's different</div>
+    <div style="font-size:11px;letter-spacing:2px;color:#eab560;margin-bottom:24px;text-align:center">// why it's different</div>
     <p style="font-weight:800;font-size:clamp(24px,3.8vw,46px);line-height:1.18;letter-spacing:-.02em;text-align:center;margin:0">
-      <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">your terminal is open. your agent is listening.</span><br>
+      <span style="background:linear-gradient(168deg,#f5d493 0%,#eab560 52%,#d68f36 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">your terminal is open. your agent is listening.</span><br>
       <span style="color:#3a3d5c">why open a browser</span> <span style="color:#eab560">to get dinner?</span>
     </p>
     <p style="max-width:54ch;margin:30px auto 0;text-align:center;color:#b6bce0;font-size:13.5px;line-height:1.78">no tab-hunting, no cookie banners, no context switch — whether you type the command or your agent does. every order is a real Swiggy bill you approve before a rupee moves. the site can be loud because the product underneath is intentionally strict.</p>
