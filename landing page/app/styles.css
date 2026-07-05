@@ -228,6 +228,86 @@ a {
     flex: 1 1 200px;
     min-width: 0;
   }
+
+  /* ---- phone readability: the desktop body copy (13.5px) is too small on a
+     phone. Bump the prose + line-height across every section, enlarge the hero
+     lead, and give headings a touch more room. Terminal-demo text stays small
+     on purpose (it mimics a real shell) and is handled separately above. ---- */
+  .hero-head {
+    line-height: 1.14 !important;
+  }
+  /* hero lead paragraph */
+  header p {
+    font-size: 17.5px !important;
+    line-height: 1.72 !important;
+    margin-top: 22px !important;
+  }
+  /* section body copy — pitch / run / agent / terminal+agent / manifesto */
+  .pitch-left p,
+  #run p,
+  #agent p,
+  .keys-grid p,
+  #why p {
+    font-size: 15.5px !important;
+    line-height: 1.72 !important;
+  }
+  /* section eyebrow labels ("// what it is") — a hair bigger + more air */
+  [data-pitch-item]:first-child,
+  #run [style*="letter-spacing:2px"],
+  #agent [style*="letter-spacing:2px"] {
+    font-size: 12px !important;
+  }
+  /* FAQ: larger question + answer text, roomier tap targets */
+  [data-faq-q] {
+    font-size: 15.5px !important;
+    padding-top: 22px !important;
+    padding-bottom: 22px !important;
+  }
+  [data-faq-a] p {
+    font-size: 14px !important;
+    line-height: 1.72 !important;
+  }
+  /* keyword chips: a touch bigger so they read as labels, not fine print */
+  .keys-grid span[style*="border-radius:7px"],
+  #agent span[style*="border-radius:7px"] {
+    font-size: 12.5px !important;
+  }
+
+  /* ---- spacing: drop the full-viewport section heights so stacked mobile
+     content doesn't float in a sea of empty space; tighten vertical rhythm. ---- */
+  #pitch {
+    min-height: auto !important;
+    padding-top: 56px !important;
+    padding-bottom: 56px !important;
+  }
+  #run,
+  #agent {
+    padding-top: 40px !important;
+    padding-bottom: 28px !important;
+  }
+  #why {
+    padding-top: 52px !important;
+    padding-bottom: 52px !important;
+  }
+  /* the terminal/agent scrolly is pinned+tall on desktop; on phones it's a
+     normal stacked flow — give it breathing room top and bottom */
+  .keys-scrolly {
+    padding-top: 44px !important;
+    padding-bottom: 8px !important;
+  }
+}
+
+/* ---- very small phones (≤400px): rein in the hero so it never clips ---- */
+@media (max-width: 400px) {
+  .hero-head {
+    font-size: clamp(25px, 8vw, 34px) !important;
+  }
+  header p {
+    font-size: 16.5px !important;
+  }
+  .install-hero .install-cmdrow {
+    font-size: 12px !important;
+  }
 }
 
 /* ---- keycap chip ---- */
