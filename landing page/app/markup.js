@@ -56,15 +56,15 @@ export const MARKUP = String.raw`
          scramble-reveal. No canvas, no gradient: logic.js bails on the missing
          hero canvas and drives [data-ref=wordmark] via startWordmark (scramble). -->
     <div data-ref="hero3dwrap" title="click to replay" style="position:absolute;left:clamp(20px,5vw,54px);top:15px;z-index:4;cursor:pointer;user-select:none;animation:introFade .9s ease both .2s">
-      <div data-ref="wordmark" style="display:none;align-items:baseline;font-weight:800;font-size:clamp(19px,2.5vw,26px);letter-spacing:-.02em;line-height:1">
-        <span data-wm-console style="color:#93a8ff">console</span><span data-wm-store style="color:#eab560;margin-left:.03em">store</span>
+      <div data-ref="wordmark" style="display:none;align-items:flex-end;font-weight:800;font-size:clamp(21px,2.7vw,28px);letter-spacing:-.035em;line-height:.92">
+        <span data-wm-console style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 50%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">console</span><span data-wm-store style="color:#eab560;font-size:.58em;align-self:flex-end;margin:0 0 .14em .05em">store</span>
       </div>
     </div>
 
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:100%;max-width:1100px;margin:0 auto;padding:18px clamp(24px,6vw,56px) 0">
       <h1 class="hero-head" style="font-weight:700;font-size:clamp(32px,5.8vw,66px);line-height:1.1;letter-spacing:-.025em;color:#e9ebf7;margin:0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .24s">Great food is just<br>a <em style="font-style:italic;color:#eab560">command</em> away.</h1>
 
-      <p style="margin:28px 0 0;max-width:56ch;font-size:15px;line-height:1.75;color:#8a8fb4;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">consolestore orders real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — straight from your terminal, or through your AI agent. No browser tabs, no forms, no cookie walls. <span style="color:#cdd3f0">You type, you eat.</span></p>
+      <p style="margin:28px 0 0;max-width:54ch;font-size:16.5px;line-height:1.8;color:#b6bce0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">consolestore orders real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — straight from your terminal, or through your AI agent. No browser tabs, no forms, no cookie walls. <span style="color:#cdd3f0">You type, you eat.</span></p>
 
       <!-- install command (OS-aware text set in logic.js; live stats live in the right drawer) -->
       <div style="margin-top:34px;display:flex;flex-direction:column;align-items:center;gap:13px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .7s">
@@ -100,21 +100,21 @@ export const MARKUP = String.raw`
       <div class="pitch-left" style="text-align:left">
         <div data-pitch-item style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:6px">// what it is</div>
         <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:16ch">dinner, piped through your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">terminal</span> — or your <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">agent</span>.</h1>
-        <p data-pitch-item style="max-width:52ch;color:#8a8fb4;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI <span style="color:#cdd3f0">(type commands)</span> and full TUI <span style="color:#cdd3f0">(a keyboard-only menu)</span> for ordering real food through Swiggy without leaving your shell — plus an MCP server <span style="color:#cdd3f0">(a plug-in your AI agent talks to)</span> that lets it order for you. authorize once, then reorder a saved favourite with a keystroke, or just tell your agent <span style="color:#cdd3f0">“order my usual.”</span></p>
+        <p data-pitch-item style="max-width:52ch;color:#b6bce0;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI <span style="color:#cdd3f0">(type commands)</span> and full TUI <span style="color:#cdd3f0">(a keyboard-only menu)</span> for ordering real food through Swiggy without leaving your shell — plus an MCP server <span style="color:#cdd3f0">(a plug-in your AI agent talks to)</span> that lets it order for you. authorize once, then reorder a saved favourite with a keystroke, or just tell your agent <span style="color:#cdd3f0">“order my usual.”</span></p>
       </div>
       <div data-pitch-item style="perspective:1200px">
         <a href="/features" data-action="features-zoom" class="feat-window" aria-label="open the full feature map">
           <div class="feat-window-bar">
             <span class="win-mark">❯</span>
-            <span style="font-size:11px;color:#8a8fb4">the feature map</span>
+            <span style="font-size:11px;color:#b6bce0">the feature map</span>
             <span class="feat-window-hint" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#93a8ff"><span style="width:6px;height:6px;border-radius:99px;background:#93a8ff;box-shadow:0 0 8px #93a8ff"></span>click to explore</span>
           </div>
           <div style="padding:22px">
             <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:12px">// everything it does</div>
             <div style="font-weight:800;font-size:clamp(22px,2.6vw,30px);line-height:1.12;letter-spacing:-.02em;color:#e9ebf7;margin-bottom:20px">18 features.<br><span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">terminal + agent.</span></div>
             <div style="display:flex;flex-direction:column;gap:12px;font-size:12.5px;line-height:1.5">
-              <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#93a8ff;flex:none">◆</span><span style="color:#8a8fb4"><span style="color:#cdd3f0">the terminal</span> — browse, order, track, presets, the <span style="color:#b08cf5">:</span> palette</span></div>
-              <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#b08cf5;flex:none">✳</span><span style="color:#8a8fb4"><span style="color:#cdd3f0">the agent</span> — chat, real bill, you approve, remembers you</span></div>
+              <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#93a8ff;flex:none">◆</span><span style="color:#b6bce0"><span style="color:#cdd3f0">the terminal</span> — browse, order, track, presets, the <span style="color:#b08cf5">:</span> palette</span></div>
+              <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#b08cf5;flex:none">✳</span><span style="color:#b6bce0"><span style="color:#cdd3f0">the agent</span> — chat, real bill, you approve, remembers you</span></div>
             </div>
             <div style="margin-top:22px;border-top:1px solid rgba(147,168,255,.09);padding-top:18px">
               <span class="feat-cta">open the full feature map <span class="feat-window-arrow" style="font-size:15px">→</span></span>
@@ -227,7 +227,7 @@ export const MARKUP = String.raw`
       <div>
         <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// watch it run</div>
         <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1">the whole shop<br>is a tui.</h2>
-        <p style="color:#8a8fb4;font-size:13.5px;line-height:1.72;margin:0 0 28px">recreated frame-by-frame from the real bubbletea app. live demo videos land at launch.</p>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 28px">recreated frame-by-frame from the real bubbletea app. live demo videos land at launch.</p>
         <div style="display:flex;flex-direction:column;gap:11px">
           <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#8ee08a;border-radius:1px"></span>browse restaurants &amp; menus</div>
           <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#93a8ff;border-radius:1px"></span>manage cart with keyboard only</div>
@@ -238,7 +238,7 @@ export const MARKUP = String.raw`
         <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(147,168,255,.05),transparent 16%);z-index:1"></div>
         <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid rgba(147,168,255,.08);background:#0d0e1c">
           <span class="win-mark">❯</span>
-          <span style="font-size:12px;color:#8a8fb4">consolestore.in ~ %</span>
+          <span style="font-size:12px;color:#b6bce0">consolestore.in ~ %</span>
           <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:#7fe0ff"><span style="width:5px;height:5px;border-radius:99px;background:#7fe0ff;animation:pulseDot 1.6s ease-in-out infinite;flex:none"></span>live preview</span>
         </div>
         <div class="demo-body" style="position:relative;padding:20px 22px;min-height:380px">
@@ -271,18 +271,18 @@ export const MARKUP = String.raw`
               <div>
                 <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// you, at the prompt</div>
                 <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 16px;background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1">order without<br>the app.</h2>
-                <p style="color:#8a8fb4;font-size:13.5px;line-height:1.72;margin:0 0 16px">save a cart once as a <span style="color:#e9ebf7">preset</span> and you never open the app to eat again. <span style="color:#e9ebf7">console order dinner</span> pushes it to your cart, pulls the <span style="color:#e9ebf7">real bill</span>, and waits for a single <span style="color:#93a8ff">↵</span> — two keystrokes, a few seconds.</p>
-                <p style="color:#8a8fb4;font-size:13.5px;line-height:1.72;margin:0 0 22px">checking a live order? <span style="color:#e9ebf7">console status</span> — one command, live ETA, done. the shortest path from craving to confirmed: no app, no browser, no broken flow.</p>
+                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">save a cart once as a <span style="color:#e9ebf7">preset</span> and you never open the app to eat again. <span style="color:#e9ebf7">console order dinner</span> pushes it to your cart, pulls the <span style="color:#e9ebf7">real bill</span>, and waits for a single <span style="color:#93a8ff">↵</span> — two keystrokes, a few seconds.</p>
+                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">checking a live order? <span style="color:#e9ebf7">console status</span> — one command, live ETA, done. the shortest path from craving to confirmed: no app, no browser, no broken flow.</p>
                 <div style="display:flex;flex-wrap:wrap;gap:8px">
-                  <span style="font-size:12px;color:#8a8fb4;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">reorder in ~8s</span>
-                  <span style="font-size:12px;color:#8a8fb4;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">status in one command</span>
-                  <span style="font-size:12px;color:#8a8fb4;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">no app · no browser</span>
+                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">reorder in ~8s</span>
+                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">status in one command</span>
+                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">no app · no browser</span>
                 </div>
               </div>
               <div class="demo-win" style="border:1px solid rgba(147,168,255,.14);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
                 <div style="display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid rgba(147,168,255,.07);background:#0e0f1c">
                   <span class="win-mark">❯</span>
-                  <span style="font-size:11px;color:#8a8fb4">zsh — your saved usuals, one command</span>
+                  <span style="font-size:11px;color:#b6bce0">zsh — your saved usuals, one command</span>
                 </div>
                 <div data-ref="cli" style="padding:18px;font-size:13px;line-height:1.95;min-height:280px"></div>
               </div>
@@ -296,12 +296,12 @@ export const MARKUP = String.raw`
                 <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.28);border-radius:999px;padding:5px 12px;margin-bottom:18px">NEW · MCP + SKILLS</span>
                 <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// hand it to your agent</div>
                 <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 16px;background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1">let your agent<br>order dinner.</h2>
-                <p style="color:#8a8fb4;font-size:13.5px;line-height:1.72;margin:0 0 16px">consolestore installs an <span style="color:#e9ebf7">MCP server + skills</span> into your AI agent — Claude, Cursor, Windsurf, Zed, VS Code. ask in plain language; it searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places the order <span style="color:#e9ebf7">only after you say yes</span>.</p>
-                <p style="color:#8a8fb4;font-size:13.5px;line-height:1.72;margin:0 0 22px">your usual, hands-free — but never a charge you didn't approve. the agent proposes; <span style="color:#93a8ff">you</span> confirm.</p>
+                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">consolestore installs an <span style="color:#e9ebf7">MCP server + skills</span> into your AI agent — Claude, Cursor, Windsurf, Zed, VS Code. ask in plain language; it searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places the order <span style="color:#e9ebf7">only after you say yes</span>.</p>
+                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">your usual, hands-free — but never a charge you didn't approve. the agent proposes; <span style="color:#93a8ff">you</span> confirm.</p>
                 <div style="display:flex;flex-wrap:wrap;gap:8px">
-                  <span style="font-size:12px;color:#8a8fb4;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">Claude · Cursor · Zed</span>
-                  <span style="font-size:12px;color:#8a8fb4;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">you approve every order</span>
-                  <span style="font-size:12px;color:#8a8fb4;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">plain language</span>
+                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">Claude · Cursor · Zed</span>
+                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">you approve every order</span>
+                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">plain language</span>
                 </div>
               </div>
               <div class="demo-win" style="border:1px solid rgba(176,140,245,.2);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
@@ -343,7 +343,7 @@ export const MARKUP = String.raw`
       <span style="background:linear-gradient(168deg,#aebcff 0%,#9c9af4 52%,#b08cf5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">your terminal is open. your agent is listening.</span><br>
       <span style="color:#3a3d5c">why open a browser</span> <span style="color:#eab560">to get dinner?</span>
     </p>
-    <p style="max-width:54ch;margin:30px auto 0;text-align:center;color:#8a8fb4;font-size:13.5px;line-height:1.78">no tab-hunting, no cookie banners, no context switch — whether you type the command or your agent does. every order is a real Swiggy bill you approve before a rupee moves. the site can be loud because the product underneath is intentionally strict.</p>
+    <p style="max-width:54ch;margin:30px auto 0;text-align:center;color:#b6bce0;font-size:13.5px;line-height:1.78">no tab-hunting, no cookie banners, no context switch — whether you type the command or your agent does. every order is a real Swiggy bill you approve before a rupee moves. the site can be loud because the product underneath is intentionally strict.</p>
   </section>
 
   <!-- FAQ -->
@@ -353,31 +353,31 @@ export const MARKUP = String.raw`
     <div style="border-top:1px solid rgba(147,168,255,.08)">
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">is it live yet?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
-        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8a8fb4;font-size:13px;line-height:1.72">early access. the command above is auto-picked for your OS — <span style="color:#e9ebf7">curl … | sh</span> on macOS/Linux, <span style="color:#e9ebf7">irm … | iex</span> on Windows. it installs a signed binary that self-updates on launch. the public (stable) channel is rolling out; alpha &amp; beta are invite-only.</p></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">early access. the command above is auto-picked for your OS — <span style="color:#e9ebf7">curl … | sh</span> on macOS/Linux, <span style="color:#e9ebf7">irm … | iex</span> on Windows. it installs a signed binary that self-updates on launch. the public (stable) channel is rolling out; alpha &amp; beta are invite-only.</p></div>
       </div>
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">can I order without opening the app?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
-        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8a8fb4;font-size:13px;line-height:1.72">yes — that's the point for power users. save a cart as a preset once (<span style="color:#e9ebf7">:alias set dinner</span> in the TUI), then <span style="color:#e9ebf7">console order dinner</span> shows the real bill and places it on ↵. <span style="color:#e9ebf7">console status</span> prints your live ETA. no TUI, no browser.</p></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">yes — that's the point for power users. save a cart as a preset once (<span style="color:#e9ebf7">:alias set dinner</span> in the TUI), then <span style="color:#e9ebf7">console order dinner</span> shows the real bill and places it on ↵. <span style="color:#e9ebf7">console status</span> prints your live ETA. no TUI, no browser.</p></div>
       </div>
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">can my AI agent order for me?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
-        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8a8fb4;font-size:13px;line-height:1.72">yes. consolestore installs a <span style="color:#e9ebf7">console mcp</span> server + skills into Claude Desktop/Code, Cursor, Windsurf, Zed, VS Code, and Codex. ask in plain language — the agent searches, builds the cart, and shows the real Swiggy bill, then places the order <span style="color:#e9ebf7">only after you confirm</span>. same broker, same guardrails as the CLI.</p></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">yes. consolestore installs a <span style="color:#e9ebf7">console mcp</span> server + skills into Claude Desktop/Code, Cursor, Windsurf, Zed, VS Code, and Codex. ask in plain language — the agent searches, builds the cart, and shows the real Swiggy bill, then places the order <span style="color:#e9ebf7">only after you confirm</span>. same broker, same guardrails as the CLI.</p></div>
       </div>
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">does it actually place real orders?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
-        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8a8fb4;font-size:13px;line-height:1.72">only the armed <span style="color:#e9ebf7">console</span> build, and only after you set <span style="color:#e9ebf7">CONSOLE_LIVE_ORDERS=1</span>. plain builds stay at browse + cart. placement always needs an explicit yes — your ↵, or your agent's confirmation — and is never silently retried.</p></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">only the armed <span style="color:#e9ebf7">console</span> build, and only after you set <span style="color:#e9ebf7">CONSOLE_LIVE_ORDERS=1</span>. plain builds stay at browse + cart. placement always needs an explicit yes — your ↵, or your agent's confirmation — and is never silently retried.</p></div>
       </div>
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">where do my tokens go?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
-        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8a8fb4;font-size:13px;line-height:1.72">into your os keyring via go-keyring. there is no server and no database — auth is a one-time loopback browser handoff with pkce, refreshed locally.</p></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">into your os keyring via go-keyring. there is no server and no database — auth is a one-time loopback browser handoff with pkce, refreshed locally.</p></div>
       </div>
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">what backs the menus?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
-        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8a8fb4;font-size:13px;line-height:1.72">swiggy's food + instamart mcp api, brokered in-process by the cli — real restaurants, real prices, real delivery estimates.</p></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">swiggy's food + instamart mcp api, brokered in-process by the cli — real restaurants, real prices, real delivery estimates.</p></div>
       </div>
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">which terminals work?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
-        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#8a8fb4;font-size:13px;line-height:1.72">anything truecolor. kitty graphics renders the hero art where supported; everywhere else falls back to a portable half-block render. macos, linux, and windows terminal are all detected.</p></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">anything truecolor. kitty graphics renders the hero art where supported; everywhere else falls back to a portable half-block render. macos, linux, and windows terminal are all detected.</p></div>
       </div>
     </div>
   </section>
@@ -399,7 +399,7 @@ export const MARKUP = String.raw`
           </div>
           <div style="font-size:11.5px;color:#2d2f48">// not affiliated with swiggy. preview build, no warranty, no real orders on this page.</div>
         </div>
-        <div style="display:flex;gap:40px;font-size:12.5px;color:#8a8fb4;flex-wrap:wrap">
+        <div style="display:flex;gap:40px;font-size:12.5px;color:#b6bce0;flex-wrap:wrap">
           <div style="display:flex;flex-direction:column;gap:11px">
             <span style="color:#565b80;font-size:10.5px;letter-spacing:1px">PRODUCT</span>
             <a href="#run" class="lnk">run</a>
