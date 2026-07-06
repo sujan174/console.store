@@ -64,9 +64,8 @@ func confettiFrame(w, h, tick int) []confParticle {
 // after an order is placed (scrConfirm). Like loaderView, it is a dead end in
 // View: the caller returns it directly instead of assembling the usual brand
 // banner / footer chrome, so it must be exactly m.h lines on its own. The
-// confetti burst is a pure function of m.confirmTick (and m.frame for the
-// spinner-adjacent shimmer), never stored particle state, so the view is
-// trivially deterministic and testable.
+// confetti burst is a pure function of m.confirmTick, never stored particle
+// state, so the view is trivially deterministic and testable.
 func confettiView(m Model) string {
 	w, h := m.w, m.h
 	if w <= 0 {

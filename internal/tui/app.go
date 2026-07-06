@@ -2129,6 +2129,8 @@ func (m Model) onTick() (Model, tea.Cmd) {
 		// refreshing while the screen is open, even if the delivery heuristic has
 		// cleared the active-order flag.
 		if m.trackTick%500 == 0 && m.activeOrder.OrderID != "" && m.backend != nil {
+			// Early return skips one dodge.Tick this frame — harmless (imperceptible),
+			// and keeps the poll cadence exact.
 			return m, m.trackingPollCmd()
 		}
 		// Dodge minigame: shown below the tracking body only when there's room.
@@ -5193,8 +5195,6 @@ func (m Model) screenLabel() string {
 		return "menu"
 	case scrCheckout:
 		return "checkout"
-	case scrConfirm:
-		return "order placed"
 	case scrTracking:
 		return "tracking"
 	case scrAddress:
@@ -5502,7 +5502,7 @@ func (m Model) View() string {
 	// legacy cart, IM checkout/confirm) show the Instamart cart, not food's.
 	chip := m.cartChip()
 	if m.screen == scrInstamart || m.screen == scrImCart ||
-		((m.screen == scrCheckout || m.screen == scrConfirm) && m.checkoutVertical == 1) {
+		(m.screen == scrCheckout && m.checkoutVertical == 1) {
 		chip = m.imCartChip()
 	}
 	content = screens.BrandBanner(components.FrameWidth(), m.frame, m.addr.Line, m.addr.Label, chip) + content

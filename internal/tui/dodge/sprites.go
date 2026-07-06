@@ -4,7 +4,6 @@ package dodge
 // decoupled package and must not import internal/tui/theme (see CLAUDE.md's
 // note on deliberate palette duplication across the screens/tui boundary).
 const (
-	colBg     = "#15161f" // panel background (unused directly; cells default to fg only)
 	colText   = "#a9b1d6" // default text
 	colBright = "#c0caf5" // headings / hint text
 	colDim    = "#565f89" // secondary / wheels / dimmed-on-death
