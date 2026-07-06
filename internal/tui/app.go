@@ -61,6 +61,10 @@ const tickInterval = 60 * time.Millisecond
 // Esc presses for them to count as a double-Esc "home" gesture.
 const escDoubleWindow = 12
 
+// confirmAdvanceFrames is how many onTick frames the confetti celebration
+// (scrConfirm) holds before auto-advancing to tracking — ~1.5s at the 60ms tick.
+const confirmAdvanceFrames = 25
+
 func tick() tea.Cmd {
 	return tea.Tick(tickInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
@@ -2103,7 +2107,7 @@ func (m Model) onTick() (Model, tea.Cmd) {
 	}
 	if m.screen == scrConfirm {
 		m.confirmTick++
-		if m.confirmTick >= 42 {
+		if m.confirmTick >= confirmAdvanceFrames {
 			// Auto-advance off the confirm screen. With an active order we go to
 			// tracking and poll; without one (e.g. a disarmed "placed" flow) we
 			// still leave — never leave the user stuck ticking on scrConfirm.
@@ -5409,6 +5413,9 @@ func (m Model) View() string {
 	if m.placingOrder && m.screen == scrCheckout {
 		return loaderView(m)
 	}
+	if m.screen == scrConfirm {
+		return confettiView(m)
+	}
 
 	var body string
 	switch m.screen {
@@ -5418,7 +5425,7 @@ func (m Model) View() string {
 		// 14 left a ~5-row blank gap above the footer).
 		chrome := 10 + screens.BrandHeaderLines
 		body = m.rest.WithMaxRows(m.listRows(chrome)).WithAnim(m.frame, m.hourNow()).View()
-	case scrCheckout, scrConfirm:
+	case scrCheckout:
 		body = m.checkout.WithPlacing(m.placingOrder).WithViewport(m.h).
 			WithHour(m.hourNow()).View(m.frame)
 	case scrTracking:

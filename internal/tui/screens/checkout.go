@@ -142,6 +142,9 @@ func (c Checkout) Place() string { return c.restaurant }
 // OrderID returns the placed order's id (used to seed tracking).
 func (c Checkout) OrderID() string { return c.orderID }
 
+// ETA is the delivery estimate captured at Placed(); empty if not yet placed.
+func (c Checkout) ETA() string { return c.eta }
+
 // Lines returns the order's cart lines (used to derive the order id).
 func (c Checkout) Lines() []CartLine { return c.lines }
 

@@ -86,7 +86,9 @@ func TestAllScreensFitViewport(t *testing.T) {
 		{"restaurant", true, func(m *Model) { m.live = true; m.screen = scrRestaurant; m.rest = rest }},
 		{"checkout", true, func(m *Model) { m.live = true; m.screen = scrCheckout; m.checkout = cart(10) }},
 		{"checkout-empty", true, func(m *Model) { m.live = true; m.screen = scrCheckout; m.checkout = cart(0) }},
-		{"confirm", true, func(m *Model) { m.live = true; m.screen = scrConfirm; m.checkout = cart(3).Placed("999", "35-40 mins") }},
+		// confirm is now the full-page confetti celebration (chrome-free, like
+		// the order-placing loader) — no brand banner, just no-overflow.
+		{"confirm", false, func(m *Model) { m.live = true; m.screen = scrConfirm; m.checkout = cart(3).Placed("999", "35-40 mins") }},
 		{"track-transit", true, func(m *Model) {
 			m.live = true
 			m.screen = scrTracking
