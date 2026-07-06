@@ -9,8 +9,10 @@ import (
 )
 
 // scooterFrames are the two-frame "wheels turning" animation for the loader's
-// scooter glyph, cycled on m.frame like the braille spinner.
-var scooterFrames = []string{"🛵", "🛵"}
+// scooter glyph, cycled on m.frame like the braille spinner. Width-1,
+// emoji-free glyphs only (see screens/tracking.go's routeScene and
+// dodge/sprites.go's scooterSprite for the same convention).
+var scooterFrames = []string{"o", "O"}
 
 // loaderView renders a full-page, chrome-free loading screen shown while an
 // order placement is in flight (m.placingOrder on the checkout screen). It is
@@ -53,16 +55,21 @@ func loaderView(m Model) string {
 	return strings.Join(lines, "\n")
 }
 
+// clampWidth clamps w to the inclusive [min, max] range.
+func clampWidth(w, min, max int) int {
+	if w < min {
+		return min
+	}
+	if w > max {
+		return max
+	}
+	return w
+}
+
 // roadLine draws a dotted road with a small scooter driving across it,
 // looping position from m.frame so it appears to drive endlessly.
 func roadLine(frame, w int) string {
-	roadWidth := w - 4
-	if roadWidth < 8 {
-		roadWidth = 8
-	}
-	if roadWidth > 48 {
-		roadWidth = 48
-	}
+	roadWidth := clampWidth(w-4, 8, 48)
 
 	dots := make([]rune, roadWidth)
 	for i := range dots {
@@ -85,13 +92,7 @@ func roadLine(frame, w int) string {
 // shimmerLine is a subtle moving highlight strip beneath the road, giving the
 // loader a sense of motion even when nothing else changes.
 func shimmerLine(frame, w int) string {
-	barWidth := w - 4
-	if barWidth < 8 {
-		barWidth = 8
-	}
-	if barWidth > 48 {
-		barWidth = 48
-	}
+	barWidth := clampWidth(w-4, 8, 48)
 
 	bar := make([]rune, barWidth)
 	for i := range bar {

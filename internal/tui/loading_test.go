@@ -19,11 +19,12 @@ func TestLoaderViewRenders(t *testing.T) {
 	m.w, m.h = 80, 24
 	m.placingOrder = true
 	m.screen = scrCheckout
-	out := ansiStrip(loaderView(m))
+	view := loaderView(m)
+	out := ansiStrip(view)
 	if !strings.Contains(out, "placing your order") {
 		t.Fatal("loader should say placing your order")
 	}
-	if n := strings.Count(loaderView(m), "\n"); n != m.h-1 {
+	if n := strings.Count(view, "\n"); n != m.h-1 {
 		t.Fatalf("loader should be %d lines, got %d", m.h, n+1)
 	}
 }
