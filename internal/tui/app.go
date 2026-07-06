@@ -5406,6 +5406,10 @@ func (m Model) View() string {
 		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card)
 	}
 
+	if m.placingOrder && m.screen == scrCheckout {
+		return loaderView(m)
+	}
+
 	var body string
 	switch m.screen {
 	case scrRestaurant:
