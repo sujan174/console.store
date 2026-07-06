@@ -21,6 +21,7 @@ import (
 	"consolestore/internal/localstore"
 	"consolestore/internal/tui/components"
 	"consolestore/internal/tui/datasource"
+	"consolestore/internal/tui/dodge"
 	"consolestore/internal/tui/render"
 	"consolestore/internal/tui/screens"
 	"consolestore/internal/tui/theme"
@@ -280,6 +281,8 @@ type Model struct {
 
 	track          screens.Tracking
 	trackTick      int
+	dodge          *dodge.Game            // lazily created in onTick; nil until scrTracking has room
+	dodgeShown     bool                   // true when the game panel fits below the tracking body
 	confirmTick    int                    // ticks since scrConfirm was entered; auto-advances to scrTracking
 	nowUnix        int64                  // updated each tick — passed to tracking View for live elapsed
 	activeOrder    localstore.ActiveOrder // last placed order (persisted)
@@ -2112,6 +2115,7 @@ func (m Model) onTick() (Model, tea.Cmd) {
 			// tracking and poll; without one (e.g. a disarmed "placed" flow) we
 			// still leave — never leave the user stuck ticking on scrConfirm.
 			m.screen = scrTracking
+			m.dodge = nil
 			m.trackTick = 0
 			if m.hasActiveOrder && m.backend != nil {
 				return m, m.trackingPollCmd()
@@ -2126,6 +2130,18 @@ func (m Model) onTick() (Model, tea.Cmd) {
 		// cleared the active-order flag.
 		if m.trackTick%500 == 0 && m.activeOrder.OrderID != "" && m.backend != nil {
 			return m, m.trackingPollCmd()
+		}
+		// Dodge minigame: shown below the tracking body only when there's room.
+		// Created lazily here (a persisting path) — never in View, which runs on
+		// a throwaway copy.
+		if m.dodge == nil {
+			m.dodge = dodge.New()
+		}
+		rows, shown := trackingGameRows(m)
+		m.dodgeShown = shown
+		if shown {
+			m.dodge.SetSize(components.ContentWidth(), rows)
+			m.dodge.Tick(m.frame)
 		}
 	}
 	// Fire the debounced rail-category load once the cursor has settled.
@@ -2260,6 +2276,7 @@ func (m Model) swapTrackedOrder() (Model, tea.Cmd) {
 	).WithAlt(true)
 	m.trackTick = 0
 	m.screen = scrTracking
+	m.dodge = nil
 	m = m.refreshSplashOrderLabel()
 	var cmd tea.Cmd
 	if m.backend != nil {
@@ -2494,6 +2511,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
 		m.w, m.h = ws.Width, ws.Height
 		components.SetFrameWidth(m.w)
+		if m.screen == scrTracking {
+			// Re-fit the dodge panel to the new size: it may newly fit, no
+			// longer fit, or just need a resize of its play field.
+			if m.dodge == nil {
+				m.dodge = dodge.New()
+			}
+			rows, shown := trackingGameRows(m)
+			m.dodgeShown = shown
+			if shown {
+				m.dodge.SetSize(components.ContentWidth(), rows)
+			}
+		}
 		return m, nil
 	}
 	switch dm := msg.(type) {
@@ -3892,6 +3921,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				).WithAlt(true)
 				m.trackTick = 0
 				m.screen = scrTracking
+				m.dodge = nil
 				var pollCmd tea.Cmd
 				if m.backend != nil {
 					pollCmd = m.trackingPollCmd()
@@ -4207,6 +4237,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.activeOrder.ETAHiMin,
 					)
 					m.screen = scrTracking
+					m.dodge = nil
 					var pollCmd tea.Cmd
 					if m.backend != nil {
 						pollCmd = m.trackingPollCmd()
@@ -4823,6 +4854,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Any key advances immediately to tracking (esc included — there's
 			// no going back to "unplace" an order).
 			m.screen = scrTracking
+			m.dodge = nil
 			m.trackTick = 0
 			m = m.clearPlacedCarts()
 			var pollCmd tea.Cmd
@@ -4831,6 +4863,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, pollCmd
 		case scrTracking:
+			if m.dodge != nil && m.dodgeShown && (k.String() == "enter" || k.String() == " ") {
+				key := "enter"
+				if k.String() == " " {
+					key = "space"
+				}
+				m.dodge.Key(key)
+				return m, nil
+			}
 			switch k.String() {
 			case "esc":
 				m = m.clearPlacedCarts()
@@ -5429,7 +5469,13 @@ func (m Model) View() string {
 		body = m.checkout.WithPlacing(m.placingOrder).WithViewport(m.h).
 			WithHour(m.hourNow()).View(m.frame)
 	case scrTracking:
-		body = m.track.WithViewport(m.h).WithAlt(m.hasAltOrder).View(m.nowUnix, m.frame, m.spin())
+		track := m.track.WithViewport(m.h).WithAlt(m.hasAltOrder).View(m.nowUnix, m.frame, m.spin())
+		if m.dodgeShown && m.dodge != nil {
+			tContent, tHint := splitHint(track)
+			body = tContent + "\n" + m.dodge.Render() + "\n" + tHint
+		} else {
+			body = track
+		}
 	case scrInstamart:
 		// Two-pane live layout mirrors scrMenu's chrome exactly (store switcher +
 		// footer); the mock single-pane path (no rail attached) uses its own
@@ -5478,6 +5524,21 @@ func (m Model) View() string {
 		gap = 1
 	}
 	return content + strings.Repeat("\n", gap) + footer
+}
+
+// trackingGameRows computes how many rows are free below the tracking body
+// for the dodge minigame panel, and whether that's enough room to show it.
+// Pure/read-only: it renders the tracking body but does not mutate m or the
+// game. footerReserve (3) accounts for the blank-line gap + status bar below
+// the content that View always reserves.
+func trackingGameRows(m Model) (rows int, shown bool) {
+	track := m.track.WithViewport(m.h).WithAlt(m.hasAltOrder).View(m.nowUnix, m.frame, m.spin())
+	content, _ := splitHint(track)
+	contentLines := strings.Count(content, "\n") + 1
+	const footerReserve = 3
+	rows = m.h - contentLines - footerReserve
+	shown = rows >= 6
+	return rows, shown
 }
 
 // splitHint separates a screen body into its content and its trailing footer
