@@ -324,12 +324,12 @@ export const MARKUP = String.raw`
       <span style="padding:20px 42px;font-size:16px;color:#565b80">os keyring auth</span><span style="padding:20px 42px;font-size:16px;color:#b08cf5">·</span>
       <span style="padding:20px 42px;font-size:16px;color:#565b80">guarded live checkout</span><span style="padding:20px 42px;font-size:16px;color:#8ee08a">·</span>
       <span style="padding:20px 42px;font-size:16px;color:#565b80">no server to babysit</span><span style="padding:20px 42px;font-size:16px;color:#eab560">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">swiggy-backed</span><span style="padding:20px 42px;font-size:16px;color:#7fe0ff">·</span>
+      <span style="padding:20px 42px;font-size:16px;color:#565b80">real swiggy orders</span><span style="padding:20px 42px;font-size:16px;color:#7fe0ff">·</span>
       <span style="padding:20px 42px;font-size:16px;color:#565b80">terminal + agent ordering</span><span style="padding:20px 42px;font-size:16px;color:#93a8ff">·</span>
       <span style="padding:20px 42px;font-size:16px;color:#565b80">os keyring auth</span><span style="padding:20px 42px;font-size:16px;color:#b08cf5">·</span>
       <span style="padding:20px 42px;font-size:16px;color:#565b80">guarded live checkout</span><span style="padding:20px 42px;font-size:16px;color:#8ee08a">·</span>
       <span style="padding:20px 42px;font-size:16px;color:#565b80">no server to babysit</span><span style="padding:20px 42px;font-size:16px;color:#eab560">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">swiggy-backed</span><span style="padding:20px 42px;font-size:16px;color:#7fe0ff">·</span>
+      <span style="padding:20px 42px;font-size:16px;color:#565b80">real swiggy orders</span><span style="padding:20px 42px;font-size:16px;color:#7fe0ff">·</span>
     </div>
   </section>
 
