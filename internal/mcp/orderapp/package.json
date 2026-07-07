@@ -1,0 +1,16 @@
+{
+  "name": "consolestore-order-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "INPUT=mcp-app.html vite build && node -e \"require('fs').copyFileSync('dist/mcp-app.html','order-app.html')\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^6.0.0",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}
