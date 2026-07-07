@@ -1,5 +1,9 @@
 # Building `DATA` from the MCP tools
 
+> **Fallback: for hosts without MCP Apps** — the primary experience is the
+> `open_store` app (see `SKILL.md`). This build guide only applies when you're
+> assembling the old sendPrompt-based widget by hand.
+
 This is the build guide: which MCP tool fills which `DATA` field (the schema is in
 `ordering-app.md`), and the agent-side judgment calls the raw tool output demands
 before it's fit to render. Read `surfaces.md` (the model, the invariants) and

@@ -1,5 +1,10 @@
 # The ordering app — one fixed template, stitched by intent
 
+> **Fallback: for hosts without MCP Apps** — the primary experience is the
+> `open_store` app (see `SKILL.md`). Use this template only when the client
+> can't render an MCP App resource and you're building the old sendPrompt-based
+> widget by hand instead.
+
 This is the whole ordering experience as **one self-contained widget**: search →
 menu (categories) → item → customize → cart → checkout, all navigated
 client-side. You do NOT compose this from parts or regenerate it per turn — you

@@ -1,5 +1,9 @@
 # Checkout & edges — the money surface and the failure paths
 
+> **Fallback: for hosts without MCP Apps** — the primary experience is the
+> `open_store` app (see `SKILL.md`). These hand-built surfaces only apply when
+> the client can't render an MCP App resource.
+
 Read `surfaces.md` first (the model, the three invariants) and `ordering-app.md`
 (the template these surfaces sit downstream of). This file covers the two
 surfaces the app hands *out* to — bill-confirm and the cross-restaurant

@@ -1,5 +1,10 @@
 # Surface kit — the building blocks
 
+> **Fallback: for hosts without MCP Apps** — the primary experience is the
+> `open_store` app (see `SKILL.md`). These primitives only apply when you're
+> hand-building the old sendPrompt-based surfaces for a client that can't
+> render an MCP App resource.
+
 Copy-paste HTML primitives for order surfaces. Every one is theme-adaptive and
 self-contained. Compose surfaces from these; don't reinvent them. Keep the
 structure and class names; swap in real data.

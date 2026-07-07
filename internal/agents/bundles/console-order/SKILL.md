@@ -1,156 +1,126 @@
 ---
 name: console-order
-description: Use when the user wants to order food or groceries (Instamart), build or add to a cart, reorder a usual, pick a restaurant/dish/product, track a live order, or asks what consolestore remembers about them (default address, favorites, tastes, presets) through consolestore's Swiggy tools.
+description: Use when the user wants to order food or groceries (Instamart), build or add to a cart, reorder a previous order, pick a restaurant/dish/product, or track a live order through consolestore's Swiggy tools and its interactive ordering app.
 ---
 
 # Ordering food & groceries with consolestore
 
-consolestore exposes Swiggy ordering as MCP tools, plus a small local memory
-(address, per-item tastes, presets) that makes ordering need less back-and-forth.
-Two verticals: **Food** (restaurants) and **Instamart** (groceries, `im_*` tools —
-see "Instamart" below). They have **separate carts** that never interact.
-Orders cost **real money and cannot be cancelled**, so `place_order` runs only
-after an explicit user "yes" — see the two-step gate.
+consolestore exposes Swiggy ordering as MCP tools. **Food** renders as one
+interactive **ordering app** (opened with `open_store`) that the user browses,
+customizes, and checks out in directly — the app calls the tools it needs
+back itself. Your job on a food intent is **resolution + routing**: figure out
+what the user means and open the app at the right place. You do not build the
+cart or the bill by hand unless you're in the text-only fallback (no MCP Apps
+support) or working the Instamart vertical (see below, unchanged, `im_*`
+tools, its own cart). Food and Instamart carts never interact. Orders cost
+**real money and cannot be cancelled**.
 
-## Rendering surfaces (interactive UI)
+## Step 1 — always call `initialize` first
 
-When the client can render inline interactive UI, present ordering as **one
-interactive app** — search → menu → customize → cart in a single window — instead
-of plain text, and render it **by default** for browse/order intents (don't wait to
-be asked). Full guide: `references/surfaces.md` (read before rendering); the app
-template is `references/ordering-app.md`; building its data is
-`references/app-data.md`; the checkout + failure surfaces are in
-`references/checkout-and-edges.md`; shared tokens in `references/surface-kit.md`.
+On ANY ordering intent, call `initialize` before anything else. It's fast (an
+auth check, no address list fetch) and tells you exactly where to go next:
 
-Three rules hold whether or not you render a surface:
+- **`signed_in: false`** → call `sign_in`, give the user the `authorize_url`
+  link, tell them to sign in, then call `initialize` again. Do not proceed —
+  don't guess an address, don't open the store, don't build a cart.
+- **`signed_in: true`, `address: null`** → no saved address yet. Onboard:
+  call `open_store{}` (the store home) so the user can pick one — the home's
+  address chip lazily calls `list_addresses` and persists the choice via
+  `set_address`. Never open a restaurant before an address exists.
+- **`signed_in: true`, `address` set** → ready. Route to `open_store` (Step 2).
 
-1. **No `place_order` without the user pressing a confirm button in a surface** (or
-   the plain "yes" of the text gate below). The press is the confirmation — never
-   your own judgment, never an inferred yes.
-2. **A surface never invents the bill.** Only `prepare_order`'s `total` is the
-   amount charged; any number shown before that is a labeled estimate.
-3. **Guard a cross-restaurant conflict *before* `update_cart`**, not after.
+## Step 2 — route every food intent through `open_store`
 
-If the client can't render interactive UI, ignore this section and use the
-text flow below — ordering must never depend on a surface.
+`open_store` is the universal entry point and carries the whole app resource;
+a client with MCP Apps support renders it and the app takes over browsing →
+customizing → cart → checkout. Route the user's words into the right call
+shape — don't call `search_restaurants`/`get_menu`/`update_cart` yourself for
+these, the app does it:
 
-## Cart vs. order — first, know which one the user asked for
+| Intent | Call |
+|---|---|
+| Vague ("open the store", "I'm hungry", "order food") | `open_store{}` → home (categories + search + the user's restaurants) |
+| A cuisine or dish ("smash burgers near me", "best pizza") | `open_store{query:"…"}` → home with search results |
+| A named restaurant ("order from McDonald's") | resolve its id with `search_restaurants`, then `open_store{restaurant_id}` directly |
+| A specific item at a restaurant ("a paneer whopper from BK") | `open_store{restaurant_id, item_id}` |
+| Reorder ("my usual", "what I got last time", "order that again") | `get_previous_orders{address_id}` → present the list → the user picks one (pushes it to the cart in the app; a human still presses place) |
 
-- "add X", "put X in my cart", "build me a cart" → stop once the cart is updated.
-  Show what's in the cart; do **NOT** call `prepare_order` or `place_order`.
-- "order X", "get me X", "check out", "place it" → build the cart, then run the
-  two-step gate below.
-- "what do you remember about me", "what's my default address", "my favorites",
-  "my usuals/prefs" → this is a **read**, not an order. Answer from `get_card`;
-  don't build a cart.
-- Unsure which? Ask. Never place an order the user didn't clearly ask to place.
+**Query translation** (cuisine/dish case): Swiggy's search is a dumb keyword
+index, not semantic — strip qualifiers ("best", "cheap", style words) and
+search the base cuisine/dish noun before calling `open_store{query}`. If you
+present a ranked list yourself (outside the app), re-rank by `rating`
+descending, drop cross-cuisine ad injections, and never rank a result up for
+carrying an `offer` — that's a paid promotion, not a quality signal.
 
-## First: one call gets you everything
+**Named-restaurant resolution**: if the resolved restaurant is closed
+(`unavailable`) or can't deliver to the address, tell the user plainly and
+offer a different address, or a nearby alternative via `search_restaurants` —
+never open a place you already know can't serve them.
 
-1. `auth_status`. When `signed_in` is true it **also returns `card`** — the opening
-   snapshot: `card.address:{default,last}`, `favorites`, `policies`, `taste[]`,
-   `suggestions[]`, plus `warnings[]`. That single call answers who + where + what
-   they like — **do NOT also call `get_card` to start an order.**
-2. If `signed_in` is false → `sign_in`, show the `authorize_url`, poll `auth_status`
-   until `signed_in: true` (the successful poll carries the `card`).
-3. `get_card` still exists for a later "what do you remember about me" read, or to
-   re-check after the cart/address context changed mid-conversation.
+**Cart vs. order**: for food, both "add X to my cart" and "order X" route the
+same way — through `open_store`. The app itself distinguishes building the
+cart from checking out; you never call `prepare_order`/`place_order` on your
+own initiative for a food intent that goes through the app.
 
-## Choosing the address — silent by default
+## The address model
 
-Use the address already in the `card` from `auth_status` — no extra call:
+`initialize`'s `address` is the **active** address — the locked default if
+one is set, else the last one used, never both — sourced from a small local
+address-preference store, not fetched from Swiggy on every call.
 
-- `card.address.default` set → use it, don't ask, don't mention it.
-- No default but `card.address.last` set → use that, silently.
-- Both absent, or the user asks to change it → `list_addresses`: one address →
-  use it; several → ask which; none → tell the user to add one in the Swiggy app.
-  This is the only case where `list_addresses` is normally needed.
-- Never invent an address id. Never narrate the address mechanic — just proceed.
-- Surface `warnings` (from `auth_status`/`get_card`) plainly (e.g. a saved default
-  deleted on Swiggy) before relying on that address.
-- **Mid-flow address change** ("actually, send it to the office"): just call
-  `prepare_order` with the new address id. The server moves the cart — same
-  restaurant, same lines — and re-prices for the new address, returning
-  `rebuilt: "address_change"`. Mention it in one line with the bill ("moved the
-  cart to Office"). If the restaurant can't deliver there you get an
-  `unserviceable:` error — tell the user plainly and offer to find the same
-  brand near the new address with `search_restaurants`; never switch outlets
-  silently (menus and prices differ between outlets).
+- **Never call `list_addresses` before the store opens.** The app's picker
+  fetches it lazily, once, only when the user taps the address chip.
+- The in-app picker calls `set_address{address_id, label, as_default?}` when
+  the user chooses one. `as_default: true` locks it — every future
+  `initialize` returns it regardless of what's used later. Without the lock,
+  the most-recently-used address becomes the next session's active one.
+- You can offer "want me to set this as your default?" after a switch — say
+  it once, don't push it.
 
-## Finding the food
+## The three safety invariants — never violate these
 
-- A restaurant ("get me McDonald's") or a dish ("add a maharaja mac"): call
-  `search_restaurants` with the address and the user's words — both work.
-- Several outlets match → prefer one already in `favorites`, else ask.
-- Reorder ("the usual"): `list_usuals`. Saved cart: `list_presets` (`order_preset`
-  is the fastest path — see below).
-- `get_menu` for the chosen restaurant.
-- **Several menu items match the user's words** (combo vs plain, veg vs chicken,
-  regular vs large)? Do **not** pick silently — the differences cost money and can
-  matter for diet. Ask one short question, unless a `policy` in `get_card`
-  resolves it (e.g. "vegetarian" → the veg variant). Don't trust a single `veg`
-  flag that contradicts the item name; when in doubt, ask.
-- Item marked `customizable` → `get_item_options` for its variant/add-on groups and
-  choice ids. A non-customizable item needs no options.
+The app enforces these UI-side for its own flow, but you still call the
+underlying tools directly for Instamart, the text fallback, and recovery — so
+they bind you too, always:
 
-## Taste memory — apply silently, verify against the live menu
+1. **No `place_order` without a human pressing a button.** The press is the
+   only thing that authorizes a real order — never your own judgment, never
+   an inferred "yes."
+2. **The checkout to-pay is always the server's `prepare_order` (or
+   `im_prepare_order`) `total` — never a number you or a surface computed.**
+   Any total shown before that call is a labeled estimate.
+3. **Guard a cross-restaurant conflict *before* `update_cart`, not after.**
+   You already know the live cart's restaurant; if the new item belongs to
+   another one, resolve keep/switch first. `update_cart` may wipe a foreign
+   cart silently and not reliably report it.
 
-- `taste[]` entries are keyed by (restaurant, item). Each has `picks` (preferred
-  options), `dont_care` (axes the user doesn't want asked about again), and `avoid`
-  (disliked choices).
-- Explicit picks apply **silently** when building the cart — don't ask about
-  something the user already told you.
-- **Always re-resolve picks against `get_item_options` for the current menu** —
-  stored option ids can go stale. Match by option/choice **name**, not id. If a
-  preferred choice is sold out or no longer exists, fall back to a sensible
-  default and say so plainly (don't silently substitute without a word).
-- Don't ask about an axis listed in `dont_care` — that's settled.
-- Anything not covered by a pick or `dont_care` is genuinely ambiguous: ask, same
-  as any other multi-option case.
+## Ban-safety — call discipline that must never regress
 
-## Building the cart
+Swiggy's anomaly detection has restricted this account before for exactly
+this kind of call-burst. The app follows these on its own; state them because
+you still make some of these calls directly (resolving a named restaurant,
+Instamart, the text fallback):
 
-- `update_cart` **REPLACES** the cart for that restaurant with the lines you send.
-  - **Adding to an existing cart:** call `get_cart` first, then send the existing
-    lines **plus** the new one (the full set). Sending only the new line wipes the
-    rest.
-  - **Starting fresh:** send just the new lines.
-- Each line: menu `item_id` + `quantity`, plus variant/add-on ids from
-  `get_item_options` (taste-resolved where applicable).
-- **A different restaurant is a conflict — guard it before you write.** You know
-  the current cart's restaurant; when the new item is from another one, resolve it
-  *before* `update_cart` — render the cart-conflict surface, or in text ask
-  keep-current / start-fresh. Don't rely on `update_cart` to report what it
-  replaced: the `replaced_cart` receipt (`{restaurant, item_count, total}`) is
-  best-effort — it comes back only when Swiggy forced a clear-and-retry, and is
-  **absent when Swiggy silently accepts the overwrite**, which is exactly when a
-  cart is lost without a trace. If a receipt does come back, fold it into your next
-  message in one line ("replaced the ₹340 KFC cart"); never hide it. The money gate
-  below still protects anything that costs money.
-- Check each line's `available` flag — a sold-out line blocks the order.
-- Don't narrate the mechanics ("clearing your cart", "checking your usual milk") —
-  just act. Only surface what actually matters to the user: the cart contents and
-  the bill.
+- `get_item_options` only on a real customize tap/intent — never
+  speculatively pre-fetched for a whole menu section.
+- One `search_restaurants` call per category tap or search submit.
+- One `get_menu` call per restaurant open.
+- One `update_cart` call at checkout (cart edits stay client-side until then).
 
-## Reading & presenting the bill
+## Text fallback (no MCP Apps support)
 
-The bill has `lines` (each with name, quantity, price), `item_total`, `delivery`,
-`taxes`, and a to-pay/`total`. A coupon or offer can make these **not add up**, and
-a line's price can differ from `item_total` — that is normal, not an error.
-**The to-pay/`total` is what the user is charged; present that as the authoritative
-amount.** Never invent a reason for a mismatch and never hide it — if a number looks
-wrong, say so and offer to re-check rather than guess.
-
-**Always show the bill as a clear itemized breakdown, with the delivery address.**
-`prepare_order`/`order_preset` return `address` alongside `bill` — show it. Never
-present just a single total. Use a layout like:
+If the client can't render the app, fall back to the plain tool flow the app
+otherwise runs for you: `search_restaurants` → `get_menu` → (on real intent
+only) `get_item_options` → `update_cart` → `prepare_order` → confirm →
+`place_order`. The invariants and ban-safety rules above apply exactly the
+same way. Present the bill as a clear itemized breakdown before asking for
+confirmation:
 
 ```
 Blue Tokai Coffee Roasters
 Delivering to: Home
 
   1 × Vietnamese Style Iced Coffee   ₹275
-  (oat milk, your usual)
 
   Item total                         ₹260
   Delivery                            ₹46
@@ -159,19 +129,23 @@ Delivering to: Home
   To pay                             ₹371
 ```
 
-Fold the one-line memory-transparency note into the relevant line (as above), so a
-silently-wrong assumption is catchable. Then ask for confirmation.
+The bill can look like it doesn't add up (a coupon/offer is opaque
+server-side) — that's normal, not an error; the to-pay/`total` is always the
+authoritative, charged amount. Never invent a reason for a mismatch and never
+hide it.
 
 ## Recoveries, receipts, and error codes
 
 The server fixes what it can and *reports* it; you only surface the outcome.
 Receipts on success payloads — mention each in one line, never as a question:
 
-- `update_cart.replaced_cart` — a conflicting cart was force-replaced (best-effort:
-  present only when Swiggy made us clear-and-retry, absent on a silent overwrite —
-  so guard the conflict before writing, don't rely on this).
-- `prepare_order.rebuilt` — `"address_change"` (cart moved to the new address)
-  or `"expired"` (Swiggy had dropped the cart; it was rebuilt as-was).
+- `update_cart.replaced_cart` — a conflicting cart was force-replaced
+  (best-effort: present only when Swiggy made us clear-and-retry, absent on a
+  silent overwrite — so guard the conflict before writing, don't rely on
+  this).
+- `prepare_order.rebuilt` — `"address_change"` (cart moved to the new
+  address) or `"expired"` (Swiggy had dropped the cart; it was rebuilt
+  as-was).
 
 Hard stops are errors with a stable `code:` prefix — branch on the prefix:
 
@@ -184,64 +158,27 @@ Hard stops are errors with a stable `code:` prefix — branch on the prefix:
 | `confirmation_expired:` | confirmation too old | `prepare_order` again, show the bill again |
 | `cart_changed:` | cart no longer matches the confirmed bill | `prepare_order` again, re-confirm the new bill |
 
-## Placing the order (two steps, always)
+Never call `place_order` on your own initiative, and never retry it. On any
+error the order may still have been placed — call `list_active_orders` before
+doing anything else.
 
-1. `prepare_order` with the address id → the real `bill`, the delivery `address`,
-   and a `confirmation_id`. Present the **itemized breakdown + delivery address**
-   (see "Reading & presenting the bill"), to-pay authoritative, with the one-line
-   memory-transparency note. Ask the user to confirm.
-2. Only after a clear "yes" (a plain affirmative — if the reply is hedged, ask
-   again) → `place_order` with that `confirmation_id`. If the cart changed since
-   `prepare_order`, the call is refused — re-run `prepare_order` and re-confirm the
-   new bill.
-3. Never call `place_order` on your own initiative, and never retry it. On any
-   error the order may still have been placed — call `list_active_orders` before
-   doing anything else.
-4. Memory only **pre-fills** the cart; it never places on its own.
+## Instamart (groceries) — unchanged, text-driven
 
-## After the order — the one place to ask for saves
+Instamart is a separate vertical, not part of the `open_store` app rewrite.
+Quick-commerce groceries ("get me milk", "order a red bull", "add bananas")
+go through the `im_*` tools — NOT the restaurant tools:
 
-At order completion, and only there:
-
-- If `suggestions[]` has an entry for what was just ordered (an inferred pick that
-  crossed the repeat threshold), offer it **once**, plainly — "You've picked oat
-  milk for Starbucks a few times — want me to remember that?" On yes → `remember`
-  with `confirm_suggestion`. On no → `forget` with `decline_suggestion` (same
-  `restaurant_id` + `item_name`); that silences it for good without deleting
-  anything, so it won't be re-offered.
-- Offer to `save_preset {name}` for a cart worth reordering — also **once**. It
-  snapshots the cart just placed; no extra args needed.
-- Back off hard on any decline. Don't ask again later in the same conversation.
-- The user can always trigger either any time, e.g. "remember this" / "save this
-  as my usual" — treat that as the manual escape hatch regardless of timing.
-
-## Explicit memory writes
-
-When the user states a preference outright, write it immediately (no waiting for
-order completion) via `remember` (reconcile-on-write — a new value replaces the
-old, nothing accumulates):
-
-- "I always want oat milk [for X]" → `taste` (per-item pick).
-- "no onion", "I'm allergic to peanuts" → `policy` (cross-restaurant rule).
-- "make Office my default [address]" → `default_address_id`.
-
-To undo any of the above, use `forget`.
-
-## Instamart (groceries)
-
-Quick-commerce groceries ("get me milk", "order a red bull", "add bananas") go
-through the `im_*` tools — NOT the restaurant tools:
-
-- `im_search_products {address_id, query}` — products come back with `variants`
-  (pack sizes), each with its own `spin_id` and price. **Carts hold variants**:
-  when several pack sizes exist, ask which one (or match the user's words) —
-  never pick a size silently.
-- `im_update_cart {address_id, items:[{spin_id, qty}]}` — **REPLACES the whole
-  Instamart cart.** Adding to an existing cart: `im_get_cart` first, resend the
-  existing lines plus the new one. The Instamart cart binds to the address and
-  may span multiple stores — there is no restaurant-conflict concept.
-- `im_get_cart` — lines + the real bill (`item_total`, `delivery`, `handling`,
-  `to_pay`) and the available payment methods.
+- `im_search_products {address_id, query}` — products come back with
+  `variants` (pack sizes), each with its own `spin_id` and price. **Carts
+  hold variants**: when several pack sizes exist, ask which one (or match the
+  user's words) — never pick a size silently.
+- `im_update_cart {address_id, items:[{spin_id, qty}]}` — **REPLACES the
+  whole Instamart cart.** Adding to an existing cart: `im_get_cart` first,
+  resend the existing lines plus the new one. The Instamart cart binds to the
+  address and may span multiple stores — there is no restaurant-conflict
+  concept.
+- `im_get_cart` — lines + the real bill (`item_total`, `delivery`,
+  `handling`, `to_pay`) and the available payment methods.
 - `im_prepare_order {address_id}` → bill + `confirmation_id`, then the SAME
   confirm-then-`place_order` gate as food (`place_order` routes by the
   confirmation automatically). Limits: **₹99 minimum** (`under_min:`) and the
@@ -251,21 +188,27 @@ through the `im_*` tools — NOT the restaurant tools:
 
 ## Presets
 
-Presets are **uniform across verticals**: a name can point at a food cart or an
-Instamart cart, and the ordering flow is identical.
+A **preset** is a named saved cart snapshot (`:alias set` in the TUI/CLI),
+separate from `get_previous_orders`' auto-saved order history — a preset is
+deliberately named and curated by the user, an order history entry is
+whatever they actually ordered last. Presets stay uniform across verticals:
 
-- `save_preset {name}` snapshots the current/just-placed food cart;
-  `save_preset {name, vertical:"instamart"}` snapshots the Instamart cart.
-- `order_preset` with the preset `name` (and `index` when several share a name)
-  loads it into the right cart — food or Instamart, routed automatically — and
-  returns a bill + `confirmation_id` — then the same confirm-then-`place_order`
-  gate.
+- `order_preset` with the preset `name` (and `index` when several share a
+  name) loads it into the right cart — food or Instamart, routed
+  automatically — and returns a bill + `confirmation_id`, then the same
+  confirm-then-`place_order` gate.
 - `list_presets` lists saved presets (each carries its `vertical`). It does
-  NOT check live stock (would burn calls on every listing) — before ordering
-  a preset for the user, you may verify availability yourself first via
-  `get_menu` (food) or `im_search_products` (Instamart, search by item name);
-  either way, `order_preset`/`prepare_order` refuse a sold-out line for you.
+  NOT check live stock — before ordering a preset for the user, you may
+  verify availability yourself first via `get_menu` (food) or
+  `im_search_products` (Instamart); either way, `order_preset`/
+  `prepare_order` refuse a sold-out line for you.
+- `save_preset {name}` snapshots the current/just-placed cart (add
+  `vertical:"instamart"` for the Instamart cart). Offer it once, right after
+  a placement, for a cart worth reordering; back off on any decline.
 - `forget_preset {name, index?}` removes one.
+- `list_usuals {address_id}` surfaces Swiggy's own frequently-ordered
+  restaurant list for the address, if you need it outside
+  `get_previous_orders`/presets.
 
 ## Tracking
 
@@ -275,6 +218,6 @@ Instamart cart, and the ordering flow is identical.
 
 ## Discovery
 
-Mention, naturally and without nagging, that consolestore can remember tastes and
-save presets when it's relevant — so users learn the capability without being
-sold on it.
+Mention, naturally and without nagging, that consolestore can save a cart as
+a preset for one-tap reordering later — so users learn the capability without
+being sold on it.

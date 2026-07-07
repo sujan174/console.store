@@ -1,5 +1,11 @@
 # Rendering order surfaces
 
+> **Fallback: for hosts without MCP Apps** — the primary experience is the
+> `open_store` app (see `SKILL.md`), which renders as a real MCP App and calls
+> tools back itself. Everything below describes the older sendPrompt-based
+> text/widget surfaces, kept as the fallback for clients that can't render an
+> MCP App resource.
+
 The ordering experience is **one app**, not a pile of separate screens you hand back
 between. It is a single fixed template (`ordering-app.md`) that runs
 search → menu → item → customize → cart client-side in one window. You do the
