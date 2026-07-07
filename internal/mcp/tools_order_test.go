@@ -88,6 +88,49 @@ func TestOrderPresetRecordsFavoriteWithRealID(t *testing.T) {
 	}
 }
 
+// A successful food placement auto-saves the placed cart into orders.json for
+// the delivery address and records the placement in addrpref.json.
+func TestPlaceOrderAutoSavesOrderAndAddrPref(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cart := api.Cart{Restaurant: "Blue Tokai", Total: 300,
+		Lines: []api.CartLine{{ItemID: "i1", Name: "Latte", Quantity: 1, Available: true}}}
+	be := &fakeBackend{cart: cart, order: api.Order{ID: "O1", Restaurant: "Blue Tokai", Total: 300}}
+	s := NewServer(be, &fakeAuth{token: true})
+	if _, _, err := s.handleUpdateCart(context.Background(), nil, UpdateCartIn{
+		AddressID: "a1", RestaurantID: "R9", RestaurantName: "Blue Tokai",
+		Items: []CartItemIn{{ItemID: "i1", Quantity: 1}},
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	_, prep, _ := s.handlePrepareOrder(context.Background(), nil, PrepareOrderIn{AddressID: "a1"})
+	if _, _, err := s.handlePlaceOrder(context.Background(), nil, PlaceOrderIn{ConfirmationID: prep.ConfirmationID}); err != nil {
+		t.Fatalf("place: %v", err)
+	}
+
+	orders, err := localstore.LoadOrders("a1")
+	if err != nil {
+		t.Fatalf("LoadOrders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("orders for a1 = %d, want 1", len(orders))
+	}
+	o := orders[0]
+	if o.RestaurantID != "R9" || o.RestaurantName != "Blue Tokai" || o.Total != 300 {
+		t.Fatalf("order = %+v", o)
+	}
+	if len(o.Lines) != 1 || o.Lines[0].ItemID != "i1" || o.Lines[0].Name != "Latte" || o.Lines[0].Qty != 1 {
+		t.Fatalf("order lines = %+v", o.Lines)
+	}
+
+	ap, err := localstore.LoadAddrPref()
+	if err != nil {
+		t.Fatalf("LoadAddrPref: %v", err)
+	}
+	if ap.LastAddrID != "a1" {
+		t.Fatalf("addrpref LastAddrID = %q, want a1", ap.LastAddrID)
+	}
+}
+
 func TestPlaceRejectsUnknownConfirmation(t *testing.T) {
 	be := &fakeBackend{cart: api.Cart{Total: 250}}
 	s := NewServer(be, &fakeAuth{token: true})

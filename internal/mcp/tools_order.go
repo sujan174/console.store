@@ -165,6 +165,28 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	// Record real identity: restaurantID is a Swiggy id for presets, "" for ad-hoc
 	// orders (then bumpFavorite skips). Never a name in the id slot.
 	_ = localstore.RecordOrder(p.addressID, p.addrLabel, p.restaurantID, p.restaurantName, nowUnix())
+	// Auto-save the placed order for the app's previous-orders list, and record
+	// the placement address in the app's addrpref (default/last/lock) model.
+	if cw, ok := s.cartWriteFor(p.addressID); ok {
+		po := localstore.PlacedOrder{
+			RestaurantID: cw.RestaurantID, RestaurantName: cw.RestaurantName,
+			Total: p.total, PlacedUnix: nowUnix(),
+		}
+		for _, ln := range cw.Lines {
+			pl := localstore.PlacedLine{ItemID: ln.ItemID, Name: ln.ItemName, Qty: ln.Qty}
+			for _, sel := range ln.Sels {
+				pl.Sels = append(pl.Sels, localstore.PresetSel{
+					GroupID: sel.GroupID, ChoiceID: sel.ChoiceID,
+					Variant: sel.Variant, Absolute: sel.Absolute, Name: sel.ChoiceName,
+				})
+			}
+			po.Lines = append(po.Lines, pl)
+		}
+		_ = localstore.AppendOrder(p.addressID, po)
+		if ap, err := localstore.LoadAddrPref(); err == nil {
+			_ = localstore.SaveAddrPref(ap.RecordPlacement(p.addressID, p.addrLabel, nowUnix()))
+		}
+	}
 	// Best-effort taste observation from the cart that was actually placed.
 	// Never blocks the order and is never allowed to duplicate it.
 	if cw, ok := s.cartWriteFor(p.addressID); ok && cw.RestaurantID != "" {
