@@ -146,6 +146,7 @@ func addTool[In, Out any](srv *mcp.Server, t *mcp.Tool, h mcp.ToolHandlerFor[In,
 // register wires every tool. Later tasks append to it.
 func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "server_info", Description: "consolestore server name and version"}, s.handleServerInfo)
+	addTool(srv, &mcp.Tool{Name: "initialize", Description: "Fast readiness check for ordering: returns whether the user is signed in and their active delivery address (locked default, else last-used). Call this FIRST on any ordering intent. Does not fetch the address list."}, s.handleInitialize)
 	addTool(srv, &mcp.Tool{Name: "list_addresses", Description: "the user's saved Swiggy delivery addresses"}, s.handleListAddresses)
 	addTool(srv, &mcp.Tool{Name: "search_restaurants", Description: "search restaurants/dishes deliverable to an address"}, s.handleSearchRestaurants)
 	addTool(srv, &mcp.Tool{Name: "list_usuals", Description: "the user's frequently ordered restaurants for an address"}, s.handleListUsuals)
