@@ -443,10 +443,12 @@ async function openCart(): Promise<void> {
     if (cartToken !== token) return; // superseded — discard
 
     if (result.isError) {
-      // Couldn't read an existing cart → there is no foreign cart we can prove;
-      // proceed to materialize (the single update_cart replaces whatever is
-      // there). We never place off this path — only prepare + human press do.
-      await materializeCart(token);
+      // Couldn't READ the cart → we can't prove there's no foreign cart, so we
+      // must not lean on update_cart's silent auto-replace (invariant 3). Route
+      // through clear_cart first (harmless {cleared:false} on an empty cart)
+      // before materialize — no foreign cart ever reaches update_cart unguarded.
+      // Swiggy can return an MCP error for an empty cart, so this is a hot path.
+      await clearThenMaterialize(token);
       return;
     }
 
@@ -749,10 +751,12 @@ function onRootClick(evt: MouseEvent): void {
     return;
   }
 
-  // "re-sync" — re-run STEP 2 (update_cart + prepare_order) after a recoverable
-  // cart error.
+  // "re-sync" — recover from a cart_conflict / cart_expired error. Go through
+  // clear_cart FIRST: a cart_conflict is a foreign cart the write couldn't get
+  // past, so a bare re-materialize would just re-hit the same wall (a dead-end
+  // loop). clear_cart on an already-clear cart is a harmless {cleared:false}.
   if (el.dataset.cartRetry !== undefined) {
-    void materializeCart(++cartToken);
+    void clearThenMaterialize();
     return;
   }
 
@@ -762,10 +766,13 @@ function onRootClick(evt: MouseEvent): void {
   }
 }
 
-// clearThenMaterialize resolves the conflict prompt's "clear & continue":
-// clear_cart, then the single update_cart + prepare_order (STEP 2).
-async function clearThenMaterialize(): Promise<void> {
-  const token = ++cartToken;
+// clearThenMaterialize resolves the conflict prompt's "clear & continue" and
+// the get_cart-error / cart_conflict re-sync paths: clear_cart, then the single
+// update_cart + prepare_order (STEP 2). Callers already inside a checkout flow
+// pass their existing identity token to keep the stale-response guard intact;
+// a fresh user gesture (the conflict button) omits it and mints a new one.
+async function clearThenMaterialize(existingToken?: number): Promise<void> {
+  const token = existingToken ?? ++cartToken;
   if (!app) {
     state.cart = { status: "error", error: "missing app context" };
     render();
