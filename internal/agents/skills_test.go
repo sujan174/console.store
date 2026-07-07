@@ -24,6 +24,25 @@ func TestInstallSkillsCopiesBundles(t *testing.T) {
 	}
 }
 
+// Reference files live in a references/ subdir; the installer must copy the whole
+// tree, not just top-level files, or the surface guides silently never ship.
+func TestInstallSkillsCopiesReferenceSubdir(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := installSkills(dir); err != nil {
+		t.Fatalf("installSkills: %v", err)
+	}
+	for _, rel := range []string{
+		"references/surfaces.md",
+		"references/surface-kit.md",
+	} {
+		p := filepath.Join(dir, "console-order", filepath.FromSlash(rel))
+		fi, err := os.Stat(p)
+		if err != nil || fi.Size() == 0 {
+			t.Fatalf("missing/empty %s: %v", p, err)
+		}
+	}
+}
+
 // An install over a client that still has the retired console-card bundle must
 // prune it (its stale instructions reference removed tools), while leaving
 // console-order installed and any foreign skill untouched.

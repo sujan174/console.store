@@ -12,6 +12,27 @@ see "Instamart" below). They have **separate carts** that never interact.
 Orders cost **real money and cannot be cancelled**, so `place_order` runs only
 after an explicit user "yes" — see the two-step gate.
 
+## Rendering surfaces (interactive UI)
+
+When the client can render inline interactive UI, present the ordering flow as a
+**surface** — a small, task-shaped mini-app (a ranked search list, a sectioned
+menu, an item card, a bill with a confirm button) instead of plain text. It's
+faster and lets the user keep the final, consequential click. Full guide:
+`references/surfaces.md` (read it before rendering); building blocks in
+`references/surface-kit.md`; per-surface recipes in `references/surface-recipes-*.md`.
+
+Three rules hold whether or not you render a surface:
+
+1. **No `place_order` without the user pressing a confirm button in a surface** (or
+   the plain "yes" of the text gate below). The press is the confirmation — never
+   your own judgment, never an inferred yes.
+2. **A surface never invents the bill.** Only `prepare_order`'s `total` is the
+   amount charged; any number shown before that is a labeled estimate.
+3. **Guard a cross-restaurant conflict *before* `update_cart`**, not after.
+
+If the client can't render interactive UI, ignore this section and use the
+text flow below — ordering must never depend on a surface.
+
 ## Cart vs. order — first, know which one the user asked for
 
 - "add X", "put X in my cart", "build me a cart" → stop once the cart is updated.
@@ -95,11 +116,16 @@ Use the address already in the `card` from `auth_status` — no extra call:
   - **Starting fresh:** send just the new lines.
 - Each line: menu `item_id` + `quantity`, plus variant/add-on ids from
   `get_item_options` (taste-resolved where applicable).
-- **A cart from another restaurant is replaced automatically** — the new order
-  intent wins. When that happens `update_cart` returns a `replaced_cart` receipt
-  (`{restaurant, item_count, total}`); fold it into your next message in one line
-  ("replaced the ₹340 KFC cart that was sitting there") — never ask beforehand,
-  never hide it. The money gate below still protects anything that costs money.
+- **A different restaurant is a conflict — guard it before you write.** You know
+  the current cart's restaurant; when the new item is from another one, resolve it
+  *before* `update_cart` — render the cart-conflict surface, or in text ask
+  keep-current / start-fresh. Don't rely on `update_cart` to report what it
+  replaced: the `replaced_cart` receipt (`{restaurant, item_count, total}`) is
+  best-effort — it comes back only when Swiggy forced a clear-and-retry, and is
+  **absent when Swiggy silently accepts the overwrite**, which is exactly when a
+  cart is lost without a trace. If a receipt does come back, fold it into your next
+  message in one line ("replaced the ₹340 KFC cart"); never hide it. The money gate
+  below still protects anything that costs money.
 - Check each line's `available` flag — a sold-out line blocks the order.
 - Don't narrate the mechanics ("clearing your cart", "checking your usual milk") —
   just act. Only surface what actually matters to the user: the cart contents and
@@ -140,7 +166,9 @@ silently-wrong assumption is catchable. Then ask for confirmation.
 The server fixes what it can and *reports* it; you only surface the outcome.
 Receipts on success payloads — mention each in one line, never as a question:
 
-- `update_cart.replaced_cart` — a conflicting cart was replaced.
+- `update_cart.replaced_cart` — a conflicting cart was force-replaced (best-effort:
+  present only when Swiggy made us clear-and-retry, absent on a silent overwrite —
+  so guard the conflict before writing, don't rely on this).
 - `prepare_order.rebuilt` — `"address_change"` (cart moved to the new address)
   or `"expired"` (Swiggy had dropped the cart; it was rebuilt as-was).
 

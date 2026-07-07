@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 //go:embed bundles
@@ -83,29 +84,39 @@ func installSkills(skillsDir string) ([]string, error) {
 	var installed []string
 	for _, name := range bundleNames() {
 		srcDir := "bundles/" + name
-		entries, err := fs.ReadDir(bundlesFS, srcDir)
-		if err != nil {
-			return installed, err
-		}
 		dstDir := filepath.Join(skillsDir, name)
-		if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		if err := copyBundleTree(srcDir, dstDir); err != nil {
 			return installed, err
-		}
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			data, err := bundlesFS.ReadFile(srcDir + "/" + e.Name())
-			if err != nil {
-				return installed, err
-			}
-			if err := os.WriteFile(filepath.Join(dstDir, e.Name()), data, 0o644); err != nil {
-				return installed, err
-			}
 		}
 		installed = append(installed, name)
 	}
 	return installed, nil
+}
+
+// copyBundleTree copies every file under the embedded srcDir into dstDir,
+// preserving subdirectories. Bundles use a references/ subdir for the
+// progressive-disclosure surface guides, so a flat top-level-only copy would
+// silently drop them. Embedded paths always use "/"; split on that and rejoin
+// with the OS separator so the copy is correct on Windows too.
+func copyBundleTree(srcDir, dstDir string) error {
+	return fs.WalkDir(bundlesFS, srcDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if p == srcDir {
+			return os.MkdirAll(dstDir, 0o755)
+		}
+		rel := strings.TrimPrefix(p, srcDir+"/")
+		dst := filepath.Join(dstDir, filepath.Join(strings.Split(rel, "/")...))
+		if d.IsDir() {
+			return os.MkdirAll(dst, 0o755)
+		}
+		data, err := bundlesFS.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dst, data, 0o644)
+	})
 }
 
 // removeSkills deletes only our bundle dirs from skillsDir.
