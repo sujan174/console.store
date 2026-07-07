@@ -153,19 +153,29 @@ function chipStyle(on: boolean): string {
   return `cursor:pointer;font-size:12px;padding:5px 10px;border-radius:999px;border:0.5px solid ${border};background:${bg};color:${color}`;
 }
 
+// multiHint labels a chip group's cardinality: a required group (min>=1)
+// reads "pick N" / "pick N–M", an optional cap reads "up to M".
+function multiHint(g: CuratedGroup): string {
+  if (g.min >= 1) return g.min === g.max ? ` · pick ${g.min}` : ` · pick ${g.min}–${g.max}`;
+  if (g.max > 1) return ` · up to ${g.max}`;
+  return "";
+}
+
 // customizeGroup renders one curated group: a segmented control for
 // base/single (exactly one pressed), or capped chips for multi (surface-kit
-// "Segmented control" / "Choice chips"). A ₹0 choice reads as "included".
+// "Segmented control" / "Choice chips"). A required multi carries data-cz-min
+// so the click handler won't let it drop below its minimum. A ₹0 choice reads
+// as "included".
 function customizeGroup(g: CuratedGroup, selection: Map<string, Set<string>>): string {
   const chosen = selection.get(g.id) ?? new Set<string>();
   const isMulti = g.kind === "multi";
-  const label = isMulti && g.max > 1 ? `${esc(g.name)} · up to ${g.max}` : esc(g.name);
+  const label = isMulti ? `${esc(g.name)}${multiHint(g)}` : esc(g.name);
   const choices = g.choices
     .map((c) => {
       const on = chosen.has(c.id);
       const priceText = c.price === 0 ? "included" : money(c.price);
       const attr = isMulti
-        ? `data-cz-toggle data-cz-group="${esc(g.id)}" data-cz-choice="${esc(c.id)}" data-cz-max="${g.max}"`
+        ? `data-cz-toggle data-cz-group="${esc(g.id)}" data-cz-choice="${esc(c.id)}" data-cz-min="${g.min}" data-cz-max="${g.max}"`
         : `data-cz-pick data-cz-group="${esc(g.id)}" data-cz-choice="${esc(c.id)}"`;
       const body = isMulti
         ? `${esc(c.name)} · ${priceText}`

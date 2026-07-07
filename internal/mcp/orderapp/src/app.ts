@@ -149,13 +149,27 @@ function toolErrorText(result: ToolResult): string {
   return "couldn't load options";
 }
 
+// Items whose get_item_options fetch is currently in flight. Guards against a
+// rapid double-tap firing two concurrent calls for one item (re-entrancy /
+// mild ban-risk multiplier) — at most one call per open.
+const optionsInFlight = new Set<string>();
+
 // openCustomize is the ONE place the options tool is ever called, and only
 // when a customize tap actually happens — never speculatively for a whole
 // section (surfaces.md / app-data.md §4). One tap, one fetch.
+//
+// Two async-safety guards (CLAUDE.md "Stale async responses are guarded by
+// identity"): (1) each post-await write is gated on the sheet still being the
+// one this fetch opened (`state.customize?.itemId === itemId`), so backing out
+// or opening another item mid-flight discards the superseded response; (2) a
+// per-item in-flight set makes a double-tap a no-op instead of a second call.
 async function openCustomize(itemId: string): Promise<void> {
   const item = itemById(itemId);
   if (!item) return;
 
+  // Always (re)open the sheet in its loading state so a tap is never silently
+  // ignored — even when a fetch for this item is already running (that fetch
+  // will fill this sheet once it resolves, since its identity still matches).
   state.customize = { itemId, status: "loading", groups: [], selection: new Map() };
   render();
 
@@ -164,6 +178,9 @@ async function openCustomize(itemId: string): Promise<void> {
     render();
     return;
   }
+
+  if (optionsInFlight.has(itemId)) return; // fetch already running for this item
+  optionsInFlight.add(itemId);
 
   try {
     const result = await app.callServerTool({
@@ -176,6 +193,8 @@ async function openCustomize(itemId: string): Promise<void> {
       },
     });
 
+    if (state.customize?.itemId !== itemId) return; // superseded — discard
+
     if (result.isError) {
       state.customize = { itemId, status: "error", error: toolErrorText(result), groups: [], selection: new Map() };
       render();
@@ -187,6 +206,7 @@ async function openCustomize(itemId: string): Promise<void> {
     state.customize = { itemId, status: "ready", groups, selection: defaultSelection(groups) };
     render();
   } catch (err) {
+    if (state.customize?.itemId !== itemId) return; // superseded — discard
     state.customize = {
       itemId,
       status: "error",
@@ -195,6 +215,8 @@ async function openCustomize(itemId: string): Promise<void> {
       selection: new Map(),
     };
     render();
+  } finally {
+    optionsInFlight.delete(itemId);
   }
 }
 
@@ -288,11 +310,16 @@ function onRootClick(evt: MouseEvent): void {
   if (el.dataset.czToggle !== undefined) {
     const groupId = el.dataset.czGroup;
     const choiceId = el.dataset.czChoice;
+    const min = Number(el.dataset.czMin ?? "0");
     const max = Number(el.dataset.czMax ?? "1");
     if (state.customize && state.customize.status === "ready" && groupId && choiceId) {
       const set = state.customize.selection.get(groupId) ?? new Set<string>();
-      if (set.has(choiceId)) set.delete(choiceId);
-      else if (set.size < max) set.add(choiceId);
+      // Deselect only above the required minimum; add only below the cap.
+      if (set.has(choiceId)) {
+        if (set.size > min) set.delete(choiceId);
+      } else if (set.size < max) {
+        set.add(choiceId);
+      }
       state.customize.selection.set(groupId, set);
       render();
     }

@@ -38,7 +38,10 @@ export interface OptionsToolOut {
 
 // "base": the variant/absolute/min1max1 size selector — its chosen price
 // REPLACES the item base price. "single": any other min1/max1 required
-// choice (pre-picked to a default). "multi": min0/maxN optional chips.
+// choice (pre-picked to a default). "multi": a min-N/max-M chip group —
+// optional when min===0, REQUIRED when min>=1 (e.g. "choose 2 of 5"). The
+// group's `min` is carried so a required group can never be emptied below
+// it and buildWireSelections always emits it.
 export type CuratedGroupKind = "base" | "single" | "multi";
 
 export interface CuratedChoice {
@@ -51,23 +54,30 @@ export interface CuratedGroup {
   id: string;
   name: string;
   kind: CuratedGroupKind;
+  min: number; // 1 for base/single; group.min for multi (0 = optional, >=1 = required)
   max: number; // choice cap; 1 for base/single, group.max for multi
   choices: CuratedChoice[];
 }
 
 const MAX_SURFACED_GROUPS = 4;
 
+// classify never returns null for a required group: a min1/max1 is base or
+// single; a min0 chip group is an optional multi; ANY OTHER cardinality with
+// min>=1 (required multi-pick like min2/max3) is still a "multi" so the
+// server-required selection renders and is sent (never silently dropped).
+// Only a truly empty min0/max0 group is noise.
 function classify(g: RawOptionGroup): CuratedGroupKind | null {
   if (g.variant && g.absolute && g.min === 1 && g.max === 1) return "base";
   if (g.min === 1 && g.max === 1) return "single";
-  if (g.min === 0 && g.max >= 1) return "multi";
-  return null; // unrecognized cardinality (e.g. "choose 2 of N") — noise, dropped
+  if (g.max >= 1 && (g.min >= 1 || g.min === 0)) return "multi";
+  return null; // min0/max0 or nonsense cardinality — droppable noise
 }
 
 // curateGroups implements the app-data.md curation rules: drop sold-out
-// choices, drop internal/noise groups (duplicate names, a lone ₹0 mirror of
-// the base selector), and surface only the 2-4 highest-signal groups (base
-// first, then required singles, then optional multis).
+// choices, drop internal/noise groups (duplicate names, an OPTIONAL lone ₹0
+// mirror of the base selector), and surface only the highest-signal groups
+// (base first, then required singles, then multis). A required group
+// (min>=1) is NEVER dropped as noise — the user must be able to pick it.
 export function curateGroups(raw: RawOptionGroup[]): CuratedGroup[] {
   const seenNames = new Set<string>();
   const base: CuratedGroup[] = [];
@@ -81,19 +91,24 @@ export function curateGroups(raw: RawOptionGroup[]): CuratedGroup[] {
     const choices = (g.choices ?? []).filter((c) => c.in_stock);
     if (choices.length === 0) continue; // nothing left to pick
 
-    // A lone ₹0 single-choice non-base group is just noise that mirrors the
-    // variant selector — drop it (app-data.md §3 "Curate — don't dump").
-    if (kind !== "base" && choices.length === 1 && choices[0].price === 0) continue;
+    const required = kind === "base" || g.min >= 1;
+
+    // A lone ₹0 single-choice OPTIONAL group is just noise that mirrors the
+    // variant selector — drop it (app-data.md §3). A required group is never
+    // dropped this way: it must still render and be sent.
+    if (!required && choices.length === 1 && choices[0].price === 0) continue;
 
     const name = g.name.trim();
     const dedupeKey = name.toLowerCase();
-    if (seenNames.has(dedupeKey)) continue; // duplicate group name — noise
+    // Only OPTIONAL duplicates are noise; a required duplicate still renders.
+    if (!required && seenNames.has(dedupeKey)) continue;
     seenNames.add(dedupeKey);
 
     const curated: CuratedGroup = {
       id: g.id,
       name,
       kind,
+      min: kind === "multi" ? Math.max(0, g.min) : 1,
       max: kind === "multi" ? Math.max(1, g.max) : 1,
       choices: choices.map((c) => ({ id: c.id, name: c.name.trim(), price: c.price })),
     };
@@ -104,13 +119,14 @@ export function curateGroups(raw: RawOptionGroup[]): CuratedGroup[] {
 }
 
 // defaultSelection pre-picks the first in-stock choice for base/single
-// groups (already in-stock-filtered by curateGroups) and leaves multi
-// groups empty.
+// groups, the first `min` in-stock choices for a REQUIRED multi group (so a
+// valid selection exists up front), and leaves an OPTIONAL (min0) multi
+// group empty. Choices are already in-stock-filtered by curateGroups.
 export function defaultSelection(groups: CuratedGroup[]): Map<string, Set<string>> {
   const sel = new Map<string, Set<string>>();
   for (const g of groups) {
     if (g.kind === "multi") {
-      sel.set(g.id, new Set());
+      sel.set(g.id, new Set(g.choices.slice(0, g.min).map((c) => c.id)));
       continue;
     }
     const first = g.choices[0];
