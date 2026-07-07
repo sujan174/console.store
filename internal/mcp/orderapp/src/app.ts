@@ -8,6 +8,7 @@ import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from
 
 import { injectStyles } from "./styles";
 import { groupByCategory, renderCartScreen, renderCustomizeScreen, renderFocusedItem, renderMenu } from "./screens";
+import { renderHome } from "./home";
 import {
   buildWireSelections,
   curateGroups,
@@ -46,13 +47,62 @@ export interface OpenStoreEntry {
   address_id: string;
 }
 
+// AddrRefDTO mirrors internal/mcp/tools_card.go's AddrRefDTO — both fields
+// are `omitempty` on the wire, so both are optional here.
+export interface AddrRefDTO {
+  id?: string;
+  label?: string;
+}
+
+// CategoryDTO is one dev-curated cuisine chip on the store home
+// (internal/mcp/tools_app.go CategoryDTO / internal/config DefaultCategories).
+export interface CategoryDTO {
+  label: string;
+  query: string;
+}
+
+// HomeRestaurant mirrors internal/mcp/tools_discovery.go's RestaurantDTO —
+// the store-home restaurant list (Task 9 renders it; Task 7 only carries it).
+export interface HomeRestaurant {
+  id: string;
+  name: string;
+  eta: string;
+  rating: number;
+  offer?: string;
+  unavailable: boolean;
+  description?: string;
+}
+
+// RecentOrder mirrors internal/localstore.PlacedOrder — a locally-persisted
+// snapshot of a past order (Swiggy's own order API has no line items; see
+// CLAUDE.md "Store CLI + presets"). `lines` is loosely typed here (Task 10
+// renders it) the same way OrderSummary is below.
+export interface RecentOrder {
+  restaurantId: string;
+  restaurantName: string;
+  lines: Record<string, unknown>[];
+  total: number;
+  placedUnix: number;
+}
+
+// OpenStoreOut mirrors internal/mcp/tools_app.go's OpenStoreOut. `screen`
+// discriminates the two shapes: "home" (categories + optional search
+// results + recent orders, no menu) or "restaurant" (a menu; `menu` is only
+// ever populated on this branch). `restaurant`/`entry`/`menu` are therefore
+// all optional — home omits them.
 export interface OpenStoreOut {
-  restaurant: OpenStoreRestaurant;
-  entry: OpenStoreEntry;
-  menu: {
+  screen: "home" | "restaurant";
+  address: AddrRefDTO;
+  restaurant?: OpenStoreRestaurant;
+  entry?: OpenStoreEntry;
+  menu?: {
     restaurant_id: string;
     items: MenuItemData[];
   };
+  categories?: CategoryDTO[];
+  restaurants?: HomeRestaurant[];
+  recent_orders?: RecentOrder[];
+  query?: string;
 }
 
 // --- client-side state ---
@@ -138,6 +188,24 @@ export interface CartState {
 }
 
 export interface AppState {
+  // "home" — the store-home screen (Task 7 router); "restaurant" — the menu
+  // browse/customize/checkout flow (all existing screens below). Render
+  // precedence: screen==="home" short-circuits straight to renderHome();
+  // everything else keeps its existing cart/customize/focused/menu order.
+  screen: "home" | "restaurant";
+  // The delivery address open_store resolved, on BOTH screens (home's
+  // address-picker slot — Task 8 — and, on the restaurant screen, the same
+  // address get_item_options/update_cart already use via addressId below).
+  address: AddrRefDTO | null;
+  // Store-home-only fields (Task 7 scaffold; Tasks 8–10 render them for
+  // real). Named distinctly from `categories` below, which is a DIFFERENT
+  // concept — the current restaurant's menu-category tabs (string names
+  // derived from its items, not the home's dev-curated cuisine chips).
+  homeCategories: CategoryDTO[];
+  restaurants: HomeRestaurant[];
+  recentOrders: RecentOrder[];
+  query: string;
+
   restaurant: OpenStoreRestaurant | null;
   restaurantId: string | null;
   addressId: string | null;
@@ -162,6 +230,13 @@ export interface AppState {
 }
 
 export const state: AppState = {
+  screen: "home",
+  address: null,
+  homeCategories: [],
+  restaurants: [],
+  recentOrders: [],
+  query: "",
+
   restaurant: null,
   restaurantId: null,
   addressId: null,
@@ -177,12 +252,17 @@ export const state: AppState = {
 let root: HTMLElement | null = null;
 let app: App | null = null;
 
-// render precedence (highest first): cart/checkout → customize sheet →
+// render precedence (highest first): the top-level screen router (home vs
+// restaurant) → within "restaurant", cart/checkout → customize sheet →
 // focused simple-item card → full menu. The focused case only holds for an
 // existing, NON-customizable item (a customizable deep-link goes through the
 // customize sheet, not here); anything else falls through to the menu.
 function render(): void {
   if (!root) return;
+  if (state.screen === "home") {
+    root.innerHTML = renderHome(state);
+    return;
+  }
   if (state.cart) root.innerHTML = renderCartScreen(state, state.cart);
   else if (state.customize) root.innerHTML = renderCustomizeScreen(state, state.customize);
   else if (state.focusedItemId && isFocusableSimpleItem(state.focusedItemId))
@@ -824,10 +904,45 @@ async function clearThenMaterialize(existingToken?: number): Promise<void> {
   }
 }
 
-// seedFromOpenStore stores the open_store result and renders the menu.
-// Deriving `categories` from groupByCategory keeps a single source of truth
-// with renderMenu's own grouping.
+// resetRestaurantScopedState clears every field that only makes sense while
+// the "restaurant" screen is open (menu, pending cart, customize sheet,
+// checkout, the deep-linked focused item). Shared by both branches of
+// seedFromOpenStore so neither a fresh home open nor a fresh restaurant open
+// can leak state from whatever was on screen before it.
+function resetRestaurantScopedState(): void {
+  state.pending = new Map();
+  state.customize = null;
+  state.cart = null;
+  state.focusedItemId = null;
+  cartToken++; // discard any in-flight checkout from a previous restaurant
+}
+
+// seedFromOpenStore stores the open_store result and renders the router's
+// target screen. `sc.screen` decides the branch (Task 7): "home" stores the
+// store-home fields and stops there — no menu, no restaurant context;
+// "restaurant" keeps the existing menu-seed behavior unchanged.
 function seedFromOpenStore(sc: OpenStoreOut): void {
+  state.address = sc.address ?? null;
+
+  if (sc.screen === "home") {
+    state.screen = "home";
+    state.homeCategories = Array.isArray(sc.categories) ? sc.categories : [];
+    state.restaurants = Array.isArray(sc.restaurants) ? sc.restaurants : [];
+    state.recentOrders = Array.isArray(sc.recent_orders) ? sc.recent_orders : [];
+    state.query = sc.query ?? "";
+
+    state.restaurant = null;
+    state.restaurantId = null;
+    state.addressId = sc.address?.id || null;
+    state.items = [];
+    state.categories = [];
+    state.activeCategory = null;
+    resetRestaurantScopedState();
+    render();
+    return;
+  }
+
+  state.screen = "restaurant";
   state.restaurant = sc.restaurant ?? null;
   state.restaurantId = sc.restaurant?.id ?? null;
   state.addressId = sc.entry?.address_id || null;
@@ -838,11 +953,7 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   state.activeCategory =
     entryCategory && state.categories.includes(entryCategory) ? entryCategory : state.categories[0] ?? null;
 
-  state.pending = new Map();
-  state.customize = null;
-  state.cart = null;
-  state.focusedItemId = null;
-  cartToken++; // discard any in-flight checkout from a previous restaurant
+  resetRestaurantScopedState();
 
   // Deep-linked item_id resolves to a FOCUSED single-item view as the primary
   // screen: a customizable item opens the customize sheet (one guarded
@@ -861,9 +972,18 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   render();
 }
 
+// applyDisplayModeAttr stamps the current display mode on <html> as
+// data-display, so styles.ts / home.ts can key a narrow-viewport fallback
+// off it (`:root[data-display="inline"] .store-layout{…}`). Defaults to
+// "inline" when the host hasn't told us otherwise yet.
+function applyDisplayModeAttr(mode: string | undefined): void {
+  document.documentElement.setAttribute("data-display", mode ?? "inline");
+}
+
 // applyHostStyling pulls the host's CSS variables, fonts, and color-scheme
 // theme into the document — called on connect AND on every host-context
-// change, so a live theme/font switch in the host re-skins us immediately.
+// change, so a live theme/font switch (or a display-mode change — e.g. the
+// host itself toggles us out of fullscreen) re-skins us immediately.
 // Each piece is independently guarded: a host that only sends a theme (or
 // only variables) still applies whatever it did send.
 function applyHostStyling(): void {
@@ -872,10 +992,29 @@ function applyHostStyling(): void {
   if (ctx.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
   if (ctx.styles?.css?.fonts) applyHostFonts(ctx.styles.css.fonts);
   if (ctx.theme) applyDocumentTheme(ctx.theme);
+  applyDisplayModeAttr(ctx.displayMode);
+}
+
+// requestFullscreenIfSupported asks the host to switch us into fullscreen —
+// the store home wants the sidebar layout, not the inline card width. Only
+// fires when the host actually advertises "fullscreen" in
+// availableDisplayModes; never hard-fails if the host doesn't support it or
+// the request itself errors (a plain inline app is a fine fallback).
+async function requestFullscreenIfSupported(): Promise<void> {
+  if (!app) return;
+  try {
+    const ctx = app.getHostContext();
+    if (!ctx?.availableDisplayModes?.includes("fullscreen")) return;
+    const result = await app.requestDisplayMode({ mode: "fullscreen" });
+    applyDisplayModeAttr(result.mode);
+  } catch (err) {
+    console.error("[consolestore order app] requestDisplayMode failed", err);
+  }
 }
 
 export function bootstrap(): void {
   injectStyles();
+  applyDisplayModeAttr(undefined); // default to "inline" before connect resolves
 
   root = document.getElementById("app");
   if (!root) throw new Error("consolestore order app: missing #app root");
@@ -886,15 +1025,21 @@ export function bootstrap(): void {
 
   // The open_store tool result is pushed here on first render — see
   // OpenStoreOut above and order-app-tool-schemas.md. Reading the menu
-  // never itself triggers another tool call.
+  // never itself triggers another tool call. A "restaurant" screen without a
+  // usable menu is dropped (unchanged guard); "home" has no menu at all, so
+  // it only needs a recognized `screen`.
   app.ontoolresult = (result) => {
     const sc = result.structuredContent as unknown as OpenStoreOut | undefined;
-    if (!sc || !sc.menu || !Array.isArray(sc.menu.items)) return;
+    if (!sc || !sc.screen) return;
+    if (sc.screen === "restaurant" && (!sc.menu || !Array.isArray(sc.menu.items))) return;
     seedFromOpenStore(sc);
   };
 
   app.connect().then(
-    () => applyHostStyling(),
+    () => {
+      applyHostStyling();
+      void requestFullscreenIfSupported();
+    },
     (err: unknown) => console.error("[consolestore order app] connect failed", err),
   );
 }

@@ -86,6 +86,8 @@ body {
   background: var(--bg);
 }
 #app { padding: 16px; max-width: 480px; margin: 0 auto; }
+/* Fullscreen has real width to spend on the home's sidebar layout. */
+:root[data-display="fullscreen"] #app { max-width: 720px; }
 
 .num {
   font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
@@ -165,6 +167,14 @@ input {
   background: rgba(252, 128, 25, .10);
   font-weight: 600;
 }
+
+/* --- store home layout (Task 7 scaffold; Tasks 8–10 fill the slots) --- */
+.store-layout { display: flex; gap: 14px; }
+.sidebar { width: 150px; flex: none; }
+.content { flex: 1; min-width: 0; }
+/* Narrow / inline-embed fallback — stack instead of side-by-side. */
+:root[data-display="inline"] .store-layout { flex-direction: column; }
+:root[data-display="inline"] .sidebar { width: auto; }
 
 /* --- menu rows --- */
 .tile {
