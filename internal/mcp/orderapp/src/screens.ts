@@ -71,14 +71,45 @@ function pendingTotal(pending: Map<string, PendingLine>): number {
   return total;
 }
 
-function categoryTabs(categories: string[], active: string | null): string {
-  const tabs = categories
+// menuSidebar renders the restaurant's real menu categories as a left rail
+// (the .sidebar/.side-item classes shared with the store-home sidebar —
+// Task 7/9), replacing the old top tab row. `data-cat` semantics are
+// unchanged — app.ts's onRootClick still handles selection the same way.
+function menuSidebar(categories: string[], active: string | null): string {
+  if (categories.length === 0) return `<div class="sidebar"></div>`;
+  const items = categories
     .map((cat) => {
       const on = cat === active;
-      return `<button type="button" data-cat="${esc(cat)}" aria-pressed="${on}" class="tab${on ? " on" : ""}">${esc(cat)}</button>`;
+      return `<button type="button" data-cat="${esc(cat)}" aria-pressed="${on}" class="side-item${on ? " on" : ""}">${esc(cat)}</button>`;
     })
     .join("");
-  return `<div class="tabrow">${tabs}</div>`;
+  return `<div class="sidebar">${items}</div>`;
+}
+
+// menuSearchBox is the in-menu item search: a text input bound to
+// state.menuQuery, updated live on every keystroke by app.ts's input
+// handler (pure client-side filtering — zero tool calls, unlike the
+// store-home search bar which only fires on submit). A "clear" button
+// (`data-menu-search-clear`) appears once there's a query to clear.
+function menuSearchBox(query: string): string {
+  const clearBtn = query
+    ? `<button type="button" data-menu-search-clear class="btn" aria-label="clear search" style="flex:none">clear</button>`
+    : "";
+  return (
+    `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">` +
+    `<input data-menu-search-input type="text" value="${esc(query)}" ` +
+    `placeholder="search this menu…" aria-label="search this menu" ` +
+    `style="flex:1;min-width:0;border:1px solid var(--border-strong);border-radius:var(--pill);` +
+    `padding:8px 12px;font-size:13px;background:var(--surface-2);color:var(--text-primary)" />` +
+    clearBtn +
+    `</div>`
+  );
+}
+
+// itemMatchesQuery: case-insensitive substring match on the item name — the
+// ONLY logic behind the in-menu search (no tool call, no fuzzy matching).
+function itemMatchesQuery(item: MenuItemData, query: string): boolean {
+  return item.name.toLowerCase().includes(query.toLowerCase());
 }
 
 // itemControl: sold-out -> disabled badge; customizable -> "customize"
@@ -124,21 +155,37 @@ function header(title: string, sub: string): string {
   return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:500">${esc(title)}</div><div style="font-size:12px;color:var(--text-secondary)">${esc(sub)}</div></div></div>`;
 }
 
-// renderMenu paints the whole menu screen: header, category tabs, the
-// active category's items, and the cart bar. No network calls happen here —
-// it is a pure function of AppState.
+// renderMenu paints the whole menu screen: header, a left category sidebar
+// (reusing the store-home .store-layout/.sidebar/.content classes — Task 7),
+// an in-menu search box, the active category's items (or, while searching,
+// every matching item across all categories), and the cart bar. No network
+// calls happen here — it is a pure function of AppState; the search filter
+// is plain in-memory string matching (itemMatchesQuery), fired on every
+// keystroke by app.ts with ZERO tool calls (ban-safety).
 export function renderMenu(state: AppState): string {
   const title = state.restaurant?.name || state.restaurant?.id || "menu";
   const groups = groupByCategory(state.items);
-  const items = state.activeCategory ? groups.get(state.activeCategory) ?? [] : [];
+  const query = state.menuQuery.trim();
+  const searching = query.length > 0;
+  const items = searching
+    ? state.items.filter((item) => itemMatchesQuery(item, query))
+    : state.activeCategory
+      ? groups.get(state.activeCategory) ?? []
+      : [];
+  const emptyMsg = searching ? "no items match that search" : "nothing in this category";
   const rows = items.length
     ? `<div class="stagger">${items.map((item, i) => itemRow(item, state.pending, i)).join("")}</div>`
-    : `<div style="padding:16px 0;color:var(--text-muted);font-size:13px">nothing in this category</div>`;
+    : `<div style="padding:16px 0;color:var(--text-muted);font-size:13px">${emptyMsg}</div>`;
   return (
     `<h2 class="sr-only">Ordering app: browse ${esc(title)}'s menu by category, add or customize items, and check out — all in one window.</h2>` +
     header(title, "estimated prices — the real bill shows at checkout") +
-    categoryTabs(state.categories, state.activeCategory) +
+    `<div class="store-layout">` +
+    menuSidebar(state.categories, state.activeCategory) +
+    `<div class="content">` +
+    menuSearchBox(state.menuQuery) +
     rows +
+    `</div>` +
+    `</div>` +
     cartBar(state.pending)
   );
 }

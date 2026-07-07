@@ -263,6 +263,13 @@ export interface AppState {
   items: MenuItemData[];
   categories: string[];
   activeCategory: string | null;
+  // Task 11: the in-menu item search box. Pure client-side substring filter
+  // over state.items (screens.ts's itemMatchesQuery) — no tool call fires
+  // when this changes, on any keystroke. Mutually exclusive with
+  // activeCategory in the sense that renderMenu shows the cross-category
+  // search results instead of the active category's items while non-empty;
+  // selecting a category or the clear affordance resets it to "".
+  menuQuery: string;
   // Client-side only — no tool call fires when this changes (invariant:
   // browse + add never touch the network; only the options tool / update_cart
   // in Tasks 5/6 do, and only on real intent).
@@ -302,6 +309,7 @@ export const state: AppState = {
   items: [],
   categories: [],
   activeCategory: null,
+  menuQuery: "",
   pending: new Map(),
   customize: null,
   cart: null,
@@ -1074,7 +1082,7 @@ function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder]",
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear]",
   );
   if (!el) return;
 
@@ -1184,6 +1192,17 @@ function onRootClick(evt: MouseEvent): void {
   const cat = el.dataset.cat;
   if (cat !== undefined) {
     state.activeCategory = cat;
+    // A sidebar tap always returns to plain category browse — otherwise the
+    // click would silently do nothing while a search is still filtering the
+    // content column (client-side only, no tool call).
+    state.menuQuery = "";
+    render();
+    return;
+  }
+
+  // In-menu search "clear" affordance — pure client-side, no tool call.
+  if (el.dataset.menuSearchClear !== undefined) {
+    state.menuQuery = "";
     render();
     return;
   }
@@ -1283,6 +1302,28 @@ function onRootKeydown(evt: KeyboardEvent): void {
   void submitHomeSearch(target.value.trim());
 }
 
+// onRootInput handles the in-menu item search box (Task 11): unlike the home
+// search bar (which only fires search_restaurants on submit), this filters
+// state.items in memory on EVERY keystroke — pure client-side, zero tool
+// calls. A full render() replaces the DOM subtree (same convention as every
+// other mutation in this file), which would otherwise drop focus/cursor
+// position out of the input on each keypress; this captures the caret before
+// re-rendering and restores it on the freshly-rendered input afterward.
+function onRootInput(evt: Event): void {
+  const target = evt.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.dataset.menuSearchInput === undefined) return;
+  const selStart = target.selectionStart;
+  const selEnd = target.selectionEnd;
+  state.menuQuery = target.value;
+  render();
+  const fresh = root?.querySelector<HTMLInputElement>("[data-menu-search-input]");
+  if (fresh) {
+    fresh.focus();
+    if (selStart !== null && selEnd !== null) fresh.setSelectionRange(selStart, selEnd);
+  }
+}
+
 // clearThenMaterialize resolves the conflict prompt's "clear & continue" and
 // the get_cart-error / cart_conflict re-sync paths: clear_cart, then the single
 // update_cart + prepare_order (STEP 2). Callers already inside a checkout flow
@@ -1323,6 +1364,7 @@ function resetRestaurantScopedState(): void {
   state.customize = null;
   state.cart = null;
   state.focusedItemId = null;
+  state.menuQuery = ""; // a fresh restaurant screen never opens mid-search
   cartToken++; // discard any in-flight checkout from a previous restaurant
 }
 
@@ -1437,6 +1479,7 @@ export function bootstrap(): void {
   if (!root) throw new Error("consolestore order app: missing #app root");
   root.addEventListener("click", onRootClick);
   root.addEventListener("keydown", onRootKeydown);
+  root.addEventListener("input", onRootInput);
 
   app = new App({ name: "consolestore order", version: "0.1.0" });
   app.onhostcontextchanged = () => applyHostStyling();
