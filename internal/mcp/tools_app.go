@@ -82,10 +82,21 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, OpenStoreOut{}, err
 	}
+	// Precedence: explicit in.AddressID → AddrPref.Active() → Swiggy's first
+	// address. AddrPref is only ever written by set_address, so a fresh user
+	// (signed in, ≥1 saved address, never called set_address) would otherwise
+	// resolve to "" and send an empty addressId to Swiggy (undefined behavior).
+	// The account's first address is the safety net that keeps both the
+	// restaurant and home branches working.
 	addr, label := in.AddressID, ""
 	if addr == "" {
 		pref, _ := localstore.LoadAddrPref()
 		addr, label = pref.Active()
+	}
+	if addr == "" {
+		if list, err := s.be.Addresses(); err == nil && len(list) > 0 {
+			addr, label = list[0].ID, list[0].Label
+		}
 	}
 
 	if in.RestaurantID != "" {

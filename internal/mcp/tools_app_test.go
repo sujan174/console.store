@@ -72,3 +72,22 @@ func TestOpenStoreRestaurantScreen(t *testing.T) {
 		t.Fatalf("restaurant screen=%q err=%v", out.Screen, err)
 	}
 }
+
+// A fresh user (empty AddrPref) who never called set_address must still get a
+// real address: open_store falls back to the account's first Swiggy address so
+// be.Menu never receives an empty addressId.
+func TestOpenStoreFallsBackToFirstAddress(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	be := &fakeBackend{addrs: []api.Address{{ID: "fb1", Label: "Home"}}}
+	s := NewServer(be, &fakeAuth{token: true})
+	_, out, err := s.handleOpenStore(context.Background(), nil, OpenStoreIn{RestaurantID: "r1"})
+	if err != nil {
+		t.Fatalf("handleOpenStore: %v", err)
+	}
+	if out.Address.ID != "fb1" {
+		t.Fatalf("address id = %q, want fb1 (fell back to first Swiggy address)", out.Address.ID)
+	}
+	if out.Entry["address_id"] != "fb1" {
+		t.Fatalf("entry address_id = %q, want fb1 (empty addressId would go to be.Menu)", out.Entry["address_id"])
+	}
+}
