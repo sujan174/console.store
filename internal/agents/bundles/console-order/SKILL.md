@@ -14,12 +14,13 @@ after an explicit user "yes" — see the two-step gate.
 
 ## Rendering surfaces (interactive UI)
 
-When the client can render inline interactive UI, present the ordering flow as a
-**surface** — a small, task-shaped mini-app (a ranked search list, a sectioned
-menu, an item card, a bill with a confirm button) instead of plain text. It's
-faster and lets the user keep the final, consequential click. Full guide:
-`references/surfaces.md` (read it before rendering); building blocks in
-`references/surface-kit.md`; per-surface recipes in `references/surface-recipes-*.md`.
+When the client can render inline interactive UI, present ordering as **one
+interactive app** — search → menu → customize → cart in a single window — instead
+of plain text, and render it **by default** for browse/order intents (don't wait to
+be asked). Full guide: `references/surfaces.md` (read before rendering); the app
+template is `references/ordering-app.md`; building its data is
+`references/app-data.md`; the checkout + failure surfaces are in
+`references/checkout-and-edges.md`; shared tokens in `references/surface-kit.md`.
 
 Three rules hold whether or not you render a surface:
 
