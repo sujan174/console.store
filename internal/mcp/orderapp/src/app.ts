@@ -839,22 +839,36 @@ function toggleAddrDefault(): void {
   render();
 }
 
+// searchToken guards runHomeSearch against a stale-response race (same class
+// of bug the checkout flow guards with cartToken): a rapid
+// category→category or category→address-switch can leave an older
+// search_restaurants response arriving AFTER a newer one and silently
+// clobbering state.restaurants with stale data while the sidebar shows the
+// newer selection active. Bumped before each search AND at every home→
+// restaurant transition (openRestaurant / seedFromOpenStore's restaurant
+// branch) so a home search that resolves after the user has entered a
+// restaurant can't clobber state either.
+let searchToken = 0;
+
 // runHomeSearch re-runs the home's current search under a (possibly new)
 // address / query — the ONE search_restaurants call site. Called by
 // pickCategory, submitHomeSearch, and chooseAddress (Task 9's category
 // sidebar / search bar / address switch, respectively).
 async function runHomeSearch(addressId: string, query: string): Promise<void> {
   if (!app) return;
+  const token = ++searchToken;
   try {
     const result = await app.callServerTool({
       name: "search_restaurants",
       arguments: { address_id: addressId, query },
     });
+    if (token !== searchToken) return; // superseded — discard stale response
     if (result.isError) return; // non-fatal — leave the current list showing
     const sc = result.structuredContent as { restaurants?: HomeRestaurant[] } | undefined;
     state.restaurants = sortRestaurants(Array.isArray(sc?.restaurants) ? sc.restaurants : []);
     render();
   } catch (err) {
+    if (token !== searchToken) return; // superseded — discard stale failure
     console.error("[consolestore order app] search_restaurants failed", err);
   }
 }
@@ -915,6 +929,9 @@ async function openRestaurant(id: string): Promise<void> {
 
     const sc = result.structuredContent as { restaurant_id?: string; items?: MenuItemData[] } | undefined;
 
+    // Leaving home for a restaurant — discard any in-flight home search so a
+    // late search_restaurants response can't clobber state after the swap.
+    searchToken++;
     state.screen = "restaurant";
     state.restaurant = { id, name: r.name };
     state.restaurantId = sc?.restaurant_id || id;
@@ -1247,6 +1264,9 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     return;
   }
 
+  // Seeding a restaurant screen — discard any in-flight home search so a late
+  // search_restaurants response can't clobber state after the swap.
+  searchToken++;
   state.screen = "restaurant";
   state.restaurant = sc.restaurant ?? null;
   state.restaurantId = sc.restaurant?.id ?? null;
