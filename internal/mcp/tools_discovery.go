@@ -33,6 +33,7 @@ type RestaurantDTO struct {
 	Rating      float64 `json:"rating"`
 	Offer       string  `json:"offer,omitempty"`
 	Unavailable bool    `json:"unavailable"`
+	Description string  `json:"description,omitempty"`
 }
 type MenuItemDTO struct {
 	ID           string `json:"id"`
@@ -54,7 +55,7 @@ func toAddressDTOs(in []api.Address) []AddressDTO {
 func toRestaurantDTOs(in []api.Restaurant) []RestaurantDTO {
 	out := make([]RestaurantDTO, 0, len(in))
 	for _, r := range in {
-		out = append(out, RestaurantDTO{ID: r.ID, Name: r.Name, ETA: r.ETA, Rating: r.Rating, Offer: r.Offer, Unavailable: r.Unavailable})
+		out = append(out, RestaurantDTO{ID: r.ID, Name: r.Name, ETA: r.ETA, Rating: r.Rating, Offer: r.Offer, Unavailable: r.Unavailable, Description: r.Description})
 	}
 	return out
 }

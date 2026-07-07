@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"consolestore/internal/broker/api"
+	"consolestore/internal/localstore"
 )
 
 func TestOpenStoreToolDeclaresUI(t *testing.T) {
@@ -33,6 +34,7 @@ func TestAppResourceServesBundle(t *testing.T) {
 }
 
 func TestOpenStoreEchoesRestaurantName(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	be := &fakeBackend{
 		addrs: []api.Address{{ID: "a1", Label: "Home", Full: "12 Main St"}},
 		menu:  api.Menu{RestaurantID: "r1", Items: []api.MenuItem{{ID: "i1", Name: "Burger", Price: 200, InStock: true}}},
@@ -50,5 +52,23 @@ func TestOpenStoreEchoesRestaurantName(t *testing.T) {
 	}
 	if out.Restaurant["name"] != "Burger King" {
 		t.Fatalf("restaurant name = %q, want Burger King", out.Restaurant["name"])
+	}
+}
+
+func TestOpenStoreHomeScreen(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	_ = localstore.SaveAddrPref(localstore.AddrPref{}.SetActive("a1", "Home"))
+	s := NewServer(&fakeBackend{}, &fakeAuth{token: true})
+	_, out, err := s.handleOpenStore(context.Background(), nil, OpenStoreIn{})
+	if err != nil || out.Screen != "home" || len(out.Categories) == 0 || out.Address.ID != "a1" {
+		t.Fatalf("home out=%+v err=%v", out, err)
+	}
+}
+
+func TestOpenStoreRestaurantScreen(t *testing.T) {
+	s := NewServer(&fakeBackend{}, &fakeAuth{token: true})
+	_, out, err := s.handleOpenStore(context.Background(), nil, OpenStoreIn{RestaurantID: "r1", AddressID: "a1"})
+	if err != nil || out.Screen != "restaurant" {
+		t.Fatalf("restaurant screen=%q err=%v", out.Screen, err)
 	}
 }
