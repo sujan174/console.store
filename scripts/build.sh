@@ -28,6 +28,11 @@ mkdir -p "$BIN"
 cd "$ROOT"
 
 # Pre-build gate: a broken tree must NOT silently install an armed binary.
+echo "gate: build order-app bundle"
+( cd "$ROOT/internal/mcp/orderapp" && npm install --silent && npm run build --silent )
+echo "  ✓ order-app.html rebuilt"
+echo
+
 echo "gate: go vet ./..."
 go vet ./...
 echo "gate: go test ./..."
