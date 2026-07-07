@@ -198,12 +198,35 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 	})
 	be = datasource.NewBrokerBackend(datasource.NewInProc(svc), localstore.LocalAccountID)
 
-	// Token check: present → straight in; absent → auth gate.
+	// Token check. Presence alone is NOT enough: a user returning after several
+	// days can have BOTH an expired access token and an expired/revoked refresh
+	// token still sitting in the keyring. Treating "a blob exists" as signed-in
+	// lands them in the app where every load silently fails (nothing renders).
+	// So when a token is present we validate it: EnsureAuth refreshes an expired
+	// access token if the refresh token is still good (instant/offline when the
+	// access token hasn't expired yet — the common case, no network), and tells
+	// us definitively whether the token is dead. A dead token is purged so the
+	// auth gate shows and the user re-authorizes automatically; a transient
+	// failure (offline / 5xx) keeps the token and lets them in optimistically so
+	// a flaky network never logs anyone out.
 	_, _, _, ok, kerr := ls.GetTokenFull(ctx, localstore.LocalAccountID)
 	if kerr != nil {
 		return nil, false, nil, nil, nil, "", fmt.Errorf("read keyring: %w", kerr)
 	}
 	signedIn = ok
+	if ok {
+		vctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+		switch svc.EnsureAuth(vctx, localstore.LocalAccountID) {
+		case broker.AuthRejected:
+			if perr := ls.PurgeToken(ctx, localstore.LocalAccountID); perr != nil {
+				log.Printf("auth: purge dead token: %v", perr)
+			}
+			signedIn = false
+		case broker.AuthUnknown:
+			signedIn = true // couldn't verify (offline/5xx) — keep the token
+		}
+		cancel()
+	}
 
 	launchTUI = func() error {
 		// Loopback callback server (browser redirects here after authorize).

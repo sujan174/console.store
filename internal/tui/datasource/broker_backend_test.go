@@ -140,6 +140,8 @@ func TestBrokerBackendWrapsAuthErr(t *testing.T) {
 		{"token expired", "swiggy: access token expired (401)"},
 		{"account not authorized", "swiggy: access token expired (401) (account not authorized)"},
 		{"session revoked", "swiggy: session revoked (419)"},
+		{"dead refresh token", `auth: refresh status 400: {"error":"invalid_grant"}`},
+		{"invalid_grant substring", "oauth refresh failed: invalid_grant"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

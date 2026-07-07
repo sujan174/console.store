@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -39,5 +40,34 @@ func TestRefreshNon200IsError(t *testing.T) {
 	defer srv.Close()
 	if _, err := Refresh(context.Background(), srv.Client(), srv.URL, "c", "r"); err == nil {
 		t.Fatal("a non-200 refresh must return an error")
+	}
+}
+
+func TestRefreshErrorClassifiesStatus(t *testing.T) {
+	cases := []struct {
+		status   int
+		rejected bool
+	}{
+		{400, true},  // invalid_grant: refresh token dead → definitive rejection
+		{401, true},  // unauthorized
+		{403, true},  // forbidden
+		{500, false}, // server fault → transient, not a rejection
+		{503, false}, // unavailable → transient
+	}
+	for _, tc := range cases {
+		status := tc.status
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+			w.Write([]byte(`{"error":"invalid_grant"}`))
+		}))
+		_, err := Refresh(context.Background(), srv.Client(), srv.URL, "c", "r")
+		srv.Close()
+		var re *RefreshError
+		if !errors.As(err, &re) {
+			t.Fatalf("status %d: err = %v; want *RefreshError", status, err)
+		}
+		if re.Rejected() != tc.rejected {
+			t.Fatalf("status %d: Rejected() = %v; want %v", status, re.Rejected(), tc.rejected)
+		}
 	}
 }

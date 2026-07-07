@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -59,6 +60,50 @@ func NewService(cfg Config) *Service {
 		cfg.HTTPClient = http.DefaultClient
 	}
 	return &Service{cfg: cfg, food: map[string]*swiggy.Client{}, im: map[string]*swiggy.Client{}}
+}
+
+// AuthState is the outcome of EnsureAuth's startup token check.
+type AuthState int
+
+const (
+	// AuthValid: a usable access token is available (still valid, or an expired
+	// one was successfully refreshed and persisted).
+	AuthValid AuthState = iota
+	// AuthRejected: the stored token is definitively dead — no refresh token, or
+	// the token endpoint rejected the refresh (invalid_grant / 4xx). The caller
+	// should purge it and drive re-auth.
+	AuthRejected
+	// AuthUnknown: the check could not complete (offline, timeout, 5xx). The
+	// token may still be good; the caller should keep it and proceed rather than
+	// log the user out over a transient fault.
+	AuthUnknown
+)
+
+// EnsureAuth validates accountID's stored token at startup: it returns AuthValid
+// when a usable access token is available (refreshing an expired one if the
+// refresh token is still good), AuthRejected when the token is definitively dead
+// (so the caller purges + re-auths), and AuthUnknown when the check could not be
+// completed (transient/offline — keep the token). This is authoritative where
+// the old "a token blob exists" presence check was not: a returning user whose
+// refresh token has also expired is caught here instead of landing in a
+// signed-in UI where every load silently fails.
+func (s *Service) EnsureAuth(ctx context.Context, accountID string) AuthState {
+	ts := newStoreTokenSource(s.cfg.Store, s.cfg.Refresher, accountID)
+	if _, err := ts.Token(ctx); err == nil {
+		return AuthValid
+	} else if errors.Is(err, swiggy.ErrTokenExpired) {
+		// No token, or expired with no refresh token / no refresher: can't refresh.
+		return AuthRejected
+	} else {
+		var re *auth.RefreshError
+		if errors.As(err, &re) {
+			if re.Rejected() {
+				return AuthRejected // token endpoint rejected the refresh token
+			}
+			return AuthUnknown // 5xx — transient
+		}
+		return AuthUnknown // transport error / timeout / anything else
+	}
 }
 
 func (s *Service) foodClient(accountID string) *swiggy.Client {

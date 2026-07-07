@@ -65,6 +65,11 @@ func wrapAuthErr(err error) error {
 		"token expired", "account not authorized", "session revoked",
 		"insufficient_scope", "unauthenticated", "unauthorized",
 		"invalid_token", "invalid token", "http 401", "http 403",
+		// A dead refresh token surfaces as the OAuth token endpoint's rejection
+		// ("auth: refresh status 400: {"error":"invalid_grant"}"). Without these
+		// the runtime path would leave the user on a silently-failing screen
+		// instead of the authorize gate.
+		"invalid_grant", "refresh status 4",
 	} {
 		if strings.Contains(s, needle) {
 			return fmt.Errorf("%w: %v", ErrNeedsAuth, err)

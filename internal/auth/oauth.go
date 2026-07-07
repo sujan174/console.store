@@ -126,7 +126,27 @@ func Refresh(ctx context.Context, httpc *http.Client, tokenURL, clientID, refres
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return t, fmt.Errorf("auth: refresh status %d: %s", resp.StatusCode, b)
+		return t, &RefreshError{Status: resp.StatusCode, Body: string(b)}
 	}
 	return t, json.Unmarshal(b, &t)
 }
+
+// RefreshError is a non-200 response from the OAuth token endpoint during a
+// refresh_token grant. Rejected() distinguishes a definitive rejection of the
+// refresh token (4xx, e.g. invalid_grant → the token is dead/revoked) from a
+// transient server fault (5xx), so callers can decide whether to purge the
+// stored token and force re-auth or keep it and retry later.
+type RefreshError struct {
+	Status int
+	Body   string
+}
+
+func (e *RefreshError) Error() string {
+	// Keep the historical phrasing so existing string-based error matching (the
+	// datasource auth-gate seam) still recognizes it.
+	return fmt.Sprintf("auth: refresh status %d: %s", e.Status, e.Body)
+}
+
+// Rejected reports whether the token endpoint definitively rejected the refresh
+// token (a 4xx). A 5xx or transport error is not a rejection.
+func (e *RefreshError) Rejected() bool { return e.Status >= 400 && e.Status < 500 }
