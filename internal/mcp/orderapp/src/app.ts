@@ -61,6 +61,15 @@ export interface CategoryDTO {
   query: string;
 }
 
+// AddressOption mirrors list_addresses's wire shape (internal/mcp/tools_card.go):
+// one saved address the home address-picker (Task 8) can switch to. `full` is
+// the longer address text shown dimmed under `label` in the dropdown.
+export interface AddressOption {
+  id: string;
+  label: string;
+  full: string;
+}
+
 // HomeRestaurant mirrors internal/mcp/tools_discovery.go's RestaurantDTO —
 // the store-home restaurant list (Task 9 renders it; Task 7 only carries it).
 export interface HomeRestaurant {
@@ -206,6 +215,19 @@ export interface AppState {
   recentOrders: RecentOrder[];
   query: string;
 
+  // Address picker (Task 8; home screen only — the restaurant screen shows
+  // `address` read-only, no picker). `addresses`/`addressesLoaded` are filled
+  // by exactly ONE lazy `list_addresses` call, made the first time the picker
+  // is opened (see openAddressPicker) — never speculatively, never again once
+  // loaded. `addrSetDefault` is the picker's "set as default 🔒" checkbox,
+  // reset after each successful switch. `addrError` surfaces a list/set
+  // failure inline in the dropdown (cleared on reopen/retry).
+  addrPickerOpen: boolean;
+  addresses: AddressOption[];
+  addressesLoaded: boolean;
+  addrSetDefault: boolean;
+  addrError?: string;
+
   restaurant: OpenStoreRestaurant | null;
   restaurantId: string | null;
   addressId: string | null;
@@ -236,6 +258,11 @@ export const state: AppState = {
   restaurants: [],
   recentOrders: [],
   query: "",
+
+  addrPickerOpen: false,
+  addresses: [],
+  addressesLoaded: false,
+  addrSetDefault: false,
 
   restaurant: null,
   restaurantId: null,
@@ -739,13 +766,140 @@ function closeCart(): void {
   render();
 }
 
+// --- home: address picker (Task 8) ---
+//
+// list_addresses is only ever called from openAddressPicker, guarded by
+// `addressesLoaded` (already have them — don't refetch) and
+// `addressesInFlight` (a rapid double-tap on the chevron is a no-op instead
+// of a second concurrent call) — mirroring the options-fetch guard above.
+let addressesInFlight = false;
+
+// openAddressPicker opens the dropdown and, the first time only, lazily
+// loads the address list. Re-opening after it's already loaded (or while a
+// load is in flight) just re-renders the dropdown with what's already there.
+async function openAddressPicker(): Promise<void> {
+  state.addrPickerOpen = true;
+  state.addrError = undefined;
+  render();
+
+  if (state.addressesLoaded || addressesInFlight || !app) return;
+  addressesInFlight = true;
+
+  try {
+    const result = await app.callServerTool({ name: "list_addresses", arguments: {} });
+    if (!state.addrPickerOpen) return; // closed before the fetch resolved — discard
+
+    if (result.isError) {
+      state.addrError = toolErrorText(result);
+      render();
+      return;
+    }
+
+    const sc = result.structuredContent as { addresses?: AddressOption[] } | undefined;
+    state.addresses = Array.isArray(sc?.addresses) ? sc.addresses : [];
+    state.addressesLoaded = true;
+    render();
+  } catch (err) {
+    if (!state.addrPickerOpen) return;
+    state.addrError = err instanceof Error ? err.message : String(err);
+    render();
+  } finally {
+    addressesInFlight = false;
+  }
+}
+
+// toggleAddrDefault flips the "set as default 🔒" checkbox in the open
+// picker — pure client-side, no tool call (it's just an arg to the next
+// set_address, on choose).
+function toggleAddrDefault(): void {
+  state.addrSetDefault = !state.addrSetDefault;
+  render();
+}
+
+// runHomeSearch re-runs the home's current search under a (possibly new)
+// address — the ONE search_restaurants call site (Task 9 may later add a
+// dedicated runSearch; until then this is it, per the Task 8 brief).
+async function runHomeSearch(addressId: string, query: string): Promise<void> {
+  if (!app) return;
+  try {
+    const result = await app.callServerTool({
+      name: "search_restaurants",
+      arguments: { address_id: addressId, query },
+    });
+    if (result.isError) return; // non-fatal — leave the current list showing
+    const sc = result.structuredContent as { restaurants?: HomeRestaurant[] } | undefined;
+    state.restaurants = Array.isArray(sc?.restaurants) ? sc.restaurants : [];
+    render();
+  } catch (err) {
+    console.error("[consolestore order app] search_restaurants failed", err);
+  }
+}
+
+// chooseAddress switches the active address (set_address), closes the
+// picker, and — only when there's a live query to preserve — re-runs the
+// home search under the new address so the list reflects the new location.
+// With no query, the address just switches; the (unrelated) recent-orders
+// list is left as-is.
+async function chooseAddress(id: string, label: string, asDefault: boolean): Promise<void> {
+  if (!app) return;
+  state.addrError = undefined;
+
+  try {
+    const result = await app.callServerTool({
+      name: "set_address",
+      arguments: { address_id: id, label, as_default: asDefault },
+    });
+
+    if (result.isError) {
+      state.addrError = toolErrorText(result);
+      render();
+      return;
+    }
+
+    const sc = result.structuredContent as { active?: AddrRefDTO } | undefined;
+    const active = sc?.active ?? { id, label };
+    state.address = active;
+    state.addressId = active.id || id;
+    state.addrPickerOpen = false;
+    state.addrSetDefault = false;
+    render();
+
+    if (state.query) await runHomeSearch(state.addressId, state.query);
+  } catch (err) {
+    state.addrError = err instanceof Error ? err.message : String(err);
+    render();
+  }
+}
+
 function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place]",
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default]",
   );
   if (!el) return;
+
+  if (el.dataset.addrOpen !== undefined) {
+    if (state.addrPickerOpen) {
+      state.addrPickerOpen = false;
+      render();
+    } else {
+      void openAddressPicker();
+    }
+    return;
+  }
+
+  if (el.dataset.addrDefault !== undefined) {
+    toggleAddrDefault();
+    return;
+  }
+
+  const addrPickId = el.dataset.addrPick;
+  if (addrPickId !== undefined) {
+    const opt = state.addresses.find((a) => a.id === addrPickId);
+    if (opt) void chooseAddress(opt.id, opt.label, state.addrSetDefault);
+    return;
+  }
 
   const addId = el.dataset.add;
   if (addId !== undefined) {

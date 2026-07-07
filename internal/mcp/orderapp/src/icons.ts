@@ -13,7 +13,8 @@ export type IconName =
   | "alert-triangle"
   | "alert-circle"
   | "lock"
-  | "loader";
+  | "loader"
+  | "chevron-down";
 
 const PATHS: Record<IconName, string> = {
   plus: `<path d="M12 5v14M5 12h14"/>`,
@@ -25,6 +26,7 @@ const PATHS: Record<IconName, string> = {
   "alert-circle": `<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>`,
   lock: `<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
   loader: `<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>`,
+  "chevron-down": `<path d="m6 9 6 6 6-6"/>`,
 };
 
 // icon renders an inline <svg> for `name` at `size` px. `loader` gets the
