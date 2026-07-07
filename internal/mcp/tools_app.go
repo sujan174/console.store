@@ -15,10 +15,11 @@ const (
 
 // OpenStoreIn is what Claude sends after resolving the restaurant from chat.
 type OpenStoreIn struct {
-	AddressID    string `json:"address_id,omitempty"`
-	RestaurantID string `json:"restaurant_id"`
-	Category     string `json:"category,omitempty"`
-	ItemID       string `json:"item_id,omitempty"`
+	AddressID      string `json:"address_id,omitempty"`
+	RestaurantID   string `json:"restaurant_id"`
+	RestaurantName string `json:"restaurant_name,omitempty"`
+	Category       string `json:"category,omitempty"`
+	ItemID         string `json:"item_id,omitempty"`
 }
 
 // OpenStoreOut seeds the app so it paints without a second round-trip.
@@ -31,7 +32,7 @@ type OpenStoreOut struct {
 func openStoreTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "open_store",
-		Description: "Open the interactive ordering app for a known restaurant, optionally deep-linked to a category or item. Call after the user has named a restaurant.",
+		Description: "Open the interactive ordering app for a known restaurant, optionally deep-linked to a category or item. Call after the user has named a restaurant. Pass restaurant_name with the display name you resolved so the app can label the store.",
 		Meta: mcp.Meta{
 			"ui":             map[string]any{"resourceUri": appResourceURI},
 			"ui/resourceUri": appResourceURI,
@@ -75,7 +76,7 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 		return nil, OpenStoreOut{}, err
 	}
 	return nil, OpenStoreOut{
-		Restaurant: map[string]string{"id": in.RestaurantID},
+		Restaurant: map[string]string{"id": in.RestaurantID, "name": in.RestaurantName},
 		Entry:      map[string]string{"category": in.Category, "item_id": in.ItemID, "address_id": addr},
 		Menu:       GetMenuOut{RestaurantID: m.RestaurantID, Items: toMenuItemDTOs(m.Items)},
 	}, nil
