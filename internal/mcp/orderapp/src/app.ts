@@ -7,7 +7,7 @@
 import { App, applyDocumentTheme } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
-import { groupByCategory, renderCartScreen, renderCustomizeScreen, renderMenu } from "./screens";
+import { groupByCategory, renderCartScreen, renderCustomizeScreen, renderFocusedItem, renderMenu } from "./screens";
 import {
   buildWireSelections,
   curateGroups,
@@ -154,6 +154,11 @@ export interface AppState {
   // Non-null while the cart / checkout screen is open (Task 6). Takes render
   // precedence over customize and the menu. Cleared on "back to menu".
   cart: CartState | null;
+  // Non-null when open_store deep-linked a SIMPLE (non-customizable) item_id:
+  // renders a focused single-item card as the primary view. Pure client-side
+  // (add/inc/dec pending) — a simple focused card fires ZERO tool calls, never
+  // reaches get_item_options. Cleared on seed and on "back to menu".
+  focusedItemId: string | null;
 }
 
 export const state: AppState = {
@@ -166,16 +171,31 @@ export const state: AppState = {
   pending: new Map(),
   customize: null,
   cart: null,
+  focusedItemId: null,
 };
 
 let root: HTMLElement | null = null;
 let app: App | null = null;
 
+// render precedence (highest first): cart/checkout → customize sheet →
+// focused simple-item card → full menu. The focused case only holds for an
+// existing, NON-customizable item (a customizable deep-link goes through the
+// customize sheet, not here); anything else falls through to the menu.
 function render(): void {
   if (!root) return;
   if (state.cart) root.innerHTML = renderCartScreen(state, state.cart);
   else if (state.customize) root.innerHTML = renderCustomizeScreen(state, state.customize);
+  else if (state.focusedItemId && isFocusableSimpleItem(state.focusedItemId))
+    root.innerHTML = renderFocusedItem(state, state.focusedItemId);
   else root.innerHTML = renderMenu(state);
+}
+
+// isFocusableSimpleItem gates the focused-card view: the id must resolve to a
+// menu item that is NOT customizable (a customizable item is handled by the
+// customize sheet, which may fetch options — the focused card never does).
+function isFocusableSimpleItem(itemId: string): boolean {
+  const item = itemById(itemId);
+  return !!item && !item.customizable;
 }
 
 function itemById(id: string): MenuItemData | undefined {
@@ -643,7 +663,7 @@ function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place]",
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place]",
   );
   if (!el) return;
 
@@ -717,6 +737,14 @@ function onRootClick(evt: MouseEvent): void {
 
   if (el.dataset.czAdd !== undefined) {
     addCustomizedToCart();
+    return;
+  }
+
+  // "back to menu" from the focused single-item card — pure client-side, no
+  // tool call; returns to the full menu browse (activeCategory already seeded).
+  if (el.dataset.focusBack !== undefined) {
+    state.focusedItemId = null;
+    render();
     return;
   }
 
@@ -813,14 +841,24 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   state.pending = new Map();
   state.customize = null;
   state.cart = null;
+  state.focusedItemId = null;
   cartToken++; // discard any in-flight checkout from a previous restaurant
-  render();
 
+  // Deep-linked item_id resolves to a FOCUSED single-item view as the primary
+  // screen: a customizable item opens the customize sheet (one guarded
+  // get_item_options fetch — unchanged); a simple item renders a focused card
+  // with NO tool call at all. An unresolved/absent id falls back to the menu.
   const entryItemId = sc.entry?.item_id;
-  if (entryItemId) {
-    const item = itemById(entryItemId);
-    if (item && item.customizable) void openCustomize(entryItemId);
+  const entryItem = entryItemId ? itemById(entryItemId) : undefined;
+  if (entryItem && entryItem.customizable) {
+    render();
+    void openCustomize(entryItem.id);
+    return;
   }
+  if (entryItem) {
+    state.focusedItemId = entryItem.id; // simple item — focused card, no fetch
+  }
+  render();
 }
 
 function applyThemeFromHost(): void {

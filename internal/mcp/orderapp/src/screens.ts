@@ -133,6 +133,35 @@ export function renderMenu(state: AppState): string {
   );
 }
 
+// renderFocusedItem paints a single non-customizable item as the PRIMARY
+// view (a full root swap), used when open_store deep-links an item_id to a
+// simple item. It reuses the SAME pending mechanism + itemControl/stepper +
+// cartBar as the menu, so add/inc/dec and checkout behave identically — and,
+// crucially, it fires ZERO tool calls: a simple item never reaches
+// get_item_options (that only happens on the customize path). A "back to
+// menu" affordance (data-focus-back) returns to the full browse.
+export function renderFocusedItem(state: AppState, itemId: string): string {
+  const title = state.restaurant?.name || state.restaurant?.id || "menu";
+  const back = `<button type="button" data-focus-back style="padding:4px 10px;font-size:13px;margin-bottom:10px"><i class="ti ti-arrow-left" style="font-size:13px;vertical-align:-2px" aria-hidden="true"></i> back to menu</button>`;
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) {
+    return back + `<div style="padding:16px 0;color:var(--text-danger);font-size:13px">that item is no longer on the menu</div>`;
+  }
+  const qty = pendingQty(state.pending, item.id);
+  const dim = item.in_stock ? "" : ";opacity:.5";
+  const card =
+    `<div style="background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;padding:16px 18px${dim}">` +
+    `<div style="display:flex;align-items:flex-start;gap:10px">${vegMark(item.veg)}<div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:500">${esc(item.name)}</div><div style="font-size:14px;color:var(--text-secondary);margin-top:2px">${money(item.price)}</div></div></div>` +
+    `<div style="display:flex;justify-content:flex-end;margin-top:14px">${itemControl(item, qty)}</div>` +
+    `</div>`;
+  return (
+    `<h2 class="sr-only">Focused item: ${esc(item.name)} from ${esc(title)} — add it to your cart or go back to the full menu.</h2>` +
+    back +
+    card +
+    cartBar(state.pending)
+  );
+}
+
 // --- customize sheet (ported from czView() in ordering-app.md) ---
 
 function czBack(restaurantName: string): string {
