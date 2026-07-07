@@ -14,7 +14,9 @@ export type IconName =
   | "alert-circle"
   | "lock"
   | "loader"
-  | "chevron-down";
+  | "chevron-down"
+  | "search"
+  | "eye";
 
 const PATHS: Record<IconName, string> = {
   plus: `<path d="M12 5v14M5 12h14"/>`,
@@ -27,6 +29,8 @@ const PATHS: Record<IconName, string> = {
   lock: `<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
   loader: `<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>`,
   "chevron-down": `<path d="m6 9 6 6 6-6"/>`,
+  search: `<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>`,
+  eye: `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>`,
 };
 
 // icon renders an inline <svg> for `name` at `size` px. `loader` gets the

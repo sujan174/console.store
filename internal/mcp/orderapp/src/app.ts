@@ -214,6 +214,16 @@ export interface AppState {
   restaurants: HomeRestaurant[];
   recentOrders: RecentOrder[];
   query: string;
+  // Task 9: the currently active category chip's query — mutually exclusive
+  // with `query` (picking a category clears the free-text search box, and
+  // vice versa). Null when neither has been used yet.
+  activeCatQuery: string | null;
+  // Task 9: restaurant ids whose eye-toggle description panel is open. Pure
+  // client-side (no tool call fires when this changes).
+  restInfoOpen: Set<string>;
+  // Task 9: id of a closed restaurant whose card was last tapped — shows a
+  // small "closed — try another address" note under that card.
+  closedNoteId: string | null;
 
   // Address picker (Task 8; home screen only — the restaurant screen shows
   // `address` read-only, no picker). `addresses`/`addressesLoaded` are filled
@@ -258,6 +268,9 @@ export const state: AppState = {
   restaurants: [],
   recentOrders: [],
   query: "",
+  activeCatQuery: null,
+  restInfoOpen: new Set(),
+  closedNoteId: null,
 
   addrPickerOpen: false,
   addresses: [],
@@ -307,6 +320,16 @@ function isFocusableSimpleItem(itemId: string): boolean {
 
 function itemById(id: string): MenuItemData | undefined {
   return state.items.find((i) => i.id === id);
+}
+
+// sortRestaurants orders a search/seed result: open restaurants first (by
+// rating desc within each bucket), closed ones last — applied every place
+// state.restaurants gets set (Task 9 brief).
+function sortRestaurants(list: HomeRestaurant[]): HomeRestaurant[] {
+  return [...list].sort((a, b) => {
+    if (a.unavailable !== b.unavailable) return a.unavailable ? 1 : -1;
+    return b.rating - a.rating;
+  });
 }
 
 function addPending(item: MenuItemData): void {
@@ -817,8 +840,9 @@ function toggleAddrDefault(): void {
 }
 
 // runHomeSearch re-runs the home's current search under a (possibly new)
-// address — the ONE search_restaurants call site (Task 9 may later add a
-// dedicated runSearch; until then this is it, per the Task 8 brief).
+// address / query — the ONE search_restaurants call site. Called by
+// pickCategory, submitHomeSearch, and chooseAddress (Task 9's category
+// sidebar / search bar / address switch, respectively).
 async function runHomeSearch(addressId: string, query: string): Promise<void> {
   if (!app) return;
   try {
@@ -828,18 +852,90 @@ async function runHomeSearch(addressId: string, query: string): Promise<void> {
     });
     if (result.isError) return; // non-fatal — leave the current list showing
     const sc = result.structuredContent as { restaurants?: HomeRestaurant[] } | undefined;
-    state.restaurants = Array.isArray(sc?.restaurants) ? sc.restaurants : [];
+    state.restaurants = sortRestaurants(Array.isArray(sc?.restaurants) ? sc.restaurants : []);
     render();
   } catch (err) {
     console.error("[consolestore order app] search_restaurants failed", err);
   }
 }
 
+// pickCategory (Task 9): a sidebar chip tap. Marks it active, clears the
+// free-text search box (mutually exclusive), and re-runs the ONE
+// search_restaurants call via runHomeSearch.
+async function pickCategory(query: string): Promise<void> {
+  state.activeCatQuery = query;
+  state.query = "";
+  state.closedNoteId = null;
+  render();
+  if (!state.addressId) return;
+  await runHomeSearch(state.addressId, query);
+}
+
+// submitHomeSearch (Task 9): the search bar's Enter/submit. Marks the
+// free-text query active, clears any active category chip, and re-runs the
+// ONE search_restaurants call via runHomeSearch.
+async function submitHomeSearch(query: string): Promise<void> {
+  state.query = query;
+  state.activeCatQuery = null;
+  state.closedNoteId = null;
+  render();
+  if (!state.addressId) return;
+  await runHomeSearch(state.addressId, query);
+}
+
+// restaurantOpenInFlight guards a rapid double-tap on the same restaurant
+// card from firing two concurrent get_menu calls — mirrors optionsInFlight /
+// addressesInFlight above.
+let restaurantOpenInFlight = false;
+
+// openRestaurant (Task 9): the restaurant-card open affordance. ONE get_menu
+// call, then seeds the restaurant screen the same way seedFromOpenStore's
+// "restaurant" branch does (menu items, derived categories, first category
+// active) and resets every restaurant-scoped field so nothing leaks from
+// whatever screen was open before. A closed restaurant is never openable —
+// gated by the caller (onRootClick only reads data-rest-open on a card that
+// isn't unavailable).
+async function openRestaurant(id: string): Promise<void> {
+  const r = state.restaurants.find((x) => x.id === id);
+  if (!r || r.unavailable) return;
+  if (!app || !state.addressId) return;
+  if (restaurantOpenInFlight) return;
+  restaurantOpenInFlight = true;
+
+  try {
+    const result = await app.callServerTool({
+      name: "get_menu",
+      arguments: { address_id: state.addressId, restaurant_id: id },
+    });
+
+    if (result.isError) {
+      console.error("[consolestore order app] get_menu failed", toolErrorText(result));
+      return;
+    }
+
+    const sc = result.structuredContent as { restaurant_id?: string; items?: MenuItemData[] } | undefined;
+
+    state.screen = "restaurant";
+    state.restaurant = { id, name: r.name };
+    state.restaurantId = sc?.restaurant_id || id;
+    state.items = Array.isArray(sc?.items) ? sc.items : [];
+    state.categories = [...groupByCategory(state.items).keys()];
+    state.activeCategory = state.categories[0] ?? null;
+    resetRestaurantScopedState();
+    render();
+  } catch (err) {
+    console.error("[consolestore order app] get_menu failed", err);
+  } finally {
+    restaurantOpenInFlight = false;
+  }
+}
+
 // chooseAddress switches the active address (set_address), closes the
-// picker, and — only when there's a live query to preserve — re-runs the
-// home search under the new address so the list reflects the new location.
-// With no query, the address just switches; the (unrelated) recent-orders
-// list is left as-is.
+// picker, and — only when there's a live category or free-text query to
+// preserve — re-runs the home search under the new address so the list
+// reflects the new location (Task 9: whichever of the two is currently
+// active). With neither set, the address just switches; the (unrelated)
+// recent-orders list is left as-is.
 async function chooseAddress(id: string, label: string, asDefault: boolean): Promise<void> {
   if (!app) return;
   state.addrError = undefined;
@@ -862,9 +958,11 @@ async function chooseAddress(id: string, label: string, asDefault: boolean): Pro
     state.addressId = active.id || id;
     state.addrPickerOpen = false;
     state.addrSetDefault = false;
+    state.closedNoteId = null;
     render();
 
-    if (state.query) await runHomeSearch(state.addressId, state.query);
+    if (state.activeCatQuery) await runHomeSearch(state.addressId, state.activeCatQuery);
+    else if (state.query) await runHomeSearch(state.addressId, state.query);
   } catch (err) {
     state.addrError = err instanceof Error ? err.message : String(err);
     render();
@@ -875,7 +973,7 @@ function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default]",
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed]",
   );
   if (!el) return;
 
@@ -1025,7 +1123,55 @@ function onRootClick(evt: MouseEvent): void {
   // The place button — the ONLY trigger for place_order (invariant 1).
   if (el.dataset.place !== undefined) {
     void placeOrder();
+    return;
   }
+
+  // --- store home (Task 9) ---
+
+  const catQ = el.dataset.catQ;
+  if (catQ !== undefined) {
+    void pickCategory(catQ);
+    return;
+  }
+
+  if (el.dataset.homeSearch !== undefined) {
+    const input = root?.querySelector<HTMLInputElement>("[data-home-search-input]");
+    void submitHomeSearch(input?.value.trim() ?? "");
+    return;
+  }
+
+  // Eye toggle — pure client-side, zero tool calls.
+  const restInfoId = el.dataset.restInfo;
+  if (restInfoId !== undefined) {
+    if (state.restInfoOpen.has(restInfoId)) state.restInfoOpen.delete(restInfoId);
+    else state.restInfoOpen.add(restInfoId);
+    render();
+    return;
+  }
+
+  const restOpenId = el.dataset.restOpen;
+  if (restOpenId !== undefined) {
+    void openRestaurant(restOpenId);
+    return;
+  }
+
+  // A closed card's primary tap — no open, just the note.
+  const restClosedId = el.dataset.restClosed;
+  if (restClosedId !== undefined) {
+    state.closedNoteId = restClosedId;
+    render();
+  }
+}
+
+// onRootKeydown handles Enter in the home search box (submitHomeSearch is
+// otherwise only reachable via the search button's click, delegated above).
+function onRootKeydown(evt: KeyboardEvent): void {
+  if (evt.key !== "Enter") return;
+  const target = evt.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.dataset.homeSearchInput === undefined) return;
+  evt.preventDefault();
+  void submitHomeSearch(target.value.trim());
 }
 
 // clearThenMaterialize resolves the conflict prompt's "clear & continue" and
@@ -1081,9 +1227,14 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   if (sc.screen === "home") {
     state.screen = "home";
     state.homeCategories = Array.isArray(sc.categories) ? sc.categories : [];
-    state.restaurants = Array.isArray(sc.restaurants) ? sc.restaurants : [];
+    state.restaurants = sortRestaurants(Array.isArray(sc.restaurants) ? sc.restaurants : []);
     state.recentOrders = Array.isArray(sc.recent_orders) ? sc.recent_orders : [];
     state.query = sc.query ?? "";
+    // A fresh open_store home doesn't carry an active category (Task 9) —
+    // start with neither chip nor any transient UI state selected.
+    state.activeCatQuery = null;
+    state.restInfoOpen = new Set();
+    state.closedNoteId = null;
 
     state.restaurant = null;
     state.restaurantId = null;
@@ -1173,6 +1324,7 @@ export function bootstrap(): void {
   root = document.getElementById("app");
   if (!root) throw new Error("consolestore order app: missing #app root");
   root.addEventListener("click", onRootClick);
+  root.addEventListener("keydown", onRootKeydown);
 
   app = new App({ name: "consolestore order", version: "0.1.0" });
   app.onhostcontextchanged = () => applyHostStyling();

@@ -170,11 +170,40 @@ input {
 
 /* --- store home layout (Task 7 scaffold; Tasks 8–10 fill the slots) --- */
 .store-layout { display: flex; gap: 14px; }
-.sidebar { width: 150px; flex: none; }
+.sidebar { width: 150px; flex: none; display: flex; flex-direction: column; gap: 4px; }
 .content { flex: 1; min-width: 0; }
 /* Narrow / inline-embed fallback — stack instead of side-by-side. */
 :root[data-display="inline"] .store-layout { flex-direction: column; }
-:root[data-display="inline"] .sidebar { width: auto; }
+:root[data-display="inline"] .sidebar { width: auto; flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+
+/* --- store home: category sidebar (Task 9) --- */
+.side-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.side-item:hover { background: var(--surface-1); color: var(--text-primary); }
+.side-item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.side-item.on {
+  color: var(--sw-orange);
+  border-color: var(--sw-orange);
+  background: rgba(252, 128, 25, .10);
+  font-weight: 600;
+}
+:root[data-display="inline"] .side-item { width: auto; flex: none; white-space: nowrap; }
+
+/* --- store home: restaurant list (Task 9) --- */
+.rest-card { margin-bottom: 10px; }
+.rest-card--closed { opacity: .55; }
 
 /* --- menu rows --- */
 .tile {
