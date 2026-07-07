@@ -38,3 +38,11 @@ func TestSearchRestaurantsReturnsResults(t *testing.T) {
 		t.Fatalf("restaurants = %+v", out.Restaurants)
 	}
 }
+
+func TestToMenuItemDTOsKeepsCategory(t *testing.T) {
+	in := []api.MenuItem{{ID: "1", Name: "Veg Wrap", Price: 120, Veg: true, InStock: true, Category: "Wraps"}}
+	got := toMenuItemDTOs(in)
+	if len(got) != 1 || got[0].Category != "Wraps" {
+		t.Fatalf("category dropped: %+v", got)
+	}
+}
