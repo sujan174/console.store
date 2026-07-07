@@ -43,3 +43,15 @@ func TestAddrPrefRoundTrip(t *testing.T) {
 		t.Fatalf("roundtrip got=%+v err=%v", got, err)
 	}
 }
+
+func TestRecordPlacementKeepsLabelWhenEmpty(t *testing.T) {
+	p := AddrPref{}.SetActive("a1", "Home")
+	p = p.RecordPlacement("a1", "", 5) // app path: empty label
+	if p.LastLabel != "Home" {
+		t.Fatalf("label wiped: %q want Home", p.LastLabel)
+	}
+	p = p.RecordPlacement("a2", "Work", 6) // non-empty updates
+	if p.LastAddrID != "a2" || p.LastLabel != "Work" {
+		t.Fatalf("got %s/%s want a2/Work", p.LastAddrID, p.LastLabel)
+	}
+}

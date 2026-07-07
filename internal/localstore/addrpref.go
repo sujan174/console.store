@@ -44,8 +44,13 @@ func (p AddrPref) SetDefault(id, label string) AddrPref {
 }
 
 // RecordPlacement always updates Last; the default (when locked) is untouched.
+// It only updates LastLabel when label is non-empty, preserving the previous label
+// when the app passes an empty string.
 func (p AddrPref) RecordPlacement(id, label string, now int64) AddrPref {
-	p.LastAddrID, p.LastLabel, p.LastUsedUnix = id, label, now
+	p.LastAddrID, p.LastUsedUnix = id, now
+	if label != "" {
+		p.LastLabel = label
+	}
 	return p
 }
 
