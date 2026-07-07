@@ -7,7 +7,7 @@
 import { App, applyDocumentTheme } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
-import { groupByCategory, renderCustomizeScreen, renderMenu } from "./screens";
+import { groupByCategory, renderCartScreen, renderCustomizeScreen, renderMenu } from "./screens";
 import {
   buildWireSelections,
   curateGroups,
@@ -83,6 +83,60 @@ export interface CustomizeState {
   selection: Map<string, Set<string>>;
 }
 
+// --- cart / checkout (Task 6) ---
+
+// One bill line from the SERVER's <Cart> (get_cart / update_cart /
+// prepare_order.bill — order-app-tool-schemas.md). `available:false` = sold
+// out; it blocks placement (invariant: never place an unavailable line).
+export interface CartBillLine {
+  item_id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  available: boolean;
+}
+
+// The authoritative bill. Every number here is the server's — the checkout
+// screen renders these verbatim, never a client estimate (invariant 2).
+export interface CartBill {
+  restaurant: string;
+  item_total: number;
+  delivery: number;
+  taxes: number;
+  total: number;
+  lines: CartBillLine[];
+}
+
+// Loosely-typed order summary from place_order's result.structuredContent.order.
+export type OrderSummary = Record<string, unknown>;
+
+// The checkout state machine (swaps the same #app root — no new message):
+//   loading  — a get_cart / update_cart / prepare_order call is in flight.
+//   conflict — get_cart found a NON-empty foreign cart; keep/clear prompt
+//              (guarded BEFORE any write — invariant 3).
+//   bill     — the server's prepared bill + confirmation_id is showing.
+//   placing  — place_order is in flight (button pressed).
+//   placed   — the order was placed; showing the confirmation.
+//   error    — a tool failure mapped by its code prefix.
+export interface CartState {
+  status: "loading" | "conflict" | "bill" | "placing" | "placed" | "error";
+  // loading label.
+  message?: string;
+  // conflict: the name of the foreign cart's restaurant.
+  foreignRestaurant?: string;
+  // bill / placing: the prepared bill + its confirmation id + delivery label.
+  confirmationId?: string;
+  bill?: CartBill;
+  addressLabel?: string;
+  rebuilt?: string;
+  // placed: the order summary.
+  order?: OrderSummary;
+  // error: the human message, its code prefix, and whether a re-sync is offered.
+  error?: string;
+  errorCode?: string;
+  canResync?: boolean;
+}
+
 export interface AppState {
   restaurant: OpenStoreRestaurant | null;
   restaurantId: string | null;
@@ -97,6 +151,9 @@ export interface AppState {
   // Non-null while the customize sheet is open (swaps the same #app root —
   // no new render/message). Cleared on back or add-to-cart.
   customize: CustomizeState | null;
+  // Non-null while the cart / checkout screen is open (Task 6). Takes render
+  // precedence over customize and the menu. Cleared on "back to menu".
+  cart: CartState | null;
 }
 
 export const state: AppState = {
@@ -108,6 +165,7 @@ export const state: AppState = {
   activeCategory: null,
   pending: new Map(),
   customize: null,
+  cart: null,
 };
 
 let root: HTMLElement | null = null;
@@ -115,7 +173,9 @@ let app: App | null = null;
 
 function render(): void {
   if (!root) return;
-  root.innerHTML = state.customize ? renderCustomizeScreen(state, state.customize) : renderMenu(state);
+  if (state.cart) root.innerHTML = renderCartScreen(state, state.cart);
+  else if (state.customize) root.innerHTML = renderCustomizeScreen(state, state.customize);
+  else root.innerHTML = renderMenu(state);
 }
 
 function itemById(id: string): MenuItemData | undefined {
@@ -244,17 +304,344 @@ function addCustomizedToCart(): void {
   render();
 }
 
-// openCart: Task 6 fills this in with the real cart/bill screen. Stubbed
-// here — no-op besides a log line.
-function openCart(): void {
-  console.log("[consolestore order app] openCart (stub, Task 6)");
+// --- checkout: the money flow (Task 6) ---
+//
+// The whole flow is guarded by two mechanisms, mirroring the customize
+// sheet's conventions (CLAUDE.md "Stale async responses are guarded by
+// identity"):
+//   (1) `cartToken` — a monotonically increasing identity bumped at the start
+//       of every openCart / place. After each await we bail if the token no
+//       longer matches, so a superseded open/place can never clobber state.
+//   (2) `placeInFlight` — a boolean that makes a rapid double-press of the
+//       place button a no-op instead of a second place_order (non-idempotent:
+//       a double-fire risks a duplicate order).
+let cartToken = 0;
+let placeInFlight = false;
+
+function num(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function str(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+// readBill coerces a <Cart> payload (from get_cart / update_cart /
+// prepare_order.bill) into CartBill defensively — the decoders elsewhere in
+// consolestore are deliberately tolerant, so this one is too.
+function readBill(raw: unknown): CartBill {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const rawLines = Array.isArray(o.lines) ? o.lines : [];
+  const lines: CartBillLine[] = rawLines.map((l) => {
+    const line = (l ?? {}) as Record<string, unknown>;
+    return {
+      item_id: str(line.item_id),
+      name: str(line.name),
+      quantity: num(line.quantity),
+      price: num(line.price),
+      // Absent → treat as available; only an explicit false blocks placement.
+      available: line.available !== false,
+    };
+  });
+  return {
+    restaurant: str(o.restaurant),
+    item_total: num(o.item_total),
+    delivery: num(o.delivery),
+    taxes: num(o.taxes),
+    total: num(o.total),
+    lines,
+  };
+}
+
+// isForeignCart decides the conflict guard: the existing cart's restaurant
+// (a name string) versus the one we're ordering from. A blank/unknown
+// existing name counts as DIFFERENT (can't prove it's ours); a blank current
+// name also can't be proven equal, so we err on the side of a conflict prompt
+// (its "clear & continue" is idempotent — update_cart replaces the whole cart
+// anyway). Compared case-insensitively.
+function isForeignCart(existingRestaurant: string): boolean {
+  const existing = existingRestaurant.trim().toLowerCase();
+  const current = (state.restaurant?.name ?? "").trim().toLowerCase();
+  if (!existing) return true; // blank existing → different
+  if (!current) return true; // can't prove it's ours
+  return existing !== current;
+}
+
+// splitError parses a tool failure message of the form "<code>: <human text>"
+// (order-app-tool-schemas.md) into its code prefix and human message.
+function splitError(text: string): { code: string; message: string } {
+  const idx = text.indexOf(": ");
+  if (idx < 0) return { code: "", message: text };
+  return { code: text.slice(0, idx), message: text.slice(idx + 2) };
+}
+
+// buildCartError maps a tool failure into a CartState error, branching on the
+// code prefix (order-app-tool-schemas.md). cart_conflict / cart_expired offer
+// a re-sync; the rest are informational and drop back to the cart.
+function buildCartError(text: string): CartState {
+  const { code, message } = splitError(text);
+  switch (code) {
+    case "over_cap": {
+      const trim = state.cart?.bill ? priciestLineName(state.cart.bill) : "";
+      const hint = trim ? ` Trim ${trim} to get under ₹1000.` : "";
+      return { status: "error", errorCode: code, error: `${message}${hint}` };
+    }
+    case "unserviceable":
+      return { status: "error", errorCode: code, error: message };
+    case "under_min":
+      return { status: "error", errorCode: code, error: message };
+    case "cart_conflict":
+    case "cart_expired":
+      return { status: "error", errorCode: code, error: message, canResync: true };
+    default:
+      // cart_changed / confirmation_expired are handled by a silent re-prepare
+      // upstream and never reach here; anything else just shows its text.
+      return { status: "error", errorCode: code, error: message };
+  }
+}
+
+function priciestLineName(bill: CartBill): string {
+  let name = "";
+  let worst = -1;
+  for (const line of bill.lines) {
+    const cost = line.price * line.quantity;
+    if (cost > worst) {
+      worst = cost;
+      name = line.name;
+    }
+  }
+  return name;
+}
+
+// openCart — STEP 1: guard the cross-restaurant conflict with get_cart BEFORE
+// any write (invariant 3). Never trusts update_cart's `replaced_cart` receipt.
+// When there's no foreign cart it proceeds straight to materialize (STEP 2).
+async function openCart(): Promise<void> {
+  const token = ++cartToken;
+  state.customize = null;
+  state.cart = { status: "loading", message: "checking your cart…" };
+  render();
+
+  if (!app || !state.addressId || !state.restaurantId) {
+    state.cart = { status: "error", error: "missing address or restaurant context" };
+    render();
+    return;
+  }
+  if (state.pending.size === 0) {
+    state.cart = { status: "error", error: "your cart is empty — add something first" };
+    render();
+    return;
+  }
+
+  try {
+    const result = await app.callServerTool({
+      name: "get_cart",
+      arguments: { address_id: state.addressId },
+    });
+    if (cartToken !== token) return; // superseded — discard
+
+    if (result.isError) {
+      // Couldn't read an existing cart → there is no foreign cart we can prove;
+      // proceed to materialize (the single update_cart replaces whatever is
+      // there). We never place off this path — only prepare + human press do.
+      await materializeCart(token);
+      return;
+    }
+
+    const sc = result.structuredContent as { cart?: unknown } | undefined;
+    const existing = readBill(sc?.cart);
+    if (existing.lines.length > 0 && isForeignCart(existing.restaurant)) {
+      state.cart = { status: "conflict", foreignRestaurant: existing.restaurant };
+      render();
+      return;
+    }
+
+    await materializeCart(token);
+  } catch (err) {
+    if (cartToken !== token) return;
+    state.cart = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    render();
+  }
+}
+
+// The update_cart line shape (order-app-tool-schemas.md). variants_v2 / addons
+// are present only for customized lines (built in Task 5).
+interface WireCartItem {
+  item_id: string;
+  quantity: number;
+  variants_v2?: { group_id: string; variation_id: string }[];
+  addons?: { group_id: string; choice_id: string }[];
+}
+
+// materializeCart — STEP 2: the SINGLE update_cart for the whole checkout
+// (never per-tap), then prepare_order for the real bill. Runs only after the
+// conflict guard cleared. Any tool failure maps by its code prefix.
+async function materializeCart(token: number): Promise<void> {
+  if (!app || !state.addressId || !state.restaurantId) {
+    state.cart = { status: "error", error: "missing address or restaurant context" };
+    render();
+    return;
+  }
+
+  state.cart = { status: "loading", message: "syncing your cart…" };
+  render();
+
+  const items: WireCartItem[] = [...state.pending.values()].map((line) => {
+    const item: WireCartItem = { item_id: line.itemId, quantity: line.qty };
+    if (line.selections) {
+      if (line.selections.variants_v2.length) item.variants_v2 = line.selections.variants_v2;
+      if (line.selections.addons.length) item.addons = line.selections.addons;
+    }
+    return item;
+  });
+
+  const args: Record<string, unknown> = {
+    address_id: state.addressId,
+    restaurant_id: state.restaurantId,
+    items,
+  };
+  if (state.restaurant?.name) args.restaurant_name = state.restaurant.name;
+
+  try {
+    const result = await app.callServerTool({ name: "update_cart", arguments: args });
+    if (cartToken !== token) return; // superseded — discard
+
+    if (result.isError) {
+      state.cart = buildCartError(toolErrorText(result));
+      render();
+      return;
+    }
+
+    await prepareBill(token, 1);
+  } catch (err) {
+    if (cartToken !== token) return;
+    state.cart = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    render();
+  }
+}
+
+// prepareBill pulls the authoritative bill + confirmation_id and renders it.
+// EVERY number shown comes from this response (invariant 2). Used at STEP 2
+// and again to silently refresh on a stale-confirmation place error (STEP 3);
+// `retries` bounds a cart_changed/confirmation_expired self-retry so it can't
+// loop.
+async function prepareBill(token: number, retries: number): Promise<void> {
+  if (!app || !state.addressId) {
+    state.cart = { status: "error", error: "missing address context" };
+    render();
+    return;
+  }
+
+  state.cart = { status: "loading", message: "pulling the real bill…" };
+  render();
+
+  try {
+    const result = await app.callServerTool({
+      name: "prepare_order",
+      arguments: { address_id: state.addressId },
+    });
+    if (cartToken !== token) return; // superseded — discard
+
+    if (result.isError) {
+      const text = toolErrorText(result);
+      const { code } = splitError(text);
+      if ((code === "cart_changed" || code === "confirmation_expired") && retries > 0) {
+        await prepareBill(token, retries - 1);
+        return;
+      }
+      state.cart = buildCartError(text);
+      render();
+      return;
+    }
+
+    const sc = result.structuredContent as
+      | { confirmation_id?: string; bill?: unknown; address?: { label?: string }; rebuilt?: string }
+      | undefined;
+    state.cart = {
+      status: "bill",
+      confirmationId: str(sc?.confirmation_id),
+      bill: readBill(sc?.bill),
+      addressLabel: str(sc?.address?.label),
+      rebuilt: sc?.rebuilt,
+    };
+    render();
+  } catch (err) {
+    if (cartToken !== token) return;
+    state.cart = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    render();
+  }
+}
+
+// placeOrder — STEP 3: fires place_order and NOWHERE else, only on the human
+// button press (invariant 1). Blocked when a line is sold out or a place is
+// already in flight. Errors branch by code prefix; a stale-bill error silently
+// re-prepares and stays in the app (never auto-places).
+async function placeOrder(): Promise<void> {
+  const current = state.cart;
+  if (!current || current.status !== "bill" || !current.confirmationId || !current.bill) return;
+  if (current.bill.lines.some((l) => !l.available)) return; // sold-out → blocked
+  if (placeInFlight) return;
+  if (!app) return;
+
+  placeInFlight = true;
+  const token = ++cartToken;
+  const confirmationId = current.confirmationId;
+  state.cart = { ...current, status: "placing" };
+  render();
+
+  try {
+    const result = await app.callServerTool({
+      name: "place_order",
+      arguments: { confirmation_id: confirmationId },
+    });
+    if (cartToken !== token) return; // superseded — discard
+
+    if (result.isError) {
+      const text = toolErrorText(result);
+      const { code } = splitError(text);
+      if (code === "cart_changed" || code === "confirmation_expired") {
+        // Stale bill — silently re-price and re-render; do NOT place.
+        await prepareBill(token, 1);
+        return;
+      }
+      state.cart = buildCartError(text);
+      render();
+      return;
+    }
+
+    const sc = result.structuredContent as { order?: OrderSummary } | undefined;
+    state.pending = new Map();
+    state.cart = {
+      status: "placed",
+      order: sc?.order ?? {},
+      bill: current.bill,
+      addressLabel: current.addressLabel,
+    };
+    render();
+  } catch (err) {
+    if (cartToken !== token) return;
+    state.cart = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    render();
+  } finally {
+    placeInFlight = false;
+  }
+}
+
+// closeCart returns to the menu, discarding any in-flight checkout by bumping
+// the identity token (a late response then no-ops).
+function closeCart(): void {
+  cartToken++;
+  state.cart = null;
+  render();
 }
 
 function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add]",
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place]",
   );
   if (!el) return;
 
@@ -339,7 +726,66 @@ function onRootClick(evt: MouseEvent): void {
   }
 
   if (el.dataset.checkout !== undefined) {
-    openCart();
+    void openCart();
+    return;
+  }
+
+  // --- cart / checkout controls (Task 6) ---
+
+  if (el.dataset.cartBack !== undefined) {
+    closeCart();
+    return;
+  }
+
+  // "keep current" — cancel the checkout, leave the foreign cart untouched.
+  if (el.dataset.cartKeep !== undefined) {
+    closeCart();
+    return;
+  }
+
+  // "clear & continue" — clear the foreign cart, then materialize ours.
+  if (el.dataset.cartClear !== undefined) {
+    void clearThenMaterialize();
+    return;
+  }
+
+  // "re-sync" — re-run STEP 2 (update_cart + prepare_order) after a recoverable
+  // cart error.
+  if (el.dataset.cartRetry !== undefined) {
+    void materializeCart(++cartToken);
+    return;
+  }
+
+  // The place button — the ONLY trigger for place_order (invariant 1).
+  if (el.dataset.place !== undefined) {
+    void placeOrder();
+  }
+}
+
+// clearThenMaterialize resolves the conflict prompt's "clear & continue":
+// clear_cart, then the single update_cart + prepare_order (STEP 2).
+async function clearThenMaterialize(): Promise<void> {
+  const token = ++cartToken;
+  if (!app) {
+    state.cart = { status: "error", error: "missing app context" };
+    render();
+    return;
+  }
+  state.cart = { status: "loading", message: "clearing the other cart…" };
+  render();
+  try {
+    const result = await app.callServerTool({ name: "clear_cart", arguments: {} });
+    if (cartToken !== token) return; // superseded — discard
+    if (result.isError) {
+      state.cart = buildCartError(toolErrorText(result));
+      render();
+      return;
+    }
+    await materializeCart(token);
+  } catch (err) {
+    if (cartToken !== token) return;
+    state.cart = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    render();
   }
 }
 
@@ -358,6 +804,9 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     entryCategory && state.categories.includes(entryCategory) ? entryCategory : state.categories[0] ?? null;
 
   state.pending = new Map();
+  state.customize = null;
+  state.cart = null;
+  cartToken++; // discard any in-flight checkout from a previous restaurant
   render();
 
   const entryItemId = sc.entry?.item_id;
