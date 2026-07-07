@@ -4,7 +4,7 @@
 // internal/agents/bundles/console-order/references/ordering-app.md for the
 // visual/logic source the menu screen (screens.ts) ports.
 
-import { App, applyDocumentTheme } from "@modelcontextprotocol/ext-apps";
+import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
 import { groupByCategory, renderCartScreen, renderCustomizeScreen, renderFocusedItem, renderMenu } from "./screens";
@@ -861,9 +861,17 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   render();
 }
 
-function applyThemeFromHost(): void {
+// applyHostStyling pulls the host's CSS variables, fonts, and color-scheme
+// theme into the document — called on connect AND on every host-context
+// change, so a live theme/font switch in the host re-skins us immediately.
+// Each piece is independently guarded: a host that only sends a theme (or
+// only variables) still applies whatever it did send.
+function applyHostStyling(): void {
   const ctx = app?.getHostContext();
-  if (ctx?.theme) applyDocumentTheme(ctx.theme);
+  if (!ctx) return;
+  if (ctx.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
+  if (ctx.styles?.css?.fonts) applyHostFonts(ctx.styles.css.fonts);
+  if (ctx.theme) applyDocumentTheme(ctx.theme);
 }
 
 export function bootstrap(): void {
@@ -874,7 +882,7 @@ export function bootstrap(): void {
   root.addEventListener("click", onRootClick);
 
   app = new App({ name: "consolestore order", version: "0.1.0" });
-  app.onhostcontextchanged = () => applyThemeFromHost();
+  app.onhostcontextchanged = () => applyHostStyling();
 
   // The open_store tool result is pushed here on first render — see
   // OpenStoreOut above and order-app-tool-schemas.md. Reading the menu
@@ -886,7 +894,7 @@ export function bootstrap(): void {
   };
 
   app.connect().then(
-    () => applyThemeFromHost(),
+    () => applyHostStyling(),
     (err: unknown) => console.error("[consolestore order app] connect failed", err),
   );
 }

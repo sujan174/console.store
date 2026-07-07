@@ -1,85 +1,97 @@
-// Inline design tokens for the order app, ported from
-// internal/agents/bundles/console-order/references/surface-kit.md.
+// Design tokens for the order app, re-skinned to look native to Claude
+// Desktop ("cloud theme") with a Swiggy accent — see the redesign spec at
+// .superpowers/sdd/order-app-redesign-spec.md for the full rationale.
 //
-// The ext-apps host does not guarantee these variable names (it exposes its
-// own `--color-*` tokens via applyHostStyleVariables) — these are OURS, kept
-// in sync with the terminal Tokyo Night palette (internal/tui/theme/tokyonight.go)
-// so the app matches the rest of consolestore. `app.ts` flips `data-theme` on
-// <html> from the host's reported theme; `prefers-color-scheme` is the
-// fallback before that fires.
-
-const DARK = `
-  --bg: #15161f;
-  --surface-1: #10111a;
-  --surface-2: #191a24;
-  --border: #232539;
-  --border-strong: #2c2e44;
-  --text-primary: #a9b1d6;
-  --text-secondary: #565f89;
-  --text-muted: #3b3b5a;
-  --text-accent: #7aa2f7;
-  --bg-accent: rgba(122, 162, 247, 0.16);
-  --border-accent: #7aa2f7;
-  --text-success: #9ece6a;
-  --bg-success: rgba(158, 206, 106, 0.16);
-  --text-danger: #f7768e;
-  --bg-danger: rgba(247, 118, 142, 0.16);
-  --text-warning: #e0af68;
-  --radius: 10px;
-`;
+// OUR var names (--bg, --surface-1, --text-primary, …) are kept stable so
+// screens.ts never has to change when the theme does; each one now resolves
+// against the HOST's own `--color-*` tokens (applied by app.ts via
+// applyHostStyleVariables) with a Swiggy/Claude-paper fallback for when the
+// host doesn't supply one (e.g. during local dev / before connect fires).
+// `prefers-color-scheme` covers the case before `data-theme` is set;
+// `applyDocumentTheme` (app.ts) then flips `:root[data-theme]` from the
+// host's reported theme.
 
 const LIGHT = `
-  --bg: #eef0f5;
-  --surface-1: #e2e5ee;
-  --surface-2: #ffffff;
-  --border: #d7dae3;
-  --border-strong: #c0c4d2;
-  --text-primary: #343b58;
-  --text-secondary: #5a5f78;
-  --text-muted: #9195a8;
-  --text-accent: #3760bf;
-  --bg-accent: rgba(55, 96, 191, 0.1);
-  --border-accent: #3760bf;
-  --text-success: #2f7d4f;
-  --bg-success: rgba(47, 125, 79, 0.1);
-  --text-danger: #c4384d;
-  --bg-danger: rgba(196, 56, 77, 0.1);
-  --text-warning: #966300;
-  --radius: 10px;
+  --bg:             var(--color-background-primary,   #faf9f6);
+  --surface-1:      var(--color-background-tertiary,  #f1efe8);
+  --surface-2:      var(--color-background-secondary, #ffffff);
+  --border:         var(--color-border-primary,       #e8e4d9);
+  --border-strong:  var(--color-border-secondary,     #d9d4c6);
+  --text-primary:   var(--color-text-primary,         #262521);
+  --text-secondary: var(--color-text-secondary,       #6b6658);
+  --text-muted:     var(--color-text-tertiary,        #a8a294);
+  --text-success:   var(--color-text-success,         #1a7f4b);
+  --bg-success:     var(--color-background-success,   rgba(26, 127, 75, .10));
+  --text-danger:    var(--color-text-danger,          #c0392b);
+  --bg-danger:      var(--color-background-danger,    rgba(192, 57, 43, .10));
+  --text-warning:   var(--color-text-warning,         #b7791f);
+  --ring:           var(--color-ring-primary,         var(--sw-orange));
+  --shadow: 0 1px 2px rgba(30, 25, 15, .04), 0 4px 16px rgba(30, 25, 15, .06);
+`;
+
+const DARK = `
+  --bg:             var(--color-background-primary,   #1c1b18);
+  --surface-1:      var(--color-background-tertiary,  #232019);
+  --surface-2:      var(--color-background-secondary, #26241f);
+  --border:         var(--color-border-primary,       #33302a);
+  --border-strong:  var(--color-border-secondary,     #423e36);
+  --text-primary:   var(--color-text-primary,         #ece7db);
+  --text-secondary: var(--color-text-secondary,       #a6a08f);
+  --text-muted:     var(--color-text-tertiary,        #6f6a5c);
+  --text-success:   var(--color-text-success,         #6fce9a);
+  --bg-success:     var(--color-background-success,   rgba(111, 206, 154, .14));
+  --text-danger:    var(--color-text-danger,          #f2857a);
+  --bg-danger:      var(--color-background-danger,    rgba(242, 133, 122, .14));
+  --text-warning:   var(--color-text-warning,         #e0af68);
+  --ring:           var(--color-ring-primary,         var(--sw-orange));
+  --shadow: 0 1px 2px rgba(0, 0, 0, .20), 0 6px 20px rgba(0, 0, 0, .28);
+`;
+
+// Brand + geometry are theme-independent — one place, never re-derived per
+// mode. The Swiggy orange is a FIXED brand accent (not themed by the host).
+const BRAND = `
+  --sw-orange: #fc8019;
+  --sw-orange-press: #e06d0a;
+  --sw-on-orange: #fff;
+  --veg: #3aab5a;
+  --nonveg: #b02b2b;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --pill: 999px;
+
+  /* Kept for any leftover reference — now Swiggy orange, not the old blue. */
+  --text-accent: var(--sw-orange);
+  --border-accent: var(--sw-orange);
+  --bg-accent: rgba(252, 128, 25, .12);
 `;
 
 export const STYLE_TEXT = `
-:root { ${DARK} }
+:root { ${BRAND} ${DARK} }
 @media (prefers-color-scheme: light) {
   :root { ${LIGHT} }
 }
-:root[data-theme="dark"] { ${DARK} }
+@media (prefers-color-scheme: dark) {
+  :root { ${DARK} }
+}
 :root[data-theme="light"] { ${LIGHT} }
+:root[data-theme="dark"] { ${DARK} }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
-  font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
   font-size: 14px;
   line-height: 1.4;
   color: var(--text-primary);
   background: var(--bg);
 }
-#app { padding: 14px; max-width: 480px; margin: 0 auto; }
-button {
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--text-primary);
-  background: transparent;
-  border: 0.5px solid var(--border-strong);
-  border-radius: var(--radius);
-  padding: 6px 12px;
-  cursor: pointer;
+#app { padding: 16px; max-width: 480px; margin: 0 auto; }
+
+.num {
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
 }
-button:hover { border-color: var(--border-accent); }
-button:disabled { cursor: not-allowed; opacity: .5; }
-button:focus-visible { outline: 2px solid var(--border-accent); outline-offset: 1px; }
+
 input {
   font-family: inherit;
   color: var(--text-primary);
@@ -91,6 +103,207 @@ input {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* --- buttons --- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: transform .06s ease, background .15s ease, border-color .15s ease;
+}
+.btn:hover { border-color: var(--sw-orange); }
+.btn:active { transform: scale(.97); }
+.btn:disabled { cursor: not-allowed; opacity: .5; }
+.btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+.btn-primary {
+  background: var(--sw-orange);
+  border-color: var(--sw-orange);
+  color: var(--sw-on-orange);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(224, 109, 10, .25);
+}
+.btn-primary:hover { background: var(--sw-orange-press); border-color: var(--sw-orange-press); }
+
+.btn-ghost { /* default .btn look; hover picks up the orange ring */ }
+
+.btn-block { width: 100%; height: 44px; font-size: 15px; justify-content: center; }
+
+/* --- category / segmented tabs --- */
+.tabrow {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+}
+.tab {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: var(--pill);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: inherit;
+  white-space: nowrap;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.tab.on {
+  color: var(--sw-orange);
+  border-color: var(--sw-orange);
+  background: rgba(252, 128, 25, .10);
+  font-weight: 600;
+}
+
+/* --- menu rows --- */
+.tile {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  transition: background .12s ease;
+}
+.tile:hover { background: color-mix(in srgb, var(--sw-orange) 4%, transparent); }
+
+/* --- cards / surfaces --- */
+.card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+
+.cartbar {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 11px 14px;
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: var(--shadow);
+}
+
+/* --- stepper (qty +/-) --- */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--sw-orange);
+  border-radius: var(--pill);
+  overflow: hidden;
+  flex: none;
+}
+.stepper button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  color: var(--sw-orange);
+  background: rgba(252, 128, 25, .08);
+  padding: 4px 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.stepper button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.stepper .num { min-width: 14px; text-align: center; padding: 0 2px; }
+
+/* --- segmented control / choice chips --- */
+.seg, .chip {
+  cursor: pointer;
+  font-family: inherit;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: inherit;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.seg {
+  font-size: 13px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+.chip {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: var(--pill);
+}
+.seg.on, .chip.on {
+  color: var(--sw-orange);
+  border-color: var(--sw-orange);
+  background: rgba(252, 128, 25, .10);
+  font-weight: 600;
+}
+.seg:focus-visible, .chip:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* --- veg / non-veg mark --- */
+.veg {
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  border: 1.5px solid var(--veg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.veg span { width: 5px; height: 5px; border-radius: 50%; background: var(--veg); }
+.veg--nonveg { border-color: var(--nonveg); }
+.veg--nonveg span { background: var(--nonveg); }
+
+.badge-soldout {
+  font-size: 12px;
+  background: var(--bg-danger);
+  color: var(--text-danger);
+  padding: 2px 8px;
+  border-radius: var(--pill);
+  flex: none;
+}
+
+/* --- bill rows --- */
+.bill-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.bill-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-top: 1px solid var(--border);
+  padding: 10px 0;
+}
+
+/* --- motion (CSS-only, reduced-motion guarded) --- */
+@keyframes riseIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.cartbar { animation: riseIn .18s ease both; }
+.stagger > * { animation: riseIn .22s ease both; animation-delay: calc(var(--i, 0) * 22ms); }
+.card { animation: fadeIn .18s ease both; }
+.spin { animation: spin 1s linear infinite; display: inline-block; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; }
 }
 `;
 
