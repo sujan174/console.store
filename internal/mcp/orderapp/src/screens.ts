@@ -4,7 +4,8 @@
 // to read typed state instead of a baked-in DATA object, and to emit
 // data-* attributes for event delegation instead of inline onclick globals.
 
-import type { AppState, MenuItemData, PendingLine } from "./app";
+import type { AppState, CustomizeState, MenuItemData, PendingLine } from "./app";
+import { estimatePrice, type CuratedGroup } from "./customize";
 
 // Every price shown here is an estimate — invariant 2 (surfaces.md). The
 // real bill only ever comes from prepare_order, at checkout.
@@ -129,5 +130,87 @@ export function renderMenu(state: AppState): string {
     categoryTabs(state.categories, state.activeCategory) +
     rows +
     cartBar(state.pending)
+  );
+}
+
+// --- customize sheet (ported from czView() in ordering-app.md) ---
+
+function czBack(restaurantName: string): string {
+  return `<button type="button" data-cz-back style="padding:4px 10px;font-size:13px;margin-bottom:10px"><i class="ti ti-arrow-left" style="font-size:13px;vertical-align:-2px" aria-hidden="true"></i> ${esc(restaurantName)}</button>`;
+}
+
+function segmentStyle(on: boolean): string {
+  const bg = on ? "var(--bg-accent)" : "transparent";
+  const border = on ? "var(--border-accent)" : "var(--border-strong)";
+  const color = on ? "var(--text-accent)" : "inherit";
+  return `cursor:pointer;font-size:13px;padding:7px 12px;border-radius:var(--radius);border:0.5px solid ${border};background:${bg};color:${color};text-align:center`;
+}
+
+function chipStyle(on: boolean): string {
+  const bg = on ? "var(--bg-accent)" : "transparent";
+  const border = on ? "var(--border-accent)" : "var(--border-strong)";
+  const color = on ? "var(--text-accent)" : "inherit";
+  return `cursor:pointer;font-size:12px;padding:5px 10px;border-radius:999px;border:0.5px solid ${border};background:${bg};color:${color}`;
+}
+
+// customizeGroup renders one curated group: a segmented control for
+// base/single (exactly one pressed), or capped chips for multi (surface-kit
+// "Segmented control" / "Choice chips"). A ₹0 choice reads as "included".
+function customizeGroup(g: CuratedGroup, selection: Map<string, Set<string>>): string {
+  const chosen = selection.get(g.id) ?? new Set<string>();
+  const isMulti = g.kind === "multi";
+  const label = isMulti && g.max > 1 ? `${esc(g.name)} · up to ${g.max}` : esc(g.name);
+  const choices = g.choices
+    .map((c) => {
+      const on = chosen.has(c.id);
+      const priceText = c.price === 0 ? "included" : money(c.price);
+      const attr = isMulti
+        ? `data-cz-toggle data-cz-group="${esc(g.id)}" data-cz-choice="${esc(c.id)}" data-cz-max="${g.max}"`
+        : `data-cz-pick data-cz-group="${esc(g.id)}" data-cz-choice="${esc(c.id)}"`;
+      const body = isMulti
+        ? `${esc(c.name)} · ${priceText}`
+        : `${esc(c.name)}<br><span style="font-size:11px;opacity:.8">${priceText}</span>`;
+      return `<button type="button" ${attr} aria-pressed="${on}" style="${isMulti ? chipStyle(on) : segmentStyle(on)}">${body}</button>`;
+    })
+    .join("");
+  return `<div style="font-size:13px;color:var(--text-secondary);margin-top:12px">${label}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 2px" data-group="${esc(g.id)}">${choices}</div>`;
+}
+
+// renderCustomizeScreen: loading -> spinner note, error -> short message +
+// back (never crashes on a tool failure), ready -> the curated groups with
+// a live ≈ price. Swaps the same #app root — no new chat message.
+export function renderCustomizeScreen(state: AppState, cz: CustomizeState): string {
+  const item = state.items.find((i) => i.id === cz.itemId);
+  const restaurantName = state.restaurant?.name || state.restaurant?.id || "";
+  const back = czBack(restaurantName);
+
+  if (!item) {
+    return back + `<div style="padding:16px 0;color:var(--text-danger);font-size:13px">that item is no longer on the menu</div>`;
+  }
+  if (cz.status === "loading") {
+    return (
+      back +
+      `<div style="display:flex;align-items:center;gap:8px">${vegMark(item.veg)}<span style="font-size:16px;font-weight:500">${esc(item.name)}</span></div>` +
+      `<div style="padding:24px 0;text-align:center;color:var(--text-muted);font-size:13px">loading options…</div>`
+    );
+  }
+  if (cz.status === "error") {
+    return (
+      back +
+      `<div style="display:flex;align-items:center;gap:8px">${vegMark(item.veg)}<span style="font-size:16px;font-weight:500">${esc(item.name)}</span></div>` +
+      `<div style="padding:16px 0;color:var(--text-danger);font-size:13px">couldn't load options — ${esc(cz.error)}</div>`
+    );
+  }
+
+  const price = estimatePrice(item.price, cz.groups, cz.selection);
+  const groupsHtml = cz.groups.map((g) => customizeGroup(g, cz.selection)).join("");
+  const cta = "width:100%;height:42px;margin-top:16px;border-color:var(--border-accent);color:var(--text-accent);background:var(--bg-accent)";
+  return (
+    `<h2 class="sr-only">Customize ${esc(item.name)} — pick options, then add to cart.</h2>` +
+    back +
+    `<div style="display:flex;align-items:center;gap:8px">${vegMark(item.veg)}<span style="font-size:16px;font-weight:500">${esc(item.name)}</span></div>` +
+    `<div style="font-size:12px;color:var(--text-secondary)">customize — in this window</div>` +
+    groupsHtml +
+    `<button type="button" data-cz-add style="${cta}"><i class="ti ti-plus" style="font-size:15px;vertical-align:-2px" aria-hidden="true"></i> add to cart · ${money(price)}</button>`
   );
 }

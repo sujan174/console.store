@@ -7,7 +7,18 @@
 import { App, applyDocumentTheme } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
-import { groupByCategory, renderMenu } from "./screens";
+import { groupByCategory, renderCustomizeScreen, renderMenu } from "./screens";
+import {
+  buildWireSelections,
+  curateGroups,
+  defaultSelection,
+  estimatePrice,
+  selectionKey,
+  summaryBits,
+  type CuratedGroup,
+  type OptionsToolOut,
+  type PendingSelections,
+} from "./customize";
 
 // --- wire types (open_store's OpenStoreOut, internal/mcp/tools_app.go) ---
 
@@ -47,10 +58,29 @@ export interface OpenStoreOut {
 // --- client-side state ---
 
 export interface PendingLine {
+  // Simple items key by itemId; a customized line keys by itemId + its
+  // sorted chosen choice ids (customize.ts selectionKey) so the same item
+  // with different selections is a distinct line.
+  key: string;
   itemId: string;
   name: string;
   price: number;
   qty: number;
+  // Present only for a line added from the customize sheet — the resolved
+  // selections shaped for Task 6's update_cart call.
+  selections?: PendingSelections;
+}
+
+// The customize sheet's state machine. `groups`/`selection` are only
+// meaningful once status is "ready" — curateGroups()'s output and the
+// user's in-progress picks (groupId -> chosen choice ids; size 1 for
+// base/single groups, up to a multi group's cap).
+export interface CustomizeState {
+  itemId: string;
+  status: "loading" | "error" | "ready";
+  error?: string;
+  groups: CuratedGroup[];
+  selection: Map<string, Set<string>>;
 }
 
 export interface AppState {
@@ -61,9 +91,12 @@ export interface AppState {
   categories: string[];
   activeCategory: string | null;
   // Client-side only — no tool call fires when this changes (invariant:
-  // browse + add never touch the network; only get_item_options/update_cart
+  // browse + add never touch the network; only the options tool / update_cart
   // in Tasks 5/6 do, and only on real intent).
   pending: Map<string, PendingLine>;
+  // Non-null while the customize sheet is open (swaps the same #app root —
+  // no new render/message). Cleared on back or add-to-cart.
+  customize: CustomizeState | null;
 }
 
 export const state: AppState = {
@@ -74,6 +107,7 @@ export const state: AppState = {
   categories: [],
   activeCategory: null,
   pending: new Map(),
+  customize: null,
 };
 
 let root: HTMLElement | null = null;
@@ -81,7 +115,7 @@ let app: App | null = null;
 
 function render(): void {
   if (!root) return;
-  root.innerHTML = renderMenu(state);
+  root.innerHTML = state.customize ? renderCustomizeScreen(state, state.customize) : renderMenu(state);
 }
 
 function itemById(id: string): MenuItemData | undefined {
@@ -91,7 +125,7 @@ function itemById(id: string): MenuItemData | undefined {
 function addPending(item: MenuItemData): void {
   const line = state.pending.get(item.id);
   if (line) line.qty += 1;
-  else state.pending.set(item.id, { itemId: item.id, name: item.name, price: item.price, qty: 1 });
+  else state.pending.set(item.id, { key: item.id, itemId: item.id, name: item.name, price: item.price, qty: 1 });
 }
 
 function decPending(itemId: string): void {
@@ -101,12 +135,91 @@ function decPending(itemId: string): void {
   if (line.qty <= 0) state.pending.delete(itemId);
 }
 
-// openCustomize: Task 5 fills this in with the real get_item_options fetch
-// + customize sheet render. Stubbed here — no-op besides a log line, and
-// critically NOT a tool call (get_item_options is fetched only on real
-// customize intent, never speculatively — surfaces.md).
-function openCustomize(itemId: string): void {
-  console.log("[consolestore order app] openCustomize (stub, Task 5)", itemId);
+// The result of app.callServerTool — inferred from the App class itself so
+// this file never needs to import the SDK's CallToolResult type directly.
+type ToolResult = Awaited<ReturnType<App["callServerTool"]>>;
+
+// A tool failure's message is "<code>: <human text>" carried as a text
+// content block (order-app-tool-schemas.md). Extract it defensively — an
+// options fetch failure must render a short message, never throw.
+function toolErrorText(result: ToolResult): string {
+  for (const block of result.content ?? []) {
+    if (block.type === "text" && block.text) return block.text;
+  }
+  return "couldn't load options";
+}
+
+// openCustomize is the ONE place the options tool is ever called, and only
+// when a customize tap actually happens — never speculatively for a whole
+// section (surfaces.md / app-data.md §4). One tap, one fetch.
+async function openCustomize(itemId: string): Promise<void> {
+  const item = itemById(itemId);
+  if (!item) return;
+
+  state.customize = { itemId, status: "loading", groups: [], selection: new Map() };
+  render();
+
+  if (!app || !state.addressId || !state.restaurantId) {
+    state.customize = { itemId, status: "error", error: "missing address or restaurant context", groups: [], selection: new Map() };
+    render();
+    return;
+  }
+
+  try {
+    const result = await app.callServerTool({
+      name: "get_item_options",
+      arguments: {
+        address_id: state.addressId,
+        restaurant_id: state.restaurantId,
+        item_name: item.name,
+        menu_item_id: itemId,
+      },
+    });
+
+    if (result.isError) {
+      state.customize = { itemId, status: "error", error: toolErrorText(result), groups: [], selection: new Map() };
+      render();
+      return;
+    }
+
+    const out = result.structuredContent as unknown as OptionsToolOut | undefined;
+    const groups = curateGroups(out?.groups ?? []);
+    state.customize = { itemId, status: "ready", groups, selection: defaultSelection(groups) };
+    render();
+  } catch (err) {
+    state.customize = {
+      itemId,
+      status: "error",
+      error: err instanceof Error ? err.message : String(err),
+      groups: [],
+      selection: new Map(),
+    };
+    render();
+  }
+}
+
+// addCustomizedToCart resolves the sheet's current picks into a pending
+// line — keyed distinctly per selection (customize.ts selectionKey) — and
+// returns to the menu. Never calls a tool: cart materialization is Task 6's
+// update_cart, at checkout.
+function addCustomizedToCart(): void {
+  const cz = state.customize;
+  if (!cz || cz.status !== "ready") return;
+  const item = itemById(cz.itemId);
+  if (!item) return;
+
+  const price = estimatePrice(item.price, cz.groups, cz.selection);
+  const bits = summaryBits(cz.groups, cz.selection);
+  const name = bits.length ? `${item.name} (${bits.join(", ")})` : item.name;
+  const key = selectionKey(item.id, cz.selection);
+  const selections = buildWireSelections(cz.groups, cz.selection);
+
+  const existing = state.pending.get(key);
+  if (existing) existing.qty += 1;
+  else state.pending.set(key, { key, itemId: item.id, name, price, qty: 1, selections });
+
+  state.customize = null;
+  render();
 }
 
 // openCart: Task 6 fills this in with the real cart/bill screen. Stubbed
@@ -118,7 +231,9 @@ function openCart(): void {
 function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
-  const el = target.closest<HTMLElement>("[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout]");
+  const el = target.closest<HTMLElement>(
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add]",
+  );
   if (!el) return;
 
   const addId = el.dataset.add;
@@ -150,7 +265,42 @@ function onRootClick(evt: MouseEvent): void {
 
   const customizeId = el.dataset.customize;
   if (customizeId !== undefined) {
-    openCustomize(customizeId);
+    void openCustomize(customizeId);
+    return;
+  }
+
+  if (el.dataset.czBack !== undefined) {
+    state.customize = null;
+    render();
+    return;
+  }
+
+  if (el.dataset.czPick !== undefined) {
+    const groupId = el.dataset.czGroup;
+    const choiceId = el.dataset.czChoice;
+    if (state.customize && state.customize.status === "ready" && groupId && choiceId) {
+      state.customize.selection.set(groupId, new Set([choiceId]));
+      render();
+    }
+    return;
+  }
+
+  if (el.dataset.czToggle !== undefined) {
+    const groupId = el.dataset.czGroup;
+    const choiceId = el.dataset.czChoice;
+    const max = Number(el.dataset.czMax ?? "1");
+    if (state.customize && state.customize.status === "ready" && groupId && choiceId) {
+      const set = state.customize.selection.get(groupId) ?? new Set<string>();
+      if (set.has(choiceId)) set.delete(choiceId);
+      else if (set.size < max) set.add(choiceId);
+      state.customize.selection.set(groupId, set);
+      render();
+    }
+    return;
+  }
+
+  if (el.dataset.czAdd !== undefined) {
+    addCustomizedToCart();
     return;
   }
 
@@ -186,7 +336,7 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   const entryItemId = sc.entry?.item_id;
   if (entryItemId) {
     const item = itemById(entryItemId);
-    if (item && item.customizable) openCustomize(entryItemId);
+    if (item && item.customizable) void openCustomize(entryItemId);
   }
 }
 
