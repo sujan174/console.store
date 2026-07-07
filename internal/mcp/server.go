@@ -168,6 +168,8 @@ func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "forget", Description: "remove a saved taste or policy"}, s.handleForget)
 	addTool(srv, &mcp.Tool{Name: "save_preset", Description: "save the current cart as a named preset the user can reorder (pass vertical: \"instamart\" to save the instamart cart instead of food)"}, s.handleSavePreset)
 	addTool(srv, &mcp.Tool{Name: "forget_preset", Description: "delete a saved preset"}, s.handleForgetPreset)
+	addTool(srv, &mcp.Tool{Name: "get_previous_orders", Description: "List previously placed orders for an address (newest first) so the user can reorder."}, s.handleGetPreviousOrders)
+	addTool(srv, &mcp.Tool{Name: "set_address", Description: "Persist the delivery address the user picked in the app; as_default also locks it as the sticky default."}, s.handleSetAddress)
 	addTool(srv, &mcp.Tool{Name: "im_search_products", Description: "search instamart (grocery) products deliverable to an address; carts are keyed by spin_id, the variant/pack-size id"}, s.handleIMSearchProducts)
 	addTool(srv, &mcp.Tool{Name: "im_get_cart", Description: "the current instamart cart with the authoritative bill"}, s.handleIMGetCart)
 	addTool(srv, &mcp.Tool{Name: "im_update_cart", Description: "set the instamart cart lines (replaces the whole instamart cart)"}, s.handleIMUpdateCart)
