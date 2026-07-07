@@ -205,6 +205,15 @@ input {
 .rest-card { margin-bottom: 10px; }
 .rest-card--closed { opacity: .55; }
 
+/* --- store home: recent orders (Task 10) --- */
+.recent-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.recent-row:last-child { margin-bottom: 0; }
+
 /* --- menu rows --- */
 .tile {
   display: flex;

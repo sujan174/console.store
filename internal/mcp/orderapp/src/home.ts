@@ -1,14 +1,14 @@
 // The store-home screen (Task 7 scaffold; Task 8 filled the address picker;
-// Task 9 fills the category sidebar, universal search bar, and restaurant
-// list) — what open_store returns when no restaurant_id was given: an
-// address, dev-curated cuisine categories, an optional search-result
-// restaurant list, and recent orders. Recent orders is still a placeholder
-// (Task 10). Pure function of state — no network calls happen in this file;
-// app.ts's onRootClick makes every tool call, matching every other render*
-// function in screens.ts.
+// Task 9 filled the category sidebar, universal search bar, and restaurant
+// list; Task 10 fills recent orders + reorder) — what open_store returns
+// when no restaurant_id was given: an address, dev-curated cuisine
+// categories, an optional search-result restaurant list, and recent orders.
+// Pure function of state — no network calls happen in this file; app.ts's
+// onRootClick makes every tool call, matching every other render* function
+// in screens.ts.
 
-import type { AddressOption, AppState, HomeRestaurant } from "./app";
-import { esc } from "./screens";
+import type { AddressOption, AppState, HomeRestaurant, RecentOrder } from "./app";
+import { esc, rupees } from "./screens";
 import { icon } from "./icons";
 
 // addressSlot is the picker's trigger: the active address (or a neutral
@@ -176,10 +176,47 @@ function restaurantListSlot(state: AppState): string {
   return `<div style="margin-top:14px" class="stagger">${state.restaurants.map((r) => restaurantCard(r, state)).join("")}</div>`;
 }
 
-// recentOrdersSlot is the recent-orders placeholder (Task 10 renders
-// state.recentOrders here, with a one-tap reorder).
-function recentOrdersSlot(): string {
-  return `<div data-recent-orders style="margin-top:18px;color:var(--text-muted);font-size:13px">your recent orders</div>`;
+// recentOrderSummary builds the short line-summary text for one recent
+// order: the first couple item names, plus a "+N more" tail when there are
+// more lines than that.
+function recentOrderSummary(order: RecentOrder): string {
+  const names = order.lines.map((l) => l.name);
+  if (names.length === 0) return "";
+  const shown = names.slice(0, 2).join(", ");
+  const rest = names.length - 2;
+  return rest > 0 ? `${shown} +${rest} more` : shown;
+}
+
+// recentOrderRow renders one past order: restaurant name, a short line
+// summary, the total, and a one-tap "reorder" button (`data-reorder`,
+// handled by app.ts's onRootClick -> reorder(index)). `index` addresses back
+// into state.recentOrders — the row carries no other identity.
+function recentOrderRow(order: RecentOrder, index: number): string {
+  return (
+    `<div class="card recent-row">` +
+    `<div style="flex:1;min-width:0">` +
+    `<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(order.restaurantName)}</div>` +
+    `<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(recentOrderSummary(order))}</div>` +
+    `<div style="font-size:12px;color:var(--text-muted);margin-top:3px">${rupees(Math.round(order.total))}</div>` +
+    `</div>` +
+    `<button type="button" data-reorder="${index}" class="btn btn-primary" style="flex:none">reorder</button>` +
+    `</div>`
+  );
+}
+
+// recentOrdersSlot (Task 10) renders state.recentOrders under a "order
+// again" heading, each row with a one-tap reorder. Hidden entirely when
+// there are none — no empty-state placeholder needed here (the restaurant
+// list above already carries the home's primary empty state).
+function recentOrdersSlot(state: AppState): string {
+  if (state.recentOrders.length === 0) return "";
+  const rows = state.recentOrders.map((o, i) => recentOrderRow(o, i)).join("");
+  return (
+    `<div data-recent-orders style="margin-top:22px">` +
+    `<div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">order again</div>` +
+    `<div class="stagger">${rows}</div>` +
+    `</div>`
+  );
 }
 
 // renderHome paints the store-home shell: the address-picker header, a left
@@ -195,7 +232,7 @@ export function renderHome(state: AppState): string {
     `<div class="content">` +
     searchBarSlot(state) +
     restaurantListSlot(state) +
-    recentOrdersSlot() +
+    recentOrdersSlot(state) +
     `</div>` +
     `</div>`
   );

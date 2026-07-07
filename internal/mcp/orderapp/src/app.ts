@@ -82,14 +82,33 @@ export interface HomeRestaurant {
   description?: string;
 }
 
+// RecentOrderSel mirrors internal/localstore.PresetSel — one customization
+// choice on a placed line. `variant===true` is a variantsV2 pick (replaces
+// the base price, sent as variants_v2 to update_cart); `variant===false` is
+// an addon (sent as addons).
+export interface RecentOrderSel {
+  groupId: string;
+  choiceId: string;
+  variant: boolean;
+  absolute: boolean;
+  name?: string;
+}
+
+// RecentOrderLine mirrors internal/localstore.PlacedLine.
+export interface RecentOrderLine {
+  itemId: string;
+  name: string;
+  qty: number;
+  sels?: RecentOrderSel[];
+}
+
 // RecentOrder mirrors internal/localstore.PlacedOrder — a locally-persisted
 // snapshot of a past order (Swiggy's own order API has no line items; see
-// CLAUDE.md "Store CLI + presets"). `lines` is loosely typed here (Task 10
-// renders it) the same way OrderSummary is below.
+// CLAUDE.md "Store CLI + presets"). Task 10 renders it + reorders from it.
 export interface RecentOrder {
   restaurantId: string;
   restaurantName: string;
-  lines: Record<string, unknown>[];
+  lines: RecentOrderLine[];
   total: number;
   placedUnix: number;
 }
@@ -906,12 +925,14 @@ let restaurantOpenInFlight = false;
 // call, then seeds the restaurant screen the same way seedFromOpenStore's
 // "restaurant" branch does (menu items, derived categories, first category
 // active) and resets every restaurant-scoped field so nothing leaks from
-// whatever screen was open before. A closed restaurant is never openable —
-// gated by the caller (onRootClick only reads data-rest-open on a card that
-// isn't unavailable).
-async function openRestaurant(id: string): Promise<void> {
+// whatever screen was open before. A KNOWN-closed restaurant (present in
+// state.restaurants with unavailable:true) is never openable — gated here.
+// `fallbackName` (Task 10's reorder) is used only when `id` isn't in the
+// currently-loaded home list — reorder can target a restaurant the home
+// screen never searched for, so there's nothing to look the name up from.
+async function openRestaurant(id: string, fallbackName?: string): Promise<void> {
   const r = state.restaurants.find((x) => x.id === id);
-  if (!r || r.unavailable) return;
+  if (r?.unavailable) return;
   if (!app || !state.addressId) return;
   if (restaurantOpenInFlight) return;
   restaurantOpenInFlight = true;
@@ -933,7 +954,7 @@ async function openRestaurant(id: string): Promise<void> {
     // late search_restaurants response can't clobber state after the swap.
     searchToken++;
     state.screen = "restaurant";
-    state.restaurant = { id, name: r.name };
+    state.restaurant = { id, name: r?.name ?? fallbackName ?? "" };
     state.restaurantId = sc?.restaurant_id || id;
     state.items = Array.isArray(sc?.items) ? sc.items : [];
     state.categories = [...groupByCategory(state.items).keys()];
@@ -944,6 +965,69 @@ async function openRestaurant(id: string): Promise<void> {
     console.error("[consolestore order app] get_menu failed", err);
   } finally {
     restaurantOpenInFlight = false;
+  }
+}
+
+// reorderInFlight guards a rapid double-tap on the same "reorder" button from
+// firing the flow twice (two concurrent get_menu/update_cart sequences) —
+// mirrors optionsInFlight / addressesInFlight / restaurantOpenInFlight above.
+let reorderInFlight = false;
+
+// reorder (Task 10): one tap on a recent order's "reorder" button. Re-enters
+// that order's restaurant through the SAME single get_menu call every other
+// restaurant-open uses (openRestaurant), replays its lines into the pending
+// cart client-side (no tool call — same convention as addPending /
+// addCustomizedToCart), then runs the existing checkout flow (openCart) —
+// the same conflict-guard -> ONE update_cart -> prepare_order path every
+// other checkout goes through. Never places on its own (invariant 1); a
+// since-removed or sold-out item is caught by the cart bill the same way it
+// always is (CartBillLine.available).
+async function reorder(index: number): Promise<void> {
+  if (reorderInFlight) return;
+  const order = state.recentOrders[index];
+  if (!order || !order.restaurantId) return;
+  reorderInFlight = true;
+
+  try {
+    await openRestaurant(order.restaurantId, order.restaurantName);
+    // get_menu failed, was superseded, or the restaurant is known-closed —
+    // openRestaurant already logged/handled it; don't build a cart for a
+    // restaurant screen that never opened.
+    if (state.screen !== "restaurant" || state.restaurantId !== order.restaurantId) return;
+
+    const pending = new Map<string, PendingLine>();
+    for (const line of order.lines) {
+      const qty = Math.max(1, Math.round(num(line.qty)));
+      const item = itemById(line.itemId);
+      const sels = Array.isArray(line.sels) ? line.sels : [];
+
+      let key = line.itemId;
+      let selections: PendingSelections | undefined;
+      if (sels.length > 0) {
+        const selMap = new Map<string, Set<string>>();
+        for (const s of sels) {
+          const set = selMap.get(s.groupId) ?? new Set<string>();
+          set.add(s.choiceId);
+          selMap.set(s.groupId, set);
+        }
+        key = selectionKey(line.itemId, selMap);
+        selections = {
+          variants_v2: sels.filter((s) => s.variant).map((s) => ({ group_id: s.groupId, variation_id: s.choiceId })),
+          addons: sels.filter((s) => !s.variant).map((s) => ({ group_id: s.groupId, choice_id: s.choiceId })),
+        };
+      }
+
+      const existing = pending.get(key);
+      if (existing) existing.qty += qty;
+      else pending.set(key, { key, itemId: line.itemId, name: item?.name ?? line.name, price: item?.price ?? 0, qty, selections });
+    }
+
+    state.pending = pending;
+    render();
+
+    await openCart();
+  } finally {
+    reorderInFlight = false;
   }
 }
 
@@ -990,7 +1074,7 @@ function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed]",
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder]",
   );
   if (!el) return;
 
@@ -1177,6 +1261,14 @@ function onRootClick(evt: MouseEvent): void {
   if (restClosedId !== undefined) {
     state.closedNoteId = restClosedId;
     render();
+    return;
+  }
+
+  // Recent orders — one-tap reorder (Task 10).
+  const reorderIdx = el.dataset.reorder;
+  if (reorderIdx !== undefined) {
+    const index = Number(reorderIdx);
+    if (Number.isInteger(index)) void reorder(index);
   }
 }
 
