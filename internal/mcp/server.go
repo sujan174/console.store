@@ -172,4 +172,5 @@ func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "im_update_cart", Description: "set the instamart cart lines (replaces the whole instamart cart)"}, s.handleIMUpdateCart)
 	addTool(srv, &mcp.Tool{Name: "im_clear_cart", Description: "empty the instamart cart"}, s.handleIMClearCart)
 	addTool(srv, &mcp.Tool{Name: "im_prepare_order", Description: "sync the instamart cart and return the real bill + a confirmation_id (does NOT place)"}, s.handleIMPrepareOrder)
+	s.registerApp(srv)
 }
