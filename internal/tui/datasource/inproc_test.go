@@ -37,6 +37,10 @@ func (f *fakeService) RestaurantsPage(_ context.Context, a, _, _ string, offset 
 	f.gotAccount = a
 	return []api.Restaurant{{ID: "r1"}}, offset + 1, false, nil
 }
+func (f *fakeService) RestaurantsPageOrganic(_ context.Context, a, _, query string, offset int) ([]api.Restaurant, string, int, bool, error) {
+	f.gotAccount = a
+	return []api.Restaurant{{ID: "r1"}}, query, offset + 1, false, nil
+}
 func (f *fakeService) ItemOptions(_ context.Context, a, _, _, _, _ string) ([]api.OptionGroup, error) {
 	f.gotAccount = a
 	return nil, nil

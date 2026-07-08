@@ -8,7 +8,7 @@
 // in screens.ts.
 
 import type { AddressOption, AppState, HomeRestaurant, RecentOrder } from "./app";
-import { esc, rupees } from "./screens";
+import { esc, loadingBlock, rupees } from "./screens";
 import { icon } from "./icons";
 
 // addressSlot is the picker's trigger: the active address (or a neutral
@@ -164,16 +164,39 @@ function restaurantCard(r: HomeRestaurant, state: AppState): string {
   );
 }
 
+// loadMoreFooter renders under the restaurant list once there's something to
+// say about pagination: a small spinner row while loadMoreHome's call is in
+// flight, or (once the list has run out) a quiet "that's everything" line —
+// shown only when there WAS a next page to run out of, so a short list that
+// never had pagination doesn't get a pointless footer.
+function loadMoreFooter(state: AppState): string {
+  if (state.homeLoadingMore) {
+    return `<div style="padding:14px 0;text-align:center;color:var(--text-muted);font-size:12px;display:flex;align-items:center;justify-content:center;gap:6px">${icon("loader", 14)} loading more…</div>`;
+  }
+  if (!state.homeHasMore && state.homeNextOffset > 0) {
+    return `<div style="padding:14px 0;text-align:center;color:var(--text-muted);font-size:12px">that's everything nearby</div>`;
+  }
+  return "";
+}
+
 // restaurantListSlot renders state.restaurants (Task 9), sorted upstream by
 // app.ts (open first, rating desc, closed last). Two distinct empty states:
-// nothing searched yet vs. a search that came back with nothing.
+// nothing searched yet vs. a search that came back with nothing. Scrolling
+// near the bottom triggers "load more" (app.ts's onRootScroll/loadMoreHome);
+// this function only renders whatever state that produced, never fetches.
 function restaurantListSlot(state: AppState): string {
+  // A FRESH search/category tap is in flight — spinner instead of the stale
+  // list (distinct from homeLoadingMore, which appends without hiding it).
+  if (state.homeLoading) return loadingBlock("finding restaurants…");
   if (state.restaurants.length === 0) {
     const searched = !!state.query || !!state.activeCatQuery;
     const msg = searched ? "no restaurants for that" : "pick a category or search to see restaurants";
     return `<div style="margin-top:20px;padding:20px 0;text-align:center;color:var(--text-muted);font-size:13px">${msg}</div>`;
   }
-  return `<div style="margin-top:14px" class="stagger">${state.restaurants.map((r) => restaurantCard(r, state)).join("")}</div>`;
+  return (
+    `<div style="margin-top:14px" class="stagger">${state.restaurants.map((r) => restaurantCard(r, state)).join("")}</div>` +
+    loadMoreFooter(state)
+  );
 }
 
 // recentOrderSummary builds the short line-summary text for one recent

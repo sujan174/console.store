@@ -28,13 +28,41 @@ func TestListAddressesReturnsAddresses(t *testing.T) {
 }
 
 func TestSearchRestaurantsReturnsResults(t *testing.T) {
-	be := &fakeBackend{search: []api.Restaurant{{ID: "r1", Name: "McDonald's", ETA: "30 mins"}}}
+	be := &fakeBackend{
+		search:     []api.Restaurant{{ID: "r1", Name: "McDonald's", ETA: "30 mins"}},
+		searchNext: 8,
+		searchMore: true,
+	}
 	s := NewServer(be, &fakeAuth{token: true})
 	_, out, err := s.handleSearchRestaurants(context.Background(), nil, SearchRestaurantsIn{AddressID: "a1", Query: "mcd"})
 	if err != nil {
 		t.Fatalf("handleSearchRestaurants: %v", err)
 	}
 	if len(out.Restaurants) != 1 || out.Restaurants[0].Name != "McDonald's" {
+		t.Fatalf("restaurants = %+v", out.Restaurants)
+	}
+	// Pagination fields propagate so the app can offer "load more".
+	if out.NextOffset != 8 || !out.HasMore {
+		t.Fatalf("pagination not propagated: next=%d more=%v", out.NextOffset, out.HasMore)
+	}
+}
+
+// TestSearchRestaurantsSelfResolvesAddress verifies the speedup contract: an
+// agent can call search_restaurants WITHOUT an address_id and the server
+// fills the active address itself (here, falling back to the account's first
+// saved address) — so no initialize/list_addresses round trip is forced first.
+func TestSearchRestaurantsSelfResolvesAddress(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // no AddrPref written → falls back to Addresses()[0]
+	be := &fakeBackend{
+		addrs:  []api.Address{{ID: "a1", Label: "Home"}},
+		search: []api.Restaurant{{ID: "r1", Name: "Truffles"}},
+	}
+	s := NewServer(be, &fakeAuth{token: true})
+	_, out, err := s.handleSearchRestaurants(context.Background(), nil, SearchRestaurantsIn{Query: "truffles"})
+	if err != nil {
+		t.Fatalf("handleSearchRestaurants with no address_id: %v", err)
+	}
+	if len(out.Restaurants) != 1 || out.Restaurants[0].Name != "Truffles" {
 		t.Fatalf("restaurants = %+v", out.Restaurants)
 	}
 }

@@ -7,9 +7,12 @@ import (
 )
 
 type fakeBackend struct {
-	addrs    []api.Address
-	search   []api.Restaurant
-	menu     api.Menu
+	addrs         []api.Address
+	search        []api.Restaurant
+	searchNext    int
+	searchMore    bool
+	searchPageErr error
+	menu          api.Menu
 	itemOpts []api.OptionGroup
 	cart     api.Cart
 	order    api.Order
@@ -42,6 +45,12 @@ type fakeBackend struct {
 func (f *fakeBackend) Addresses() ([]api.Address, error) { return f.addrs, nil }
 func (f *fakeBackend) SearchOrganic(addressID, query string) ([]api.Restaurant, string, error) {
 	return f.search, query, nil
+}
+func (f *fakeBackend) SearchOrganicPage(addressID, query string, offset int) ([]api.Restaurant, string, int, bool, error) {
+	if f.searchPageErr != nil {
+		return nil, query, offset, false, f.searchPageErr
+	}
+	return f.search, query, f.searchNext, f.searchMore, nil
 }
 func (f *fakeBackend) PlacesQuery(addressID, query string) ([]api.Restaurant, error) {
 	return f.search, nil

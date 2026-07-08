@@ -167,6 +167,29 @@ function header(title: string, sub: string): string {
   return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:500">${esc(title)}</div><div style="font-size:12px;color:var(--text-secondary)">${esc(sub)}</div></div></div>`;
 }
 
+// loadingBlock is the shared centered spinner + label used by every in-widget
+// loading view (menu open, home search). The ring is CSS-animated (styles.ts
+// .ring) — reduced-motion users get a static ring, which still reads as a
+// "working" affordance next to the label.
+export function loadingBlock(label: string): string {
+  return `<div class="loading-wrap"><div class="ring" role="status" aria-label="${esc(label)}"></div><div>${esc(label)}</div></div>`;
+}
+
+// renderMenuLoading paints the restaurant screen the instant a card is tapped,
+// before get_menu resolves — so the tap is never dead time. Keeps the same
+// "back to search" affordance and title (when known) as the loaded menu so the
+// frame doesn't jump when the real menu swaps in.
+export function renderMenuLoading(state: AppState): string {
+  const title = state.restaurant?.name || state.restaurant?.id || "menu";
+  const back = `<button type="button" data-menu-back class="btn" style="margin-bottom:10px">${icon("arrow-left", 14)} search</button>`;
+  return (
+    `<h2 class="sr-only">Opening ${esc(title)}'s menu…</h2>` +
+    back +
+    header(title, "loading the menu…") +
+    loadingBlock("loading menu…")
+  );
+}
+
 // renderMenu paints the whole menu screen: header, a left category sidebar
 // (reusing the store-home .store-layout/.sidebar/.content classes — Task 7),
 // an in-menu search box, the active category's items (or, while searching,
@@ -382,10 +405,14 @@ export function renderConflict(state: AppState, foreignRestaurant: string): stri
   const here = esc(state.restaurant?.name || state.restaurant?.id || "this restaurant");
   return (
     `<h2 class="sr-only">Your cart has items from a different restaurant — keep it or clear it to add from ${here}.</h2>` +
+    // Overlay: pops OVER the live menu (renderScreen concatenates this after
+    // renderMenu). position:fixed means it never changes the frame height.
+    `<div class="overlay">` +
     cardShell(
       `<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px"><span style="color:var(--text-warning);flex:none">${icon("alert-triangle", 20)}</span><div><div style="font-size:15px;font-weight:600">Different restaurant</div><div style="font-size:13px;color:var(--text-secondary);margin-top:3px">Your cart already has items from ${other}. Adding from ${here} clears that cart and starts fresh.</div></div></div>` +
         `<div style="display:flex;gap:8px;margin-top:14px"><button type="button" data-conflict-keep class="btn" style="flex:1">keep ${other}</button><button type="button" data-conflict-clear class="btn btn-primary" style="flex:1">clear &amp; continue</button></div>`,
-    )
+    ) +
+    `</div>`
   );
 }
 

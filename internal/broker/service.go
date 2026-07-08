@@ -172,6 +172,31 @@ func (s *Service) RestaurantsPage(ctx context.Context, accountID, addressID, que
 	return mapRestaurants(rs), next, more, nil
 }
 
+// RestaurantsPageOrganic is RestaurantsPage's ad-free counterpart — the
+// global search box / a category's "load more" pagination. On the very
+// first page (offset 0) coming back empty, it retries with spelling
+// variants exactly like Restaurants (first hit wins), so typo recovery
+// still works for a fresh search; a later page (offset > 0) never retries —
+// pagination is continuing an already-resolved query, not resolving one.
+func (s *Service) RestaurantsPageOrganic(ctx context.Context, accountID, addressID, query string, offset int) ([]api.Restaurant, string, int, bool, error) {
+	fc := s.foodClient(accountID)
+	r, next, more, err := fc.SearchOrganicPage(ctx, addressID, query, offset)
+	if err != nil {
+		return nil, query, offset, false, err
+	}
+	effective := query
+	if offset == 0 && len(r) == 0 {
+		for _, v := range swiggy.SpellingVariants(query) {
+			alt, altNext, altMore, aerr := fc.SearchOrganicPage(ctx, addressID, v, 0)
+			if aerr == nil && len(alt) > 0 {
+				r, effective, next, more = alt, v, altNext, altMore
+				break
+			}
+		}
+	}
+	return mapRestaurants(r), effective, next, more, nil
+}
+
 func (s *Service) Menu(ctx context.Context, accountID, addressID, restaurantID string) (api.Menu, error) {
 	// get_restaurant_menu paginates by CATEGORY (pageSize = categories per page,
 	// max 8, 1-indexed). A single call returns only the first page, so the TUI

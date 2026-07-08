@@ -77,17 +77,83 @@ export const STYLE_TEXT = `
 :root[data-theme="dark"] { ${DARK} }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
+html, body { margin: 0; padding: 0; height: 100%; }
 body {
   font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
   font-size: 14px;
   line-height: 1.4;
   color: var(--text-primary);
   background: var(--bg);
+  /* The FRAME never scrolls — #app is the single scroll surface (below).
+     This is what keeps the widget one fixed size: the host measures the
+     document, not each screen's content, so swapping screens (menu ->
+     conflict -> cart) can't grow or shrink the window. */
+  overflow: hidden;
 }
-#app { padding: 16px; max-width: 480px; margin: 0 auto; }
-/* Fullscreen has real width to spend on the home's sidebar layout. */
-:root[data-display="fullscreen"] #app { max-width: 720px; }
+/* #app is the fixed-size, internally-scrolling shop frame. It fills the
+   host viewport (fullscreen or inline) at a constant height; content that
+   overflows scrolls INSIDE it instead of resizing the iframe. Generous
+   symmetric padding gives the shop presence and breathing room on all
+   sides; the extra bottom pad clears the sticky cart bar. */
+#app {
+  /* Inline embeds size the iframe to our content, so a CONCRETE height is
+     what makes the frame both usable-tall AND fixed (100dvh would collapse to
+     the host's tiny inline slot — the bug that made this a sliver). Content
+     that overflows scrolls inside this fixed box. Fullscreen overrides to
+     100dvh below. */
+  height: 620px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 24px 26px 34px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+/* Fullscreen has the whole host viewport — fill it, more width for the
+   home's sidebar layout. */
+:root[data-display="fullscreen"] #app { height: 100dvh; max-width: 760px; padding: 28px 32px 40px; }
+
+/* --- modal overlay (conflict keep/clear pops OVER the menu, so the frame
+   height never changes) --- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  backdrop-filter: blur(3px);
+  animation: fadeIn .15s ease both;
+}
+.overlay > .card {
+  width: 100%;
+  max-width: 380px;
+  animation: riseIn .2s ease both;
+}
+
+/* --- loading spinner + centered loading block --- */
+.ring {
+  width: 24px;
+  height: 24px;
+  border: 2.5px solid var(--border-strong);
+  border-top-color: var(--sw-orange);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  flex: none;
+}
+.loading-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  animation: fadeIn .15s ease both;
+}
 
 .num {
   font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);

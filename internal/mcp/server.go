@@ -22,6 +22,11 @@ var errAuthUnavailable = errors.New("sign-in is unavailable in this build")
 type Backend interface {
 	Addresses() ([]api.Address, error)
 	SearchOrganic(addressID, query string) ([]api.Restaurant, string, error)
+	// SearchOrganicPage fetches ONE ad-free search page (offset-based
+	// pagination) — "load more" on the store-home restaurant list, for both
+	// a free-text search and a category tap. nextOffset feeds the next call;
+	// hasMore is false when results ran out.
+	SearchOrganicPage(addressID, query string, offset int) ([]api.Restaurant, string, int, bool, error)
 	PlacesQuery(addressID, query string) ([]api.Restaurant, error)
 	Usuals(addressID string) ([]api.Restaurant, error)
 	Menu(addressID, restaurantID string) (api.Menu, error)
@@ -146,11 +151,11 @@ func addTool[In, Out any](srv *mcp.Server, t *mcp.Tool, h mcp.ToolHandlerFor[In,
 // register wires every tool. Later tasks append to it.
 func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "server_info", Description: "consolestore server name and version"}, s.handleServerInfo)
-	addTool(srv, &mcp.Tool{Name: "initialize", Description: "Fast readiness check for ordering: returns whether the user is signed in and their active delivery address (locked default, else last-used). Call this FIRST on any ordering intent. Does not fetch the address list."}, s.handleInitialize)
+	addTool(srv, &mcp.Tool{Name: "initialize", Description: "Standalone readiness check: returns whether the user is signed in and their active delivery address (locked default, else last-used), without fetching the address list. Not needed before open_store — that tool already self-checks auth and self-resolves the address. Use this only for a text-only fallback or to answer a signed-in/address question without opening anything."}, s.handleInitialize)
 	addTool(srv, &mcp.Tool{Name: "list_addresses", Description: "the user's saved Swiggy delivery addresses"}, s.handleListAddresses)
-	addTool(srv, &mcp.Tool{Name: "search_restaurants", Description: "search restaurants/dishes deliverable to an address"}, s.handleSearchRestaurants)
+	addTool(srv, &mcp.Tool{Name: "search_restaurants", Description: "Search restaurants/dishes for delivery. address_id is OPTIONAL — omit it and the active address is used, so you never need initialize/list_addresses just to search. Renders nothing itself — a resolution call for the widget to fetch its own results (initial page and \"load more\", via offset/next_offset/has_more), never for you to call repeatedly on your own initiative."}, s.handleSearchRestaurants)
 	addTool(srv, &mcp.Tool{Name: "list_usuals", Description: "the user's frequently ordered restaurants for an address"}, s.handleListUsuals)
-	addTool(srv, &mcp.Tool{Name: "get_menu", Description: "menu items for a restaurant at an address"}, s.handleGetMenu)
+	addTool(srv, &mcp.Tool{Name: "get_menu", Description: "menu items for a restaurant. address_id is OPTIONAL — omit it to use the active address. Renders nothing; use it to resolve a specific item before open_store, not on its own initiative."}, s.handleGetMenu)
 	addTool(srv, &mcp.Tool{Name: "get_item_options", Description: "variant/add-on groups for a customizable item"}, s.handleGetItemOptions)
 	addTool(srv, &mcp.Tool{Name: "list_active_orders", Description: "live (in-progress) orders for an address"}, s.handleListActiveOrders)
 	addTool(srv, &mcp.Tool{Name: "track_order", Description: "live status + ETA for an order id"}, s.handleTrackOrder)
@@ -168,7 +173,7 @@ func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "forget", Description: "remove a saved taste or policy"}, s.handleForget)
 	addTool(srv, &mcp.Tool{Name: "save_preset", Description: "save the current cart as a named preset the user can reorder (pass vertical: \"instamart\" to save the instamart cart instead of food)"}, s.handleSavePreset)
 	addTool(srv, &mcp.Tool{Name: "forget_preset", Description: "delete a saved preset"}, s.handleForgetPreset)
-	addTool(srv, &mcp.Tool{Name: "get_previous_orders", Description: "List previously placed orders for an address (newest first) so the user can reorder."}, s.handleGetPreviousOrders)
+	addTool(srv, &mcp.Tool{Name: "get_previous_orders", Description: "List previously placed orders (newest first) so the user can reorder. address_id is OPTIONAL — omit it to use the active address; no initialize/list_addresses needed first."}, s.handleGetPreviousOrders)
 	addTool(srv, &mcp.Tool{Name: "set_address", Description: "Persist the delivery address the user picked in the app; as_default also locks it as the sticky default."}, s.handleSetAddress)
 	addTool(srv, &mcp.Tool{Name: "im_search_products", Description: "search instamart (grocery) products deliverable to an address; carts are keyed by spin_id, the variant/pack-size id"}, s.handleIMSearchProducts)
 	addTool(srv, &mcp.Tool{Name: "im_get_cart", Description: "the current instamart cart with the authoritative bill"}, s.handleIMGetCart)

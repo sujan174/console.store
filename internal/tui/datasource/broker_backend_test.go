@@ -60,6 +60,13 @@ func (f *fakeRPC) RestaurantsPage(accountID, addressID, query string, offset int
 	}
 	return []api.Restaurant{{ID: "r1"}}, offset + 1, false, nil
 }
+func (f *fakeRPC) RestaurantsPageOrganic(accountID, addressID, query string, offset int) ([]api.Restaurant, string, int, bool, error) {
+	f.lastAccount, f.lastQuery = accountID, query
+	if f.err != nil {
+		return nil, query, offset, false, f.err
+	}
+	return []api.Restaurant{{ID: "r1"}}, query, offset + 1, false, nil
+}
 func (f *fakeRPC) ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {
 	f.lastAccount = accountID
 	return nil, nil

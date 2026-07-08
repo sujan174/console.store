@@ -15,35 +15,76 @@ support) or working the Instamart vertical (see below, unchanged, `im_*`
 tools, its own cart). Food and Instamart carts never interact. Orders cost
 **real money and cannot be cancelled**.
 
-## Step 1 — always call `initialize` first
+## Step 1 — never pre-fetch state; every tool self-resolves the address
 
-On ANY ordering intent, call `initialize` before anything else. It's fast (an
-auth check, no address list fetch) and tells you exactly where to go next:
+Do NOT open a turn with `initialize` (or `list_addresses`) to "get ready".
+Every ordering tool — `open_store`, `search_restaurants`, `get_menu`,
+`get_previous_orders` — **self-checks auth and self-resolves the address**
+(the active address: locked default, else last-used, else the account's
+first). `address_id` is OPTIONAL on all of them; **omit it**. There is
+nothing to fetch first — go straight to resolving the intent (Step 2).
 
-- **`signed_in: false`** → call `sign_in`, give the user the `authorize_url`
-  link, tell them to sign in, then call `initialize` again. Do not proceed —
-  don't guess an address, don't open the store, don't build a cart.
-- **`signed_in: true`, `address: null`** → no saved address yet. Onboard:
-  call `open_store{}` (the store home) so the user can pick one — the home's
-  address chip lazily calls `list_addresses` and persists the choice via
-  `set_address`. Never open a restaurant before an address exists.
-- **`signed_in: true`, `address` set** → ready. Route to `open_store` (Step 2).
+This matters for speed: `initialize` gates nothing the other tools don't
+already gate themselves, so calling it just to obtain an `address_id` to
+hand back is a wasted round trip that delays everything the user sees. The
+address you'd pass is the same one these tools pick on their own.
 
-## Step 2 — route every food intent through `open_store`
+- If any call fails with a **`not signed in`** error → call `sign_in`, give
+  the user the `authorize_url` link, tell them to sign in, then retry the
+  original call. Don't guess an address, don't build a cart, don't retry the
+  render until they're signed in.
+- If the account has **no saved address yet**, `open_store{}` (the store
+  home) still opens fine — the home's address chip lazily calls
+  `list_addresses` and persists the choice via `set_address`. Never open a
+  restaurant before an address exists.
+- `initialize` still exists as a standalone readiness check (the text-only
+  fallback, or answering "am I signed in?" without opening anything) — just
+  never a mandatory first hop, and never to look up an address to pass along.
 
-`open_store` is the universal entry point and carries the whole app resource;
-a client with MCP Apps support renders it and the app takes over browsing →
-customizing → cart → checkout. Route the user's words into the right call
-shape — don't call `search_restaurants`/`get_menu`/`update_cart` yourself for
-these, the app does it:
+## Step 2 — resolve first, then open the app ONCE
 
-| Intent | Call |
+`open_store` is the ONLY call that renders the interactive app. Everything
+that comes before it — finding a restaurant's id, checking a menu for an item
+— is done with plain tool calls (`search_restaurants`, `get_menu`) that
+**render nothing**. So the shape is always the same: **resolve silently →
+call `open_store` exactly once**, at the deepest place you've resolved. Once
+the app is open it takes over browsing → customizing → cart → checkout on its
+own; you do not call `update_cart`/`prepare_order`/`place_order` for it.
+
+**Two hard rules — do not violate:**
+
+- **One widget per turn.** NEVER call `open_store` twice in a single turn, and
+  NEVER open the app just to read an id out of it. Resolve the id with
+  `search_restaurants`/`get_menu` FIRST (those render nothing), THEN open the
+  app directly at the destination. Opening the store to "find" a restaurant
+  and then opening it again to "enter" that restaurant is the exact bug this
+  rule exists to prevent — it leaves two dead widgets in the chat.
+- **A rendered widget can't be re-driven.** Once the app is open the user owns
+  it — you cannot reach in and change what's on screen. Only render a NEW
+  widget (a fresh `open_store`) when the user's next message needs one.
+
+Route the user's words into the single right call shape:
+
+(None of the resolving calls below need an `address_id` — omit it; the
+server fills in the active address. Passing one is only for a deliberate
+non-default address.)
+
+| Intent | Resolve (silent tool calls) → then open ONCE |
 |---|---|
-| Vague ("open the store", "I'm hungry", "order food") | `open_store{}` → home (categories + search + the user's restaurants) |
-| A cuisine or dish ("smash burgers near me", "best pizza") | `open_store{query:"…"}` → home with search results |
-| A named restaurant ("order from McDonald's") | resolve its id with `search_restaurants`, then `open_store{restaurant_id}` directly |
-| A specific item at a restaurant ("a paneer whopper from BK") | `open_store{restaurant_id, item_id}` |
-| Reorder ("my usual", "what I got last time", "order that again") | `get_previous_orders{address_id}` → present the list → the user picks one (pushes it to the cart in the app; a human still presses place) |
+| Vague ("I'm hungry", "open the store") | — → `open_store{}` (home) |
+| A cuisine/dish, no restaurant named ("smash burgers near me") | — → `open_store{query:"burger"}` (home search) |
+| A named restaurant ("open Truffles") | `search_restaurants{query:"Truffles"}` → `open_store{restaurant_id, restaurant_name}` |
+| A specific, UNAMBIGUOUS item ("Maharaja Mac non-veg from McDonald's") | resolve the restaurant id, then `get_menu{restaurant_id}` and match the one item → `open_store{restaurant_id, item_id}` |
+| A dish that's AMBIGUOUS — ≥2 menu matches, or the user didn't pin it ("a Maharaja Mac from McDonald's") | resolve the restaurant id, `get_menu{restaurant_id}` → `open_store{restaurant_id, query:"Maharaja Mac"}` — opens the menu with search prefilled and the matches shown, user picks |
+| Reorder ("my usual", "what I got last time", "order that again") | `get_previous_orders{}` → present the list → the user picks one (loads the cart in the app; a human still presses place) |
+
+**Resolving an item** (the two item rows above): pull the restaurant's
+`get_menu` ONCE and match the user's words against item names. **Exactly one**
+in-stock match → deep-link it with `item_id`. **Two or more** matches (e.g.
+the veg and non-veg Maharaja Macs), or the user was vague → do NOT guess: open
+the restaurant with `query` set to the dish so the app shows the matches and
+the user chooses. That `get_menu` is a resolution call — it renders nothing
+and is the one allowed menu fetch (ban-safety below).
 
 **Query translation** (cuisine/dish case): Swiggy's search is a dumb keyword
 index, not semantic — strip qualifiers ("best", "cheap", style words) and
@@ -64,7 +105,7 @@ own initiative for a food intent that goes through the app.
 
 ## The address model
 
-`initialize`'s `address` is the **active** address — the locked default if
+`open_store`'s `address` is the **active** address — the locked default if
 one is set, else the last one used, never both — sourced from a small local
 address-preference store, not fetched from Swiggy on every call.
 
@@ -72,8 +113,9 @@ address-preference store, not fetched from Swiggy on every call.
   fetches it lazily, once, only when the user taps the address chip.
 - The in-app picker calls `set_address{address_id, label, as_default?}` when
   the user chooses one. `as_default: true` locks it — every future
-  `initialize` returns it regardless of what's used later. Without the lock,
-  the most-recently-used address becomes the next session's active one.
+  `open_store`/`initialize` returns it regardless of what's used later.
+  Without the lock, the most-recently-used address becomes the next
+  session's active one.
 - You can offer "want me to set this as your default?" after a switch — say
   it once, don't push it.
 
@@ -103,8 +145,11 @@ Instamart, the text fallback):
 
 - `get_item_options` only on a real customize tap/intent — never
   speculatively pre-fetched for a whole menu section.
-- One `search_restaurants` call per category tap or search submit.
-- One `get_menu` call per restaurant open.
+- One `search_restaurants` call to resolve a named restaurant (or per category
+  tap / search submit inside the app).
+- At most ONE `get_menu` to resolve an item before opening the app; then
+  `open_store` re-reads that menu itself to render. That resolve-then-render
+  pair is fine — but never poll or loop `get_menu` on a restaurant.
 - One `update_cart` call at checkout (cart edits stay client-side until then).
 
 ## Text fallback (no MCP Apps support)

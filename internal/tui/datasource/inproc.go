@@ -17,6 +17,7 @@ type inprocService interface {
 	Menu(ctx context.Context, accountID, addressID, restaurantID string) (api.Menu, error)
 	MenuPage(ctx context.Context, accountID, addressID, restaurantID string, page int) (api.Menu, bool, error)
 	RestaurantsPage(ctx context.Context, accountID, addressID, query string, offset int) ([]api.Restaurant, int, bool, error)
+	RestaurantsPageOrganic(ctx context.Context, accountID, addressID, query string, offset int) ([]api.Restaurant, string, int, bool, error)
 	ItemOptions(ctx context.Context, accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error)
 	UpdateCart(ctx context.Context, a api.UpdateCartArgs) (api.Cart, error)
 	GetCart(ctx context.Context, accountID, addressID, restaurantName string) (api.Cart, error)
@@ -75,6 +76,10 @@ func (p InProc) MenuPage(accountID, addressID, restaurantID string, page int) (a
 
 func (p InProc) RestaurantsPage(accountID, addressID, query string, offset int) ([]api.Restaurant, int, bool, error) {
 	return p.svc.RestaurantsPage(context.Background(), accountID, addressID, query, offset)
+}
+
+func (p InProc) RestaurantsPageOrganic(accountID, addressID, query string, offset int) ([]api.Restaurant, string, int, bool, error) {
+	return p.svc.RestaurantsPageOrganic(context.Background(), accountID, addressID, query, offset)
 }
 
 func (p InProc) ItemOptions(accountID, addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {

@@ -9,7 +9,10 @@ import (
 )
 
 type GetPreviousOrdersIn struct {
-	AddressID string `json:"address_id"`
+	// AddressID is OPTIONAL — omit it and the server self-resolves the active
+	// address. Previous orders are keyed by address, so this returns the
+	// active address's history unless a specific one is passed.
+	AddressID string `json:"address_id,omitempty" jsonschema:"optional delivery address id; omit to use the active address"`
 }
 type GetPreviousOrdersOut struct {
 	Orders []localstore.PlacedOrder `json:"orders"`
@@ -19,7 +22,8 @@ func (s *Server) handleGetPreviousOrders(ctx context.Context, _ *mcp.CallToolReq
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, GetPreviousOrdersOut{}, err
 	}
-	orders, err := localstore.LoadOrders(in.AddressID)
+	addr, _ := s.resolveAddress(in.AddressID)
+	orders, err := localstore.LoadOrders(addr)
 	if err != nil {
 		return nil, GetPreviousOrdersOut{}, err
 	}

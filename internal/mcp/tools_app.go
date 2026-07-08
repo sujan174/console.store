@@ -5,7 +5,6 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"consolestore/internal/broker/api"
 	"consolestore/internal/config"
 	"consolestore/internal/localstore"
 	"consolestore/internal/mcp/orderapp"
@@ -46,14 +45,25 @@ type OpenStoreOut struct {
 	Restaurants  []RestaurantDTO          `json:"restaurants,omitempty"`
 	RecentOrders []localstore.PlacedOrder `json:"recent_orders,omitempty"`
 	Query        string                   `json:"query,omitempty"`
+	// NextOffset/HasMore paginate Restaurants (query-seeded home only — a
+	// bare open_store{} has no results to page through yet). The app calls
+	// search_restaurants{offset: NextOffset} for "load more"; HasMore false
+	// means don't bother.
+	NextOffset int  `json:"next_offset,omitempty"`
+	HasMore    bool `json:"has_more,omitempty"`
 }
 
 func openStoreTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name: "open_store",
-		Description: "Open the interactive ordering app. With no restaurant_id → the store home " +
-			"(categories + search + your restaurants); with query → search results on the home " +
-			"screen; with restaurant_id → its menu; add item_id to deep-link straight to that item. " +
+		Description: "Open the interactive ordering app — render it ONCE per turn, at the deepest " +
+			"place you've already resolved (resolve ids first with search_restaurants/get_menu, " +
+			"which render nothing; never open the app just to read an id, and never call this twice " +
+			"in one turn). No restaurant_id → the store home (categories + your restaurants); " +
+			"query alone → home search results; restaurant_id → that restaurant's menu; " +
+			"restaurant_id + item_id → deep-link straight to that one item; " +
+			"restaurant_id + query → open the menu with its in-menu search prefilled to query and " +
+			"the matches shown (use for an ambiguous dish the user named but didn't pin down). " +
 			"Pass restaurant_name with the display name you resolved so the app can label the store.",
 		Meta: mcp.Meta{
 			"ui":             map[string]any{"resourceUri": appResourceURI},
@@ -79,49 +89,42 @@ func (s *Server) registerApp(srv *mcp.Server) {
 	addTool(srv, openStoreTool(), s.handleOpenStore)
 }
 
-// addrInList reports whether id is present among list's addresses.
-func addrInList(id string, list []api.Address) bool {
-	for _, a := range list {
-		if a.ID == id {
-			return true
-		}
+
+// resolveAddress picks the delivery address for a tool call, in precedence
+// order: an explicit id the caller passed → the locally-preferred active
+// address (AddrPref) → the account's first saved address.
+//
+// This is the seam that lets EVERY resolution tool (open_store,
+// search_restaurants, get_menu, get_previous_orders) accept an OPTIONAL
+// address_id and fill it itself — so the agent never has to spend an
+// initialize/list_addresses round trip just to obtain an id to hand back.
+// For a returning user (AddrPref set) it is a pure local read, zero network;
+// only a fresh user who has never run set_address pays the one Addresses()
+// call — the same cost list_addresses would have, minus the extra agent hop.
+//
+// No live reconcile against the address list on the happy path: catching a
+// since-deleted cached id would cost a Swiggy round trip on every call to
+// guard a rare edge case. Trust the cached address; a dead id surfaces as
+// whatever error the downstream Menu/Search call returns.
+func (s *Server) resolveAddress(explicit string) (id, label string) {
+	if explicit != "" {
+		return explicit, ""
 	}
-	return false
+	pref, _ := localstore.LoadAddrPref()
+	if id, label = pref.Active(); id != "" {
+		return id, label
+	}
+	if list, err := s.be.Addresses(); err == nil && len(list) > 0 {
+		return list[0].ID, list[0].Label
+	}
+	return "", ""
 }
 
 func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in OpenStoreIn) (*mcp.CallToolResult, OpenStoreOut, error) {
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, OpenStoreOut{}, err
 	}
-	// Precedence: explicit in.AddressID → AddrPref.Active() → Swiggy's first
-	// address. AddrPref is only ever written by set_address, so a fresh user
-	// (signed in, ≥1 saved address, never called set_address) would otherwise
-	// resolve to "" and send an empty addressId to Swiggy (undefined behavior).
-	// The account's first address is the safety net that keeps both the
-	// restaurant and home branches working.
-	addr, label := in.AddressID, ""
-	if addr == "" {
-		pref, _ := localstore.LoadAddrPref()
-		addr, label = pref.Active()
-	}
-	// Reconcile against the live address list: a saved AddrPref (or an id
-	// passed in) can point at an address the user has since deleted in the
-	// Swiggy app. Resolving that dead id straight through would send an
-	// unknown addressId to Menu/UpdateCart. Only reconcile when the list
-	// actually loaded with entries — a transient Addresses() failure must not
-	// wipe out an otherwise-good address.
-	if addr != "" {
-		if list, err := s.be.Addresses(); err == nil && len(list) > 0 && !addrInList(addr, list) {
-			pref, _ := localstore.LoadAddrPref()
-			_ = localstore.SaveAddrPref(pref.ForgetActive(addr))
-			addr, label = list[0].ID, list[0].Label
-		}
-	}
-	if addr == "" {
-		if list, err := s.be.Addresses(); err == nil && len(list) > 0 {
-			addr, label = list[0].ID, list[0].Label
-		}
-	}
+	addr, label := s.resolveAddress(in.AddressID)
 
 	if in.RestaurantID != "" {
 		m, err := s.be.Menu(addr, in.RestaurantID)
@@ -133,8 +136,13 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 			Screen:     "restaurant",
 			Address:    AddrRefDTO{ID: addr, Label: label},
 			Restaurant: map[string]string{"id": in.RestaurantID, "name": in.RestaurantName},
-			Entry:      map[string]string{"category": in.Category, "item_id": in.ItemID, "address_id": addr},
-			Menu:       &menu,
+			// "search" prefills the restaurant's in-menu search box. This is the
+			// `query` overload: WITH a restaurant_id, `query` means "search
+			// inside this restaurant" — used for the ambiguous-item case (open
+			// the store already showing the matches so the user picks). WITHOUT a
+			// restaurant_id, `query` is the home search instead (below).
+			Entry: map[string]string{"category": in.Category, "item_id": in.ItemID, "address_id": addr, "search": in.Query},
+			Menu:  &menu,
 		}, nil
 	}
 
@@ -143,12 +151,15 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 		cats = append(cats, CategoryDTO{Label: c.Label, Query: c.Query})
 	}
 	var rests []RestaurantDTO
+	var nextOffset int
+	var hasMore bool
 	if in.Query != "" {
-		res, _, err := s.be.SearchOrganic(addr, in.Query)
+		res, _, next, more, err := s.be.SearchOrganicPage(addr, in.Query, 0)
 		if err != nil {
 			return nil, OpenStoreOut{}, err
 		}
 		rests = toRestaurantDTOs(res)
+		nextOffset, hasMore = next, more
 	}
 	recent, _ := localstore.LoadOrders(addr)
 	return nil, OpenStoreOut{
@@ -158,5 +169,7 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 		Restaurants:  rests,
 		RecentOrders: recent,
 		Query:        in.Query,
+		NextOffset:   nextOffset,
+		HasMore:      hasMore,
 	}, nil
 }

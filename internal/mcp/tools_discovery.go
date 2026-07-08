@@ -99,23 +99,33 @@ func (s *Server) handleListAddresses(ctx context.Context, _ *mcp.CallToolRequest
 // --- search_restaurants ---
 
 type SearchRestaurantsIn struct {
-	AddressID string `json:"address_id" jsonschema:"the delivery address id from list_addresses"`
+	// AddressID is OPTIONAL — omit it and the server self-resolves the active
+	// address (locked default, else last-used, else the account's first). Only
+	// pass one to search a specific non-default address.
+	AddressID string `json:"address_id,omitempty" jsonschema:"optional delivery address id; omit to use the active address"`
 	Query     string `json:"query" jsonschema:"restaurant or dish to search for"`
+	// Offset is the pagination cursor from a previous call's next_offset —
+	// omit/0 for the first page. Used for "load more" on a result list the
+	// app already rendered; never pass a made-up value.
+	Offset int `json:"offset,omitempty" jsonschema:"pagination cursor from a previous call's next_offset; omit for the first page"`
 }
 type SearchRestaurantsOut struct {
 	Restaurants []RestaurantDTO `json:"restaurants"`
 	Corrected   string          `json:"corrected_query,omitempty"`
+	NextOffset  int             `json:"next_offset,omitempty"`
+	HasMore     bool            `json:"has_more"`
 }
 
 func (s *Server) handleSearchRestaurants(ctx context.Context, _ *mcp.CallToolRequest, in SearchRestaurantsIn) (*mcp.CallToolResult, SearchRestaurantsOut, error) {
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, SearchRestaurantsOut{}, err
 	}
-	res, effective, err := s.be.SearchOrganic(in.AddressID, in.Query)
+	addr, _ := s.resolveAddress(in.AddressID)
+	res, effective, next, more, err := s.be.SearchOrganicPage(addr, in.Query, in.Offset)
 	if err != nil {
 		return nil, SearchRestaurantsOut{}, err
 	}
-	out := SearchRestaurantsOut{Restaurants: toRestaurantDTOs(res)}
+	out := SearchRestaurantsOut{Restaurants: toRestaurantDTOs(res), NextOffset: next, HasMore: more}
 	if effective != in.Query {
 		out.Corrected = effective
 	}
@@ -145,7 +155,9 @@ func (s *Server) handleListUsuals(ctx context.Context, _ *mcp.CallToolRequest, i
 // --- get_menu ---
 
 type GetMenuIn struct {
-	AddressID    string `json:"address_id"`
+	// AddressID is OPTIONAL — omit it and the server self-resolves the active
+	// address. Only pass one to read the menu at a specific non-default address.
+	AddressID    string `json:"address_id,omitempty" jsonschema:"optional delivery address id; omit to use the active address"`
 	RestaurantID string `json:"restaurant_id"`
 }
 type GetMenuOut struct {
@@ -157,7 +169,8 @@ func (s *Server) handleGetMenu(ctx context.Context, _ *mcp.CallToolRequest, in G
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, GetMenuOut{}, err
 	}
-	m, err := s.be.Menu(in.AddressID, in.RestaurantID)
+	addr, _ := s.resolveAddress(in.AddressID)
+	m, err := s.be.Menu(addr, in.RestaurantID)
 	if err != nil {
 		return nil, GetMenuOut{}, err
 	}

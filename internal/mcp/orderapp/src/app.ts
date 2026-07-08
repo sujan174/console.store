@@ -7,7 +7,7 @@
 import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
-import { esc, groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu } from "./screens";
+import { esc, groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading } from "./screens";
 import { renderHome } from "./home";
 import {
   buildWireSelections,
@@ -45,6 +45,10 @@ export interface OpenStoreEntry {
   category: string;
   item_id: string;
   address_id: string;
+  // Prefills the restaurant's in-menu search box (the `query` overload — see
+  // open_store). Set for the ambiguous-item case: open the menu already
+  // filtered to these matches so the user picks. Empty otherwise.
+  search?: string;
 }
 
 // AddrRefDTO mirrors internal/mcp/tools_card.go's AddrRefDTO — both fields
@@ -132,6 +136,11 @@ export interface OpenStoreOut {
   restaurants?: HomeRestaurant[];
   recent_orders?: RecentOrder[];
   query?: string;
+  // Pagination for `restaurants` (query-seeded home only — a bare
+  // open_store{} has none to page through yet). "Load more" re-calls
+  // search_restaurants with offset: next_offset; has_more false means don't.
+  next_offset?: number;
+  has_more?: boolean;
 }
 
 // --- client-side state ---
@@ -303,6 +312,24 @@ export interface AppState {
   // True while a cart sync is scheduled or in flight — drives a "saving…"
   // indicator on the cart bar so an add visibly shows work happening.
   cartSyncBusy: boolean;
+  // True while a home search_restaurants call is in flight — the restaurant
+  // list slot shows a spinner instead of the stale list so a search/category
+  // tap gives immediate feedback (the call takes ~seconds).
+  homeLoading: boolean;
+  // Pagination over state.restaurants (the current query/category's result
+  // list) — mirrors OpenStoreOut/SearchRestaurantsOut's next_offset/has_more.
+  // homeNextOffset feeds the next "load more" call; homeHasMore false means
+  // the list ran out (hide the affordance). homeLoadingMore is a SEPARATE
+  // flag from homeLoading: a fresh search/category tap replaces the whole
+  // list (homeLoading's stale-list-hiding spinner), but scrolling to load
+  // more only appends — the existing cards must stay on screen throughout.
+  homeNextOffset: number;
+  homeHasMore: boolean;
+  homeLoadingMore: boolean;
+  // True from the instant a restaurant card is tapped until its get_menu
+  // resolves — the restaurant screen paints a loading view immediately (no
+  // dead time), and a second tap supersedes rather than being dropped.
+  menuLoading: boolean;
 }
 
 export const state: AppState = {
@@ -335,6 +362,11 @@ export const state: AppState = {
   conflict: null,
   cartSyncError: null,
   cartSyncBusy: false,
+  homeLoading: false,
+  homeNextOffset: 0,
+  homeHasMore: false,
+  homeLoadingMore: false,
+  menuLoading: false,
 };
 
 let root: HTMLElement | null = null;
@@ -422,11 +454,20 @@ function renderScreen(root: HTMLElement): void {
     root.innerHTML = renderHome(state);
     return;
   }
+  // The menu is still loading (a restaurant card was just tapped) — paint the
+  // loading view immediately so the tap isn't dead time. Takes precedence over
+  // everything else on the restaurant screen.
+  if (state.menuLoading) {
+    root.innerHTML = renderMenuLoading(state);
+    return;
+  }
   // A cross-restaurant conflict (raised by syncCart on first add) takes top
   // precedence on the restaurant screen — the user must keep/clear before any
-  // more cart work happens.
+  // more cart work happens. Rendered as an OVERLAY on top of the live menu
+  // (position:fixed) so the frame height never changes — a small card pops up
+  // within the fixed window rather than swapping the whole screen.
   if (state.conflict) {
-    root.innerHTML = renderConflict(state, state.conflict.foreignRestaurant);
+    root.innerHTML = renderMenu(state) + renderConflict(state, state.conflict.foreignRestaurant);
     return;
   }
   if (state.cart) root.innerHTML = renderCartScreen(state, state.cart);
@@ -1431,19 +1472,76 @@ let searchToken = 0;
 async function runHomeSearch(addressId: string, query: string): Promise<void> {
   if (!app) return;
   const token = ++searchToken;
+  // Show the list spinner immediately so a search/category tap gives feedback
+  // during the ~seconds the call takes, instead of leaving the stale list up.
+  state.homeLoading = true;
+  state.homeLoadingMore = false; // a fresh search supersedes any in-flight "load more"
+  render();
   try {
     const result = await app.callServerTool({
       name: "search_restaurants",
-      arguments: { address_id: addressId, query },
+      arguments: { address_id: addressId, query, offset: 0 },
     });
-    if (token !== searchToken) return; // superseded — discard stale response
-    if (result.isError) return; // non-fatal — leave the current list showing
-    const sc = result.structuredContent as { restaurants?: HomeRestaurant[] } | undefined;
+    if (token !== searchToken) return; // superseded — discard stale response (newer call owns homeLoading)
+    state.homeLoading = false;
+    if (result.isError) {
+      render(); // non-fatal — drop the spinner, leave the current list showing
+      return;
+    }
+    const sc = result.structuredContent as { restaurants?: HomeRestaurant[]; next_offset?: number; has_more?: boolean } | undefined;
     state.restaurants = sortRestaurants(Array.isArray(sc?.restaurants) ? sc.restaurants : []);
+    state.homeNextOffset = sc?.next_offset ?? 0;
+    state.homeHasMore = !!sc?.has_more;
     render();
   } catch (err) {
     if (token !== searchToken) return; // superseded — discard stale failure
+    state.homeLoading = false;
+    render();
     console.error("[consolestore order app] search_restaurants failed", err);
+  }
+}
+
+// loadMoreHome (scroll-to-bottom pagination): fetches the NEXT page of the
+// current query/category's restaurant list and appends it — unlike
+// runHomeSearch, it never clears the existing cards (homeLoadingMore drives
+// a small footer instead of the full-list spinner). Guarded by homeHasMore
+// (nothing more to fetch) and loadingMore's own re-entrancy flag (a fast
+// double-fire from repeated scroll events must not queue two calls). Dedupes
+// by restaurant id when appending — Swiggy's raw page offset doesn't line up
+// 1:1 with our ad-filtered organic count, so a page boundary can technically
+// re-return something already shown; silently drop the repeat rather than
+// let it flash a duplicate card.
+async function loadMoreHome(): Promise<void> {
+  if (!app || !state.addressId) return;
+  if (!state.homeHasMore || state.homeLoadingMore || state.homeLoading) return;
+  const query = state.activeCatQuery ?? state.query ?? "";
+  const token = ++searchToken;
+  state.homeLoadingMore = true;
+  render();
+  try {
+    const result = await app.callServerTool({
+      name: "search_restaurants",
+      arguments: { address_id: state.addressId, query, offset: state.homeNextOffset },
+    });
+    if (token !== searchToken) return; // superseded by a fresh search/category tap — discard
+    state.homeLoadingMore = false;
+    if (result.isError) {
+      state.homeHasMore = false; // stop retrying a failing page
+      render();
+      return;
+    }
+    const sc = result.structuredContent as { restaurants?: HomeRestaurant[]; next_offset?: number; has_more?: boolean } | undefined;
+    const fresh = Array.isArray(sc?.restaurants) ? sc.restaurants : [];
+    const known = new Set(state.restaurants.map((r) => r.id));
+    state.restaurants = sortRestaurants([...state.restaurants, ...fresh.filter((r) => !known.has(r.id))]);
+    state.homeNextOffset = sc?.next_offset ?? state.homeNextOffset;
+    state.homeHasMore = !!sc?.has_more;
+    render();
+  } catch (err) {
+    if (token !== searchToken) return;
+    state.homeLoadingMore = false;
+    render();
+    console.error("[consolestore order app] load more restaurants failed", err);
   }
 }
 
@@ -1471,10 +1569,11 @@ async function submitHomeSearch(query: string): Promise<void> {
   await runHomeSearch(state.addressId, query);
 }
 
-// restaurantOpenInFlight guards a rapid double-tap on the same restaurant
-// card from firing two concurrent get_menu calls — mirrors optionsInFlight /
-// addressesInFlight above.
-let restaurantOpenInFlight = false;
+// menuToken guards openRestaurant against a stale-response race AND lets a
+// second restaurant tap SUPERSEDE an in-flight one (instead of the old
+// boolean drop): every open bumps the token, paints its loading view, then
+// discards its own get_menu response if a newer tap has since bumped it.
+let menuToken = 0;
 
 // openRestaurant (Task 9): the restaurant-card open affordance. ONE get_menu
 // call, then seeds the restaurant screen the same way seedFromOpenStore's
@@ -1497,41 +1596,58 @@ async function openRestaurant(id: string, fallbackName?: string): Promise<void> 
   // dropping items already synced. No get_menu, no reset.
   if (id === state.restaurantId && state.items.length > 0) {
     searchToken++;
+    state.homeLoadingMore = false; // discard any in-flight "load more" — leaving home
+    menuToken++; // supersede any in-flight open of a different restaurant
     state.screen = "restaurant";
+    state.menuLoading = false;
     render();
     return;
   }
-  if (restaurantOpenInFlight) return;
-  restaurantOpenInFlight = true;
+
+  // Paint the loading view IMMEDIATELY (before the await) so the tap is never
+  // dead time, and bump menuToken so a later tap supersedes this one. Leaving
+  // home for a restaurant — bump searchToken too so a late search_restaurants
+  // response can't clobber state after the swap.
+  const token = ++menuToken;
+  searchToken++;
+  state.homeLoadingMore = false; // discard any in-flight "load more" — leaving home
+  state.screen = "restaurant";
+  state.restaurant = { id, name: r?.name ?? fallbackName ?? "" };
+  state.items = [];
+  state.categories = [];
+  state.activeCategory = null;
+  resetRestaurantScopedState();
+  state.menuLoading = true;
+  render();
 
   try {
     const result = await app.callServerTool({
       name: "get_menu",
       arguments: { address_id: state.addressId, restaurant_id: id },
     });
+    if (token !== menuToken) return; // superseded by a newer tap — discard
 
     if (result.isError) {
       console.error("[consolestore order app] get_menu failed", toolErrorText(result));
+      state.menuLoading = false;
+      state.cart = { status: "error", error: "Couldn't load that restaurant's menu — try again." };
+      render();
       return;
     }
 
     const sc = result.structuredContent as { restaurant_id?: string; items?: MenuItemData[] } | undefined;
-
-    // Leaving home for a restaurant — discard any in-flight home search so a
-    // late search_restaurants response can't clobber state after the swap.
-    searchToken++;
-    state.screen = "restaurant";
-    state.restaurant = { id, name: r?.name ?? fallbackName ?? "" };
     state.restaurantId = sc?.restaurant_id || id;
     state.items = Array.isArray(sc?.items) ? sc.items : [];
     state.categories = [...groupByCategory(state.items).keys()];
     state.activeCategory = state.categories[0] ?? null;
-    resetRestaurantScopedState();
+    state.menuLoading = false;
     render();
   } catch (err) {
+    if (token !== menuToken) return; // superseded — discard
     console.error("[consolestore order app] get_menu failed", err);
-  } finally {
-    restaurantOpenInFlight = false;
+    state.menuLoading = false;
+    state.cart = { status: "error", error: "Couldn't load that restaurant's menu — try again." };
+    render();
   }
 }
 
@@ -1984,6 +2100,24 @@ function onRootInput(evt: Event): void {
   }
 }
 
+// Distance from the bottom of #app's own scroll (styles.ts: overflow-y:auto,
+// fixed height) at which "load more" fires — well before the true bottom so
+// the next page is ready by the time the user actually gets there.
+const LOAD_MORE_SCROLL_THRESHOLD_PX = 160;
+
+// onRootScroll fires "load more" on the store-home restaurant list once the
+// user scrolls near the bottom of #app's own scroll container (there is no
+// page/window scroll — the whole widget lives inside one fixed-height,
+// internally-scrolling box). Cheap to call on every scroll event: the early
+// screen/hasMore/in-flight checks make it a no-op the overwhelming majority
+// of the time, and loadMoreHome's own re-entrancy flag covers the rest.
+function onRootScroll(): void {
+  if (!root || state.screen !== "home") return;
+  if (!state.homeHasMore || state.homeLoadingMore || state.homeLoading) return;
+  const distanceFromBottom = root.scrollHeight - root.scrollTop - root.clientHeight;
+  if (distanceFromBottom < LOAD_MORE_SCROLL_THRESHOLD_PX) void loadMoreHome();
+}
+
 // clearThenMaterialize resolves the conflict prompt's "clear & continue" and
 // the get_cart-error / cart_conflict re-sync paths: clear_cart, then the single
 // update_cart + prepare_order (STEP 2). Callers already inside a checkout flow
@@ -2053,6 +2187,9 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     state.screen = "home";
     state.homeCategories = Array.isArray(sc.categories) ? sc.categories : [];
     state.restaurants = sortRestaurants(Array.isArray(sc.restaurants) ? sc.restaurants : []);
+    state.homeNextOffset = sc.next_offset ?? 0;
+    state.homeHasMore = !!sc.has_more;
+    state.homeLoadingMore = false;
     state.recentOrders = Array.isArray(sc.recent_orders) ? sc.recent_orders : [];
     state.query = sc.query ?? "";
     // A fresh open_store home doesn't carry an active category (Task 9) —
@@ -2075,6 +2212,7 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   // Seeding a restaurant screen — discard any in-flight home search so a late
   // search_restaurants response can't clobber state after the swap.
   searchToken++;
+  state.homeLoadingMore = false; // discard any in-flight "load more" — leaving home
   state.screen = "restaurant";
   state.restaurant = sc.restaurant ?? null;
   state.restaurantId = sc.restaurant?.id ?? null;
@@ -2087,6 +2225,13 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     entryCategory && state.categories.includes(entryCategory) ? entryCategory : state.categories[0] ?? null;
 
   resetRestaurantScopedState();
+
+  // Prefilled in-menu search (the `query` overload for the ambiguous-item
+  // case): open the menu already filtered to the matches so the user picks.
+  // Set AFTER resetRestaurantScopedState (which clears menuQuery). item_id
+  // deep-link below takes precedence — the two are never sent together.
+  const entrySearch = (sc.entry?.search ?? "").trim();
+  if (entrySearch) state.menuQuery = entrySearch;
 
   // Deep-linked item_id resolves to a FOCUSED single-item view as the primary
   // screen: a customizable item opens the customize sheet (one guarded
@@ -2179,6 +2324,7 @@ export function bootstrap(): void {
   root.addEventListener("click", onRootClickSafe);
   root.addEventListener("keydown", onRootKeydown);
   root.addEventListener("input", onRootInput);
+  root.addEventListener("scroll", onRootScroll, { passive: true });
 
   app = new App({ name: "consolestore order", version: "0.1.0" });
   app.onhostcontextchanged = () => applyHostStyling();

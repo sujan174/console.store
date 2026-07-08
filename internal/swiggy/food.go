@@ -68,11 +68,63 @@ func (c *Client) SearchRestaurantsOnePage(ctx context.Context, addressID, query 
 	return out, offset + len(page), len(page) > 0, nil
 }
 
+// searchPageSize is the target number of ad-free restaurants per "page" the
+// store-home search shows before offering "load more". Swiggy interleaves
+// ads and dishes into its raw pages, so one raw page's ad-free yield varies;
+// SearchOrganicPage walks just enough raw pages to reach this many.
+const searchPageSize = 8
+
+// SearchOrganicPage is the store-home search's paginated, ad-free primitive
+// (the "load more" seam). Starting at raw offset `offset`, it walks
+// consecutive search_restaurants pages only as far as needed to gather about
+// searchPageSize ad-free restaurants — so page 1 and every subsequent page
+// are a consistent size regardless of how many ads/dishes Swiggy mixes in.
+// Returns the filtered restaurants, the raw offset to resume the NEXT page
+// from, and whether more may exist. On the common case (a raw page already
+// carries ≥ searchPageSize real restaurants) it is a single round trip.
+func (c *Client) SearchOrganicPage(ctx context.Context, addressID, query string, offset int) ([]Restaurant, int, bool, error) {
+	// Ban-safety cap: never walk more than this many raw pages in one call,
+	// so a query drowning in ads can't fan out into a request burst.
+	const maxRawPages = 3
+	var out []Restaurant
+	seen := map[string]bool{}
+	more := false
+	for p := 0; p < maxRawPages; p++ {
+		page, err := c.searchRestaurantsPage(ctx, addressID, query, offset)
+		if err != nil {
+			if p == 0 {
+				return nil, offset, false, err
+			}
+			break // a later page failed — return what we have so far
+		}
+		if len(page) == 0 {
+			more = false // ran out — nothing beyond this
+			break
+		}
+		offset += len(page)
+		more = true // a full page came back; assume another may exist until an empty one proves otherwise
+		for _, r := range onlyRestaurants(page) {
+			if isAd(r.Name) || r.ID == "" || seen[r.ID] {
+				continue
+			}
+			seen[r.ID] = true
+			out = append(out, r)
+		}
+		if len(out) >= searchPageSize {
+			break
+		}
+	}
+	return out, offset, more, nil
+}
+
 // searchFill paginates search_restaurants, dropping dishes (always) and ads
 // (when dropAds), de-duplicating, until it has ~searchWant or results run out.
 func (c *Client) searchFill(ctx context.Context, addressID, query string, offset int, dropAds bool) ([]Restaurant, error) {
 	const (
-		searchWant = 12
+		// Lowered from 12: page 1 alone satisfies this far more often (after ad
+		// filtering), avoiding a 2nd sequential Swiggy round trip on the common
+		// case — still ample for a first screen.
+		searchWant = 8
 		// Cap any single query at 2 pages (~20-30 restaurants — ample for a terminal
 		// list). Keeps our request volume gentle so we don't look like a scraper to
 		// Swiggy's anomaly detection; sparse categories just show fewer results.
