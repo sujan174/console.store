@@ -141,6 +141,9 @@ export interface OpenStoreOut {
   // search_restaurants with offset: next_offset; has_more false means don't.
   next_offset?: number;
   has_more?: boolean;
+  // Set by the server's loading shell: this result carries NO menu/restaurants
+  // yet — the widget renders the scooter loader and fetches them itself.
+  loading?: boolean;
 }
 
 // --- client-side state ---
@@ -2176,22 +2179,115 @@ function resetRestaurantScopedState(): void {
   }
 }
 
+type DeepLink = { itemId: string; search: string };
+
+// applyMenuDeepLink runs AFTER state.items is populated (whether seeded by the
+// server or fetched by the widget). It sets the active category, then applies
+// the open_store entry deep-link: a customizable item opens the customize
+// sheet; a simple item shows the focused card; otherwise a prefilled in-menu
+// search; falling back to the plain menu. Mirrors the logic that used to live
+// inline in seedFromOpenStore's restaurant branch.
+function applyMenuDeepLink(deepLink: DeepLink): void {
+  state.categories = [...groupByCategory(state.items).keys()];
+  state.activeCategory = state.categories[0] ?? null;
+
+  if (deepLink.search) state.menuQuery = deepLink.search;
+
+  const entryItem = deepLink.itemId ? itemById(deepLink.itemId) : undefined;
+  if (entryItem && entryItem.customizable) {
+    render();
+    void openCustomize(entryItem.id);
+    return;
+  }
+  if (entryItem) state.focusedItemId = entryItem.id;
+  render();
+}
+
+// fetchMenuThenApply fetches ONE menu for the just-opened restaurant under the
+// scooter loader (state.menuLoading), guarded by menuToken so a superseding
+// open discards a stale response, then applies the deep-link. This is the
+// instant-open path: open_store returned a shell with no menu, so the widget
+// reads the menu itself (the same single read the server used to do).
+async function fetchMenuThenApply(restaurantId: string, deepLink: DeepLink): Promise<void> {
+  if (!app || !state.addressId) {
+    state.menuLoading = false;
+    state.cart = { status: "error", error: "missing address or restaurant context" };
+    render();
+    return;
+  }
+  const token = ++menuToken;
+  try {
+    const result = await app.callServerTool({
+      name: "get_menu",
+      arguments: { address_id: state.addressId, restaurant_id: restaurantId },
+    });
+    if (token !== menuToken) return; // superseded — discard
+    if (result.isError) {
+      state.menuLoading = false;
+      state.cart = { status: "error", error: "Couldn't load that restaurant's menu — try again." };
+      render();
+      return;
+    }
+    const sc = result.structuredContent as { restaurant_id?: string; items?: MenuItemData[] } | undefined;
+    state.restaurantId = sc?.restaurant_id || restaurantId;
+    state.items = Array.isArray(sc?.items) ? sc.items : [];
+    state.menuLoading = false;
+    applyMenuDeepLink(deepLink);
+  } catch (err) {
+    if (token !== menuToken) return;
+    state.menuLoading = false;
+    state.cart = { status: "error", error: "Couldn't load that restaurant's menu — try again." };
+    render();
+    console.error("[order-app] fetchMenuThenApply failed", err);
+  }
+}
+
 // seedFromOpenStore stores the open_store result and renders the router's
 // target screen. `sc.screen` decides the branch (Task 7): "home" stores the
 // store-home fields and stops there — no menu, no restaurant context;
-// "restaurant" keeps the existing menu-seed behavior unchanged.
+// "restaurant" keeps the existing menu-seed behavior unchanged. Either branch
+// may arrive as a "loading shell" (Task 3): no menu/restaurants yet, in which
+// case the widget renders the scooter loader and fetches the data itself
+// (ONE get_menu or ONE search_restaurants call) instead of the server having
+// seeded it — a fully-seeded result (the current, unchanged server) still
+// applies straight away, unchanged.
 function seedFromOpenStore(sc: OpenStoreOut): void {
   state.address = sc.address ?? null;
 
   if (sc.screen === "home") {
     state.screen = "home";
     state.homeCategories = Array.isArray(sc.categories) ? sc.categories : [];
+    state.query = sc.query ?? "";
+    const homeQuery = state.query;
+    if (homeQuery && sc.loading) {
+      // Loading shell — search under the scooter animation instead of a
+      // server-seeded list. runHomeSearch fills restaurants + pagination.
+      state.restaurants = [];
+      state.homeNextOffset = 0;
+      state.homeHasMore = false;
+      state.homeLoadingMore = false;
+      state.recentOrders = Array.isArray(sc.recent_orders) ? sc.recent_orders : [];
+      state.activeCatQuery = null;
+      state.restInfoOpen = new Set();
+      state.closedNoteId = null;
+      state.restaurant = null;
+      state.restaurantId = null;
+      state.addressId = sc.address?.id || null;
+      state.items = [];
+      state.categories = [];
+      state.activeCategory = null;
+      resetRestaurantScopedState();
+      state.homeLoading = true;
+      render();
+      if (state.addressId) void runHomeSearch(state.addressId, homeQuery);
+      return;
+    }
+    // Seeded (backward-compat) or bare home — existing behavior.
     state.restaurants = sortRestaurants(Array.isArray(sc.restaurants) ? sc.restaurants : []);
     state.homeNextOffset = sc.next_offset ?? 0;
     state.homeHasMore = !!sc.has_more;
     state.homeLoadingMore = false;
     state.recentOrders = Array.isArray(sc.recent_orders) ? sc.recent_orders : [];
-    state.query = sc.query ?? "";
     // A fresh open_store home doesn't carry an active category (Task 9) —
     // start with neither chip nor any transient UI state selected.
     state.activeCatQuery = null;
@@ -2209,45 +2305,36 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     return;
   }
 
-  // Seeding a restaurant screen — discard any in-flight home search so a late
-  // search_restaurants response can't clobber state after the swap.
+  // Seeding a restaurant screen — discard any in-flight home search / load-more
+  // so a late response can't clobber state after the swap.
   searchToken++;
-  state.homeLoadingMore = false; // discard any in-flight "load more" — leaving home
+  state.homeLoadingMore = false;
   state.screen = "restaurant";
   state.restaurant = sc.restaurant ?? null;
   state.restaurantId = sc.restaurant?.id ?? null;
   state.addressId = sc.entry?.address_id || null;
-  state.items = Array.isArray(sc.menu?.items) ? sc.menu.items : [];
-  state.categories = [...groupByCategory(state.items).keys()];
-
-  const entryCategory = sc.entry?.category;
-  state.activeCategory =
-    entryCategory && state.categories.includes(entryCategory) ? entryCategory : state.categories[0] ?? null;
-
   resetRestaurantScopedState();
 
-  // Prefilled in-menu search (the `query` overload for the ambiguous-item
-  // case): open the menu already filtered to the matches so the user picks.
-  // Set AFTER resetRestaurantScopedState (which clears menuQuery). item_id
-  // deep-link below takes precedence — the two are never sent together.
-  const entrySearch = (sc.entry?.search ?? "").trim();
-  if (entrySearch) state.menuQuery = entrySearch;
+  const deepLink: DeepLink = {
+    itemId: sc.entry?.item_id ?? "",
+    search: (sc.entry?.search ?? "").trim(),
+  };
 
-  // Deep-linked item_id resolves to a FOCUSED single-item view as the primary
-  // screen: a customizable item opens the customize sheet (one guarded
-  // get_item_options fetch — unchanged); a simple item renders a focused card
-  // with NO tool call at all. An unresolved/absent id falls back to the menu.
-  const entryItemId = sc.entry?.item_id;
-  const entryItem = entryItemId ? itemById(entryItemId) : undefined;
-  if (entryItem && entryItem.customizable) {
-    render();
-    void openCustomize(entryItem.id);
+  if (sc.menu && Array.isArray(sc.menu.items) && sc.menu.items.length > 0) {
+    // Server seeded the full menu (backward-compat with the pre-instant-open
+    // server) — apply it straight away.
+    state.items = sc.menu.items;
+    applyMenuDeepLink(deepLink);
     return;
   }
-  if (entryItem) {
-    state.focusedItemId = entryItem.id; // simple item — focused card, no fetch
-  }
+
+  // Loading shell — fetch the menu ourselves under the scooter animation.
+  state.items = [];
+  state.categories = [];
+  state.activeCategory = null;
+  state.menuLoading = true;
   render();
+  void fetchMenuThenApply(state.restaurantId ?? (sc.restaurant?.id ?? ""), deepLink);
 }
 
 // applyDisplayModeAttr stamps the current display mode on <html> as
@@ -2343,7 +2430,10 @@ export function bootstrap(): void {
   app.ontoolresult = (result) => {
     const sc = result.structuredContent as unknown as OpenStoreOut | undefined;
     if (!sc || !sc.screen) return;
-    if (sc.screen === "restaurant" && (!sc.menu || !Array.isArray(sc.menu.items))) return;
+    // A restaurant screen is valid with a menu OR as a loading shell (the
+    // widget then fetches the menu itself). Drop only a malformed result that
+    // is neither.
+    if (sc.screen === "restaurant" && !sc.loading && (!sc.menu || !Array.isArray(sc.menu.items))) return;
     seedFromOpenStore(sc);
   };
 
