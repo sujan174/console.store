@@ -121,7 +121,9 @@ function itemControl(item: MenuItemData, qty: number): string {
     return `<span class="badge-soldout">sold out</span>`;
   }
   if (item.customizable) {
-    return `<button type="button" data-customize="${esc(item.id)}" class="btn">customize</button>`;
+    // One unified "add" affordance: tapping it opens the customize sheet
+    // (options are picked there, then added). No separate "customize" label.
+    return `<button type="button" data-customize="${esc(item.id)}" class="btn">${icon("plus", 14)} add</button>`;
   }
   if (qty > 0) {
     return (
@@ -176,8 +178,10 @@ export function renderMenu(state: AppState): string {
   const rows = items.length
     ? `<div class="stagger">${items.map((item, i) => itemRow(item, state.pending, i)).join("")}</div>`
     : `<div style="padding:16px 0;color:var(--text-muted);font-size:13px">${emptyMsg}</div>`;
+  const back = `<button type="button" data-menu-back class="btn" style="margin-bottom:10px">${icon("arrow-left", 14)} search</button>`;
   return (
     `<h2 class="sr-only">Ordering app: browse ${esc(title)}'s menu by category, add or customize items, and check out — all in one window.</h2>` +
+    back +
     header(title, "estimated prices — the real bill shows at checkout") +
     `<div class="store-layout">` +
     menuSidebar(state.categories, state.activeCategory) +
@@ -186,6 +190,9 @@ export function renderMenu(state: AppState): string {
     rows +
     `</div>` +
     `</div>` +
+    (state.cartSyncError
+      ? `<div style="font-size:12px;color:var(--text-warning);margin-top:8px">${esc(state.cartSyncError)}</div>`
+      : "") +
     cartBar(state.pending)
   );
 }
@@ -354,6 +361,22 @@ function billLines(bill: CartBill): string {
 // Card shell.
 function cardShell(inner: string): string {
   return `<div class="card" style="max-width:420px">${inner}</div>`;
+}
+
+// renderConflict is the menu-level cross-restaurant prompt raised by syncCart on
+// the first add when the real Swiggy cart holds a DIFFERENT restaurant (guarded
+// BEFORE any write — invariant 3). "keep" cancels adding here; "clear &
+// continue" clears the other cart and syncs this restaurant's items.
+export function renderConflict(state: AppState, foreignRestaurant: string): string {
+  const other = foreignRestaurant.trim() ? esc(foreignRestaurant) : "another restaurant";
+  const here = esc(state.restaurant?.name || state.restaurant?.id || "this restaurant");
+  return (
+    `<h2 class="sr-only">Your cart has items from a different restaurant — keep it or clear it to add from ${here}.</h2>` +
+    cardShell(
+      `<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px"><span style="color:var(--text-warning);flex:none">${icon("alert-triangle", 20)}</span><div><div style="font-size:15px;font-weight:600">Different restaurant</div><div style="font-size:13px;color:var(--text-secondary);margin-top:3px">Your cart already has items from ${other}. Adding from ${here} clears that cart and starts fresh.</div></div></div>` +
+        `<div style="display:flex;gap:8px;margin-top:14px"><button type="button" data-conflict-keep class="btn" style="flex:1">keep ${other}</button><button type="button" data-conflict-clear class="btn btn-primary" style="flex:1">clear &amp; continue</button></div>`,
+    )
+  );
 }
 
 function loadingView(cart: CartState): string {

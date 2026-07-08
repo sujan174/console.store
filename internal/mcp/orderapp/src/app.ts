@@ -7,7 +7,7 @@
 import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
-import { groupByCategory, renderCartScreen, renderCustomizeScreen, renderFocusedItem, renderMenu } from "./screens";
+import { groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu } from "./screens";
 import { renderHome } from "./home";
 import {
   buildWireSelections,
@@ -285,6 +285,14 @@ export interface AppState {
   // (add/inc/dec pending) — a simple focused card fires ZERO tool calls, never
   // reaches get_item_options. Cleared on seed and on "back to menu".
   focusedItemId: string | null;
+  // Non-null while a cross-restaurant conflict is unresolved: the real cart
+  // holds a DIFFERENT restaurant's items, found on the first add of this
+  // restaurant session (syncCart's guard, before any write — invariant 3).
+  // Renders a menu-level keep/clear prompt; blocks cart sync until resolved.
+  conflict: { foreignRestaurant: string } | null;
+  // A non-blocking note from the debounced cart sync (e.g. over_cap) — shown
+  // inline on the menu; the pending cart stays editable so the user can adjust.
+  cartSyncError: string | null;
 }
 
 export const state: AppState = {
@@ -314,6 +322,8 @@ export const state: AppState = {
   customize: null,
   cart: null,
   focusedItemId: null,
+  conflict: null,
+  cartSyncError: null,
 };
 
 let root: HTMLElement | null = null;
@@ -328,6 +338,13 @@ function render(): void {
   if (!root) return;
   if (state.screen === "home") {
     root.innerHTML = renderHome(state);
+    return;
+  }
+  // A cross-restaurant conflict (raised by syncCart on first add) takes top
+  // precedence on the restaurant screen — the user must keep/clear before any
+  // more cart work happens.
+  if (state.conflict) {
+    root.innerHTML = renderConflict(state, state.conflict.foreignRestaurant);
     return;
   }
   if (state.cart) root.innerHTML = renderCartScreen(state, state.cart);
@@ -363,6 +380,7 @@ function addPending(item: MenuItemData): void {
   const line = state.pending.get(item.id);
   if (line) line.qty += 1;
   else state.pending.set(item.id, { key: item.id, itemId: item.id, name: item.name, price: item.price, qty: 1 });
+  scheduleCartSync();
 }
 
 function decPending(itemId: string): void {
@@ -370,6 +388,7 @@ function decPending(itemId: string): void {
   if (!line) return;
   line.qty -= 1;
   if (line.qty <= 0) state.pending.delete(itemId);
+  scheduleCartSync();
 }
 
 // The result of app.callServerTool — inferred from the App class itself so
@@ -478,6 +497,7 @@ function addCustomizedToCart(): void {
   else state.pending.set(key, { key, itemId: item.id, name, price, qty: 1, selections });
 
   state.customize = null;
+  scheduleCartSync();
   render();
 }
 
@@ -494,6 +514,122 @@ function addCustomizedToCart(): void {
 //       a double-fire risks a duplicate order).
 let cartToken = 0;
 let placeInFlight = false;
+
+// --- add-really-adds: debounced real-cart sync ---
+//
+// Every add/remove writes the pending set to the REAL Swiggy cart, but batched
+// (debounced) so rapid taps become ~one update_cart, never a per-tap burst —
+// the same ban-safe pattern the TUI uses (see CLAUDE.md settled cart sync; the
+// account was restricted once for a raw call-burst). Checkout then just
+// navigates to the (already-synced) cart and pulls the authoritative bill.
+//
+// The cross-restaurant conflict is guarded on the FIRST write of a restaurant
+// session (`cartVerifiedRestaurant`), BEFORE any update_cart (invariant 3): a
+// foreign non-empty cart raises the menu-level keep/clear prompt and nothing is
+// written until the user resolves it.
+let cartSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let cartVerifiedRestaurant: string | null = null;
+let cartSyncInFlight = false;
+const CART_SYNC_DEBOUNCE_MS = 550;
+
+function scheduleCartSync(): void {
+  if (cartSyncTimer) clearTimeout(cartSyncTimer);
+  cartSyncTimer = setTimeout(() => {
+    cartSyncTimer = null;
+    void syncCart();
+  }, CART_SYNC_DEBOUNCE_MS);
+}
+
+// flushCartSync forces any pending debounced sync to run now and awaits it, so
+// the server cart matches the pending set before prepare_order at checkout.
+async function flushCartSync(): Promise<void> {
+  if (cartSyncTimer) {
+    clearTimeout(cartSyncTimer);
+    cartSyncTimer = null;
+  }
+  await syncCart();
+}
+
+function pendingToWireItems(): WireCartItem[] {
+  return [...state.pending.values()].map((line) => {
+    const item: WireCartItem = { item_id: line.itemId, quantity: line.qty };
+    if (line.selections) {
+      if (line.selections.variants_v2.length) item.variants_v2 = line.selections.variants_v2;
+      if (line.selections.addons.length) item.addons = line.selections.addons;
+    }
+    return item;
+  });
+}
+
+// syncCart pushes the current pending set to the real Swiggy cart with ONE
+// update_cart. Guards the cross-restaurant conflict before the first write.
+// Best-effort: a failure leaves the optimistic pending in place (a later edit
+// or the checkout flush retries) and surfaces a non-blocking note.
+async function syncCart(): Promise<void> {
+  if (!app || !state.addressId || !state.restaurantId) return;
+  if (state.conflict) return; // waiting on the user's keep/clear decision
+  if (cartSyncInFlight) {
+    scheduleCartSync(); // coalesce — run again after the in-flight one settles
+    return;
+  }
+  cartSyncInFlight = true;
+  const restaurantId = state.restaurantId;
+  try {
+    // Conflict guard, once per restaurant session, before the first write.
+    if (cartVerifiedRestaurant !== restaurantId) {
+      const got = await app.callServerTool({
+        name: "get_cart",
+        arguments: { address_id: state.addressId },
+      });
+      if (state.restaurantId !== restaurantId) return; // navigated away mid-flight
+      if (!got.isError) {
+        const existing = readBill((got.structuredContent as { cart?: unknown } | undefined)?.cart);
+        if (existing.lines.length > 0 && isForeignCart(existing.restaurant)) {
+          state.conflict = { foreignRestaurant: existing.restaurant };
+          render();
+          return; // do NOT write — wait for keep/clear
+        }
+      }
+      // Either no foreign cart, or get_cart errored (empty-cart is an MCP error
+      // on Swiggy). update_cart replaces the whole cart for this restaurant, so
+      // a nameless/empty existing cart is safe to overwrite; a proven foreign
+      // one was already caught above.
+      cartVerifiedRestaurant = restaurantId;
+    }
+
+    const args: Record<string, unknown> = {
+      address_id: state.addressId,
+      restaurant_id: restaurantId,
+      items: pendingToWireItems(),
+    };
+    if (state.restaurant?.name) args.restaurant_name = state.restaurant.name;
+
+    const result = await app.callServerTool({ name: "update_cart", arguments: args });
+    if (state.restaurantId !== restaurantId) return;
+    state.cartSyncError = result.isError ? splitError(toolErrorText(result)).message : null;
+    if (result.isError) render(); // surface e.g. over_cap inline; pending stays editable
+  } catch {
+    // Network hiccup — leave pending as-is; a later edit or the checkout flush retries.
+  } finally {
+    cartSyncInFlight = false;
+  }
+}
+
+// resolveConflictClear handles the menu-level conflict prompt's "clear &
+// continue": clear the foreign Swiggy cart, mark this restaurant as owning the
+// cart, then sync the pending items.
+async function resolveConflictClear(): Promise<void> {
+  if (!app || !state.restaurantId) return;
+  state.conflict = null;
+  render();
+  try {
+    await app.callServerTool({ name: "clear_cart", arguments: {} });
+  } catch {
+    // Best-effort — update_cart replaces the whole cart anyway.
+  }
+  cartVerifiedRestaurant = state.restaurantId; // cleared → this restaurant now owns the cart
+  void syncCart();
+}
 
 function num(v: unknown): number {
   if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -598,51 +734,34 @@ function priciestLineName(bill: CartBill): string {
 async function openCart(): Promise<void> {
   const token = ++cartToken;
   state.customize = null;
-  state.cart = { status: "loading", message: "checking your cart…" };
-  render();
 
-  if (!app || !state.addressId || !state.restaurantId) {
-    state.cart = { status: "error", error: "missing address or restaurant context" };
-    render();
-    return;
-  }
   if (state.pending.size === 0) {
     state.cart = { status: "error", error: "your cart is empty — add something first" };
     render();
     return;
   }
-
-  try {
-    const result = await app.callServerTool({
-      name: "get_cart",
-      arguments: { address_id: state.addressId },
-    });
-    if (cartToken !== token) return; // superseded — discard
-
-    if (result.isError) {
-      // Couldn't READ the cart → we can't prove there's no foreign cart, so we
-      // must not lean on update_cart's silent auto-replace (invariant 3). Route
-      // through clear_cart first (harmless {cleared:false} on an empty cart)
-      // before materialize — no foreign cart ever reaches update_cart unguarded.
-      // Swiggy can return an MCP error for an empty cart, so this is a hot path.
-      await clearThenMaterialize(token);
-      return;
-    }
-
-    const sc = result.structuredContent as { cart?: unknown } | undefined;
-    const existing = readBill(sc?.cart);
-    if (existing.lines.length > 0 && isForeignCart(existing.restaurant)) {
-      state.cart = { status: "conflict", foreignRestaurant: existing.restaurant };
-      render();
-      return;
-    }
-
-    await materializeCart(token);
-  } catch (err) {
-    if (cartToken !== token) return;
-    state.cart = { status: "error", error: err instanceof Error ? err.message : String(err) };
+  if (!app || !state.addressId || !state.restaurantId) {
+    state.cart = { status: "error", error: "missing address or restaurant context" };
     render();
+    return;
   }
+
+  state.cart = { status: "loading", message: "loading your cart…" };
+  render();
+
+  // "Add" already wrote the cart (debounced syncCart). Flush any pending sync
+  // so the server matches the pending set, then pull the authoritative bill.
+  // The cross-restaurant conflict was already guarded at add time.
+  await flushCartSync();
+  if (cartToken !== token) return; // superseded
+  if (state.conflict) {
+    // A conflict surfaced during the flush — its menu-level keep/clear prompt
+    // now owns the screen; abort checkout until the user resolves it.
+    state.cart = null;
+    render();
+    return;
+  }
+  await prepareBill(token, 1);
 }
 
 // The update_cart line shape (order-app-tool-schemas.md). variants_v2 / addons
@@ -1082,7 +1201,7 @@ function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear]",
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear]",
   );
   if (!el) return;
 
@@ -1186,6 +1305,30 @@ function onRootClick(evt: MouseEvent): void {
   if (el.dataset.focusBack !== undefined) {
     state.focusedItemId = null;
     render();
+    return;
+  }
+
+  // Restaurant menu → back to the store home (global search). Home state
+  // (categories/results/address) is preserved, so the last search reappears.
+  if (el.dataset.menuBack !== undefined) {
+    state.screen = "home";
+    state.menuQuery = "";
+    render();
+    return;
+  }
+
+  // Cross-restaurant conflict — keep the existing (other) cart: cancel adding
+  // here by dropping the local pending, and stay on the menu.
+  if (el.dataset.conflictKeep !== undefined) {
+    state.pending = new Map();
+    state.conflict = null;
+    render();
+    return;
+  }
+  // Cross-restaurant conflict — clear & continue: clear the foreign cart, then
+  // sync this restaurant's pending items.
+  if (el.dataset.conflictClear !== undefined) {
+    void resolveConflictClear();
     return;
   }
 
@@ -1365,7 +1508,16 @@ function resetRestaurantScopedState(): void {
   state.cart = null;
   state.focusedItemId = null;
   state.menuQuery = ""; // a fresh restaurant screen never opens mid-search
+  state.conflict = null;
+  state.cartSyncError = null;
   cartToken++; // discard any in-flight checkout from a previous restaurant
+  // Fresh restaurant → re-run the cross-restaurant conflict guard on its first
+  // add, and drop any debounced sync queued for the previous restaurant.
+  cartVerifiedRestaurant = null;
+  if (cartSyncTimer) {
+    clearTimeout(cartSyncTimer);
+    cartSyncTimer = null;
+  }
 }
 
 // seedFromOpenStore stores the open_store result and renders the router's
