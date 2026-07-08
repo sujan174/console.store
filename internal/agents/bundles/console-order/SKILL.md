@@ -29,10 +29,10 @@ already gate themselves, so calling it just to obtain an `address_id` to
 hand back is a wasted round trip that delays everything the user sees. The
 address you'd pass is the same one these tools pick on their own.
 
-- If any call fails with a **`not signed in`** error → call `sign_in`, give
-  the user the `authorize_url` link, tell them to sign in, then retry the
-  original call. Don't guess an address, don't build a cart, don't retry the
-  render until they're signed in.
+- If the user is not signed in, DO NOT call `sign_in` or paste a link. Just call
+  `open_store` as normal — when signed out it opens the app on a Sign-in screen
+  with a button that signs the user in and then continues to their request
+  automatically. You never hand over an authorize link.
 - If the account has **no saved address yet**, `open_store{}` (the store
   home) still opens fine — the home's address chip lazily calls
   `list_addresses` and persists the choice via `set_address`. Never open a

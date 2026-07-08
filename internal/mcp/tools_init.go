@@ -17,7 +17,7 @@ type InitializeOut struct {
 
 func (s *Server) handleInitialize(ctx context.Context, _ *mcp.CallToolRequest, _ InitializeIn) (*mcp.CallToolResult, InitializeOut, error) {
 	signedIn := s.auth != nil && s.auth.TokenPresent(ctx)
-	out := InitializeOut{SignedIn: signedIn, Note: "if signed_out, call sign_in and give the user the link; if address is null, open_store home so they pick an address"}
+	out := InitializeOut{SignedIn: signedIn, Note: "if signed_out, just open_store — it opens an in-widget Sign-in screen and continues automatically; never paste an authorize link. If address is null, open_store home so they pick an address"}
 	if !signedIn {
 		return nil, out, nil
 	}
