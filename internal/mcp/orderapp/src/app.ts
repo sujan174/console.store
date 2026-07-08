@@ -36,8 +36,9 @@ export interface MenuItemData {
 
 export interface OpenStoreRestaurant {
   id: string;
-  // Not currently sent by open_store (only `id`) — kept optional so the UI
-  // degrades gracefully if a future server build adds it.
+  // open_store now sends both `id` and `name` (the resolved display name).
+  // Kept optional so the UI degrades gracefully against older server builds
+  // that only sent `id`.
   name?: string;
 }
 
@@ -1949,6 +1950,7 @@ function onRootClick(evt: MouseEvent): void {
   if (el.dataset.menuBack !== undefined) {
     state.screen = "home";
     state.menuQuery = "";
+    state.homeLoading = false; // never land back on home with a dormant stuck scooter
     render();
     return;
   }
@@ -2301,6 +2303,8 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     state.homeNextOffset = sc.next_offset ?? 0;
     state.homeHasMore = !!sc.has_more;
     state.homeLoadingMore = false;
+    searchToken++;            // supersede any in-flight home search from a prior shell open
+    state.homeLoading = false; // this path has nothing loading — never leave the scooter up
     state.recentOrders = Array.isArray(sc.recent_orders) ? sc.recent_orders : [];
     // A fresh open_store home doesn't carry an active category (Task 9) —
     // start with neither chip nor any transient UI state selected.
