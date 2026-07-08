@@ -148,6 +148,12 @@ export interface PendingLine {
   // Present only for a line added from the customize sheet — the resolved
   // selections shaped for Task 6's update_cart call.
   selections?: PendingSelections;
+  // Stamped from a successful update_cart's returned <Cart> lines (M3) — a
+  // browse-time sold-out heads-up. Defaults to available (undefined/true);
+  // only an explicit `false` from the server flips it. Placement itself is
+  // still blocked at the bill (CartBillLine.available), same as always —
+  // this is purely an earlier signal on the cart bar/menu.
+  available?: boolean;
 }
 
 // The customize sheet's state machine. `groups`/`selection` are only
@@ -608,6 +614,90 @@ let cartVerifiedRestaurant: string | null = null;
 let cartSyncChain: Promise<void> = Promise.resolve();
 const CART_SYNC_DEBOUNCE_MS = 550;
 
+// confirmedPending is the last state.pending snapshot we KNOW the server
+// agrees with — set after a successful update_cart and after a same-restaurant
+// pre-existing-cart seed (M4), deep-cloned so later edits to `pending` never
+// mutate it. `pending` is the SOLE source of truth for the REPLACE-semantics
+// update_cart (H3), so on a failed write we roll `pending` back to this
+// snapshot rather than leave a phantom optimistic line in place. Reset to
+// null in resetRestaurantScopedState (a new restaurant has no confirmed
+// baseline yet — an empty Map is the right fallback there).
+let confirmedPending: Map<string, PendingLine> | null = null;
+// lastSyncOk mirrors the outcome of the most recent syncCartOnce: true on a
+// clean update_cart (or when there was simply nothing to do — no context,
+// waiting on a conflict decision, or a no-op guard), false on an isError
+// result or a thrown error. openCart (H4) checks this after flushCartSync so
+// it never bills against a cart the server never actually saw.
+let lastSyncOk = true;
+
+// clonePendingLine deep-clones one PendingLine, including its nested
+// selections arrays, so a confirmedPending snapshot can never be mutated by a
+// later edit to the live `state.pending` line objects.
+function clonePendingLine(line: PendingLine): PendingLine {
+  return {
+    key: line.key,
+    itemId: line.itemId,
+    name: line.name,
+    price: line.price,
+    qty: line.qty,
+    available: line.available,
+    selections: line.selections
+      ? {
+          variants_v2: line.selections.variants_v2.map((s) => ({ ...s })),
+          variants_legacy: line.selections.variants_legacy.map((s) => ({ ...s })),
+          addons: line.selections.addons.map((s) => ({ ...s })),
+        }
+      : undefined,
+  };
+}
+
+function clonePendingMap(map: Map<string, PendingLine>): Map<string, PendingLine> {
+  const out = new Map<string, PendingLine>();
+  for (const [key, line] of map) out.set(key, clonePendingLine(line));
+  return out;
+}
+
+// rollbackPending restores state.pending to the last confirmed snapshot (or
+// an empty cart if we never had one) — used on a failed/threw syncCartOnce
+// (H3) so `pending` can never diverge from the REPLACE-semantics server
+// truth.
+function rollbackPending(): void {
+  state.pending = confirmedPending ? clonePendingMap(confirmedPending) : new Map();
+}
+
+// seedExistingCartLines (M4) folds a pre-existing, SAME-restaurant, non-empty
+// Swiggy cart's lines into `pending` as plain qty lines — get_cart returns no
+// selection detail, so a seeded line is simple (no variants/addons), mirroring
+// the TUI's seedCartFromLive. Only seeds ids not already tracked this session
+// so a fresher local edit is never clobbered.
+function seedExistingCartLines(lines: CartBillLine[]): void {
+  for (const line of lines) {
+    if (!line.item_id) continue;
+    if (state.pending.has(line.item_id)) continue; // already have a session line — keep it
+    state.pending.set(line.item_id, {
+      key: line.item_id,
+      itemId: line.item_id,
+      name: line.name,
+      price: line.price,
+      qty: line.quantity,
+      available: line.available,
+    });
+  }
+}
+
+// stampAvailabilityFromCart (M3) reads a successful update_cart's returned
+// <Cart> lines and flags sold-out on the matching pending lines — a
+// browse-time heads-up (placement stays blocked by the bill regardless).
+function stampAvailabilityFromCart(raw: unknown): void {
+  const cart = readBill(raw);
+  if (!cart.lines.length) return;
+  const byId = new Map(cart.lines.map((l) => [l.item_id, l.available]));
+  for (const line of state.pending.values()) {
+    const avail = byId.get(line.itemId);
+    if (avail !== undefined) line.available = avail;
+  }
+}
+
 let pendingSyncs = 0;
 
 function setSyncBusy(busy: boolean): void {
@@ -666,15 +756,27 @@ function pendingToWireItems(): WireCartItem[] {
 // syncCartOnce pushes the CURRENT pending set to the real Swiggy cart with ONE
 // update_cart (reads state.pending at run time, so a chained/flushed call always
 // writes the latest). Guards the cross-restaurant conflict before the first
-// write per restaurant. Runs serialized on cartSyncChain — never concurrently.
-// Best-effort: a failure leaves the optimistic pending in place (a later edit or
-// the checkout flush retries) and surfaces a non-blocking note.
+// write per restaurant, seeding a same-restaurant pre-existing cart into
+// pending first (M4). Runs serialized on cartSyncChain — never concurrently.
+// On a FAILED write (isError or a throw), `pending` is rolled back to the last
+// confirmed snapshot (H3) — `pending` is the sole source of truth for the
+// REPLACE-semantics update_cart, so a phantom optimistic line must never
+// survive a failed sync. `lastSyncOk` records the outcome for openCart (H4).
 async function syncCartOnce(): Promise<void> {
-  if (!app || !state.addressId || !state.restaurantId) return;
-  if (state.conflict) return; // waiting on the user's keep/clear decision
+  if (!app || !state.addressId || !state.restaurantId) {
+    lastSyncOk = true; // nothing to do
+    return;
+  }
+  if (state.conflict) {
+    lastSyncOk = true; // waiting on the user's keep/clear decision, not a failure
+    return;
+  }
   // Never touch the cart once an order is placing or placed (a late chained sync
   // must not wipe/rewrite a cart that's already been consumed by place_order).
-  if (placeInFlight || state.cart?.status === "placed") return;
+  if (placeInFlight || state.cart?.status === "placed") {
+    lastSyncOk = true;
+    return;
+  }
 
   const restaurantId = state.restaurantId;
   log("syncCartOnce:start", { restaurantId, verified: cartVerifiedRestaurant === restaurantId, pending: state.pending.size });
@@ -685,7 +787,10 @@ async function syncCartOnce(): Promise<void> {
         name: "get_cart",
         arguments: { address_id: state.addressId },
       });
-      if (state.restaurantId !== restaurantId) return; // navigated away mid-flight
+      if (state.restaurantId !== restaurantId) {
+        lastSyncOk = true; // navigated away mid-flight — not a failure
+        return;
+      }
       if (!got.isError) {
         const existing = readBill((got.structuredContent as { cart?: unknown } | undefined)?.cart);
         log("syncCartOnce:get_cart", { existingRestaurant: existing.restaurant, existingLines: existing.lines.length });
@@ -693,7 +798,15 @@ async function syncCartOnce(): Promise<void> {
           log("syncCartOnce:conflict", { foreign: existing.restaurant });
           state.conflict = { foreignRestaurant: existing.restaurant };
           render();
+          lastSyncOk = true; // a pending user decision, not a failure
           return; // do NOT write — wait for keep/clear
+        }
+        if (existing.lines.length > 0) {
+          // Same restaurant, non-empty pre-existing cart (added outside this
+          // session) — seed it into pending BEFORE the first replace so those
+          // items aren't silently dropped (M4; TUI parity: seedCartFromLive).
+          log("syncCartOnce:seed", { lines: existing.lines.length });
+          seedExistingCartLines(existing.lines);
         }
       } else {
         log("syncCartOnce:get_cart_error", { text: toolErrorText(got) });
@@ -703,6 +816,10 @@ async function syncCartOnce(): Promise<void> {
       // a nameless/empty existing cart is safe to overwrite; a proven foreign
       // one was already caught above.
       cartVerifiedRestaurant = restaurantId;
+      // Whatever is in `pending` right now (session adds + any seeded lines) is
+      // the confirmed server-side truth as of this get_cart — the fallback if
+      // the very next update_cart below fails.
+      confirmedPending = clonePendingMap(state.pending);
     }
 
     const args: Record<string, unknown> = {
@@ -713,13 +830,31 @@ async function syncCartOnce(): Promise<void> {
     if (state.restaurant?.name) args.restaurant_name = state.restaurant.name;
 
     const result = await app.callServerTool({ name: "update_cart", arguments: args });
-    if (state.restaurantId !== restaurantId) return;
+    if (state.restaurantId !== restaurantId) {
+      lastSyncOk = true; // navigated away mid-flight — not a failure
+      return;
+    }
     log("syncCartOnce:update_cart", { isError: result.isError, items: (args.items as unknown[]).length });
-    state.cartSyncError = result.isError ? splitError(toolErrorText(result)).message : null;
-    if (result.isError) render(); // surface e.g. over_cap inline; pending stays editable
+
+    if (result.isError) {
+      state.cartSyncError = splitError(toolErrorText(result)).message;
+      lastSyncOk = false;
+      rollbackPending(); // revert the phantom optimistic line — pending == server truth
+      render(); // surface e.g. over_cap inline
+      return;
+    }
+
+    state.cartSyncError = null;
+    lastSyncOk = true;
+    stampAvailabilityFromCart((result.structuredContent as { cart?: unknown } | undefined)?.cart); // M3
+    confirmedPending = clonePendingMap(state.pending);
   } catch (err) {
-    // Network hiccup — leave pending as-is; a later edit or the checkout flush retries.
+    // Unknown server state — roll back rather than risk a phantom line (H3).
     log("syncCartOnce:threw", { err: err instanceof Error ? err.message : String(err) });
+    state.cartSyncError = err instanceof Error ? err.message : String(err);
+    lastSyncOk = false;
+    rollbackPending();
+    render();
   }
 }
 
@@ -866,6 +1001,20 @@ async function openCart(): Promise<void> {
     // A conflict surfaced during the flush — its menu-level keep/clear prompt
     // now owns the screen; abort checkout until the user resolves it.
     state.cart = null;
+    render();
+    return;
+  }
+  if (!lastSyncOk) {
+    // The flush's write failed (H4) — pending has already been rolled back to
+    // the last confirmed snapshot (H3), so it matches the server, but that
+    // server state is NOT what the user just tried to add. Never bill against
+    // a cart the server never actually saw; surface the error and offer retry
+    // instead of silently proceeding to prepare_order.
+    state.cart = {
+      status: "error",
+      error: state.cartSyncError || "couldn't sync your cart — check your connection and try again",
+      canResync: true,
+    };
     render();
     return;
   }
@@ -1656,6 +1805,10 @@ function resetRestaurantScopedState(): void {
   // Fresh restaurant → re-run the cross-restaurant conflict guard on its first
   // add, and drop any debounced sync queued for the previous restaurant.
   cartVerifiedRestaurant = null;
+  // No confirmed baseline yet for this restaurant — an empty Map is the right
+  // rollback target (H3) until the first get_cart/update_cart establishes one.
+  confirmedPending = null;
+  lastSyncOk = true;
   if (cartSyncTimer) {
     clearTimeout(cartSyncTimer);
     cartSyncTimer = null;

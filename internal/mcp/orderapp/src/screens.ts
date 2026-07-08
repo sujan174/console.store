@@ -154,7 +154,13 @@ function cartBar(state: AppState): string {
   const saving = state.cartSyncBusy
     ? `<span style="font-size:11px;color:var(--text-muted);margin-left:8px">${icon("loader", 12)} saving…</span>`
     : "";
-  return `<div class="cartbar"><span style="font-size:14px">${n} in cart · ${money(pendingTotal(pending))}${saving}</span><button type="button" data-checkout class="btn btn-primary">checkout →</button></div>`;
+  // M3: a lightweight browse-time heads-up when the last sync's returned cart
+  // flagged a pending line sold-out. Placement itself is still blocked at the
+  // bill (CartBillLine.available) — this is just an earlier signal.
+  const soldOutNote = [...pending.values()].some((line) => line.available === false)
+    ? `<div style="font-size:11px;color:var(--text-warning);margin-bottom:6px">an item in your cart went sold out — check before checkout</div>`
+    : "";
+  return `${soldOutNote}<div class="cartbar"><span style="font-size:14px">${n} in cart · ${money(pendingTotal(pending))}${saving}</span><button type="button" data-checkout class="btn btn-primary">checkout →</button></div>`;
 }
 
 function header(title: string, sub: string): string {
