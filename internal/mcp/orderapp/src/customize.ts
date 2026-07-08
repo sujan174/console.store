@@ -57,6 +57,13 @@ export interface CuratedGroup {
   min: number; // 1 for base/single; group.min for multi (0 = optional, >=1 = required)
   max: number; // choice cap; 1 for base/single, group.max for multi
   choices: CuratedChoice[];
+  // Carried straight from the raw group so buildWireSelections can route the
+  // wire channel by variant+absolute (TUI parity — CLAUDE.md's Go
+  // CartItemIn.VariantsLegacy), independent of the curated `kind` bucketing
+  // above (kind is a UI/curation concept; variant/absolute is the wire
+  // routing concept — they overlap for "base" but are otherwise unrelated).
+  variant: boolean;
+  absolute: boolean;
 }
 
 const MAX_SURFACED_GROUPS = 4;
@@ -73,25 +80,45 @@ function classify(g: RawOptionGroup): CuratedGroupKind | null {
   return null; // min0/max0 or nonsense cardinality — droppable noise
 }
 
+// CurateResult carries the curated groups plus an `unfulfillable` signal: set
+// when a REQUIRED group (base, or min>=1) has zero in-stock choices left
+// after filtering — the item can never be validly customized (TUI parity:
+// the TUI keeps such a group unselectable and blocks via Valid()===false;
+// the app instead surfaces a hard error and refuses to render an add
+// button — see openCustomize's error branch in app.ts).
+export interface CurateResult {
+  groups: CuratedGroup[];
+  unfulfillable: boolean;
+}
+
 // curateGroups implements the app-data.md curation rules: drop sold-out
 // choices, drop internal/noise groups (duplicate names, an OPTIONAL lone ₹0
 // mirror of the base selector), and surface only the highest-signal groups
 // (base first, then required singles, then multis). A required group
-// (min>=1) is NEVER dropped as noise — the user must be able to pick it.
-export function curateGroups(raw: RawOptionGroup[]): CuratedGroup[] {
+// (min>=1) is NEVER dropped as noise — the user must be able to pick it —
+// and the MAX_SURFACED_GROUPS cap applies ONLY to optional multis: capping a
+// required group would mean it's never selected/sent and Swiggy rejects the
+// cart, so every required group always survives even past the 4th slot.
+export function curateGroups(raw: RawOptionGroup[]): CurateResult {
   const seenNames = new Set<string>();
   const base: CuratedGroup[] = [];
   const single: CuratedGroup[] = [];
   const multi: CuratedGroup[] = [];
+  let unfulfillable = false;
 
   for (const g of raw) {
     const kind = classify(g);
     if (!kind) continue;
 
-    const choices = (g.choices ?? []).filter((c) => c.in_stock);
-    if (choices.length === 0) continue; // nothing left to pick
-
     const required = kind === "base" || g.min >= 1;
+    const choices = (g.choices ?? []).filter((c) => c.in_stock);
+    if (choices.length === 0) {
+      // A required group with nothing left in stock can never be validly
+      // selected — block the whole item instead of silently dropping the
+      // group (M2). An optional group with nothing left is just noise.
+      if (required) unfulfillable = true;
+      continue; // nothing left to pick
+    }
 
     // A lone ₹0 single-choice OPTIONAL group is just noise that mirrors the
     // variant selector — drop it (app-data.md §3). A required group is never
@@ -111,11 +138,19 @@ export function curateGroups(raw: RawOptionGroup[]): CuratedGroup[] {
       min: kind === "multi" ? Math.max(0, g.min) : 1,
       max: kind === "multi" ? Math.max(1, g.max) : 1,
       choices: choices.map((c) => ({ id: c.id, name: c.name.trim(), price: c.price })),
+      variant: g.variant,
+      absolute: g.absolute,
     };
     (kind === "base" ? base : kind === "single" ? single : multi).push(curated);
   }
 
-  return [...base, ...single, ...multi].slice(0, MAX_SURFACED_GROUPS);
+  // base + single are always required (see classify); multi splits into
+  // required (min>=1) and optional (min===0). Keep every required group;
+  // cap only the optional multis to what's left of MAX_SURFACED_GROUPS.
+  const requiredGroups = [...base, ...single, ...multi.filter((g) => g.min >= 1)];
+  const optionalGroups = multi.filter((g) => g.min === 0);
+  const room = Math.max(0, MAX_SURFACED_GROUPS - requiredGroups.length);
+  return { groups: [...requiredGroups, ...optionalGroups.slice(0, room)], unfulfillable };
 }
 
 // defaultSelection pre-picks the first in-stock choice for base/single
@@ -194,22 +229,35 @@ export function selectionKey(itemId: string, selection: Map<string, Set<string>>
 }
 
 // --- update_cart wire shape (Task 6 sends these verbatim) ---
-
+//
+// Three channels, routed the same way the TUI routes a selection (CLAUDE.md
+// / tui-parity-fixes.md H1) — by the group's raw `variant`/`absolute` flags,
+// NOT by the curated `kind`:
+//   variant && absolute  -> variants_v2      (replaces the item base price)
+//   variant && !absolute -> variants_legacy  (additive; Go CartItemIn.VariantsLegacy)
+//   !variant             -> addons           (additive)
+// `kind==="base"` and `variant&&absolute` coincide in practice (classify()
+// only calls a group "base" when both are true), but the routing here keys
+// off the raw flags directly so it stays correct even if curation logic
+// changes independently of the wire contract.
 export interface PendingSelections {
   variants_v2: { group_id: string; variation_id: string }[];
+  variants_legacy: { group_id: string; variation_id: string }[];
   addons: { group_id: string; choice_id: string }[];
 }
 
 export function buildWireSelections(groups: CuratedGroup[], selection: Map<string, Set<string>>): PendingSelections {
   const variants_v2: { group_id: string; variation_id: string }[] = [];
+  const variants_legacy: { group_id: string; variation_id: string }[] = [];
   const addons: { group_id: string; choice_id: string }[] = [];
   for (const g of groups) {
     const chosen = selection.get(g.id);
     if (!chosen) continue;
     for (const choiceId of chosen) {
-      if (g.kind === "base") variants_v2.push({ group_id: g.id, variation_id: choiceId });
+      if (g.variant && g.absolute) variants_v2.push({ group_id: g.id, variation_id: choiceId });
+      else if (g.variant) variants_legacy.push({ group_id: g.id, variation_id: choiceId });
       else addons.push({ group_id: g.id, choice_id: choiceId });
     }
   }
-  return { variants_v2, addons };
+  return { variants_v2, variants_legacy, addons };
 }

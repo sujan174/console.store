@@ -83,9 +83,10 @@ export interface HomeRestaurant {
 }
 
 // RecentOrderSel mirrors internal/localstore.PresetSel — one customization
-// choice on a placed line. `variant===true` is a variantsV2 pick (replaces
-// the base price, sent as variants_v2 to update_cart); `variant===false` is
-// an addon (sent as addons).
+// choice on a placed line. Routed the same 3-way channel as a fresh
+// customize pick (customize.ts buildWireSelections / H1, H2):
+// `variant && absolute` -> variants_v2 (replaces the base price);
+// `variant && !absolute` -> variants_legacy (additive); `!variant` -> addons.
 export interface RecentOrderSel {
   groupId: string;
   choiceId: string;
@@ -513,7 +514,23 @@ async function openCustomize(itemId: string): Promise<void> {
     }
 
     const out = result.structuredContent as unknown as OptionsToolOut | undefined;
-    const groups = curateGroups(out?.groups ?? []);
+    const { groups, unfulfillable } = curateGroups(out?.groups ?? []);
+    if (unfulfillable) {
+      // A required group (base or min>=1) has zero in-stock choices left —
+      // the item can't be validly customized (M2; TUI parity: TUI keeps it
+      // unselectable and blocks via Valid()===false). Surface a hard error
+      // instead of a normal ready sheet — the error branch renders no add
+      // button (screens.ts renderCustomizeScreen).
+      state.customize = {
+        itemId,
+        status: "error",
+        error: "this item can't be added right now — a required option is sold out",
+        groups: [],
+        selection: new Map(),
+      };
+      render();
+      return;
+    }
     state.customize = { itemId, status: "ready", groups, selection: defaultSelection(groups) };
     render();
   } catch (err) {
@@ -639,6 +656,7 @@ function pendingToWireItems(): WireCartItem[] {
     const item: WireCartItem = { item_id: line.itemId, quantity: line.qty };
     if (line.selections) {
       if (line.selections.variants_v2.length) item.variants_v2 = line.selections.variants_v2;
+      if (line.selections.variants_legacy.length) item.variants_legacy = line.selections.variants_legacy;
       if (line.selections.addons.length) item.addons = line.selections.addons;
     }
     return item;
@@ -854,12 +872,14 @@ async function openCart(): Promise<void> {
   await prepareBill(token, 1);
 }
 
-// The update_cart line shape (order-app-tool-schemas.md). variants_v2 / addons
-// are present only for customized lines (built in Task 5).
+// The update_cart line shape (order-app-tool-schemas.md). variants_v2 /
+// variants_legacy / addons are present only for customized lines (built in
+// Task 5; H1's 3-way routing — customize.ts buildWireSelections).
 interface WireCartItem {
   item_id: string;
   quantity: number;
   variants_v2?: { group_id: string; variation_id: string }[];
+  variants_legacy?: { group_id: string; variation_id: string }[];
   addons?: { group_id: string; choice_id: string }[];
 }
 
@@ -876,19 +896,12 @@ async function materializeCart(token: number): Promise<void> {
   state.cart = { status: "loading", message: "syncing your cart…" };
   render();
 
-  const items: WireCartItem[] = [...state.pending.values()].map((line) => {
-    const item: WireCartItem = { item_id: line.itemId, quantity: line.qty };
-    if (line.selections) {
-      if (line.selections.variants_v2.length) item.variants_v2 = line.selections.variants_v2;
-      if (line.selections.addons.length) item.addons = line.selections.addons;
-    }
-    return item;
-  });
-
+  // Single shared line-assembly (pendingToWireItems) so this and syncCartOnce
+  // can never drift on which wire channels a selection maps to (H1).
   const args: Record<string, unknown> = {
     address_id: state.addressId,
     restaurant_id: state.restaurantId,
-    items,
+    items: pendingToWireItems(),
   };
   if (state.restaurant?.name) args.restaurant_name = state.restaurant.name;
 
@@ -1240,8 +1253,17 @@ async function reorder(index: number): Promise<void> {
           selMap.set(s.groupId, set);
         }
         key = selectionKey(line.itemId, selMap);
+        // Same 3-way routing as a fresh customize pick (H1/H2): variant &&
+        // absolute -> variants_v2 (replaces base); variant && !absolute ->
+        // variants_legacy (additive); !variant -> addons. Ignoring `absolute`
+        // here previously sent every legacy variant pick as variants_v2.
         selections = {
-          variants_v2: sels.filter((s) => s.variant).map((s) => ({ group_id: s.groupId, variation_id: s.choiceId })),
+          variants_v2: sels
+            .filter((s) => s.variant && s.absolute)
+            .map((s) => ({ group_id: s.groupId, variation_id: s.choiceId })),
+          variants_legacy: sels
+            .filter((s) => s.variant && !s.absolute)
+            .map((s) => ({ group_id: s.groupId, variation_id: s.choiceId })),
           addons: sels.filter((s) => !s.variant).map((s) => ({ group_id: s.groupId, choice_id: s.choiceId })),
         };
       }
