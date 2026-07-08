@@ -7,7 +7,7 @@
 import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
-import { esc, groupByCategory, loadingBlock, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading } from "./screens";
+import { esc, groupByCategory, loadingBlock, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading, renderSignIn } from "./screens";
 import { renderHome } from "./home";
 import {
   buildWireSelections,
@@ -126,7 +126,8 @@ export interface RecentOrder {
 // ever populated on this branch). `restaurant`/`entry`/`menu` are therefore
 // all optional — home omits them.
 export interface OpenStoreOut {
-  screen: "home" | "restaurant";
+  screen: "home" | "restaurant" | "signed_out";
+  authorize_url?: string;
   address: AddrRefDTO;
   restaurant?: OpenStoreRestaurant;
   entry?: OpenStoreEntry;
@@ -241,7 +242,20 @@ export interface AppState {
   // browse/customize/checkout flow (all existing screens below). Render
   // precedence: screen==="home" short-circuits straight to renderHome();
   // everything else keeps its existing cart/customize/focused/menu order.
-  screen: "home" | "restaurant";
+  screen: "home" | "restaurant" | "signin";
+  // Signed-out gate (Task 2): the authorize URL to open, whether the sign-in
+  // button has already been tapped (drives the "waiting for sign-in" line),
+  // and the carried intent (restaurant/query/item/category) to resume once
+  // auth_status reports signed_in.
+  authorizeURL: string;
+  signinOpened: boolean;
+  signinIntent: {
+    restaurant_id?: string;
+    restaurant_name?: string;
+    query?: string;
+    item_id?: string;
+    category?: string;
+  };
   // The delivery address open_store resolved, on BOTH screens (home's
   // address-picker slot — Task 8 — and, on the restaurant screen, the same
   // address get_item_options/update_cart already use via addressId below).
@@ -339,6 +353,9 @@ export interface AppState {
 
 export const state: AppState = {
   screen: "home",
+  authorizeURL: "",
+  signinOpened: false,
+  signinIntent: {},
   address: null,
   homeCategories: [],
   restaurants: [],
@@ -455,6 +472,10 @@ function renderScreen(root: HTMLElement): void {
     pending: state.pending.size,
     syncBusy: state.cartSyncBusy,
   });
+  if (state.screen === "signin") {
+    root.innerHTML = renderSignIn(state);
+    return;
+  }
   if (state.screen === "home") {
     root.innerHTML = renderHome(state);
     return;
@@ -1838,10 +1859,17 @@ function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear]",
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin]",
   );
   if (!el) return;
   log("click", { action: Object.keys(el.dataset)[0] ?? "?" });
+
+  if (el.dataset.signin !== undefined) {
+    if (app && state.authorizeURL) void app.openLink({ url: state.authorizeURL });
+    state.signinOpened = true;
+    render();
+    return;
+  }
 
   if (el.dataset.addrOpen !== undefined) {
     if (state.addrPickerOpen) {
@@ -2348,7 +2376,108 @@ async function resolveRestaurantThenOpen(name: string, deepLink: DeepLink): Prom
 // (ONE get_menu or ONE search_restaurants call) instead of the server having
 // seeded it — a fully-seeded result (the current, unchanged server) still
 // applies straight away, unchanged.
+// authPollHandle is the single live auth_status poll. The signed-out gate starts
+// it; it stops itself the moment the token appears, then resumes the intent.
+let authPollHandle: number | null = null;
+
+function startAuthPoll(): void {
+  if (authPollHandle !== null) return; // already polling
+  authPollHandle = window.setInterval(() => {
+    void checkAuthOnce();
+  }, 2000);
+}
+
+function stopAuthPoll(): void {
+  if (authPollHandle !== null) {
+    window.clearInterval(authPollHandle);
+    authPollHandle = null;
+  }
+}
+
+// checkAuthOnce polls auth_status (a cheap local token check while signed out —
+// no Swiggy call). On signed_in it stops polling and resumes the carried intent.
+async function checkAuthOnce(): Promise<void> {
+  if (!app) return;
+  try {
+    const result = await app.callServerTool({ name: "auth_status", arguments: {} });
+    const sc = result.isError
+      ? undefined
+      : (result.structuredContent as { signed_in?: boolean } | undefined);
+    if (sc?.signed_in) {
+      stopAuthPoll();
+      await resumeAfterSignin();
+    }
+  } catch (err) {
+    console.error("[order-app] auth poll failed", err);
+    // transient — keep polling
+  }
+}
+
+// resumeAfterSignin rebuilds a synthetic OpenStoreOut from the stashed intent
+// (resolving a delivery address the way the server would — first saved address)
+// and replays it through seedFromOpenStore, reusing every existing resume path
+// (restaurant id -> fetchMenuThenApply, name -> resolveRestaurantThenOpen,
+// query -> home search, else bare home).
+async function resumeAfterSignin(): Promise<void> {
+  if (!app) return;
+  let addr: AddrRefDTO = { id: "", label: "" };
+  try {
+    const result = await app.callServerTool({ name: "list_addresses", arguments: {} });
+    const sc = result.isError
+      ? undefined
+      : (result.structuredContent as { addresses?: { id: string; label: string }[] } | undefined);
+    const first = sc?.addresses?.[0];
+    if (first) addr = { id: first.id, label: first.label };
+  } catch (err) {
+    console.error("[order-app] resume list_addresses failed", err);
+  }
+  const intent = state.signinIntent;
+  let shell: OpenStoreOut;
+  if (intent.restaurant_id || intent.restaurant_name) {
+    const entry: OpenStoreEntry = {
+      address_id: addr.id ?? "",
+      item_id: intent.item_id ?? "",
+      search: intent.query ?? "",
+      category: intent.category ?? "",
+    };
+    shell = {
+      screen: "restaurant",
+      address: addr,
+      restaurant: { id: intent.restaurant_id, name: intent.restaurant_name },
+      entry,
+      loading: true,
+    };
+  } else if (intent.query) {
+    shell = {
+      screen: "home",
+      address: addr,
+      categories: state.homeCategories,
+      query: intent.query,
+      loading: true,
+    };
+  } else {
+    shell = { screen: "home", address: addr, categories: state.homeCategories };
+  }
+  seedFromOpenStore(shell);
+}
+
 function seedFromOpenStore(sc: OpenStoreOut): void {
+  if (sc.screen === "signed_out") {
+    state.screen = "signin";
+    state.authorizeURL = sc.authorize_url ?? "";
+    state.signinOpened = false;
+    state.homeCategories = Array.isArray(sc.categories) ? sc.categories : [];
+    state.signinIntent = {
+      restaurant_id: sc.restaurant?.id,
+      restaurant_name: sc.restaurant?.name,
+      query: sc.query,
+      item_id: sc.entry?.item_id,
+      category: sc.entry?.category,
+    };
+    render();
+    startAuthPoll();
+    return;
+  }
   // Bump menuToken unconditionally, on every open_store — home or restaurant,
   // loading shell or seeded — so any in-flight fetchMenuThenApply from a
   // restaurant the user just left is superseded and its stale get_menu
@@ -2560,6 +2689,10 @@ export function bootstrap(): void {
   app.ontoolresult = (result) => {
     const sc = result.structuredContent as unknown as OpenStoreOut | undefined;
     if (!sc || !sc.screen) return;
+    if (sc.screen === "signed_out") {
+      seedFromOpenStore(sc);
+      return;
+    }
     // A restaurant screen is valid with a menu OR as a loading shell that has
     // something to resolve from: a restaurant id (widget fetches the menu) OR
     // a restaurant name (widget searches for it first — Level C). Drop

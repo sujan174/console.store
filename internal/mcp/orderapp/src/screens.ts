@@ -642,6 +642,28 @@ function orderEtaOf(order: Record<string, unknown> | undefined): string {
   return "";
 }
 
+// renderSignIn is the signed-out gate: a terminal-branded card with a Sign-in
+// button wired (in app.ts) to app.openLink(authorizeURL). Once opened, a quiet
+// "waiting for sign-in" scooter line shows while the auth poll runs; the button
+// stays so the user can re-open the browser. The whole store resumes itself the
+// moment auth_status reports signed_in.
+export function renderSignIn(state: AppState): string {
+  const disabled = state.authorizeURL ? "" : " disabled";
+  const waiting = state.signinOpened
+    ? `<div style="margin-top:8px">${loadingBlock("~ % waiting for sign-in")}</div>`
+    : `<div style="font-size:12px;color:var(--text-muted);margin-top:10px">opens Swiggy in your browser · come back when you're done</div>`;
+  return (
+    `<h2 class="sr-only">Sign in to Swiggy to start ordering.</h2>` +
+    brandBar() +
+    `<div class="card" style="max-width:420px;margin-top:4px">` +
+    `<div style="font-size:15px;font-weight:500;margin-bottom:4px">sign in to Swiggy</div>` +
+    `<div style="font-size:13px;color:var(--text-secondary)">connect your Swiggy account to browse restaurants and place orders right here.</div>` +
+    `<button type="button" data-signin class="btn btn-primary btn-block" style="margin-top:14px"${disabled}>${icon("lock", 15)} sign in with Swiggy</button>` +
+    waiting +
+    `</div>`
+  );
+}
+
 // renderCartScreen swaps the same #app root for the whole checkout flow.
 export function renderCartScreen(state: AppState, cart: CartState): string {
   switch (cart.status) {
