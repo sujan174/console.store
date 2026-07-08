@@ -7,7 +7,7 @@
 import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
-import { esc, groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading } from "./screens";
+import { esc, groupByCategory, loadingBlock, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading } from "./screens";
 import { renderHome } from "./home";
 import {
   buildWireSelections,
@@ -2325,6 +2325,11 @@ export function bootstrap(): void {
   root.addEventListener("keydown", onRootKeydown);
   root.addEventListener("input", onRootInput);
   root.addEventListener("scroll", onRootScroll, { passive: true });
+
+  // Paint the animated boot loader at once — replaces the static skeleton label
+  // so the first thing the user sees is the centered scooter animation, held
+  // until connect resolves and the first tool result seeds a real screen.
+  root.innerHTML = loadingBlock("Fulfilling your request…");
 
   app = new App({ name: "consolestore order", version: "0.1.0" });
   app.onhostcontextchanged = () => applyHostStyling();
