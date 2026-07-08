@@ -143,6 +143,42 @@ func TestOpenStoreRestaurantShellNoMenuFetch(t *testing.T) {
 	}
 }
 
+// Level C: open_store{restaurant_name} with NO restaurant_id returns a
+// name-only restaurant shell — the widget searches for the restaurant itself,
+// picks the match, and loads its menu, all under the loader. open_store makes
+// zero backend calls; the shell carries the name (no id) + the item query.
+func TestOpenStoreNameShellResolvesInWidget(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	_ = localstore.SaveAddrPref(localstore.AddrPref{}.SetActive("a1", "Home"))
+	be := &fakeBackend{}
+	s := NewServer(be, &fakeAuth{token: true})
+	_, out, err := s.handleOpenStore(context.Background(), nil, OpenStoreIn{RestaurantName: "Truffles", Query: "burger"})
+	if err != nil {
+		t.Fatalf("handleOpenStore: %v", err)
+	}
+	if out.Screen != "restaurant" {
+		t.Fatalf("screen = %q, want restaurant", out.Screen)
+	}
+	if !out.Loading {
+		t.Fatalf("name shell must set loading=true")
+	}
+	if out.Menu != nil {
+		t.Fatalf("name shell must not carry a menu, got %+v", out.Menu)
+	}
+	if out.Restaurant["name"] != "Truffles" {
+		t.Fatalf("restaurant name = %q, want Truffles", out.Restaurant["name"])
+	}
+	if out.Restaurant["id"] != "" {
+		t.Fatalf("name shell must have an EMPTY id (widget resolves it); got %q", out.Restaurant["id"])
+	}
+	if out.Entry["search"] != "burger" || out.Entry["address_id"] != "a1" {
+		t.Fatalf("entry = %+v", out.Entry)
+	}
+	if be.menuCalls != 0 || be.searchPageCalls != 0 {
+		t.Fatalf("open_store must make zero backend calls; menuCalls=%d searchPageCalls=%d", be.menuCalls, be.searchPageCalls)
+	}
+}
+
 func TestOpenStoreHomeQueryShellNoSearchFetch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	_ = localstore.SaveAddrPref(localstore.AddrPref{}.SetActive("a1", "Home"))

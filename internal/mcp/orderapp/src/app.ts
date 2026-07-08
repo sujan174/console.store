@@ -35,10 +35,11 @@ export interface MenuItemData {
 }
 
 export interface OpenStoreRestaurant {
-  id: string;
-  // open_store now sends both `id` and `name` (the resolved display name).
-  // Kept optional so the UI degrades gracefully against older server builds
-  // that only sent `id`.
+  // Optional: a Level-C name-only shell carries just `name` (no id) — the
+  // widget searches for the restaurant and fills the id itself. The id-carrying
+  // shell and older seeded results still send `id`.
+  id?: string;
+  // open_store now sends `name` (the display name / the name to resolve).
   name?: string;
 }
 
@@ -2244,6 +2245,100 @@ async function fetchMenuThenApply(restaurantId: string, deepLink: DeepLink): Pro
   }
 }
 
+// pickConfidentMatch implements the hybrid disambiguation rule for a
+// Level-C name resolution: a match is "confident" (auto-open its menu) only
+// when there is exactly ONE clearly-intended result, otherwise the widget
+// falls to a chooser. Rule: an exact (case-insensitive) name match wins (the
+// highest-rated one if several are exact); else, if exactly one result's name
+// STARTS WITH the searched name, that one wins; anything else is ambiguous
+// (returns null). "Truffles" → exact-matches the "Truffles" card even though
+// "Cake Collective By Truffles" is also returned.
+function pickConfidentMatch(results: HomeRestaurant[], name: string): HomeRestaurant | null {
+  const target = name.trim().toLowerCase();
+  if (!target || results.length === 0) return null;
+  const norm = (s: string) => s.trim().toLowerCase();
+  const exact = results.filter((r) => norm(r.name) === target).sort((a, b) => b.rating - a.rating);
+  if (exact.length) return exact[0];
+  const prefix = results.filter((r) => norm(r.name).startsWith(target));
+  if (prefix.length === 1) return prefix[0];
+  return null;
+}
+
+// showHomeChooser drops a Level-C resolution to the home screen showing the
+// name's search results for the user to tap — used when the match is ambiguous,
+// the confident match is closed/unserviceable, or the search found nothing.
+// The search box carries the name so it reads as "here's what I found for
+// Truffles". state.homeCategories was already seeded from the name shell, so
+// the category rail is intact.
+function showHomeChooser(name: string, results: HomeRestaurant[], nextOffset: number, hasMore: boolean): void {
+  searchToken++; // this render now owns the home search state
+  state.screen = "home";
+  state.menuLoading = false;
+  state.restaurant = null;
+  state.restaurantId = null;
+  state.items = [];
+  state.categories = [];
+  state.activeCategory = null;
+  state.query = name;
+  state.activeCatQuery = null;
+  state.restInfoOpen = new Set();
+  state.closedNoteId = null;
+  state.restaurants = sortRestaurants(results);
+  state.homeNextOffset = nextOffset;
+  state.homeHasMore = hasMore;
+  state.homeLoading = false;
+  state.homeLoadingMore = false;
+  render();
+}
+
+// resolveRestaurantThenOpen is the Level-C entry: open_store handed us a
+// restaurant NAME but no id, so the widget searches for it (one
+// search_restaurants), applies the hybrid confidence rule, and either loads
+// the confident match's menu (fetchMenuThenApply — one get_menu) or drops to
+// the home chooser. Guarded by menuToken so a superseding open_store discards
+// a stale search. Ban-safety: confident = 1 search + 1 menu; else = 1 search.
+async function resolveRestaurantThenOpen(name: string, deepLink: DeepLink): Promise<void> {
+  if (!app || !state.addressId) {
+    state.menuLoading = false;
+    state.cart = { status: "error", error: "missing address or restaurant context" };
+    render();
+    return;
+  }
+  const token = ++menuToken;
+  state.menuLoading = true;
+  render();
+  try {
+    const result = await app.callServerTool({
+      name: "search_restaurants",
+      arguments: { address_id: state.addressId, query: name },
+    });
+    if (token !== menuToken) return; // superseded by a newer open — discard
+
+    const sc = result.isError
+      ? undefined
+      : (result.structuredContent as { restaurants?: HomeRestaurant[]; next_offset?: number; has_more?: boolean } | undefined);
+    const results = Array.isArray(sc?.restaurants) ? sc.restaurants : [];
+    const pick = pickConfidentMatch(results, name);
+
+    if (pick && !pick.unavailable) {
+      // Confident, open restaurant → load its menu under the loader, carrying
+      // the item deep-link (e.g. prefill "burger"). fetchMenuThenApply owns the
+      // next menuToken; nothing after this runs for this call.
+      state.restaurant = { id: pick.id, name: pick.name };
+      state.restaurantId = pick.id ?? null;
+      render();
+      await fetchMenuThenApply(pick.id ?? "", deepLink);
+      return;
+    }
+    // Ambiguous, closed, or nothing found → let the user pick.
+    showHomeChooser(name, results, sc?.next_offset ?? 0, !!sc?.has_more);
+  } catch (err) {
+    if (token !== menuToken) return;
+    console.error("[order-app] resolveRestaurantThenOpen failed", err);
+    showHomeChooser(name, [], 0, false);
+  }
+}
+
 // seedFromOpenStore stores the open_store result and renders the router's
 // target screen. `sc.screen` decides the branch (Task 7): "home" stores the
 // store-home fields and stops there — no menu, no restaurant context;
@@ -2331,6 +2426,10 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   state.restaurant = sc.restaurant ?? null;
   state.restaurantId = sc.restaurant?.id ?? null;
   state.addressId = sc.entry?.address_id || null;
+  // Seed the home category rail so a Level-C name resolution that falls to the
+  // chooser (showHomeChooser) renders a complete home. Harmless on the
+  // confident/menu path (the restaurant screen never shows these).
+  state.homeCategories = Array.isArray(sc.categories) ? sc.categories : state.homeCategories;
   resetRestaurantScopedState();
 
   const deepLink: DeepLink = {
@@ -2346,13 +2445,23 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     return;
   }
 
-  // Loading shell — fetch the menu ourselves under the scooter animation.
+  // Loading shell — resolve under the scooter animation. With a restaurant id,
+  // fetch the menu directly; with only a NAME (Level C), search for the
+  // restaurant first, then open the confident match's menu.
   state.items = [];
   state.categories = [];
   state.activeCategory = null;
   state.menuLoading = true;
   render();
-  void fetchMenuThenApply(state.restaurantId ?? (sc.restaurant?.id ?? ""), deepLink);
+  if (state.restaurantId) {
+    void fetchMenuThenApply(state.restaurantId, deepLink);
+  } else if (state.restaurant?.name) {
+    void resolveRestaurantThenOpen(state.restaurant.name, deepLink);
+  } else {
+    state.menuLoading = false;
+    state.cart = { status: "error", error: "nothing to open — no restaurant given" };
+    render();
+  }
 }
 
 // applyDisplayModeAttr stamps the current display mode on <html> as
@@ -2451,14 +2560,15 @@ export function bootstrap(): void {
   app.ontoolresult = (result) => {
     const sc = result.structuredContent as unknown as OpenStoreOut | undefined;
     if (!sc || !sc.screen) return;
-    // A restaurant screen is valid with a menu OR as a loading shell that
-    // actually has a restaurant id to fetch (fetchMenuThenApply needs a
-    // non-empty restaurant_id — otherwise it'd fire get_menu with one
-    // missing). Drop anything else as malformed.
+    // A restaurant screen is valid with a menu OR as a loading shell that has
+    // something to resolve from: a restaurant id (widget fetches the menu) OR
+    // a restaurant name (widget searches for it first — Level C). Drop
+    // anything else as malformed (a shell with neither id nor name has nothing
+    // to open).
     if (
       sc.screen === "restaurant" &&
       !(sc.menu && Array.isArray(sc.menu.items)) &&
-      !(sc.loading && sc.restaurant?.id)
+      !(sc.loading && (sc.restaurant?.id || sc.restaurant?.name))
     ) {
       return;
     }

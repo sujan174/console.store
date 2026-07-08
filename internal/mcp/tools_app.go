@@ -60,15 +60,15 @@ type OpenStoreOut struct {
 func openStoreTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name: "open_store",
-		Description: "Open the interactive ordering app — render it ONCE per turn, at the deepest " +
-			"place you've already resolved (resolve ids first with search_restaurants/get_menu, " +
-			"which render nothing; never open the app just to read an id, and never call this twice " +
-			"in one turn). No restaurant_id → the store home (categories + your restaurants); " +
-			"query alone → home search results; restaurant_id → that restaurant's menu; " +
-			"restaurant_id + item_id → deep-link straight to that one item; " +
-			"restaurant_id + query → open the menu with its in-menu search prefilled to query and " +
-			"the matches shown (use for an ambiguous dish the user named but didn't pin down). " +
-			"Pass restaurant_name with the display name you resolved so the app can label the store.",
+		Description: "Open the interactive ordering app — render it ONCE per turn. The app resolves " +
+			"and loads everything itself under a loading animation, so this is normally the ONLY " +
+			"call you make for an ordering intent (no pre-search needed). Shapes: nothing → the " +
+			"store home; query alone → home search for a cuisine/dish (e.g. \"pizza\"); " +
+			"restaurant_name (a specific restaurant the user named, e.g. \"Truffles\") → the app " +
+			"searches for it, opens its menu, and prefills the in-menu search with `query` if given " +
+			"(the item/dish); restaurant_id → open that restaurant's menu directly when you already " +
+			"hold the id (e.g. a reorder). Prefer restaurant_name over resolving the id yourself. " +
+			"Never call this twice in one turn.",
 		Meta: mcp.Meta{
 			"ui":             map[string]any{"resourceUri": appResourceURI},
 			"ui/resourceUri": appResourceURI,
@@ -150,6 +150,24 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 	cats := make([]CategoryDTO, 0)
 	for _, c := range config.DefaultCategories() {
 		cats = append(cats, CategoryDTO{Label: c.Label, Query: c.Query})
+	}
+
+	if in.RestaurantName != "" {
+		// Level C — a named restaurant with NO id yet: return a name-only
+		// restaurant shell. The widget searches for the restaurant itself
+		// (search_restaurants), picks the match, and loads its menu, all under
+		// the loader — so the agent opens the app in ONE call, no pre-search.
+		// `search` carries the item/dish query to prefill the in-menu search on
+		// the confident match. Categories ride along so that if the widget
+		// falls to the disambiguation chooser (home screen), its rail is intact.
+		return nil, OpenStoreOut{
+			Screen:     "restaurant",
+			Address:    AddrRefDTO{ID: addr, Label: label},
+			Restaurant: map[string]string{"name": in.RestaurantName}, // no id — widget resolves it
+			Entry:      map[string]string{"address_id": addr, "search": in.Query},
+			Categories: cats,
+			Loading:    true,
+		}, nil
 	}
 	recent, _ := localstore.LoadOrders(addr)
 	// Instant-open home: a query returns a loading shell (widget runs the

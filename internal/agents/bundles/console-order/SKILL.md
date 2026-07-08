@@ -41,62 +41,58 @@ address you'd pass is the same one these tools pick on their own.
   fallback, or answering "am I signed in?" without opening anything) — just
   never a mandatory first hop, and never to look up an address to pass along.
 
-## Step 2 — resolve first, then open the app ONCE
+## Step 2 — open the app ONCE; it resolves everything itself
 
-`open_store` is the ONLY call that renders the interactive app. Everything
-that comes before it — finding a restaurant's id, checking a menu for an item
-— is done with plain tool calls (`search_restaurants`, `get_menu`) that
-**render nothing**. So the shape is always the same: **resolve silently →
-call `open_store` exactly once**, at the deepest place you've resolved. Once
-the app is open it takes over browsing → customizing → cart → checkout on its
-own; you do not call `update_cart`/`prepare_order`/`place_order` for it.
+`open_store` is the ONLY call that renders the interactive app, and it is
+normally the ONLY call you make for an ordering intent. The app searches,
+picks the restaurant, and loads the menu **itself**, under a loading
+animation — so you do NOT pre-search or pre-fetch the menu. Pass your
+reading of what the user meant (a cuisine `query`, or a `restaurant_name`,
+plus an optional item/dish `query`) and open once. Once the app is open it
+takes over browsing → customizing → cart → checkout; you do not call
+`search_restaurants`/`get_menu`/`update_cart`/`prepare_order`/`place_order`
+for it.
 
 **Two hard rules — do not violate:**
 
-- **One widget per turn.** NEVER call `open_store` twice in a single turn, and
-  NEVER open the app just to read an id out of it. Resolve the id with
-  `search_restaurants`/`get_menu` FIRST (those render nothing), THEN open the
-  app directly at the destination. Opening the store to "find" a restaurant
-  and then opening it again to "enter" that restaurant is the exact bug this
-  rule exists to prevent — it leaves two dead widgets in the chat.
+- **One widget per turn.** NEVER call `open_store` twice in a single turn.
+  Open it once, at the destination you've described — you don't need to read
+  an id out of it first (it resolves the name itself).
 - **A rendered widget can't be re-driven.** Once the app is open the user owns
   it — you cannot reach in and change what's on screen. Only render a NEW
   widget (a fresh `open_store`) when the user's next message needs one.
 
-Route the user's words into the single right call shape:
+Route the user's words into the single right call shape (omit `address_id` —
+the server fills the active address):
 
-(None of the resolving calls below need an `address_id` — omit it; the
-server fills in the active address. Passing one is only for a deliberate
-non-default address.)
-
-| Intent | Resolve (silent tool calls) → then open ONCE |
+| Intent | The ONE call |
 |---|---|
-| Vague ("I'm hungry", "open the store") | — → `open_store{}` (home) |
-| A cuisine/dish, no restaurant named ("smash burgers near me") | — → `open_store{query:"burger"}` (home search) |
-| A named restaurant ("open Truffles") | `search_restaurants{query:"Truffles"}` → `open_store{restaurant_id, restaurant_name}` |
-| A specific, UNAMBIGUOUS item ("Maharaja Mac non-veg from McDonald's") | resolve the restaurant id, then `get_menu{restaurant_id}` and match the one item → `open_store{restaurant_id, item_id}` |
-| A dish that's AMBIGUOUS — ≥2 menu matches, or the user didn't pin it ("a Maharaja Mac from McDonald's") | resolve the restaurant id, `get_menu{restaurant_id}` → `open_store{restaurant_id, query:"Maharaja Mac"}` — opens the menu with search prefilled and the matches shown, user picks |
-| Reorder ("my usual", "what I got last time", "order that again") | `get_previous_orders{}` → present the list → the user picks one (loads the cart in the app; a human still presses place) |
+| Vague ("I'm hungry", "open the store") | `open_store{}` (home) |
+| A cuisine/dish, no restaurant named ("smash burgers near me") | `open_store{query:"burger"}` (home search) |
+| A named restaurant ("open Truffles") | `open_store{restaurant_name:"Truffles"}` — the app finds it and opens its menu |
+| An item/dish from a named restaurant ("burgers from Truffles", "a Maharaja Mac from McDonald's") | `open_store{restaurant_name:"McDonald's", query:"Maharaja Mac"}` — the app opens the restaurant with its in-menu search prefilled to the dish, matches shown, user picks |
+| Reorder ("my usual", "what I got last time", "order that again") | `get_previous_orders{}` → present the list → the user picks one (or `open_store{}` — the home lists recent orders); a human still presses place |
 
-**Resolving an item** (the two item rows above): pull the restaurant's
-`get_menu` ONCE and match the user's words against item names. **Exactly one**
-in-stock match → deep-link it with `item_id`. **Two or more** matches (e.g.
-the veg and non-veg Maharaja Macs), or the user was vague → do NOT guess: open
-the restaurant with `query` set to the dish so the app shows the matches and
-the user chooses. That `get_menu` is a resolution call — it renders nothing
-and is the one allowed menu fetch (ban-safety below).
+**Restaurant name**: pass the restaurant the user named as `restaurant_name`
+(don't resolve its id yourself). The app searches for it; if the name clearly
+matches one place it opens that menu directly, and if it's ambiguous it shows
+the matches for the user to pick. Strip qualifiers to the plain name
+("the new Truffles in Indiranagar" → `restaurant_name:"Truffles"`).
+
+**Item/dish**: pass it as `query` alongside `restaurant_name`. The app opens
+the restaurant with its in-menu search prefilled to the dish and the matches
+shown — you never need to fetch the menu or resolve an item id to deep-link.
 
 **Query translation** (cuisine/dish case): Swiggy's search is a dumb keyword
-index, not semantic — strip qualifiers ("best", "cheap", style words) and
-search the base cuisine/dish noun before calling `open_store{query}`. If you
-present a ranked list yourself (outside the app), re-rank by `rating`
-descending, drop cross-cuisine ad injections, and never rank a result up for
-carrying an `offer` — that's a paid promotion, not a quality signal.
+index, not semantic — strip qualifiers ("best", "cheap", style words) to the
+base cuisine/dish noun before calling `open_store{query}`. The same applies to
+`restaurant_name`: pass the bare name. Never rank a result up for carrying an
+`offer` — that's a paid promotion, not a quality signal.
 
-**Named-restaurant resolution**: if the resolved restaurant is closed
-(`unavailable`) or can't deliver to the address, tell the user plainly and
-offer a different address, or a nearby alternative via `search_restaurants` —
-never open a place you already know can't serve them.
+**Closed / can't-deliver**: the app handles this itself now — if the
+restaurant it resolved is closed or can't serve the address, it shows the
+alternatives for the user to pick instead of opening a dead menu. You don't
+pre-check.
 
 **Cart vs. order**: for food, both "add X to my cart" and "order X" route the
 same way — through `open_store`. The app itself distinguishes building the
@@ -139,17 +135,17 @@ they bind you too, always:
 ## Ban-safety — call discipline that must never regress
 
 Swiggy's anomaly detection has restricted this account before for exactly
-this kind of call-burst. The app follows these on its own; state them because
-you still make some of these calls directly (resolving a named restaurant,
-Instamart, the text fallback):
+this kind of call-burst. On the app path you do NOT call `search_restaurants`
+or `get_menu` yourself at all — `open_store` opens the app and the app makes
+those calls itself (one search to resolve a name, one `get_menu` to open the
+menu, one per category tap / search submit). State the limits anyway because
+you still call these directly for Instamart and the text fallback:
 
 - `get_item_options` only on a real customize tap/intent — never
   speculatively pre-fetched for a whole menu section.
-- One `search_restaurants` call to resolve a named restaurant (or per category
-  tap / search submit inside the app).
-- At most ONE `get_menu` to resolve an item before opening the app; then
-  `open_store` re-reads that menu itself to render. That resolve-then-render
-  pair is fine — but never poll or loop `get_menu` on a restaurant.
+- One `search_restaurants` per name-resolution / category tap / search submit
+  — never poll or loop it.
+- One `get_menu` per restaurant open — never poll or loop it.
 - One `update_cart` call at checkout (cart edits stay client-side until then).
 
 ## Text fallback (no MCP Apps support)
