@@ -1309,6 +1309,38 @@ export function mount(root) {
     return true;
   };
 
+  // ---- waitlist: hosted / Claude-web access capture. POSTs the email to
+  // /event/waitlist (rate-limited, stored in Postgres) and shows an inline
+  // status. Progressive enhancement: without JS the <form> simply does nothing. ----
+  const initWaitlist = () => {
+    const form = root.querySelector("[data-waitlist]");
+    if (!form) return;
+    const input = form.querySelector("[data-waitlist-email]");
+    const btn = form.querySelector("[data-waitlist-submit]");
+    const msg = root.querySelector("[data-waitlist-msg]");
+    const say = (t, ok) => { if (msg) { msg.textContent = t; msg.style.color = ok ? "#8ee08a" : "#ff7d96"; } };
+    const onSubmit = async (e) => {
+      e.preventDefault();
+      const email = (input && input.value ? input.value : "").trim();
+      if (!email) return;
+      if (btn) { btn.disabled = true; btn.textContent = "…"; }
+      try {
+        const r = await fetch("/event/waitlist", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email, source: "landing" }),
+        });
+        if (r.ok) { say("you're on the list — we'll email you when web access opens.", true); if (input) input.value = ""; }
+        else if (r.status === 400) say("that doesn't look like a valid email.", false);
+        else if (r.status === 429) say("one sec — try again in a moment.", false);
+        else say("something went wrong — try again later.", false);
+      } catch (err) { say("network hiccup — try again.", false); }
+      if (btn) { btn.disabled = false; btn.textContent = "join waitlist"; }
+    };
+    form.addEventListener("submit", onSubmit);
+    S.waitlistCleanup = () => form.removeEventListener("submit", onSubmit);
+  };
+
   // boot
   if (refs.toast) refs.toast.style.display = "none";
   initReveal();
@@ -1317,6 +1349,7 @@ export function mount(root) {
   initCmdClicks();
   initFeaturesZoom();
   initStats();
+  initWaitlist();
 
   // Brand lockup → back to the very top of the page (y=0, so the whole hero +
   // nav are in frame). Overrides the #top anchor, which would otherwise land a
@@ -1399,6 +1432,7 @@ export function mount(root) {
     if (S.navCleanup) S.navCleanup();
     if (S.snapCleanup) S.snapCleanup();
     if (S.featZoomCleanup) S.featZoomCleanup();
+    if (S.waitlistCleanup) S.waitlistCleanup();
     cleanupKeys();
   };
 }

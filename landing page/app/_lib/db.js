@@ -41,6 +41,11 @@ export function ensureSchema() {
         version    TEXT,
         placed_at  TIMESTAMPTZ DEFAULT now()
       );
+      CREATE TABLE IF NOT EXISTS waitlist (
+        email      TEXT PRIMARY KEY,
+        source     TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
     `).catch((e) => {
       _schemaReady = undefined; // allow retry on next request
       throw e;

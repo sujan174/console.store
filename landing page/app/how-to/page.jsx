@@ -971,18 +971,18 @@ export default function HowToPage() {
               accent="#b08cf5"
               lines={[
                 [{ t: "dim", v: "$ " }, { t: "accent", v: "console agents install" }],
-                [{ t: "text", v: "found Claude Code, Cursor, Codex" }],
+                [{ t: "text", v: "found Claude Desktop, Claude Code" }],
                 [{ t: "plain", v: "✓ " }, { t: "text", v: "MCP server wired" }],
                 [{ t: "plain", v: "✓ " }, { t: "text", v: "skills installed" }],
-                [{ t: "dim", v: "3 agents ready" }]
+                [{ t: "dim", v: "Claude ready" }]
               ]}
             />
           </div>
 
           <p style={{ maxWidth: "62ch", fontSize: "15px", color: "#8a8fb4", lineHeight: 1.75, marginBottom: "22px" }}>
-            It auto-detects Claude Desktop &amp; Code, Cursor, Windsurf, Zed, VS
-            Code, Codex, and Hermes, and wires in the MCP server + skills. It
-            re-runs itself on update, so your agents stay current.
+            It sets up Claude Desktop &amp; Claude Code and wires in the MCP
+            server + skills. It re-runs itself on update, so Claude stays
+            current.
           </p>
 
           <div style={{ maxWidth: "70ch", marginBottom: "22px" }}>

@@ -68,13 +68,13 @@ const AGENT_CARDS = [
   {
     n: "01",
     title: "Order by chatting",
-    desc: 'Tell your AI agent "order my usual dinner" in plain language, and it handles the rest.',
-    tag: "ANY AGENT"
+    desc: 'Tell Claude "order my usual dinner" in plain language, and it handles the rest.',
+    tag: "CLAUDE"
   },
   {
     n: "02",
     title: "Works in your tools",
-    desc: "Claude Desktop & Code, Cursor, Windsurf, Zed, VS Code, Codex, and Hermes — wherever you already work.",
+    desc: "Claude Desktop and Claude Code — set up automatically, wherever you already work with Claude.",
     tag: "MCP"
   },
   {
@@ -583,7 +583,7 @@ export default function FeaturesPage() {
                 lineHeight: 1.7
               }}
             >
-              Already using an AI assistant like Claude, Cursor or VS Code? Just ask
+              Already using Claude? Just ask
               it — in plain words — to order for you. It finds the food, builds the
               cart, shows the price, and only orders once you say yes.
             </p>

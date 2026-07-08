@@ -64,7 +64,7 @@ const STEPS = [
     accent: "#b08cf5",
     title: "6 · your agent",
     body:
-      'One command — console agents install — wires consolestore into Claude, Cursor, Codex, Zed and more as an MCP server. Then just tell your agent "order my usual dinner" and approve the bill.'
+      'One command — console agents install — wires consolestore into Claude (Desktop and Code) as an MCP server. Then just tell Claude "order my usual dinner" and approve the bill.'
   },
   {
     id: null,

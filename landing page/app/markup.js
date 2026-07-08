@@ -67,7 +67,7 @@ export const MARKUP = String.raw`
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:100%;max-width:1100px;margin:0 auto;padding:18px clamp(24px,6vw,56px) 0">
       <h1 class="hero-head" style="font-weight:700;font-size:clamp(32px,5.8vw,66px);line-height:1.1;letter-spacing:-.025em;color:#e9ebf7;margin:0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .24s">Great food is now just<br>a <span class="hero-cmd">command<span class="hero-caret" aria-hidden="true"></span></span> away.</h1>
 
-      <p style="margin:28px 0 0;max-width:54ch;font-size:16.5px;line-height:1.8;color:#b6bce0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">consolestore orders real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — straight from your terminal, or through your AI agent. No browser tabs, no forms, no cookie walls. <span style="color:#cdd3f0">You type, you eat.</span></p>
+      <p style="margin:28px 0 0;max-width:54ch;font-size:16.5px;line-height:1.8;color:#b6bce0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">consolestore orders real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — straight from your terminal, or straight from Claude. No browser tabs, no forms, no cookie walls. <span style="color:#cdd3f0">You type, you eat.</span></p>
 
       <!-- install command (OS-aware text set in logic.js; live stats live in the right drawer) -->
       <div style="margin-top:34px;display:flex;flex-direction:column;align-items:center;gap:13px;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .7s">
@@ -90,7 +90,8 @@ export const MARKUP = String.raw`
           <span>one binary</span><span style="color:#2d2f48">·</span>
           <span>macOS</span><span style="color:#2d2f48">·</span>
           <span>Linux</span><span style="color:#2d2f48">·</span>
-          <span>Windows</span>
+          <span>Windows</span><span style="color:#2d2f48">·</span>
+          <span style="color:#b08cf5">+ Claude</span>
         </div>
         <div data-install-hint style="font-size:11px;color:#2d2f48">beta channel · armed builds place real orders, the default stays safe.</div>
       </div>
@@ -103,7 +104,7 @@ export const MARKUP = String.raw`
       <div class="pitch-left" style="text-align:left">
         <div data-pitch-item style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:6px">// what it is</div>
         <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:16ch">dinner, piped through your <span style="color:#93a8ff">terminal</span> — or your <span style="color:#93a8ff">agent</span>.</h1>
-        <p data-pitch-item style="max-width:52ch;color:#b6bce0;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI <span style="color:#cdd3f0">(type commands)</span> and full TUI <span style="color:#cdd3f0">(a keyboard-only menu)</span> for ordering real food through Swiggy without leaving your shell — plus an MCP server <span style="color:#cdd3f0">(a plug-in your AI agent talks to)</span> that lets it order for you. authorize once, then reorder a saved favourite with a keystroke, or just tell your agent <span style="color:#cdd3f0">“order my usual.”</span></p>
+        <p data-pitch-item style="max-width:52ch;color:#b6bce0;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI <span style="color:#cdd3f0">(type commands)</span> and full TUI <span style="color:#cdd3f0">(a keyboard-only menu)</span> for ordering real food through Swiggy without leaving your shell — plus an MCP server <span style="color:#cdd3f0">(a plug-in Claude talks to)</span> that lets it order for you. authorize once, then reorder a saved favourite with a keystroke, or just tell Claude <span style="color:#cdd3f0">“order my usual.”</span></p>
         <a href="/features" data-pitch-item class="pitch-cta" aria-label="explore all features" style="display:inline-flex;align-items:center;gap:10px;margin-top:32px;padding:14px 24px;border-radius:11px;border:1px solid rgba(147,168,255,.32);background:rgba(147,168,255,.09);color:#aebcff;font-weight:600;font-size:14px;letter-spacing:.2px;text-decoration:none">explore all 18 features <span style="font-size:16px;line-height:1">→</span></a>
       </div>
       <div data-pitch-item class="pitch-demo">
@@ -219,11 +220,11 @@ export const MARKUP = String.raw`
       <div>
         <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.3);border-radius:999px;padding:5px 13px;margin-bottom:16px">✳ AI AGENT · MCP + SKILLS</span>
         <div style="font-size:11px;letter-spacing:2px;color:#b08cf5;margin-bottom:14px">// hand it to your ai</div>
-        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">just tell your<br><span style="color:#b08cf5">AI agent</span>.</h2>
-        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">already use an <span style="color:#e9ebf7">AI assistant</span> — Claude, Cursor, Windsurf, Zed, VS Code? consolestore plugs straight into it. <span style="color:#e9ebf7">"order my usual dinner"</span> or <span style="color:#e9ebf7">"grab me an energy drink"</span> — in plain words. your agent searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places it <span style="color:#e9ebf7">only after you say yes</span>.</p>
+        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">just tell<br><span style="color:#b08cf5">Claude</span>.</h2>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">already living in <span style="color:#e9ebf7">Claude</span>? consolestore plugs straight in — Desktop and Code. <span style="color:#e9ebf7">"order my usual dinner"</span> or <span style="color:#e9ebf7">"grab me an energy drink"</span>, in plain words. Claude searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places it <span style="color:#e9ebf7">only after you say yes</span>.</p>
         <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">food or Instamart, same flow — <span style="color:#e9ebf7">"grab me an energy drink"</span> and it's on the way. never a charge you didn't approve.</p>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
-          <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">Claude · Cursor · Zed · VS Code</span>
+          <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">Claude Desktop · Claude Code</span>
           <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">plain language</span>
           <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">you approve every order</span>
         </div>
@@ -292,11 +293,11 @@ export const MARKUP = String.raw`
               <div>
                 <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.28);border-radius:999px;padding:5px 12px;margin-bottom:18px">NEW · MCP + SKILLS</span>
                 <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// hand it to your agent</div>
-                <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 16px;color:#e9ebf7;line-height:1.1">let your <span style="color:#b08cf5">agent</span><br>order dinner.</h2>
-                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">consolestore installs an <span style="color:#e9ebf7">MCP server + skills</span> into your AI agent — Claude, Cursor, Windsurf, Zed, VS Code. ask in plain language; it searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places the order <span style="color:#e9ebf7">only after you say yes</span>.</p>
+                <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 16px;color:#e9ebf7;line-height:1.1">let <span style="color:#b08cf5">Claude</span><br>order dinner.</h2>
+                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">consolestore installs an <span style="color:#e9ebf7">MCP server + skills</span> into <span style="color:#e9ebf7">Claude</span> — Desktop and Code. ask in plain language; it searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places the order <span style="color:#e9ebf7">only after you say yes</span>.</p>
                 <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">your usual, hands-free — but never a charge you didn't approve. the agent proposes; <span style="color:#93a8ff">you</span> confirm.</p>
                 <div style="display:flex;flex-wrap:wrap;gap:8px">
-                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">Claude · Cursor · Zed</span>
+                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">Claude Desktop · Claude Code</span>
                   <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">you approve every order</span>
                   <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">plain language</span>
                 </div>
@@ -343,6 +344,20 @@ export const MARKUP = String.raw`
     <p style="max-width:54ch;margin:30px auto 0;text-align:center;color:#b6bce0;font-size:13.5px;line-height:1.78">no tab-hunting, no cookie banners, no context switch — whether you type the command or your agent does. every order is a real Swiggy bill you approve before a rupee moves. the site can be loud because the product underneath is intentionally strict.</p>
   </section>
 
+  <!-- WAITLIST — hosted / Claude-web access is coming; capture demand -->
+  <section id="waitlist" style="position:relative;z-index:2;max-width:640px;margin:0 auto;padding:24px clamp(24px,6vw,56px) 40px" data-reveal>
+    <div style="border:1px solid rgba(176,140,245,.2);border-radius:16px;background:linear-gradient(180deg,#0c0b16,#09090f);padding:clamp(28px,5vw,44px);text-align:center;box-shadow:0 30px 90px rgba(0,0,0,.5)">
+      <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.3);border-radius:999px;padding:5px 13px;margin-bottom:18px">✳ COMING NEXT</span>
+      <h2 style="font-weight:800;font-size:clamp(22px,3vw,34px);letter-spacing:-.02em;margin:0 0 14px;color:#e9ebf7;line-height:1.12">use it in <span style="color:#b08cf5">Claude on the web?</span></h2>
+      <p style="max-width:46ch;margin:0 auto 24px;color:#b6bce0;font-size:14px;line-height:1.72">today consolestore runs as a local install — <span style="color:#e9ebf7">Claude Desktop &amp; Claude Code</span>. a hosted version for <span style="color:#e9ebf7">Claude web &amp; mobile</span> is next. drop your email and you'll be first in.</p>
+      <form data-waitlist style="display:flex;gap:9px;max-width:420px;margin:0 auto;flex-wrap:wrap;justify-content:center">
+        <input data-waitlist-email type="email" required placeholder="you@example.com" aria-label="your email" style="flex:1;min-width:200px;background:#08080e;border:1px solid rgba(147,168,255,.18);border-radius:10px;padding:13px 15px;color:#e9ebf7;font-family:inherit;font-size:13.5px;outline:none" />
+        <button data-waitlist-submit type="submit" style="flex:none;background:#b08cf5;border:0;border-radius:10px;padding:0 22px;height:44px;color:#160e28;font-weight:700;font-family:inherit;font-size:13px;letter-spacing:.3px;cursor:pointer">join waitlist</button>
+      </form>
+      <div data-waitlist-msg role="status" aria-live="polite" style="min-height:16px;margin-top:13px;font-size:12px;color:#565b80"></div>
+    </div>
+  </section>
+
   <!-- FAQ -->
   <section id="faq" style="position:relative;z-index:2;max-width:760px;margin:0 auto;padding:24px clamp(24px,6vw,56px) 54px" data-reveal>
     <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// questions</div>
@@ -358,7 +373,11 @@ export const MARKUP = String.raw`
       </div>
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">can my AI agent order for me?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
-        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">yes. consolestore installs a <span style="color:#e9ebf7">console mcp</span> server + skills into Claude Desktop/Code, Cursor, Windsurf, Zed, VS Code, and Codex. ask in plain language — the agent searches, builds the cart, and shows the real Swiggy bill, then places the order <span style="color:#e9ebf7">only after you confirm</span>. same broker, same guardrails as the CLI.</p></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">yes. consolestore installs a <span style="color:#e9ebf7">console mcp</span> server + skills into <span style="color:#e9ebf7">Claude Desktop and Claude Code</span>. ask in plain language — Claude searches, builds the cart, and shows the real Swiggy bill, then places the order <span style="color:#e9ebf7">only after you confirm</span>. same broker, same guardrails as the CLI.</p></div>
+      </div>
+      <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
+        <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">can I use it in Claude on the web?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">not yet. today consolestore runs as a <span style="color:#e9ebf7">local install</span>, so it works in <span style="color:#e9ebf7">Claude Desktop and Claude Code</span>. Claude web &amp; mobile need a hosted version — that's what's coming next. <span style="color:#e9ebf7">join the waitlist above</span> and we'll ping you the moment it opens.</p></div>
       </div>
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">does it actually place real orders?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
