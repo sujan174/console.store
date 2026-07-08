@@ -2252,6 +2252,13 @@ async function fetchMenuThenApply(restaurantId: string, deepLink: DeepLink): Pro
 // seeded it — a fully-seeded result (the current, unchanged server) still
 // applies straight away, unchanged.
 function seedFromOpenStore(sc: OpenStoreOut): void {
+  // Bump menuToken unconditionally, on every open_store — home or restaurant,
+  // loading shell or seeded — so any in-flight fetchMenuThenApply from a
+  // restaurant the user just left is superseded and its stale get_menu
+  // response is discarded (mirrors openRestaurant bumping the token on every
+  // transition). The restaurant-shell branch below bumps it again itself,
+  // which is fine — that's the latest token claiming ownership.
+  menuToken++;
   state.address = sc.address ?? null;
 
   if (sc.screen === "home") {
@@ -2279,7 +2286,14 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
       resetRestaurantScopedState();
       state.homeLoading = true;
       render();
-      if (state.addressId) void runHomeSearch(state.addressId, homeQuery);
+      if (state.addressId) {
+        void runHomeSearch(state.addressId, homeQuery);
+      } else {
+        // No resolved address — there's nothing to search with, so don't
+        // leave the scooter loader spinning forever.
+        state.homeLoading = false;
+        render();
+      }
       return;
     }
     // Seeded (backward-compat) or bare home — existing behavior.
@@ -2430,10 +2444,17 @@ export function bootstrap(): void {
   app.ontoolresult = (result) => {
     const sc = result.structuredContent as unknown as OpenStoreOut | undefined;
     if (!sc || !sc.screen) return;
-    // A restaurant screen is valid with a menu OR as a loading shell (the
-    // widget then fetches the menu itself). Drop only a malformed result that
-    // is neither.
-    if (sc.screen === "restaurant" && !sc.loading && (!sc.menu || !Array.isArray(sc.menu.items))) return;
+    // A restaurant screen is valid with a menu OR as a loading shell that
+    // actually has a restaurant id to fetch (fetchMenuThenApply needs a
+    // non-empty restaurant_id — otherwise it'd fire get_menu with one
+    // missing). Drop anything else as malformed.
+    if (
+      sc.screen === "restaurant" &&
+      !(sc.menu && Array.isArray(sc.menu.items)) &&
+      !(sc.loading && sc.restaurant?.id)
+    ) {
+      return;
+    }
     seedFromOpenStore(sc);
   };
 
