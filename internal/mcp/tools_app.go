@@ -36,7 +36,10 @@ type CategoryDTO struct {
 // discriminates the two shapes the app can open into: "home" (categories +
 // optional search results + recent orders) or "restaurant" (a menu).
 type OpenStoreOut struct {
-	Screen       string                   `json:"screen"` // "home" | "restaurant"
+	Screen string `json:"screen"` // "home" | "restaurant"
+	// AuthorizeURL is set ONLY on a "signed_out" shell — the browser OAuth URL
+	// the widget's Sign-in button opens (via app.openLink). Empty otherwise.
+	AuthorizeURL string                   `json:"authorize_url,omitempty"`
 	Address      AddrRefDTO               `json:"address"`
 	Restaurant   map[string]string        `json:"restaurant,omitempty"`
 	Entry        map[string]string        `json:"entry,omitempty"`
@@ -124,8 +127,42 @@ func (s *Server) resolveAddress(explicit string) (id, label string) {
 }
 
 func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in OpenStoreIn) (*mcp.CallToolResult, OpenStoreOut, error) {
-	if err := s.requireAuth(ctx); err != nil {
-		return nil, OpenStoreOut{}, err
+	// Signed out: open the app on a Sign-in screen instead of erroring (which
+	// left the widget unopened and forced the agent to hand the user a link).
+	// auth.Start begins/resumes the loopback OAuth flow, brings up the callback
+	// listener, and returns the browser authorize URL. The widget renders a
+	// Sign-in button wired to it, polls auth_status until signed in, then
+	// resumes the carried intent (restaurant/query below).
+	if s.auth == nil {
+		return nil, OpenStoreOut{}, errAuthUnavailable
+	}
+	if !s.auth.TokenPresent(ctx) {
+		url, _, err := s.auth.Start(ctx)
+		if err != nil {
+			return nil, OpenStoreOut{}, err
+		}
+		cats := make([]CategoryDTO, 0)
+		for _, c := range config.DefaultCategories() {
+			cats = append(cats, CategoryDTO{Label: c.Label, Query: c.Query})
+		}
+		rest := map[string]string{}
+		if in.RestaurantID != "" {
+			rest["id"] = in.RestaurantID
+		}
+		if in.RestaurantName != "" {
+			rest["name"] = in.RestaurantName
+		}
+		out := OpenStoreOut{
+			Screen:       "signed_out",
+			AuthorizeURL: url,
+			Entry:        map[string]string{"item_id": in.ItemID, "search": in.Query, "category": in.Category},
+			Query:        in.Query,
+			Categories:   cats,
+		}
+		if len(rest) > 0 {
+			out.Restaurant = rest
+		}
+		return nil, out, nil
 	}
 	addr, label := s.resolveAddress(in.AddressID)
 

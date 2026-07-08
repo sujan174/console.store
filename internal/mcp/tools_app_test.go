@@ -238,3 +238,26 @@ func TestOpenStoreTrustsCachedAddressWithoutReconcile(t *testing.T) {
 		t.Fatalf("address id = %q, want dead1 (cached address trusted, no live reconcile)", out.Address.ID)
 	}
 }
+
+func TestOpenStoreSignedOutReturnsSignInShell(t *testing.T) {
+	s := NewServer(&fakeBackend{}, &fakeAuth{token: false, url: "https://authorize.example/oauth"})
+	_, out, err := s.handleOpenStore(context.Background(), nil, OpenStoreIn{RestaurantName: "Truffles", Query: "burger"})
+	if err != nil {
+		t.Fatalf("handleOpenStore signed-out must not error: %v", err)
+	}
+	if out.Screen != "signed_out" {
+		t.Fatalf("screen = %q; want signed_out", out.Screen)
+	}
+	if out.AuthorizeURL != "https://authorize.example/oauth" {
+		t.Fatalf("authorize_url = %q; want the Start() url", out.AuthorizeURL)
+	}
+	if out.Restaurant["name"] != "Truffles" {
+		t.Fatalf("intent restaurant name not carried: %+v", out.Restaurant)
+	}
+	if out.Entry["search"] != "burger" {
+		t.Fatalf("intent query not carried in entry.search: %+v", out.Entry)
+	}
+	if len(out.Categories) == 0 {
+		t.Fatalf("categories should ride along for the home-resume rail")
+	}
+}
