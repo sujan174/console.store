@@ -228,17 +228,21 @@ body {
   border-bottom: 2px dotted var(--border-strong);
 }
 .scooter-rider {
-  position: absolute; bottom: 0; left: 0; font-size: 20px; line-height: 1;
+  position: absolute; bottom: 0; font-size: 20px; line-height: 1;
   animation: scooter-drive 1.6s linear infinite;
 }
+/* Drive by left-offset (% of the track), not a fixed px translate, so the
+   scooter traverses the full road at ANY track width — the track is
+   min(240px,72%), so a fixed 240px translate would clip it on narrow hosts. */
 @keyframes scooter-drive {
-  from { transform: translateX(-28px); }
-  to   { transform: translateX(240px); }
+  from { left: -28px; }
+  to   { left: 100%; }
 }
 .scooter-shimmer {
-  width: 240px; max-width: 72%; height: 2px; border-radius: 2px;
+  width: min(240px, 72%); height: 2px; border-radius: 2px;
   background: linear-gradient(90deg, transparent, var(--sw-orange, #ff5200), transparent);
   background-size: 45% 100%; background-repeat: no-repeat;
+  background-position: 50% 0;
   animation: scooter-shimmer 1.6s linear infinite;
 }
 @keyframes scooter-shimmer {
@@ -247,6 +251,9 @@ body {
 }
 .scooter-label { font-family: var(--font-mono, ui-monospace, monospace); letter-spacing: .01em; }
 @media (prefers-reduced-motion: reduce) {
+  /* No motion: park the scooter centered on the road and show the shimmer as
+     a clean centered highlight (background-position 50% above) rather than a
+     frozen off-screen frame. */
   .scooter-rider, .scooter-shimmer { animation: none; }
   .scooter-rider { left: 50%; transform: translateX(-50%); }
 }
