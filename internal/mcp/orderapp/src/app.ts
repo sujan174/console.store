@@ -529,25 +529,38 @@ let placeInFlight = false;
 // written until the user resolves it.
 let cartSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let cartVerifiedRestaurant: string | null = null;
-let cartSyncInFlight = false;
+// Writes are serialized on this chain so they never overlap. flushCartSync
+// awaits the chain's tail, giving checkout a TRUE barrier: the latest pending
+// set is on the server before prepare_order (a fire-and-forget reschedule would
+// let prepare_order run against a stale cart).
+let cartSyncChain: Promise<void> = Promise.resolve();
 const CART_SYNC_DEBOUNCE_MS = 550;
 
 function scheduleCartSync(): void {
   if (cartSyncTimer) clearTimeout(cartSyncTimer);
   cartSyncTimer = setTimeout(() => {
     cartSyncTimer = null;
-    void syncCart();
+    void enqueueCartSync();
   }, CART_SYNC_DEBOUNCE_MS);
 }
 
-// flushCartSync forces any pending debounced sync to run now and awaits it, so
-// the server cart matches the pending set before prepare_order at checkout.
+// enqueueCartSync appends one write to the serialized chain and returns a
+// promise that settles when that write (and everything queued before it) has
+// completed. syncCartOnce reads state.pending at run time, so the tail write
+// always reflects the latest cart.
+function enqueueCartSync(): Promise<void> {
+  cartSyncChain = cartSyncChain.then(syncCartOnce, syncCartOnce);
+  return cartSyncChain;
+}
+
+// flushCartSync forces any debounced sync to run now and awaits the chain tail,
+// so the server cart matches the pending set before prepare_order at checkout.
 async function flushCartSync(): Promise<void> {
   if (cartSyncTimer) {
     clearTimeout(cartSyncTimer);
     cartSyncTimer = null;
   }
-  await syncCart();
+  await enqueueCartSync();
 }
 
 function pendingToWireItems(): WireCartItem[] {
@@ -561,18 +574,19 @@ function pendingToWireItems(): WireCartItem[] {
   });
 }
 
-// syncCart pushes the current pending set to the real Swiggy cart with ONE
-// update_cart. Guards the cross-restaurant conflict before the first write.
-// Best-effort: a failure leaves the optimistic pending in place (a later edit
-// or the checkout flush retries) and surfaces a non-blocking note.
-async function syncCart(): Promise<void> {
+// syncCartOnce pushes the CURRENT pending set to the real Swiggy cart with ONE
+// update_cart (reads state.pending at run time, so a chained/flushed call always
+// writes the latest). Guards the cross-restaurant conflict before the first
+// write per restaurant. Runs serialized on cartSyncChain — never concurrently.
+// Best-effort: a failure leaves the optimistic pending in place (a later edit or
+// the checkout flush retries) and surfaces a non-blocking note.
+async function syncCartOnce(): Promise<void> {
   if (!app || !state.addressId || !state.restaurantId) return;
   if (state.conflict) return; // waiting on the user's keep/clear decision
-  if (cartSyncInFlight) {
-    scheduleCartSync(); // coalesce — run again after the in-flight one settles
-    return;
-  }
-  cartSyncInFlight = true;
+  // Never touch the cart once an order is placing or placed (a late chained sync
+  // must not wipe/rewrite a cart that's already been consumed by place_order).
+  if (placeInFlight || state.cart?.status === "placed") return;
+
   const restaurantId = state.restaurantId;
   try {
     // Conflict guard, once per restaurant session, before the first write.
@@ -610,8 +624,6 @@ async function syncCart(): Promise<void> {
     if (result.isError) render(); // surface e.g. over_cap inline; pending stays editable
   } catch {
     // Network hiccup — leave pending as-is; a later edit or the checkout flush retries.
-  } finally {
-    cartSyncInFlight = false;
   }
 }
 
@@ -628,7 +640,7 @@ async function resolveConflictClear(): Promise<void> {
     // Best-effort — update_cart replaces the whole cart anyway.
   }
   cartVerifiedRestaurant = state.restaurantId; // cleared → this restaurant now owns the cart
-  void syncCart();
+  void enqueueCartSync();
 }
 
 function num(v: unknown): number {
@@ -1061,6 +1073,18 @@ async function openRestaurant(id: string, fallbackName?: string): Promise<void> 
   const r = state.restaurants.find((x) => x.id === id);
   if (r?.unavailable) return;
   if (!app || !state.addressId) return;
+  // Re-entering the restaurant we already have loaded (e.g. back to search then
+  // tapping the same place): just switch back to it, PRESERVING the pending
+  // cart. pending is the sole source of truth for the REPLACE-semantics
+  // update_cart — wiping it (via resetRestaurantScopedState) would make the
+  // next add overwrite the real Swiggy cart with only that one item, silently
+  // dropping items already synced. No get_menu, no reset.
+  if (id === state.restaurantId && state.items.length > 0) {
+    searchToken++;
+    state.screen = "restaurant";
+    render();
+    return;
+  }
   if (restaurantOpenInFlight) return;
   restaurantOpenInFlight = true;
 
