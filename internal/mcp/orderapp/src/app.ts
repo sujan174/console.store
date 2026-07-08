@@ -660,7 +660,9 @@ function clonePendingMap(map: Map<string, PendingLine>): Map<string, PendingLine
 // rollbackPending restores state.pending to the last confirmed snapshot (or
 // an empty cart if we never had one) — used on a failed/threw syncCartOnce
 // (H3) so `pending` can never diverge from the REPLACE-semantics server
-// truth.
+// truth. Like the TUI's rollbackCart, this whole-Map swap can lose a
+// concurrent edit made between the failed write and the rollback; that race
+// is accepted parity (the next sync reconciles) — kept intentionally simple.
 function rollbackPending(): void {
   state.pending = confirmedPending ? clonePendingMap(confirmedPending) : new Map();
 }
@@ -673,7 +675,12 @@ function rollbackPending(): void {
 function seedExistingCartLines(lines: CartBillLine[]): void {
   for (const line of lines) {
     if (!line.item_id) continue;
-    if (state.pending.has(line.item_id)) continue; // already have a session line — keep it
+    // Dedupe by itemId across ALL pending values, not by Map key: a customized
+    // session line keys by selectionKey ("itemId::choiceIds"), so has(item_id)
+    // would miss it and seed a duplicate bare-itemId line → two WireCartItems
+    // for one product in the same update_cart. Skip the product entirely if the
+    // session already has it in any form.
+    if ([...state.pending.values()].some((l) => l.itemId === line.item_id)) continue;
     state.pending.set(line.item_id, {
       key: line.item_id,
       itemId: line.item_id,
@@ -849,6 +856,12 @@ async function syncCartOnce(): Promise<void> {
     stampAvailabilityFromCart((result.structuredContent as { cart?: unknown } | undefined)?.cart); // M3
     confirmedPending = clonePendingMap(state.pending);
   } catch (err) {
+    // A late throw for a restaurant we've already navigated away from must be a
+    // no-op — mirror the post-await identity guards above. Without this,
+    // rollbackPending() would run against the NEW restaurant's state (whose
+    // confirmedPending was reset to null), wiping its pending and flipping its
+    // lastSyncOk. Check identity BEFORE mutating anything.
+    if (state.restaurantId !== restaurantId) return;
     // Unknown server state — roll back rather than risk a phantom line (H3).
     log("syncCartOnce:threw", { err: err instanceof Error ? err.message : String(err) });
     state.cartSyncError = err instanceof Error ? err.message : String(err);
@@ -1063,6 +1076,16 @@ async function materializeCart(token: number): Promise<void> {
       render();
       return;
     }
+
+    // This update_cart lives OUTSIDE syncCartOnce (the manual re-sync path via
+    // clearThenMaterialize / data-cart-retry), so it must keep the H3
+    // bookkeeping in sync itself — otherwise a later background syncCartOnce
+    // failure would roll back to a STALE pre-retry baseline. Align it with
+    // syncCartOnce's success path: pending is now the confirmed server truth,
+    // the sync is clean, and this restaurant owns the cart.
+    confirmedPending = clonePendingMap(state.pending);
+    lastSyncOk = true;
+    cartVerifiedRestaurant = state.restaurantId;
 
     await prepareBill(token, 1);
   } catch (err) {
