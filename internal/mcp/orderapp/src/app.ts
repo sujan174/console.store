@@ -2379,6 +2379,10 @@ async function resolveRestaurantThenOpen(name: string, deepLink: DeepLink): Prom
 // authPollHandle is the single live auth_status poll. The signed-out gate starts
 // it; it stops itself the moment the token appears, then resumes the intent.
 let authPollHandle: number | null = null;
+// authCheckInFlight guards against overlapping checkAuthOnce calls (if
+// auth_status ever takes longer than the 2s poll interval) so
+// resumeAfterSignin can't run twice concurrently.
+let authCheckInFlight = false;
 
 function startAuthPoll(): void {
   if (authPollHandle !== null) return; // already polling
@@ -2398,6 +2402,8 @@ function stopAuthPoll(): void {
 // no Swiggy call). On signed_in it stops polling and resumes the carried intent.
 async function checkAuthOnce(): Promise<void> {
   if (!app) return;
+  if (authCheckInFlight) return; // previous check still in flight — skip this tick
+  authCheckInFlight = true;
   try {
     const result = await app.callServerTool({ name: "auth_status", arguments: {} });
     const sc = result.isError
@@ -2410,6 +2416,8 @@ async function checkAuthOnce(): Promise<void> {
   } catch (err) {
     console.error("[order-app] auth poll failed", err);
     // transient — keep polling
+  } finally {
+    authCheckInFlight = false;
   }
 }
 
@@ -2478,6 +2486,10 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     startAuthPoll();
     return;
   }
+  // Left the sign-in gate via a fresh, non-poll result — stop the auth poll so
+  // it can't later fire resumeAfterSignin() on a stale intent and wipe the cart.
+  if (state.screen === "signin") stopAuthPoll();
+
   // Bump menuToken unconditionally, on every open_store — home or restaurant,
   // loading shell or seeded — so any in-flight fetchMenuThenApply from a
   // restaurant the user just left is superseded and its stale get_menu
