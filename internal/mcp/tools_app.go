@@ -5,6 +5,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"consolestore/internal/broker/api"
 	"consolestore/internal/config"
 	"consolestore/internal/localstore"
 	"consolestore/internal/mcp/orderapp"
@@ -78,6 +79,16 @@ func (s *Server) registerApp(srv *mcp.Server) {
 	addTool(srv, openStoreTool(), s.handleOpenStore)
 }
 
+// addrInList reports whether id is present among list's addresses.
+func addrInList(id string, list []api.Address) bool {
+	for _, a := range list {
+		if a.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in OpenStoreIn) (*mcp.CallToolResult, OpenStoreOut, error) {
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, OpenStoreOut{}, err
@@ -92,6 +103,19 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 	if addr == "" {
 		pref, _ := localstore.LoadAddrPref()
 		addr, label = pref.Active()
+	}
+	// Reconcile against the live address list: a saved AddrPref (or an id
+	// passed in) can point at an address the user has since deleted in the
+	// Swiggy app. Resolving that dead id straight through would send an
+	// unknown addressId to Menu/UpdateCart. Only reconcile when the list
+	// actually loaded with entries — a transient Addresses() failure must not
+	// wipe out an otherwise-good address.
+	if addr != "" {
+		if list, err := s.be.Addresses(); err == nil && len(list) > 0 && !addrInList(addr, list) {
+			pref, _ := localstore.LoadAddrPref()
+			_ = localstore.SaveAddrPref(pref.ForgetActive(addr))
+			addr, label = list[0].ID, list[0].Label
+		}
 	}
 	if addr == "" {
 		if list, err := s.be.Addresses(); err == nil && len(list) > 0 {

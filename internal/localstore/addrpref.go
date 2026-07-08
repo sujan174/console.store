@@ -54,6 +54,19 @@ func (p AddrPref) RecordPlacement(id, label string, now int64) AddrPref {
 	return p
 }
 
+// ForgetActive drops a stale resolved address (one that no longer exists in
+// the live address list) from the preference. Last is always cleared; the
+// locked Default is only cleared when it was the stale id itself — so a
+// deleted default address doesn't keep resolving to a dead address on every
+// open_store call, but an unrelated stale Last never disturbs a good default.
+func (p AddrPref) ForgetActive(staleID string) AddrPref {
+	p.LastAddrID, p.LastLabel, p.LastUsedUnix = "", "", 0
+	if p.DefaultAddrID == staleID {
+		p.DefaultAddrID, p.DefaultLabel, p.Locked = "", "", false
+	}
+	return p
+}
+
 func addrPrefPath() (string, error) {
 	p, err := configPath()
 	if err != nil {

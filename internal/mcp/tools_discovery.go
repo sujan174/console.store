@@ -59,9 +59,20 @@ func toRestaurantDTOs(in []api.Restaurant) []RestaurantDTO {
 	}
 	return out
 }
+
+// toMenuItemDTOs dedupes by item id, keeping the FIRST occurrence — the same
+// id repeats across category pages in the raw MCP menu (e.g. once under
+// "Recommended", again under its real category). This matches the TUI's
+// MergeMenuPage (internal/catalog/swiggy/snapshot.go). Dedupe is by id only,
+// never by name: punctuation-variant names can be distinct items.
 func toMenuItemDTOs(in []api.MenuItem) []MenuItemDTO {
 	out := make([]MenuItemDTO, 0, len(in))
+	seen := make(map[string]bool, len(in))
 	for _, m := range in {
+		if m.ID == "" || seen[m.ID] {
+			continue
+		}
+		seen[m.ID] = true
 		out = append(out, MenuItemDTO{ID: m.ID, Name: m.Name, Price: m.Price, Veg: m.Veg, InStock: m.InStock, Customizable: m.Customizable, Category: m.Category})
 	}
 	return out

@@ -165,8 +165,9 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	// Record real identity: restaurantID is a Swiggy id for presets, "" for ad-hoc
 	// orders (then bumpFavorite skips). Never a name in the id slot.
 	_ = localstore.RecordOrder(p.addressID, p.addrLabel, p.restaurantID, p.restaurantName, nowUnix())
-	// Auto-save the placed order for the app's previous-orders list, and record
-	// the placement address in the app's addrpref (default/last/lock) model.
+	// Auto-save the placed order for the app's previous-orders list. Best-effort
+	// and only possible when we have a cached cart write to source lines from
+	// (a pre-existing Swiggy cart never routed through update_cart has none).
 	if cw, ok := s.cartWriteFor(p.addressID); ok {
 		po := localstore.PlacedOrder{
 			RestaurantID: cw.RestaurantID, RestaurantName: cw.RestaurantName,
@@ -183,9 +184,12 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 			po.Lines = append(po.Lines, pl)
 		}
 		_ = localstore.AppendOrder(p.addressID, po)
-		if ap, err := localstore.LoadAddrPref(); err == nil {
-			_ = localstore.SaveAddrPref(ap.RecordPlacement(p.addressID, p.addrLabel, nowUnix()))
-		}
+	}
+	// Record the placement address in the app's addrpref (default/last/lock)
+	// model. Unconditional (not gated on a cart write existing) — every
+	// successful placement, food or ad-hoc, should keep addrpref current.
+	if ap, err := localstore.LoadAddrPref(); err == nil {
+		_ = localstore.SaveAddrPref(ap.RecordPlacement(p.addressID, p.addrLabel, nowUnix()))
 	}
 	// Best-effort taste observation from the cart that was actually placed.
 	// Never blocks the order and is never allowed to duplicate it.
@@ -239,6 +243,11 @@ func (s *Server) placeIMOrder(p pendingOrder) (*mcp.CallToolResult, PlaceOrderOu
 	}
 	_ = localstore.SaveActiveOrder(active)
 	_ = localstore.RecordOrder(p.addressID, p.addrLabel, p.restaurantID, p.restaurantName, nowUnix())
+	// Best-effort, mirrors the food path: keep addrpref current for Instamart
+	// placements too (previously only food touched it).
+	if ap, err := localstore.LoadAddrPref(); err == nil {
+		_ = localstore.SaveAddrPref(ap.RecordPlacement(p.addressID, p.addrLabel, nowUnix()))
+	}
 	s.markCartWritePlaced()
 	// Force-clear the server cart after placement: checkout normally consumes
 	// it, but leftovers have been seen live lingering in the Swiggy app cart.

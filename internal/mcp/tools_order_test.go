@@ -131,6 +131,32 @@ func TestPlaceOrderAutoSavesOrderAndAddrPref(t *testing.T) {
 	}
 }
 
+// AddrPref must record the placement address even when the placement had no
+// cached cartWrite to source lines from (e.g. prepare_order/place_order
+// against a pre-existing Swiggy cart, never routed through update_cart).
+func TestPlaceOrderRecordsAddrPrefWithoutCartWrite(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	be := &fakeBackend{
+		cart:  api.Cart{Restaurant: "McDonald's", Total: 250, Lines: []api.CartLine{{ItemID: "i1", Quantity: 1, Available: true}}},
+		order: api.Order{ID: "OID1", Restaurant: "McDonald's", Total: 250},
+	}
+	s := NewServer(be, &fakeAuth{token: true})
+	_, prep, err := s.handlePrepareOrder(context.Background(), nil, PrepareOrderIn{AddressID: "a9"})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if _, _, err := s.handlePlaceOrder(context.Background(), nil, PlaceOrderIn{ConfirmationID: prep.ConfirmationID}); err != nil {
+		t.Fatalf("place: %v", err)
+	}
+	ap, err := localstore.LoadAddrPref()
+	if err != nil {
+		t.Fatalf("LoadAddrPref: %v", err)
+	}
+	if ap.LastAddrID != "a9" {
+		t.Fatalf("addrpref LastAddrID = %q, want a9 (recorded even without a cart write)", ap.LastAddrID)
+	}
+}
+
 func TestPlaceRejectsUnknownConfirmation(t *testing.T) {
 	be := &fakeBackend{cart: api.Cart{Total: 250}}
 	s := NewServer(be, &fakeAuth{token: true})

@@ -91,3 +91,28 @@ func TestOpenStoreFallsBackToFirstAddress(t *testing.T) {
 		t.Fatalf("entry address_id = %q, want fb1 (empty addressId would go to be.Menu)", out.Entry["address_id"])
 	}
 }
+
+// A saved AddrPref pointing at an address id the account no longer has (the
+// user deleted it in the Swiggy app) must not resolve to a dead id: open_store
+// reconciles against the live address list and falls back to list[0], clearing
+// the stale pref so it doesn't keep resolving to nothing on every call.
+func TestOpenStoreReconcilesStaleAddress(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	_ = localstore.SaveAddrPref(localstore.AddrPref{}.SetActive("dead1", "Old Place"))
+	be := &fakeBackend{addrs: []api.Address{{ID: "fresh1", Label: "New Home"}}}
+	s := NewServer(be, &fakeAuth{token: true})
+	_, out, err := s.handleOpenStore(context.Background(), nil, OpenStoreIn{})
+	if err != nil {
+		t.Fatalf("handleOpenStore: %v", err)
+	}
+	if out.Address.ID != "fresh1" {
+		t.Fatalf("address id = %q, want fresh1 (stale pref reconciled to first live address)", out.Address.ID)
+	}
+	ap, err := localstore.LoadAddrPref()
+	if err != nil {
+		t.Fatalf("LoadAddrPref: %v", err)
+	}
+	if ap.LastAddrID == "dead1" {
+		t.Fatalf("stale address id dead1 still recorded in addrpref: %+v", ap)
+	}
+}

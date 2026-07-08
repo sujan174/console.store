@@ -44,6 +44,34 @@ func TestAddrPrefRoundTrip(t *testing.T) {
 	}
 }
 
+// ForgetActive clears a stale Last address, and — when that same id is the
+// locked Default — also clears the Default+lock so a deleted default doesn't
+// keep resolving to a dead address.
+func TestForgetActiveClearsLastAndStaleDefault(t *testing.T) {
+	p := AddrPref{}.SetDefault("a2", "Work")
+	p = p.RecordPlacement("a2", "Work", 1) // Last == Default == a2
+	p = p.ForgetActive("a2")
+	if p.LastAddrID != "" || p.LastLabel != "" {
+		t.Fatalf("Last not cleared: %+v", p)
+	}
+	if p.DefaultAddrID != "" || p.DefaultLabel != "" || p.Locked {
+		t.Fatalf("stale default not cleared: %+v", p)
+	}
+}
+
+// ForgetActive must not touch a Default that isn't the stale id.
+func TestForgetActiveKeepsUnrelatedDefault(t *testing.T) {
+	p := AddrPref{}.SetDefault("a2", "Work")
+	p = p.RecordPlacement("a5", "Other", 1) // Last=a5, Default stays a2 (locked)
+	p = p.ForgetActive("a5")
+	if p.LastAddrID != "" {
+		t.Fatalf("Last not cleared: %+v", p)
+	}
+	if p.DefaultAddrID != "a2" || !p.Locked {
+		t.Fatalf("unrelated default wrongly cleared: %+v", p)
+	}
+}
+
 func TestRecordPlacementKeepsLabelWhenEmpty(t *testing.T) {
 	p := AddrPref{}.SetActive("a1", "Home")
 	p = p.RecordPlacement("a1", "", 5) // app path: empty label

@@ -179,6 +179,13 @@ func TestPlaceOrderRoutesInstamartIdentity(t *testing.T) {
 	if err != nil || !ok || ao.Vertical != "instamart" || ao.Lat != 12.9 || ao.Lng != 77.6 {
 		t.Fatalf("active order = %+v ok=%v err=%v", ao, ok, err)
 	}
+	ap, err := localstore.LoadAddrPref()
+	if err != nil {
+		t.Fatalf("LoadAddrPref: %v", err)
+	}
+	if ap.LastAddrID != "a1" {
+		t.Fatalf("addrpref LastAddrID = %q, want a1 (instamart placement must record addrpref like food)", ap.LastAddrID)
+	}
 }
 
 func TestPlaceOrderNeverFiresWithoutConfirmation(t *testing.T) {

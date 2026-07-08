@@ -46,3 +46,31 @@ func TestToMenuItemDTOsKeepsCategory(t *testing.T) {
 		t.Fatalf("category dropped: %+v", got)
 	}
 }
+
+// The MCP menu repeats the same item id across category pages (e.g. it shows
+// up under "Recommended" and again under its real category). toMenuItemDTOs
+// must dedupe by id, keeping the FIRST occurrence, matching the TUI's
+// MergeMenuPage (internal/catalog/swiggy/snapshot.go). Punctuation-variant
+// names with distinct ids must NOT be collapsed.
+func TestToMenuItemDTOsDedupesByID(t *testing.T) {
+	in := []api.MenuItem{
+		{ID: "1", Name: "Veg Wrap", Price: 120, Category: "Recommended"},
+		{ID: "2", Name: "Paneer Roll", Price: 150, Category: "Recommended"},
+		{ID: "1", Name: "Veg Wrap (dup)", Price: 999, Category: "Wraps"}, // repeat of id 1, later page
+		{ID: "3", Name: "Veg Wrap!", Price: 130, Category: "Wraps"},      // distinct id, punctuation-variant name
+		{ID: "", Name: "No ID Item", Price: 50},                          // empty id must be dropped
+	}
+	got := toMenuItemDTOs(in)
+	if len(got) != 3 {
+		t.Fatalf("len(got) = %d, want 3 (deduped by id, empty id dropped): %+v", len(got), got)
+	}
+	if got[0].ID != "1" || got[0].Name != "Veg Wrap" || got[0].Category != "Recommended" {
+		t.Fatalf("first occurrence of id 1 not preserved: %+v", got[0])
+	}
+	if got[1].ID != "2" {
+		t.Fatalf("order not preserved: %+v", got)
+	}
+	if got[2].ID != "3" || got[2].Name != "Veg Wrap!" {
+		t.Fatalf("distinct id with punctuation-variant name dropped: %+v", got)
+	}
+}
