@@ -24,7 +24,7 @@ func TestDetectFindsClaudeCodeByConfig(t *testing.T) {
 	if got == nil {
 		t.Fatalf("claude-code not detected; found %+v", found)
 	}
-	if got.Kind != KindJSON || got.SkillsDir == "" {
+	if got.SkillsDir == "" {
 		t.Fatalf("claude-code agent = %+v", *got)
 	}
 }

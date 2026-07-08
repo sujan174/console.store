@@ -7,19 +7,9 @@ import (
 	"reflect"
 )
 
-// serverEntry is the MCP server shape Claude/Cursor expect.
+// serverEntry is the MCP server shape Claude expects.
 func serverEntry(command string, args []string) map[string]any {
 	return map[string]any{"command": command, "args": toAnySlice(args)}
-}
-
-// serverEntryTyped is serverEntry plus a "type" field (VS Code requires
-// "type": "stdio" on stdio servers).
-func serverEntryTyped(command string, args []string, typ string) map[string]any {
-	e := serverEntry(command, args)
-	if typ != "" {
-		e["type"] = typ
-	}
-	return e
 }
 
 // nestedMap walks/creates the object at keyPath under m and returns it. Any
@@ -81,10 +71,10 @@ func saveJSONObject(path string, m map[string]any) error {
 }
 
 // writeJSONServerAt merges entry under keyPath[name], preserving every other
-// key. keyPath is the nested path to the servers map — ["mcpServers"] for
-// Claude/Cursor/Windsurf, ["mcp","servers"] for OpenClaw, ["context_servers"]
-// for Zed, ["servers"] for VS Code. Idempotent: changed=false when the exact
-// entry already exists.
+// key. keyPath is the nested path to the servers map (["mcpServers"] for the
+// Claude agents). Idempotent: changed=false when the exact entry already
+// exists. Kept general (nested keyPath) so the JSON merge/preserve logic is
+// unit-testable independently of the single call site.
 func writeJSONServerAt(path string, keyPath []string, name string, entry map[string]any) (bool, error) {
 	m, err := loadJSONObject(path)
 	if err != nil {

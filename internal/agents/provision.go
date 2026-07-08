@@ -9,28 +9,14 @@ import (
 
 func optedOut() bool { return os.Getenv("CONSOLE_NO_AGENT_SETUP") == "1" }
 
-// wireMCP writes our server entry into one agent's config (JSON, TOML, or YAML).
+// wireMCP writes our server entry into one Claude agent's JSON config under
+// "mcpServers". Idempotent (see writeJSONServer).
 func wireMCP(a Agent, bin string) (bool, error) {
-	switch a.Kind {
-	case KindTOML:
-		return writeTOMLServer(a.ConfigPath, ServerName, bin, []string{"mcp"})
-	case KindYAML:
-		return writeYAMLServer(a.ConfigPath, ServerName, bin, []string{"mcp"})
-	default:
-		entry := serverEntryTyped(bin, []string{"mcp"}, a.EntryType)
-		return writeJSONServerAt(a.ConfigPath, a.jsonKey(), ServerName, entry)
-	}
+	return writeJSONServer(a.ConfigPath, ServerName, bin, []string{"mcp"})
 }
 
 func unwireMCP(a Agent) (bool, error) {
-	switch a.Kind {
-	case KindTOML:
-		return removeTOMLServer(a.ConfigPath, ServerName)
-	case KindYAML:
-		return removeYAMLServer(a.ConfigPath, ServerName)
-	default:
-		return removeJSONServerAt(a.ConfigPath, a.jsonKey(), ServerName)
-	}
+	return removeJSONServer(a.ConfigPath, ServerName)
 }
 
 // Install wires the `console mcp` server + skills into every detected agent.
@@ -83,7 +69,7 @@ func List(out io.Writer) error {
 	for _, a := range agents {
 		wired := "not wired"
 		if raw, err := os.ReadFile(a.ConfigPath); err == nil {
-			if containsServer(string(raw), a.Kind) {
+			if containsServer(string(raw)) {
 				wired = "wired"
 			}
 		}
@@ -92,15 +78,8 @@ func List(out io.Writer) error {
 	return nil
 }
 
-func containsServer(content string, kind Kind) bool {
-	switch kind {
-	case KindTOML:
-		return strings.Contains(content, tomlHeader(ServerName))
-	case KindYAML:
-		return strings.Contains(content, ServerName+":")
-	default:
-		return strings.Contains(content, "\""+ServerName+"\"")
-	}
+func containsServer(content string) bool {
+	return strings.Contains(content, "\""+ServerName+"\"")
 }
 
 // Remove unwires the server + skills from every detected agent.
