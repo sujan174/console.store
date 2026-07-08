@@ -7,7 +7,7 @@
 import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
-import { groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu } from "./screens";
+import { esc, groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu } from "./screens";
 import { renderHome } from "./home";
 import {
   buildWireSelections,
@@ -293,6 +293,9 @@ export interface AppState {
   // A non-blocking note from the debounced cart sync (e.g. over_cap) — shown
   // inline on the menu; the pending cart stays editable so the user can adjust.
   cartSyncError: string | null;
+  // True while a cart sync is scheduled or in flight — drives a "saving…"
+  // indicator on the cart bar so an add visibly shows work happening.
+  cartSyncBusy: boolean;
 }
 
 export const state: AppState = {
@@ -324,6 +327,7 @@ export const state: AppState = {
   focusedItemId: null,
   conflict: null,
   cartSyncError: null,
+  cartSyncBusy: false,
 };
 
 let root: HTMLElement | null = null;
@@ -334,8 +338,59 @@ let app: App | null = null;
 // focused simple-item card → full menu. The focused case only holds for an
 // existing, NON-customizable item (a customizable deep-link goes through the
 // customize sheet, not here); anything else falls through to the menu.
+// DEBUG heavy logging — readable in Claude Desktop's iframe devtools
+// (Cmd+Opt+I → Console). Every state transition, tool call, and error is
+// tagged "[order-app]" so bugs are diagnosable without server access.
+const DEBUG = true;
+function log(tag: string, data?: unknown): void {
+  if (!DEBUG) return;
+  try {
+    console.log(`[order-app] ${tag}`, data ?? "");
+  } catch {
+    /* console unavailable — never let logging throw */
+  }
+}
+
+// render is an ERROR BOUNDARY: a throw in any screen renderer is caught and
+// shown as a visible error card instead of blanking the widget (the "screen
+// shows nothing" symptom). The error is also logged with its stack.
 function render(): void {
   if (!root) return;
+  try {
+    renderScreen(root);
+  } catch (err) {
+    console.error("[order-app] render crashed", err);
+    try {
+      root.innerHTML = errorCardHTML(err);
+    } catch {
+      /* last resort — leave whatever was there */
+    }
+  }
+}
+
+function errorCardHTML(err: unknown): string {
+  const msg = err instanceof Error ? `${err.message}` : String(err);
+  const stack = err instanceof Error && err.stack ? err.stack : "";
+  return (
+    `<div class="card" style="max-width:440px;border-color:var(--text-danger)">` +
+    `<div style="font-size:15px;font-weight:600;color:var(--text-danger);margin-bottom:6px">Something broke rendering this screen</div>` +
+    `<div style="font-size:13px;color:var(--text-secondary)">${esc(msg)}</div>` +
+    (stack ? `<pre style="font-size:11px;color:var(--text-muted);white-space:pre-wrap;margin-top:8px;overflow:auto;max-height:160px">${esc(stack)}</pre>` : "") +
+    `<div style="font-size:12px;color:var(--text-muted);margin-top:8px">Re-open the store to recover. (This error is logged in the console.)</div>` +
+    `</div>`
+  );
+}
+
+function renderScreen(root: HTMLElement): void {
+  log("render", {
+    screen: state.screen,
+    conflict: !!state.conflict,
+    cart: state.cart?.status ?? null,
+    customize: state.customize?.status ?? null,
+    focused: state.focusedItemId,
+    pending: state.pending.size,
+    syncBusy: state.cartSyncBusy,
+  });
   if (state.screen === "home") {
     root.innerHTML = renderHome(state);
     return;
@@ -536,20 +591,36 @@ let cartVerifiedRestaurant: string | null = null;
 let cartSyncChain: Promise<void> = Promise.resolve();
 const CART_SYNC_DEBOUNCE_MS = 550;
 
+let pendingSyncs = 0;
+
+function setSyncBusy(busy: boolean): void {
+  if (state.cartSyncBusy === busy) return;
+  state.cartSyncBusy = busy;
+  render();
+}
+
 function scheduleCartSync(): void {
   if (cartSyncTimer) clearTimeout(cartSyncTimer);
+  setSyncBusy(true); // show "saving…" immediately, through the debounce window
   cartSyncTimer = setTimeout(() => {
     cartSyncTimer = null;
     void enqueueCartSync();
   }, CART_SYNC_DEBOUNCE_MS);
+  log("scheduleCartSync", { pending: state.pending.size });
 }
 
 // enqueueCartSync appends one write to the serialized chain and returns a
 // promise that settles when that write (and everything queued before it) has
 // completed. syncCartOnce reads state.pending at run time, so the tail write
-// always reflects the latest cart.
+// always reflects the latest cart. Drops the "saving…" indicator once the chain
+// drains and no further debounced write is queued.
 function enqueueCartSync(): Promise<void> {
-  cartSyncChain = cartSyncChain.then(syncCartOnce, syncCartOnce);
+  pendingSyncs++;
+  setSyncBusy(true);
+  cartSyncChain = cartSyncChain.then(syncCartOnce, syncCartOnce).finally(() => {
+    pendingSyncs--;
+    if (pendingSyncs === 0 && !cartSyncTimer) setSyncBusy(false);
+  });
   return cartSyncChain;
 }
 
@@ -588,6 +659,7 @@ async function syncCartOnce(): Promise<void> {
   if (placeInFlight || state.cart?.status === "placed") return;
 
   const restaurantId = state.restaurantId;
+  log("syncCartOnce:start", { restaurantId, verified: cartVerifiedRestaurant === restaurantId, pending: state.pending.size });
   try {
     // Conflict guard, once per restaurant session, before the first write.
     if (cartVerifiedRestaurant !== restaurantId) {
@@ -598,11 +670,15 @@ async function syncCartOnce(): Promise<void> {
       if (state.restaurantId !== restaurantId) return; // navigated away mid-flight
       if (!got.isError) {
         const existing = readBill((got.structuredContent as { cart?: unknown } | undefined)?.cart);
+        log("syncCartOnce:get_cart", { existingRestaurant: existing.restaurant, existingLines: existing.lines.length });
         if (existing.lines.length > 0 && isForeignCart(existing.restaurant)) {
+          log("syncCartOnce:conflict", { foreign: existing.restaurant });
           state.conflict = { foreignRestaurant: existing.restaurant };
           render();
           return; // do NOT write — wait for keep/clear
         }
+      } else {
+        log("syncCartOnce:get_cart_error", { text: toolErrorText(got) });
       }
       // Either no foreign cart, or get_cart errored (empty-cart is an MCP error
       // on Swiggy). update_cart replaces the whole cart for this restaurant, so
@@ -620,10 +696,12 @@ async function syncCartOnce(): Promise<void> {
 
     const result = await app.callServerTool({ name: "update_cart", arguments: args });
     if (state.restaurantId !== restaurantId) return;
+    log("syncCartOnce:update_cart", { isError: result.isError, items: (args.items as unknown[]).length });
     state.cartSyncError = result.isError ? splitError(toolErrorText(result)).message : null;
     if (result.isError) render(); // surface e.g. over_cap inline; pending stays editable
-  } catch {
+  } catch (err) {
     // Network hiccup — leave pending as-is; a later edit or the checkout flush retries.
+    log("syncCartOnce:threw", { err: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -1221,6 +1299,23 @@ async function chooseAddress(id: string, label: string, asDefault: boolean): Pro
   }
 }
 
+// onRootClickSafe wraps the click dispatcher so a throw in any handler is
+// logged + surfaced (error card) instead of silently breaking interactivity.
+function onRootClickSafe(evt: MouseEvent): void {
+  try {
+    onRootClick(evt);
+  } catch (err) {
+    console.error("[order-app] click handler threw", err);
+    if (root) {
+      try {
+        root.innerHTML = errorCardHTML(err);
+      } catch {
+        /* noop */
+      }
+    }
+  }
+}
+
 function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
@@ -1228,6 +1323,7 @@ function onRootClick(evt: MouseEvent): void {
     "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear]",
   );
   if (!el) return;
+  log("click", { action: Object.keys(el.dataset)[0] ?? "?" });
 
   if (el.dataset.addrOpen !== undefined) {
     if (state.addrPickerOpen) {
@@ -1651,14 +1747,40 @@ export function bootstrap(): void {
   injectStyles();
   applyDisplayModeAttr(undefined); // default to "inline" before connect resolves
 
+  // Global safety nets: an uncaught error or an unhandled promise rejection
+  // (e.g. a throw inside an async handler) would otherwise leave the widget in
+  // a broken/blank state with no signal. Log it heavily and, if we have a root,
+  // surface it as a visible error card instead of a blank screen.
+  window.addEventListener("error", (e) => {
+    console.error("[order-app] window error", e.error ?? e.message);
+    if (root) {
+      try {
+        root.innerHTML = errorCardHTML(e.error ?? e.message);
+      } catch {
+        /* noop */
+      }
+    }
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    console.error("[order-app] unhandled rejection", e.reason);
+    if (root) {
+      try {
+        root.innerHTML = errorCardHTML(e.reason);
+      } catch {
+        /* noop */
+      }
+    }
+  });
+
   root = document.getElementById("app");
   if (!root) throw new Error("consolestore order app: missing #app root");
-  root.addEventListener("click", onRootClick);
+  root.addEventListener("click", onRootClickSafe);
   root.addEventListener("keydown", onRootKeydown);
   root.addEventListener("input", onRootInput);
 
   app = new App({ name: "consolestore order", version: "0.1.0" });
   app.onhostcontextchanged = () => applyHostStyling();
+  log("bootstrap");
 
   // The open_store tool result is pushed here on first render — see
   // OpenStoreOut above and order-app-tool-schemas.md. Reading the menu

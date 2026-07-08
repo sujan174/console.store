@@ -147,10 +147,14 @@ function itemRow(item: MenuItemData, pending: Map<string, PendingLine>, index: n
 
 // The sticky cart bar (surface-kit.md "Cart bar"). "checkout →" is a stub
 // until Task 6 wires the real cart/bill screen.
-function cartBar(pending: Map<string, PendingLine>): string {
+function cartBar(state: AppState): string {
+  const pending = state.pending;
   const n = pendingCount(pending);
   if (!n) return "";
-  return `<div class="cartbar"><span style="font-size:14px">${n} in cart · ${money(pendingTotal(pending))}</span><button type="button" data-checkout class="btn btn-primary">checkout →</button></div>`;
+  const saving = state.cartSyncBusy
+    ? `<span style="font-size:11px;color:var(--text-muted);margin-left:8px">${icon("loader", 12)} saving…</span>`
+    : "";
+  return `<div class="cartbar"><span style="font-size:14px">${n} in cart · ${money(pendingTotal(pending))}${saving}</span><button type="button" data-checkout class="btn btn-primary">checkout →</button></div>`;
 }
 
 function header(title: string, sub: string): string {
@@ -193,7 +197,7 @@ export function renderMenu(state: AppState): string {
     (state.cartSyncError
       ? `<div style="font-size:12px;color:var(--text-warning);margin-top:8px">${esc(state.cartSyncError)}</div>`
       : "") +
-    cartBar(state.pending)
+    cartBar(state)
   );
 }
 
@@ -221,7 +225,7 @@ export function renderFocusedItem(state: AppState, itemId: string): string {
     `<h2 class="sr-only">Focused item: ${esc(item.name)} from ${esc(title)} — add it to your cart or go back to the full menu.</h2>` +
     back +
     card +
-    cartBar(state.pending)
+    cartBar(state)
   );
 }
 

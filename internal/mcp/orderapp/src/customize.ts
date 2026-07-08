@@ -151,8 +151,15 @@ export function estimatePrice(basePrice: number, groups: CuratedGroup[], selecti
     for (const choiceId of chosen) {
       const choice = choiceById(g, choiceId);
       if (!choice) continue;
-      if (g.kind === "base") base = choice.price;
-      else add += choice.price;
+      // Absolute variant: the chosen size price REPLACES the base — but ONLY
+      // when it carries a real price (e.g. a pizza where Regular/Medium/Large
+      // are ₹200/₹400/₹600). Some items (e.g. Truffles burgers) return their
+      // size choices at ₹0 with the price living in the item's base; replacing
+      // with 0 would wipe the real price and show a ≈₹0 total. Keep the base
+      // when the chosen size is free.
+      if (g.kind === "base") {
+        if (choice.price > 0) base = choice.price;
+      } else add += choice.price;
     }
   }
   return base + add;
