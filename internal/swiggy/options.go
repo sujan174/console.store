@@ -127,6 +127,17 @@ func buildOptions(it searchMenuItem) []OptionGroup {
 
 	// Addon groups: additive, with their own min/max constraints.
 	for _, ag := range it.Addons {
+		// Swiggy exposes some REQUIRED single-choice "Choice Of X" groups
+		// (minAddons:1/maxAddons:1, e.g. Truffles' "Choice Of Bun") inside the
+		// addons array — but its cart engine REJECTS them in every wire channel
+		// (INVALID_ADDON as an addon, INVALID_ITEM_IDS as a legacy variant,
+		// silently ignored as variantsV2). Since we force-include every required
+		// group on each add, sending one fails the whole update_food_cart and the
+		// cart stays empty. Swiggy auto-applies its own default for these when you
+		// send variant-only, so drop them: never surface, never send.
+		if ag.MinAddons >= 1 && ag.MaxAddons <= 1 {
+			continue
+		}
 		g := OptionGroup{ID: ag.GroupID, Name: ag.GroupName, Min: ag.MinAddons, Max: ag.MaxAddons}
 		for _, ch := range ag.Choices {
 			g.Choices = append(g.Choices, OptionChoice{

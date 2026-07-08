@@ -306,7 +306,10 @@ function multiHint(g: CuratedGroup): string {
 // base/single (exactly one pressed), or capped chips for multi (surface-kit
 // "Segmented control" / "Choice chips"). A required multi carries data-cz-min
 // so the click handler won't let it drop below its minimum. A ₹0 choice reads
-// as "included".
+// as "included" — EXCEPT a base/size variant, where Swiggy exposes no
+// per-variant price (variantsV2 carries none), so ₹0 there means "unknown, not
+// free": show the size name alone rather than mislabel an upsized option as
+// included. The real delta always surfaces in the authoritative checkout bill.
 function customizeGroup(g: CuratedGroup, selection: Map<string, Set<string>>): string {
   const chosen = selection.get(g.id) ?? new Set<string>();
   const isMulti = g.kind === "multi";
@@ -314,6 +317,8 @@ function customizeGroup(g: CuratedGroup, selection: Map<string, Set<string>>): s
   const choices = g.choices
     .map((c) => {
       const on = chosen.has(c.id);
+      // A base variant priced 0 = price unknown → no tag, not "included".
+      const priceless = g.kind === "base" && c.price === 0;
       const priceText = c.price === 0 ? "included" : money(c.price);
       const attr = isMulti
         ? `data-cz-toggle data-cz-group="${esc(g.id)}" data-cz-choice="${esc(c.id)}" data-cz-min="${g.min}" data-cz-max="${g.max}"`
@@ -321,7 +326,9 @@ function customizeGroup(g: CuratedGroup, selection: Map<string, Set<string>>): s
       const cls = isMulti ? `chip${on ? " on" : ""}` : `seg${on ? " on" : ""}`;
       const body = isMulti
         ? `${esc(c.name)} · ${priceText}`
-        : `${esc(c.name)}<br><span style="font-size:11px;opacity:.8">${priceText}</span>`;
+        : priceless
+          ? `${esc(c.name)}`
+          : `${esc(c.name)}<br><span style="font-size:11px;opacity:.8">${priceText}</span>`;
       return `<button type="button" ${attr} aria-pressed="${on}" class="${cls}">${body}</button>`;
     })
     .join("");
