@@ -365,6 +365,7 @@ function render(): void {
   if (!root) return;
   try {
     renderScreen(root);
+    if (DEBUG) root.insertAdjacentHTML("beforeend", debugBarHTML());
   } catch (err) {
     console.error("[order-app] render crashed", err);
     try {
@@ -373,6 +374,25 @@ function render(): void {
       /* last resort — leave whatever was there */
     }
   }
+}
+
+// debugBarHTML surfaces the cart-sync internals IN the widget (DEBUG only), so a
+// bug is diagnosable without the iframe console: it shows whether the sync has a
+// valid address/restaurant, the pending count, the last sync outcome, the
+// verified-restaurant handshake, and any sync error.
+function debugBarHTML(): string {
+  const parts = [
+    `scr=${state.screen}`,
+    `addr=${state.addressId ?? "∅"}`,
+    `rest=${state.restaurantId ?? "∅"}`,
+    `pend=${state.pending.size}`,
+    `busy=${state.cartSyncBusy ? "1" : "0"}`,
+    `syncOk=${lastSyncOk ? "1" : "0"}`,
+    `verified=${cartVerifiedRestaurant === state.restaurantId ? "1" : "0"}`,
+    `err=${state.cartSyncError ?? "-"}`,
+    `conflict=${state.conflict ? "1" : "0"}`,
+  ];
+  return `<div style="position:fixed;bottom:0;left:0;right:0;font:11px/1.4 var(--font-mono,monospace);background:#111;color:#0f0;padding:3px 6px;z-index:9999;white-space:pre-wrap;word-break:break-all;opacity:.9">[dbg] ${esc(parts.join("  "))}</div>`;
 }
 
 function errorCardHTML(err: unknown): string {
@@ -630,6 +650,11 @@ let confirmedPending: Map<string, PendingLine> | null = null;
 // it never bills against a cart the server never actually saw.
 let lastSyncOk = true;
 
+// restoringCart guards restoreConfirmedCart against re-entrancy — a restore is
+// itself a real update_cart call, so a failure in it must never trigger
+// another restore (no loops).
+let restoringCart = false;
+
 // lastBill (M5) is the most recent bill that was actually on screen, stashed
 // right before prepareBill swaps state.cart to its "loading" state (which has
 // no `bill` field). Without this, an over_cap failure from that same
@@ -674,6 +699,20 @@ function clonePendingMap(map: Map<string, PendingLine>): Map<string, PendingLine
 // is accepted parity (the next sync reconciles) — kept intentionally simple.
 function rollbackPending(): void {
   state.pending = confirmedPending ? clonePendingMap(confirmedPending) : new Map();
+}
+
+// newlyAddedLineNames names the pending lines a failed update_cart just tried
+// (and failed) to add — every line whose key isn't in confirmedPending. When
+// confirmedPending is null (no confirmed baseline yet this restaurant
+// session), every pending line counts as new. MUST be read before
+// rollbackPending() runs — rollback overwrites `pending` with confirmedPending
+// itself, at which point the newly-added lines are gone.
+function newlyAddedLineNames(): string[] {
+  const names: string[] = [];
+  for (const [key, line] of state.pending) {
+    if (!confirmedPending || !confirmedPending.has(key)) names.push(line.name);
+  }
+  return names;
 }
 
 // seedExistingCartLines (M4) folds a pre-existing, SAME-restaurant, non-empty
@@ -757,8 +796,12 @@ async function flushCartSync(): Promise<void> {
   await enqueueCartSync();
 }
 
-function pendingToWireItems(): WireCartItem[] {
-  return [...state.pending.values()].map((line) => {
+// mapToWireItems projects any PendingLine map (the live `pending` set, or a
+// `confirmedPending` snapshot for a restore) into update_cart's wire shape.
+// Shared so pendingToWireItems and restoreConfirmedCart can never drift on
+// which channel a selection maps to (H1).
+function mapToWireItems(map: Map<string, PendingLine>): WireCartItem[] {
+  return [...map.values()].map((line) => {
     const item: WireCartItem = { item_id: line.itemId, quantity: line.qty };
     if (line.selections) {
       if (line.selections.variants_v2.length) item.variants_v2 = line.selections.variants_v2;
@@ -767,6 +810,10 @@ function pendingToWireItems(): WireCartItem[] {
     }
     return item;
   });
+}
+
+function pendingToWireItems(): WireCartItem[] {
+  return mapToWireItems(state.pending);
 }
 
 // syncCartOnce pushes the CURRENT pending set to the real Swiggy cart with ONE
@@ -853,10 +900,26 @@ async function syncCartOnce(): Promise<void> {
     log("syncCartOnce:update_cart", { isError: result.isError, items: (args.items as unknown[]).length });
 
     if (result.isError) {
-      state.cartSyncError = splitError(toolErrorText(result)).message;
-      lastSyncOk = false;
+      // DEBUG: append the exact wire we sent so an INVALID_ADDON is diagnosable
+      // from the [dbg] bar without the console (which id Swiggy rejected).
+      const wireDump = DEBUG ? ` | wire=${JSON.stringify(args.items)}` : "";
+      const rawMessage = splitError(toolErrorText(result)).message;
+      // Read BEFORE rollbackPending() — rollback overwrites `pending` with
+      // confirmedPending itself, at which point the newly-added lines are gone.
+      const newNames = newlyAddedLineNames();
       rollbackPending(); // revert the phantom optimistic line — pending == server truth
+      state.cartSyncError =
+        (newNames.length
+          ? `Couldn't add ${newNames.join(", ")} — an option isn't available right now (the restaurant rejected it). Your cart is unchanged.`
+          : rawMessage) + wireDump;
+      lastSyncOk = false;
       render(); // surface e.g. over_cap inline
+      // The failed batch write may have left the SERVER cart cleared/mutated —
+      // e.g. an upstream cross-restaurant-conflict recovery that cleared the
+      // cart trying to fix what was actually a menu/add-on rejection (clearing
+      // can never fix that). Push the last known-good cart back so it
+      // reappears server-side too, not just in this client's local state.
+      await restoreConfirmedCart(restaurantId);
       return;
     }
 
@@ -877,6 +940,60 @@ async function syncCartOnce(): Promise<void> {
     lastSyncOk = false;
     rollbackPending();
     render();
+  }
+}
+
+// restoreConfirmedCart pushes the last known-good cart (confirmedPending) back
+// to Swiggy after a failed syncCartOnce write. A failed batch update_cart can
+// leave the SERVER cart in a worse state than before the write even started
+// (e.g. an upstream cross-restaurant-conflict recovery that cleared the cart
+// trying to fix what was actually a menu/add-on rejection — clearing can never
+// fix that) — without this, the user's already-good items would silently
+// vanish server-side even though `state.pending` was correctly rolled back
+// locally.
+//
+// Deliberately does NOT go through syncCartOnce: that would null out
+// state.cartSyncError on success (losing the "couldn't add X" message the
+// user needs to see) and would re-run the conflict/seed guard meant for a
+// user-driven sync, not error recovery. `restoringCart` prevents this from
+// ever being re-entered while a restore is already in flight. Respects the
+// same restaurant-identity guard as syncCartOnce — bails if the user has
+// navigated to a different restaurant mid-flight.
+async function restoreConfirmedCart(restaurantId: string): Promise<void> {
+  if (restoringCart) return;
+  if (!app || !state.addressId) return;
+  if (state.restaurantId !== restaurantId) return; // navigated away — not our cart anymore
+  if (!confirmedPending || confirmedPending.size === 0) return; // nothing confirmed to restore
+
+  restoringCart = true;
+  try {
+    const args: Record<string, unknown> = {
+      address_id: state.addressId,
+      restaurant_id: restaurantId,
+      items: mapToWireItems(confirmedPending),
+    };
+    if (state.restaurant?.name) args.restaurant_name = state.restaurant.name;
+
+    const result = await app.callServerTool({ name: "update_cart", arguments: args });
+    if (state.restaurantId !== restaurantId) return; // navigated away mid-flight — discard
+
+    log("restoreConfirmedCart", { isError: result.isError });
+    if (!result.isError) {
+      // The good cart is back server-side — safe to bill against again.
+      // state.cartSyncError is intentionally left untouched: the restore
+      // fixed the SERVER cart, not the failed add, and the user still needs
+      // to see what didn't stick.
+      lastSyncOk = true;
+      render();
+    }
+    // On failure, leave state.cartSyncError / lastSyncOk exactly as the
+    // caller (syncCartOnce) already set them — there's nothing more to do
+    // automatically; the user's existing "couldn't add X" message covers it.
+  } catch (err) {
+    if (state.restaurantId !== restaurantId) return;
+    log("restoreConfirmedCart:threw", { err: err instanceof Error ? err.message : String(err) });
+  } finally {
+    restoringCart = false;
   }
 }
 

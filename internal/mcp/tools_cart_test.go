@@ -125,6 +125,36 @@ func TestUpdateCartSameRestaurantErrorPassesThrough(t *testing.T) {
 	}
 }
 
+// A menu/add-on rejection (INVALID_ADDON — e.g. a variant get_item_options
+// listed as in-stock but update_cart refuses) is never treated as a
+// cross-restaurant conflict, even when the existing cart is nameless (the
+// real-world shape: Swiggy often returns no restaurant name for a cart seeded
+// outside the agent). The clear+retry recovery must NOT fire: clearing can't
+// fix a bad selection, and doing so would destroy the user's already-good
+// cart for nothing.
+func TestUpdateCartMenuErrorDoesNotClearCart(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	be := &fakeBackend{cart: api.Cart{Restaurant: "", Total: 300,
+		Lines: []api.CartLine{{ItemID: "p1", Quantity: 1, Available: true}}}}
+	be.updateFn = func(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error) {
+		return api.Cart{}, errors.New("swiggy: Restaurant may have removed the item(s) from their menu. (INVALID_ADDON)")
+	}
+	s := NewServer(be, &fakeAuth{token: true})
+	_, _, err := s.handleUpdateCart(context.Background(), nil, UpdateCartIn{
+		AddressID: "a1", RestaurantID: "r1", RestaurantName: "Some Place",
+		Items: []CartItemIn{{ItemID: "xl", Quantity: 1}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "INVALID_ADDON") {
+		t.Fatalf("want INVALID_ADDON error passthrough, got %v", err)
+	}
+	if be.cleared != 0 {
+		t.Fatalf("cleared=%d, want 0 — a menu error must never clear the cart", be.cleared)
+	}
+	if be.updates != 1 {
+		t.Fatalf("updates=%d, want 1 — no retry for a menu error", be.updates)
+	}
+}
+
 // When the retry after a replace also fails, the error is typed cart_conflict.
 func TestUpdateCartConflictRetryFailureIsTyped(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

@@ -124,6 +124,15 @@ func (s *Server) handleUpdateCart(ctx context.Context, _ *mcp.CallToolRequest, i
 	c, err := s.be.UpdateCart(in.AddressID, in.RestaurantID, in.RestaurantName, toCartItems(in.Items))
 	var replaced *ReplacedCartDTO
 	if err != nil {
+		// A menu/add-on rejection (INVALID_ADDON) is never a cross-restaurant
+		// conflict — it means Swiggy refused this specific line (e.g. a
+		// variant get_item_options listed as in-stock but update_cart
+		// rejects). Clear+retry cannot fix that; the retry would just fail
+		// again after destroying whatever was already in the cart. Return the
+		// original error untouched and skip the conflict-recovery path below.
+		if isMenuError(err) {
+			return nil, UpdateCartOut{}, err
+		}
 		// The write may have hit Swiggy's one-restaurant-per-cart rule. Look at
 		// what's actually in the cart; if it belongs to another restaurant (or
 		// one Swiggy won't name — foreign carts), replace it and retry once.
