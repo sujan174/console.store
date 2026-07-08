@@ -19,7 +19,7 @@ const (
 // (or nothing at all, for the store home).
 type OpenStoreIn struct {
 	AddressID      string `json:"address_id,omitempty"`
-	RestaurantID   string `json:"restaurant_id"`
+	RestaurantID   string `json:"restaurant_id,omitempty"`
 	RestaurantName string `json:"restaurant_name,omitempty"`
 	Category       string `json:"category,omitempty"`
 	ItemID         string `json:"item_id,omitempty"`
