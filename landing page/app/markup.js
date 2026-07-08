@@ -47,7 +47,7 @@ export const MARKUP = String.raw`
     </a>
     <div class="nav-links">
       <a href="#run" class="lnk lnk-desk">run</a>
-      <a href="#keys" class="lnk lnk-desk">terminal &amp; agent</a>
+      <a href="#agent" class="lnk lnk-desk">claude</a>
       <a href="#faq" class="lnk lnk-desk">faq</a>
       <span class="nav-divider lnk-desk" aria-hidden="true"></span>
       <a href="/features" class="lnk nav-page">features</a>
@@ -97,35 +97,6 @@ export const MARKUP = String.raw`
       </div>
     </div>
   </header>
-
-  <!-- PITCH — one full screen: what it is + install (rises up on scroll) -->
-  <section id="pitch" data-pitch style="position:relative;z-index:2;min-height:calc(100vh - 40px);display:flex;align-items:center;justify-content:center;padding:48px clamp(24px,6vw,56px)">
-    <div class="pitch-grid" data-pitch-grid style="display:grid;grid-template-columns:1.02fr .98fr;gap:clamp(32px,5vw,60px);align-items:center;width:100%;max-width:1100px">
-      <div class="pitch-left" style="text-align:left">
-        <div data-pitch-item style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:6px">// what it is</div>
-        <h1 data-pitch-item style="font-weight:700;font-size:clamp(28px,4.2vw,52px);line-height:1.1;letter-spacing:-.015em;color:#e9ebf7;margin:8px 0 0;max-width:16ch">dinner, piped through your <span style="color:#93a8ff">terminal</span> — or your <span style="color:#93a8ff">agent</span>.</h1>
-        <p data-pitch-item style="max-width:52ch;color:#b6bce0;font-size:15px;line-height:1.8;margin:22px 0 0">consolestore is one binary: a CLI <span style="color:#cdd3f0">(type commands)</span> and full TUI <span style="color:#cdd3f0">(a keyboard-only menu)</span> for ordering real food through Swiggy without leaving your shell — plus an MCP server <span style="color:#cdd3f0">(a plug-in Claude talks to)</span> that lets it order for you. authorize once, then reorder a saved favourite with a keystroke, or just tell Claude <span style="color:#cdd3f0">“order my usual.”</span></p>
-        <a href="/features" data-pitch-item class="pitch-cta" aria-label="explore all features" style="display:inline-flex;align-items:center;gap:10px;margin-top:32px;padding:14px 24px;border-radius:11px;border:1px solid rgba(147,168,255,.32);background:rgba(147,168,255,.09);color:#aebcff;font-weight:600;font-size:14px;letter-spacing:.2px;text-decoration:none">explore all 18 features <span style="font-size:16px;line-height:1">→</span></a>
-      </div>
-      <div data-pitch-item class="pitch-demo">
-        <div class="demo-win" style="border:1px solid rgba(147,168,255,.14);border-radius:12px;background:linear-gradient(180deg,#0c0d18,#09090f);box-shadow:0 30px 90px rgba(0,0,0,.6);overflow:hidden">
-          <div style="display:flex;align-items:center;gap:8px;padding:11px 15px;border-bottom:1px solid rgba(147,168,255,.07);background:#0e0f1c">
-            <span class="win-mark">❯</span>
-            <span style="font-size:11px;color:#b6bce0">zsh — one command, dinner's on the way</span>
-          </div>
-          <div style="padding:18px 20px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.55;color:#a9b1d6;white-space:pre-wrap">
-            <div><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console order</span> <span style="color:#93a8ff">dinner</span></div>
-            <div style="color:#565b80">  ↳ pushing preset <span style="color:#8ee08a">✓</span> · pulling the real bill…</div>
-            <div><span style="color:#565b80">  bill</span>  Meghana Foods · <span style="color:#e9ebf7">₹438</span>   <span style="color:#565b80">confirm</span> <span style="color:#eab560">↵</span></div>
-            <div><span style="color:#8ee08a">  ✓ order placed</span> <span style="color:#565b80">· ETA 35 min</span></div>
-            <div style="margin-top:20px"><span style="color:#565b80">~ %</span> <span style="color:#e9ebf7">console order status</span></div>
-            <div style="color:#565b80">  » on the way · 12 min away</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
 
   <!-- TOAST -->
   <div data-ref="toast" style="display:none;position:fixed;left:50%;bottom:34px;transform:translateX(-50%);z-index:50;align-items:center;gap:10px;background:#0c0c18;border:1px solid rgba(234,181,96,.28);border-radius:10px;padding:13px 18px;font-size:13px;color:#e9ebf7;box-shadow:0 20px 60px rgba(0,0,0,.6)">
@@ -185,35 +156,6 @@ export const MARKUP = String.raw`
     </div>
   </aside>
 
-  <!-- TERMINAL DEMO -->
-  <section id="run" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:48px clamp(24px,6vw,56px) 32px" data-reveal>
-    <div class="run-grid">
-      <div>
-        <div style="font-size:11px;letter-spacing:2px;color:#eab560;margin-bottom:14px">// watch it run</div>
-        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">the whole shop<br>is a <span style="color:#eab560">tui</span>.</h2>
-        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 28px">recreated frame-by-frame from the real bubbletea app. live demo videos land at launch.</p>
-        <div style="display:flex;flex-direction:column;gap:11px">
-          <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#8ee08a;border-radius:1px"></span>browse restaurants &amp; menus</div>
-          <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#93a8ff;border-radius:1px"></span>manage cart with keyboard only</div>
-          <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#eab560;border-radius:1px"></span>place &amp; track real orders</div>
-        </div>
-      </div>
-      <div class="demo-win" style="position:relative;border:1px solid rgba(147,168,255,.12);border-radius:13px;background:linear-gradient(180deg,#0c0d18,#09090f);box-shadow:0 40px 120px rgba(0,0,0,.7),0 0 0 1px rgba(147,168,255,.04);overflow:hidden;animation:scaleIn both;animation-timeline:view();animation-range:entry 6% cover 26%">
-        <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(147,168,255,.05),transparent 16%);z-index:1"></div>
-        <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid rgba(147,168,255,.08);background:#0d0e1c">
-          <span class="win-mark">❯</span>
-          <span style="font-size:12px;color:#b6bce0">consolestore.in ~ %</span>
-          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:#7fe0ff"><span style="width:5px;height:5px;border-radius:99px;background:#7fe0ff;animation:pulseDot 1.6s ease-in-out infinite;flex:none"></span>live preview</span>
-        </div>
-        <div class="demo-body" style="position:relative;padding:20px 22px;min-height:380px">
-          <div style="position:absolute;left:0;right:0;top:0;height:56px;pointer-events:none;background:linear-gradient(180deg,rgba(147,168,255,.04),transparent);animation:scan 5.5s linear infinite;z-index:0"></div>
-          <div data-ref="term" style="position:relative;z-index:1;font-size:13px;line-height:1.65;color:#a9b1d6;white-space:pre-wrap"></div>
-          <div data-ref="key" style="position:absolute;right:16px;bottom:12px;z-index:2;font-size:10.5px;color:#565b80;border:1px solid rgba(147,168,255,.12);border-radius:7px;padding:4px 10px;background:#0a0a12;min-width:72px;text-align:center"></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- AGENT — order from wherever you already work -->
   <section id="agent" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:48px clamp(24px,6vw,56px) 32px" data-reveal>
     <div class="run-grid">
@@ -248,100 +190,81 @@ export const MARKUP = String.raw`
     </div>
   </section>
 
-  <!-- TUI / CLI SCROLL-DRIVEN TOGGLE -->
-  <section id="keys" class="keys-scrolly" style="position:relative;z-index:2;padding:0 clamp(24px,6vw,56px)">
-    <div class="keys-sticky">
-      <div style="max-width:1100px;margin:0 auto;width:100%;display:flex;flex-direction:column;align-items:center;gap:34px">
-        <div style="text-align:center">
-          <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:18px">// two ways to order</div>
-          <div data-toggle-track style="position:relative;display:inline-flex;gap:4px;border:1px solid rgba(147,168,255,.14);border-radius:999px;padding:4px;background:#08080e">
-            <div data-toggle-ind style="position:absolute;top:4px;left:4px;width:104px;height:calc(100% - 8px);border-radius:999px;background:rgba(147,168,255,.14);transition:transform .15s linear,width .2s"></div>
-            <button data-toggle="tui" style="position:relative;z-index:1;border:0;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;letter-spacing:2px;padding:9px 22px;border-radius:999px;background:transparent;color:#e9ebf7;transition:color .25s">TERMINAL</button>
-            <button data-toggle="cli" style="position:relative;z-index:1;border:0;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;letter-spacing:2px;padding:9px 22px;border-radius:999px;background:transparent;color:#565b80;transition:color .25s">AGENT</button>
-          </div>
-          <div data-keys-hint style="font-size:11.5px;color:#565b80;margin-top:14px">click to switch — order it yourself at the prompt, or hand it to your agent.</div>
+  <!-- TERMINAL DEMO -->
+  <section id="run" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:48px clamp(24px,6vw,56px) 32px" data-reveal>
+    <div class="run-grid">
+      <div>
+        <div style="font-size:11px;letter-spacing:2px;color:#eab560;margin-bottom:14px">// watch it run</div>
+        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">the whole shop<br>is a <span style="color:#eab560">tui</span>.</h2>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 28px">prefer to stay at the prompt? the whole shop is a keyboard-only terminal app — browse, cart, checkout, track. recreated frame-by-frame from the real bubbletea app.</p>
+        <div style="display:flex;flex-direction:column;gap:11px">
+          <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#8ee08a;border-radius:1px"></span>browse restaurants &amp; menus</div>
+          <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#93a8ff;border-radius:1px"></span>manage cart with keyboard only</div>
+          <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#eab560;border-radius:1px"></span>place &amp; track real orders</div>
         </div>
-        <div data-panel-wrap style="position:relative;width:100%">
-
-          <!-- TERMINAL panel · alias scripting -->
-          <div data-panel="tui">
-            <div class="keys-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center">
-              <div>
-                <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// you, at the prompt</div>
-                <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 16px;color:#e9ebf7;line-height:1.1">order in <span style="color:#93a8ff">one command</span>.</h2>
-                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">set an <span style="color:#e9ebf7">alias</span> once — <span style="color:#e9ebf7">:alias set</span> saves any cart, food <span style="color:#e9ebf7">or</span> Instamart — then it's <span style="color:#93a8ff">one command</span> forever. <span style="color:#e9ebf7">console order coffee</span> from your usual café, <span style="color:#e9ebf7">console order energy-drinks</span> from a specific Instamart, <span style="color:#e9ebf7">console order dinner</span> from your favourite kitchen.</p>
-                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">each one pushes the cart, pulls the <span style="color:#e9ebf7">real bill</span>, and waits for a single <span style="color:#93a8ff">↵</span>. checking a live order? <span style="color:#e9ebf7">console status</span> — one command, live ETA, done.</p>
-                <div style="display:flex;flex-wrap:wrap;gap:8px">
-                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">aliases · one command</span>
-                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">food + instamart</span>
-                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">real bill · one ↵</span>
-                </div>
-              </div>
-              <div class="demo-win" style="border:1px solid rgba(147,168,255,.14);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
-                <div style="display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid rgba(147,168,255,.07);background:#0e0f1c">
-                  <span class="win-mark">❯</span>
-                  <span style="font-size:11px;color:#b6bce0">zsh — your saved usuals, one command</span>
-                </div>
-                <div data-ref="cli" style="padding:18px;font-size:13px;line-height:1.95;min-height:280px"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- AGENT panel · agent ordering -->
-          <div data-panel="cli" style="display:none">
-            <div class="keys-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center">
-              <div>
-                <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.28);border-radius:999px;padding:5px 12px;margin-bottom:18px">NEW · MCP + SKILLS</span>
-                <div style="font-size:11px;letter-spacing:2px;color:#93a8ff;margin-bottom:14px">// hand it to your agent</div>
-                <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 16px;color:#e9ebf7;line-height:1.1">let <span style="color:#b08cf5">Claude</span><br>order dinner.</h2>
-                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">consolestore installs an <span style="color:#e9ebf7">MCP server + skills</span> into <span style="color:#e9ebf7">Claude</span> — Desktop and Code. ask in plain language; it searches, builds the cart, shows the <span style="color:#e9ebf7">real bill</span>, and places the order <span style="color:#e9ebf7">only after you say yes</span>.</p>
-                <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">your usual, hands-free — but never a charge you didn't approve. the agent proposes; <span style="color:#93a8ff">you</span> confirm.</p>
-                <div style="display:flex;flex-wrap:wrap;gap:8px">
-                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">Claude Desktop · Claude Code</span>
-                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">you approve every order</span>
-                  <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">plain language</span>
-                </div>
-              </div>
-              <div class="demo-win" style="border:1px solid rgba(176,140,245,.2);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
-                <div style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid rgba(147,168,255,.07);background:#0e0f1c">
-                  <span style="color:#b08cf5;font-size:13px">✳</span>
-                  <span style="font-size:11px;color:#565b80">your agent · consolestore mcp</span>
-                  <span style="margin-left:auto;width:7px;height:7px;border-radius:99px;background:#8ee08a;box-shadow:0 0 8px #8ee08a"></span>
-                </div>
-                <div data-ref="agent" style="padding:18px;font-size:13px;line-height:1.6;min-height:280px"></div>
-              </div>
-            </div>
-          </div>
-
+      </div>
+      <div class="demo-win" style="position:relative;border:1px solid rgba(147,168,255,.12);border-radius:13px;background:linear-gradient(180deg,#0c0d18,#09090f);box-shadow:0 40px 120px rgba(0,0,0,.7),0 0 0 1px rgba(147,168,255,.04);overflow:hidden;animation:scaleIn both;animation-timeline:view();animation-range:entry 6% cover 26%">
+        <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(147,168,255,.05),transparent 16%);z-index:1"></div>
+        <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid rgba(147,168,255,.08);background:#0d0e1c">
+          <span class="win-mark">❯</span>
+          <span style="font-size:12px;color:#b6bce0">consolestore.in ~ %</span>
+          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:#7fe0ff"><span style="width:5px;height:5px;border-radius:99px;background:#7fe0ff;animation:pulseDot 1.6s ease-in-out infinite;flex:none"></span>live preview</span>
+        </div>
+        <div class="demo-body" style="position:relative;padding:20px 22px;min-height:380px">
+          <div style="position:absolute;left:0;right:0;top:0;height:56px;pointer-events:none;background:linear-gradient(180deg,rgba(147,168,255,.04),transparent);animation:scan 5.5s linear infinite;z-index:0"></div>
+          <div data-ref="term" style="position:relative;z-index:1;font-size:13px;line-height:1.65;color:#a9b1d6;white-space:pre-wrap"></div>
+          <div data-ref="key" style="position:absolute;right:16px;bottom:12px;z-index:2;font-size:10.5px;color:#565b80;border:1px solid rgba(147,168,255,.12);border-radius:7px;padding:4px 10px;background:#0a0a12;min-width:72px;text-align:center"></div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- MARQUEE -->
-  <section style="position:relative;z-index:2;overflow:hidden;border-top:1px solid rgba(147,168,255,.07);border-bottom:1px solid rgba(147,168,255,.07);margin-top:44px;background:#050509">
-    <div data-marquee style="display:flex;width:max-content;animation:drift 28s linear infinite;will-change:transform">
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">terminal + agent ordering</span><span style="padding:20px 42px;font-size:16px;color:#93a8ff">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">os keyring auth</span><span style="padding:20px 42px;font-size:16px;color:#b08cf5">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">guarded live checkout</span><span style="padding:20px 42px;font-size:16px;color:#8ee08a">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">no server to babysit</span><span style="padding:20px 42px;font-size:16px;color:#eab560">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">real swiggy orders</span><span style="padding:20px 42px;font-size:16px;color:#7fe0ff">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">terminal + agent ordering</span><span style="padding:20px 42px;font-size:16px;color:#93a8ff">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">os keyring auth</span><span style="padding:20px 42px;font-size:16px;color:#b08cf5">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">guarded live checkout</span><span style="padding:20px 42px;font-size:16px;color:#8ee08a">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">no server to babysit</span><span style="padding:20px 42px;font-size:16px;color:#eab560">·</span>
-      <span style="padding:20px 42px;font-size:16px;color:#565b80">real swiggy orders</span><span style="padding:20px 42px;font-size:16px;color:#7fe0ff">·</span>
+  <!-- AGENT SPEED + CLAUDE UI — the fast path, rendered as a real UI card inside Claude -->
+  <section id="fast" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:48px clamp(24px,6vw,56px) 32px" data-reveal>
+    <div class="run-grid">
+      <div>
+        <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.3);border-radius:999px;padding:5px 13px;margin-bottom:16px">✳ IN CLAUDE · LIVE UI</span>
+        <div style="font-size:11px;letter-spacing:2px;color:#b08cf5;margin-bottom:14px">// the fast path</div>
+        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">dinner in<br><span style="color:#b08cf5">three words</span>.</h2>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">no app, no tabs, no re-typing your address. say <span style="color:#e9ebf7">"order my usual"</span> and Claude runs the whole thing — finds the food, builds the cart, pulls the <span style="color:#e9ebf7">real bill</span>.</p>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">and it doesn't just print text — it renders a <span style="color:#e9ebf7">real ordering card</span> right inside Claude. glance, tap <span style="color:#b08cf5">place order</span>, and it's on the way. <span style="color:#e9ebf7">seconds, not minutes.</span></p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">seconds, not minutes</span>
+          <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">a real UI in Claude</span>
+          <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">tap to place</span>
+        </div>
+      </div>
+      <div class="demo-win" style="border:1px solid rgba(176,140,245,.2);border-radius:12px;background:#0a0a12;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid rgba(147,168,255,.07);background:#0e0f1c">
+          <span style="color:#b08cf5;font-size:13px">✳</span>
+          <span style="font-size:11px;color:#565b80">Claude · consolestore</span>
+          <span style="margin-left:auto;width:7px;height:7px;border-radius:99px;background:#8ee08a;box-shadow:0 0 8px #8ee08a"></span>
+        </div>
+        <div style="padding:16px 16px 18px">
+          <div style="margin:0 0 14px;text-align:right"><span style="display:inline-block;background:#14162a;border:1px solid rgba(147,168,255,.16);border-radius:12px 12px 3px 12px;padding:8px 13px;color:#e9ebf7;font-size:12.5px">order my usual</span></div>
+          <div style="border:1px solid rgba(176,140,245,.28);border-radius:14px;background:linear-gradient(180deg,#12101f,#0c0b14);overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+            <div style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid rgba(176,140,245,.14)">
+              <span style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#b08cf5,#7dcfff);display:flex;align-items:center;justify-content:center;font-size:14px;flex:none">🍛</span>
+              <div style="min-width:0">
+                <div style="color:#e9ebf7;font-size:13px;font-weight:600">Meghana Foods</div>
+                <div style="color:#565b80;font-size:11px">★ 4.4 · 28 min · Home</div>
+              </div>
+              <span style="margin-left:auto;font-size:10px;letter-spacing:.5px;color:#8ee08a;border:1px solid rgba(142,224,138,.3);border-radius:99px;padding:2px 8px;flex:none">READY</span>
+            </div>
+            <div style="padding:12px 14px;font-size:12.5px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="color:#cdd3f0">Chicken Biryani <span style="color:#565b80">×2</span></span><span style="color:#b6bce0">₹398</span></div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="color:#cdd3f0">Butter Naan <span style="color:#565b80">×2</span></span><span style="color:#b6bce0">₹80</span></div>
+              <div style="border-top:1px dashed rgba(147,168,255,.16);padding-top:9px;display:flex;justify-content:space-between"><span style="color:#e9ebf7;font-weight:600">to pay</span><span style="color:#7dcfff;font-weight:700">₹438</span></div>
+            </div>
+            <div style="display:flex;gap:8px;padding:0 14px 14px">
+              <button style="flex:1;background:#b08cf5;border:0;border-radius:9px;padding:10px;color:#160e28;font-weight:700;font-family:inherit;font-size:12.5px;cursor:pointer">place order · ₹438</button>
+              <button style="flex:none;background:rgba(147,168,255,.08);border:1px solid rgba(147,168,255,.18);border-radius:9px;padding:10px 14px;color:#b6bce0;font-family:inherit;font-size:12.5px;cursor:pointer">edit</button>
+            </div>
+          </div>
+          <div style="margin:12px 2px 0;color:#565b80;font-size:11px"><span style="color:#b08cf5">✳</span> tap place order — I'll track it and ping you the ETA.</div>
+        </div>
+      </div>
     </div>
-  </section>
-
-  <!-- MANIFESTO -->
-  <section id="why" style="position:relative;z-index:2;max-width:820px;margin:0 auto;padding:64px clamp(24px,6vw,56px)" data-reveal>
-    <div style="font-size:11px;letter-spacing:2px;color:#eab560;margin-bottom:24px;text-align:center">// why it's different</div>
-    <p style="font-weight:800;font-size:clamp(24px,3.8vw,46px);line-height:1.18;letter-spacing:-.02em;text-align:center;margin:0">
-      <span style="color:#e9ebf7">your terminal is open. your agent is listening.</span><br>
-      <span style="color:#3a3d5c">why open a browser</span> <span style="color:#eab560">to get dinner?</span>
-    </p>
-    <p style="max-width:54ch;margin:30px auto 0;text-align:center;color:#b6bce0;font-size:13.5px;line-height:1.78">no tab-hunting, no cookie banners, no context switch — whether you type the command or your agent does. every order is a real Swiggy bill you approve before a rupee moves. the site can be loud because the product underneath is intentionally strict.</p>
   </section>
 
   <!-- WAITLIST — hosted / Claude-web access is coming; capture demand -->
@@ -356,6 +279,16 @@ export const MARKUP = String.raw`
       </form>
       <div data-waitlist-msg role="status" aria-live="polite" style="min-height:16px;margin-top:13px;font-size:12px;color:#565b80"></div>
     </div>
+  </section>
+
+  <!-- MANIFESTO -->
+  <section id="why" style="position:relative;z-index:2;max-width:820px;margin:0 auto;padding:64px clamp(24px,6vw,56px)" data-reveal>
+    <div style="font-size:11px;letter-spacing:2px;color:#eab560;margin-bottom:24px;text-align:center">// why it's different</div>
+    <p style="font-weight:800;font-size:clamp(24px,3.8vw,46px);line-height:1.18;letter-spacing:-.02em;text-align:center;margin:0">
+      <span style="color:#e9ebf7">your terminal is open. your agent is listening.</span><br>
+      <span style="color:#3a3d5c">why open a browser</span> <span style="color:#eab560">to get dinner?</span>
+    </p>
+    <p style="max-width:54ch;margin:30px auto 0;text-align:center;color:#b6bce0;font-size:13.5px;line-height:1.78">no tab-hunting, no cookie banners, no context switch — whether you type the command or your agent does. every order is a real Swiggy bill you approve before a rupee moves. the site can be loud because the product underneath is intentionally strict.</p>
   </section>
 
   <!-- FAQ -->
@@ -419,7 +352,7 @@ export const MARKUP = String.raw`
           <div style="display:flex;flex-direction:column;gap:11px">
             <span style="color:#565b80;font-size:10.5px;letter-spacing:1px">PRODUCT</span>
             <a href="#run" class="lnk">run</a>
-            <a href="#keys" class="lnk">terminal &amp; agent</a>
+            <a href="#agent" class="lnk">claude</a>
             <a href="#features" class="lnk">features</a>
             <a href="/how-to" class="lnk">how-to</a>
           </div>
