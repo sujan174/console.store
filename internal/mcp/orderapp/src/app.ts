@@ -2546,7 +2546,7 @@ export function bootstrap(): void {
   // .boot-center wrapper fills the fixed-height frame so the loader is
   // vertically centered WITHOUT making #app a flex container (which would
   // shrink-wrap and mis-lay every real screen — see styles.ts .boot-center).
-  root.innerHTML = `<div class="boot-center">${loadingBlock("Fulfilling your request…")}</div>`;
+  root.innerHTML = `<div class="boot-center">${loadingBlock("~ % fulfilling your request")}</div>`;
 
   app = new App({ name: "consolestore order", version: "0.1.0" });
   app.onhostcontextchanged = () => applyHostStyling();

@@ -138,6 +138,25 @@ body {
    scrolling block (never a flex container), so real screens lay out top-down. */
 .boot-center { min-height: 100%; display: flex; align-items: center; justify-content: center; }
 
+/* --- console.store brand bar: the persistent wordmark + prompt cursor that
+   marks every screen as ours (a terminal storefront inside the host). Mono,
+   quiet, one orange accent shared with the action color. --- */
+.cs-brandbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 14px;
+}
+.cs-wordmark {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 14px; letter-spacing: .01em; color: var(--text-primary);
+  white-space: nowrap;
+}
+.cs-wordmark .p { color: var(--sw-orange); }
+.cs-wordmark .d { color: var(--text-muted); }
+.cs-cursor { color: var(--sw-orange); animation: cs-blink 1.1s steps(1) infinite; }
+@keyframes cs-blink { 50% { opacity: 0; } }
+/* Leading prompt glyph on the command-line search inputs. */
+.cs-prompt { color: var(--sw-orange); font-family: var(--font-mono, ui-monospace, monospace); font-size: 14px; flex: none; }
+
 /* --- scooter-road loader: shared centered loading block --- */
 .scooter-loader {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -173,6 +192,13 @@ body {
   to   { background-position: 145% 0; }
 }
 .scooter-label { font-family: var(--font-mono, ui-monospace, monospace); letter-spacing: .01em; }
+/* Terminal cursor after the loader label — ties every loading view to the
+   console.store prompt motif. Static under reduced-motion (the * rule below
+   kills the blink). */
+.scooter-label::after {
+  content: "\\2588"; color: var(--sw-orange); margin-left: 3px;
+  animation: cs-blink 1.1s steps(1) infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   /* No motion: park the scooter centered on the road and show the shimmer as
      a clean centered highlight (background-position 50% above) rather than a
@@ -243,7 +269,7 @@ input {
 }
 .tab {
   cursor: pointer;
-  font-family: inherit;
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 13px;
   padding: 6px 12px;
   border-radius: var(--pill);
@@ -274,7 +300,7 @@ input {
   width: 100%;
   text-align: left;
   cursor: pointer;
-  font-family: inherit;
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 13px;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
@@ -423,6 +449,7 @@ input {
   padding: 4px 0;
   font-size: 14px;
   color: var(--text-secondary);
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 .bill-total {
   display: flex;
@@ -432,6 +459,7 @@ input {
   color: var(--text-primary);
   border-top: 1px solid var(--border);
   padding: 10px 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* --- motion (CSS-only, reduced-motion guarded) --- */

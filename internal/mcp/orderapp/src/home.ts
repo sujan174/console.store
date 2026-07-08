@@ -8,7 +8,7 @@
 // in screens.ts.
 
 import type { AddressOption, AppState, HomeRestaurant, RecentOrder } from "./app";
-import { esc, loadingBlock, rupees } from "./screens";
+import { brandBar, esc, loadingBlock, rupees } from "./screens";
 import { icon } from "./icons";
 
 // addressSlot is the picker's trigger: the active address (or a neutral
@@ -68,10 +68,13 @@ function addressDropdown(state: AppState): string {
   );
 }
 
+// homeHeader is the brand bar (wordmark left, interactive address picker
+// right) plus the absolutely-positioned address dropdown, anchored to this
+// relative wrapper so opening it never pushes the store layout down.
 function homeHeader(state: AppState): string {
   return (
-    `<div style="position:relative;margin-bottom:14px">` +
-    `<div style="display:flex;align-items:center;justify-content:space-between">${addressSlot(state)}</div>` +
+    `<div style="position:relative">` +
+    brandBar(addressSlot(state)) +
     (state.addrPickerOpen ? addressDropdown(state) : "") +
     `</div>`
   );
@@ -103,10 +106,13 @@ function sidebar(state: AppState): string {
 function searchBarSlot(state: AppState): string {
   return (
     `<div style="display:flex;gap:8px;align-items:center">` +
+    `<div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;border:1px solid var(--border-strong);border-radius:var(--pill);padding:8px 12px;background:var(--surface-2)">` +
+    `<span class="cs-prompt" aria-hidden="true">❯</span>` +
     `<input data-home-search-input type="text" value="${esc(state.query)}" ` +
-    `placeholder="search restaurants &amp; dishes…" aria-label="search restaurants and dishes" ` +
-    `style="flex:1;min-width:0;border:1px solid var(--border-strong);border-radius:var(--pill);` +
-    `padding:8px 12px;font-size:13px;background:var(--surface-2);color:var(--text-primary)" />` +
+    `placeholder="search restaurants &amp; dishes" aria-label="search restaurants and dishes" ` +
+    `style="flex:1;min-width:0;border:0;outline:none;padding:0;font-size:13px;` +
+    `font-family:var(--font-mono,ui-monospace,monospace);background:transparent;color:var(--text-primary)" />` +
+    `</div>` +
     `<button type="button" data-home-search class="btn" aria-label="search" style="flex:none">${icon("search", 15)}</button>` +
     `</div>`
   );
@@ -187,7 +193,7 @@ function loadMoreFooter(state: AppState): string {
 function restaurantListSlot(state: AppState): string {
   // A FRESH search/category tap is in flight — spinner instead of the stale
   // list (distinct from homeLoadingMore, which appends without hiding it).
-  if (state.homeLoading) return loadingBlock("finding restaurants…");
+  if (state.homeLoading) return loadingBlock("~ % finding restaurants");
   if (state.restaurants.length === 0) {
     const searched = !!state.query || !!state.activeCatQuery;
     const msg = searched ? "no restaurants for that" : "pick a category or search to see restaurants";
@@ -236,7 +242,7 @@ function recentOrdersSlot(state: AppState): string {
   const rows = state.recentOrders.map((o, i) => recentOrderRow(o, i)).join("");
   return (
     `<div data-recent-orders style="margin-top:22px">` +
-    `<div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">order again</div>` +
+    `<div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;font-family:var(--font-mono,ui-monospace,monospace)">order again</div>` +
     `<div class="stagger">${rows}</div>` +
     `</div>`
   );

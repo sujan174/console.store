@@ -97,10 +97,13 @@ function menuSearchBox(query: string): string {
     : "";
   return (
     `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">` +
+    `<div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;border:1px solid var(--border-strong);border-radius:var(--pill);padding:8px 12px;background:var(--surface-2)">` +
+    `<span class="cs-prompt" aria-hidden="true">❯</span>` +
     `<input data-menu-search-input type="text" value="${esc(query)}" ` +
-    `placeholder="search this menu…" aria-label="search this menu" ` +
-    `style="flex:1;min-width:0;border:1px solid var(--border-strong);border-radius:var(--pill);` +
-    `padding:8px 12px;font-size:13px;background:var(--surface-2);color:var(--text-primary)" />` +
+    `placeholder="search this menu" aria-label="search this menu" ` +
+    `style="flex:1;min-width:0;border:0;outline:none;padding:0;font-size:13px;` +
+    `font-family:var(--font-mono,ui-monospace,monospace);background:transparent;color:var(--text-primary)" />` +
+    `</div>` +
     clearBtn +
     `</div>`
   );
@@ -164,7 +167,20 @@ function cartBar(state: AppState): string {
 }
 
 function header(title: string, sub: string): string {
-  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:500">${esc(title)}</div><div style="font-size:12px;color:var(--text-secondary)">${esc(sub)}</div></div></div>`;
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:500">${esc(title)}</div><div style="font-size:12px;color:var(--text-secondary);font-family:var(--font-mono,ui-monospace,monospace)">${esc(sub)}</div></div></div>`;
+}
+
+// brandBar is the persistent console.store wordmark that marks every screen as
+// ours: a mono `~ % console food` prompt with a blinking cursor, plus an
+// optional right-aligned slot (the home passes its interactive address
+// picker). Content stays host-native; only this chrome carries the brand.
+export function brandBar(rightSlot: string = ""): string {
+  return (
+    `<div class="cs-brandbar">` +
+    `<span class="cs-wordmark"><span class="p">~ %</span> console <span class="d">food</span><span class="cs-cursor" aria-hidden="true">█</span></span>` +
+    (rightSlot ? `<div>${rightSlot}</div>` : "") +
+    `</div>`
+  );
 }
 
 // loadingBlock is the shared centered loader used by every in-widget loading
@@ -195,9 +211,10 @@ export function renderMenuLoading(state: AppState): string {
   const back = `<button type="button" data-menu-back class="btn" style="margin-bottom:10px">${icon("arrow-left", 14)} search</button>`;
   return (
     `<h2 class="sr-only">Opening ${esc(title)}'s menu…</h2>` +
+    brandBar() +
     back +
     header(title, "loading the menu…") +
-    loadingBlock("loading menu…")
+    loadingBlock("~ % loading menu")
   );
 }
 
@@ -225,6 +242,7 @@ export function renderMenu(state: AppState): string {
   const back = `<button type="button" data-menu-back class="btn" style="margin-bottom:10px">${icon("arrow-left", 14)} search</button>`;
   return (
     `<h2 class="sr-only">Ordering app: browse ${esc(title)}'s menu by category, add or customize items, and check out — all in one window.</h2>` +
+    brandBar() +
     back +
     header(title, "estimated prices — the real bill shows at checkout") +
     `<div class="store-layout">` +
@@ -263,6 +281,7 @@ export function renderFocusedItem(state: AppState, itemId: string): string {
     `</div>`;
   return (
     `<h2 class="sr-only">Focused item: ${esc(item.name)} from ${esc(title)} — add it to your cart or go back to the full menu.</h2>` +
+    brandBar() +
     back +
     card +
     cartBar(state)
@@ -518,19 +537,63 @@ function overCapView(state: AppState, cart: CartState): string {
   );
 }
 
+// placedView is the branded confirmation: a terminal receipt. The itemized
+// lines + total come from the authoritative bill (same numbers as checkout),
+// rendered mono with a dashed rule, and a `~ % console` wordmark footer — the
+// peak-of-funnel brand moment. Degrades to a plain confirmation when no bill
+// is on hand (defensive: place_order is what got us here, bill should exist).
 function placedView(cart: CartState): string {
   const bill = cart.bill;
   const id = orderIdOf(cart.order);
   const eta = orderEtaOf(cart.order);
-  const amount = bill ? rupees(bill.total) : "";
   const where = cart.addressLabel ? ` to ${esc(cart.addressLabel)}` : "";
+  const restaurant = (bill && bill.restaurant) || cart.addressLabel || "your order";
+
+  const head =
+    `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">` +
+    `<span style="color:var(--text-success);flex:none">${icon("check-circle", 22)}</span>` +
+    `<span style="font-size:15px;font-weight:500">order placed</span>` +
+    `</div>`;
+
+  const footerLeft = [id ? `order #${esc(id)}` : "", eta ? `~${esc(eta)}` : ""].filter(Boolean).join(" · ");
+  const footer =
+    `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:10px;display:flex;justify-content:space-between;align-items:center;` +
+    `font-family:var(--font-mono,ui-monospace,monospace);font-size:11px;color:var(--text-muted)">` +
+    `<span>${footerLeft}</span><span><span style="color:var(--sw-orange)">~ %</span> console</span>` +
+    `</div>`;
+
+  if (!bill) {
+    return (
+      `<h2 class="sr-only">Your order is placed.</h2>` +
+      cardShell(
+        head +
+          `<div style="font-size:13px;color:var(--text-secondary)">your order is confirmed${where} — it's on the way.</div>` +
+          footer,
+      )
+    );
+  }
+
+  const lines = bill.lines
+    .map(
+      (l) =>
+        `<div style="display:flex;justify-content:space-between"><span>${l.quantity} × ${esc(l.name)}</span><span>${rupees(l.price * l.quantity)}</span></div>`,
+    )
+    .join("");
+  const extras = rupees(bill.delivery + bill.taxes);
+
   return (
     `<h2 class="sr-only">Your order is placed.</h2>` +
     cardShell(
-      `<div style="display:flex;gap:10px;align-items:center;margin-bottom:6px"><span style="color:var(--text-success);flex:none">${icon("check-circle", 22)}</span><div style="font-size:16px;font-weight:500">Order placed</div></div>` +
-        `<div style="font-size:13px;color:var(--text-secondary)">${amount ? `${amount}${where} — it's on the way.` : `Your order is confirmed${where}.`}</div>` +
-        (eta ? `<div style="font-size:13px;color:var(--text-secondary);margin-top:4px">arriving in ~${esc(eta)}</div>` : "") +
-        (id ? `<div style="font-size:12px;color:var(--text-muted);margin-top:8px">order ${esc(id)}</div>` : ""),
+      head +
+        `<div class="num" style="font-size:13px;color:var(--text-secondary);line-height:1.9">` +
+        `<div style="color:var(--text-primary)">${esc(restaurant)}</div>` +
+        lines +
+        `<div style="border-top:1px dashed var(--border-strong);margin:8px 0"></div>` +
+        `<div style="display:flex;justify-content:space-between"><span>taxes &amp; delivery</span><span>${extras}</span></div>` +
+        `<div style="display:flex;justify-content:space-between;color:var(--text-primary);font-weight:600"><span>to pay</span><span>${rupees(bill.total)}</span></div>` +
+        `</div>` +
+        `<div style="font-size:12px;color:var(--text-secondary);margin-top:10px">on the way${where}.</div>` +
+        footer,
     )
   );
 }
