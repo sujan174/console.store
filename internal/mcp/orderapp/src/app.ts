@@ -630,6 +630,15 @@ let confirmedPending: Map<string, PendingLine> | null = null;
 // it never bills against a cart the server never actually saw.
 let lastSyncOk = true;
 
+// lastBill (M5) is the most recent bill that was actually on screen, stashed
+// right before prepareBill swaps state.cart to its "loading" state (which has
+// no `bill` field). Without this, an over_cap failure from that same
+// prepare_order call has nothing to render the bill/trim-hint from — the bill
+// was already cleared by the time buildCartError runs. Reset on a restaurant
+// change (resetRestaurantScopedState) so a stale bill from a previous
+// restaurant can never leak into a fresh over_cap notice.
+let lastBill: CartBill | null = null;
+
 // clonePendingLine deep-clones one PendingLine, including its nested
 // selections arrays, so a confirmedPending snapshot can never be mutated by a
 // later edit to the live `state.pending` line objects.
@@ -953,9 +962,15 @@ function buildCartError(text: string): CartState {
   const { code, message } = splitError(text);
   switch (code) {
     case "over_cap": {
-      const trim = state.cart?.bill ? priciestLineName(state.cart.bill) : "";
+      // M5: prepareBill/materializeCart already cleared state.cart.bill to the
+      // loading state by the time this runs, so the priciest-line hint (and
+      // the bill itself, for the notice view) must come from the stashed
+      // lastBill, falling back to the priciest PENDING line if we somehow
+      // never had a bill yet (e.g. an over_cap straight off the first sync).
+      const bill = lastBill ?? undefined;
+      const trim = bill ? priciestLineName(bill) : priciestPendingName();
       const hint = trim ? ` Trim ${trim} to get under ₹1000.` : "";
-      return { status: "error", errorCode: code, error: `${message}${hint}` };
+      return { status: "error", errorCode: code, error: `${message}${hint}`, bill };
     }
     case "unserviceable":
       return { status: "error", errorCode: code, error: message };
@@ -976,6 +991,22 @@ function priciestLineName(bill: CartBill): string {
   let worst = -1;
   for (const line of bill.lines) {
     const cost = line.price * line.quantity;
+    if (cost > worst) {
+      worst = cost;
+      name = line.name;
+    }
+  }
+  return name;
+}
+
+// priciestPendingName is priciestLineName's fallback (M5) when there is no
+// lastBill yet to name a line from — the priciest line in the CLIENT-side
+// pending set (estimated prices, but good enough for a trim hint).
+function priciestPendingName(): string {
+  let name = "";
+  let worst = -1;
+  for (const line of state.pending.values()) {
+    const cost = line.price * line.qty;
     if (cost > worst) {
       worst = cost;
       name = line.name;
@@ -1055,6 +1086,7 @@ async function materializeCart(token: number): Promise<void> {
     return;
   }
 
+  if (state.cart?.bill) lastBill = state.cart.bill; // M5 — same stash as prepareBill
   state.cart = { status: "loading", message: "syncing your cart…" };
   render();
 
@@ -1107,6 +1139,10 @@ async function prepareBill(token: number, retries: number): Promise<void> {
     return;
   }
 
+  // Stash whatever bill is currently on screen before it's cleared to the
+  // loading state — an over_cap (or any other) failure from the prepare_order
+  // call below needs it to render the bill-with-notice view (M5).
+  if (state.cart?.bill) lastBill = state.cart.bill;
   state.cart = { status: "loading", message: "pulling the real bill…" };
   render();
 
@@ -1409,6 +1445,21 @@ async function reorder(index: number): Promise<void> {
     // restaurant screen that never opened.
     if (state.screen !== "restaurant" || state.restaurantId !== order.restaurantId) return;
 
+    // M7: orders.json's restaurantId is usually not in state.restaurants (the
+    // home list the user last searched), so openRestaurant's `r?.unavailable`
+    // gate above is a no-op here — a closed/unserviceable outlet sails
+    // through with an EMPTY menu instead of being blocked. Treat that as the
+    // closed case explicitly: surface it via the existing error-card render
+    // (same as any other checkout failure) and stop before building a cart.
+    if (state.items.length === 0) {
+      state.cart = {
+        status: "error",
+        error: "That restaurant looks closed or can't deliver here right now — try another address or place.",
+      };
+      render();
+      return;
+    }
+
     const pending = new Map<string, PendingLine>();
     for (const line of order.lines) {
       const qty = Math.max(1, Math.round(num(line.qty)));
@@ -1460,6 +1511,38 @@ async function reorder(index: number): Promise<void> {
 // reflects the new location (Task 9: whichever of the two is currently
 // active). With neither set, the address just switches; the (unrelated)
 // recent-orders list is left as-is.
+// refreshRecentOrders (M8): orders.json is keyed by address, so the recent-
+// orders list must never be left showing a PREVIOUS address's orders after a
+// switch — tapping reorder would otherwise build a cart at the NEW address
+// from an OLD address's order. Called from chooseAddress alongside the
+// existing home-search refresh. Guards the same stale-response race
+// runHomeSearch guards against (a rapid address-switch-then-switch-again) by
+// checking state.addressId is still this call's addressId after the await;
+// any failure clears the list rather than leaving it stale.
+async function refreshRecentOrders(addressId: string): Promise<void> {
+  if (!app) return;
+  try {
+    const result = await app.callServerTool({
+      name: "get_previous_orders",
+      arguments: { address_id: addressId },
+    });
+    if (state.addressId !== addressId) return; // superseded — discard
+    if (result.isError) {
+      state.recentOrders = [];
+      render();
+      return;
+    }
+    const sc = result.structuredContent as { orders?: RecentOrder[] } | undefined;
+    state.recentOrders = Array.isArray(sc?.orders) ? sc.orders : [];
+    render();
+  } catch (err) {
+    if (state.addressId !== addressId) return; // superseded — discard
+    console.error("[consolestore order app] get_previous_orders failed", err);
+    state.recentOrders = [];
+    render();
+  }
+}
+
 async function chooseAddress(id: string, label: string, asDefault: boolean): Promise<void> {
   if (!app) return;
   state.addrError = undefined;
@@ -1485,8 +1568,11 @@ async function chooseAddress(id: string, label: string, asDefault: boolean): Pro
     state.closedNoteId = null;
     render();
 
-    if (state.activeCatQuery) await runHomeSearch(state.addressId, state.activeCatQuery);
-    else if (state.query) await runHomeSearch(state.addressId, state.query);
+    const addressId = state.addressId;
+    const refreshes: Promise<void>[] = [refreshRecentOrders(addressId)];
+    if (state.activeCatQuery) refreshes.push(runHomeSearch(addressId, state.activeCatQuery));
+    else if (state.query) refreshes.push(runHomeSearch(addressId, state.query));
+    await Promise.all(refreshes);
   } catch (err) {
     state.addrError = err instanceof Error ? err.message : String(err);
     render();
@@ -1832,6 +1918,7 @@ function resetRestaurantScopedState(): void {
   // rollback target (H3) until the first get_cart/update_cart establishes one.
   confirmedPending = null;
   lastSyncOk = true;
+  lastBill = null; // M5 — a new restaurant has no bill to stash yet
   if (cartSyncTimer) {
     clearTimeout(cartSyncTimer);
     cartSyncTimer = null;

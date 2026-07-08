@@ -455,9 +455,35 @@ function billView(state: AppState, cart: CartState, placing: boolean): string {
   );
 }
 
+// overCapView (M5) is the TUI-parity treatment for an over_cap prepare_order
+// failure: keep the bill on screen (lines + total, from the stashed lastBill
+// app.ts hands over as cart.bill) with a persistent gold/warning cap notice
+// inline, instead of replacing it with the generic error card. No place
+// button — the user must trim first; "← edit cart" is the only way out.
+function overCapView(state: AppState, cart: CartState): string {
+  const bill = cart.bill;
+  if (!bill) return errorView(cart); // shouldn't happen — caller already checked
+  const restaurant = bill.restaurant || state.restaurant?.name || state.restaurant?.id || "your order";
+  const message = cart.error || "Cart is over the ₹1000 beta cap.";
+  return (
+    `<h2 class="sr-only">Your cart is over the ₹1000 beta cap — trim it to continue.</h2>` +
+    cartBack(restaurant) +
+    `<div style="font-size:15px;font-weight:500;margin-bottom:2px">${esc(restaurant)}</div>` +
+    `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">your order · the real bill</div>` +
+    billLines(bill) +
+    billBlock(bill) +
+    `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;padding:10px 12px;background:var(--surface-1);border:1px solid var(--text-warning);border-radius:var(--radius)">` +
+    `<span style="color:var(--text-warning);flex:none">${icon("alert-triangle", 16)}</span>` +
+    `<div style="font-size:13px;color:var(--text-primary)">${esc(message)}</div>` +
+    `</div>` +
+    `<button type="button" data-cart-back class="btn btn-block" style="margin-top:12px">${icon("arrow-left", 14)} edit cart</button>`
+  );
+}
+
 function placedView(cart: CartState): string {
   const bill = cart.bill;
   const id = orderIdOf(cart.order);
+  const eta = orderEtaOf(cart.order);
   const amount = bill ? rupees(bill.total) : "";
   const where = cart.addressLabel ? ` to ${esc(cart.addressLabel)}` : "";
   return (
@@ -465,6 +491,7 @@ function placedView(cart: CartState): string {
     cardShell(
       `<div style="display:flex;gap:10px;align-items:center;margin-bottom:6px"><span style="color:var(--text-success);flex:none">${icon("check-circle", 22)}</span><div style="font-size:16px;font-weight:500">Order placed</div></div>` +
         `<div style="font-size:13px;color:var(--text-secondary)">${amount ? `${amount}${where} — it's on the way.` : `Your order is confirmed${where}.`}</div>` +
+        (eta ? `<div style="font-size:13px;color:var(--text-secondary);margin-top:4px">arriving in ~${esc(eta)}</div>` : "") +
         (id ? `<div style="font-size:12px;color:var(--text-muted);margin-top:8px">order ${esc(id)}</div>` : ""),
     )
   );
@@ -495,6 +522,18 @@ function orderIdOf(order: Record<string, unknown> | undefined): string {
   return "";
 }
 
+// orderEtaOf (M6) tolerant-reads the ETA place_order's OrderDTO carries
+// (`order.eta`), same convention as orderIdOf — no new tool call, just
+// reading a field the response already has.
+function orderEtaOf(order: Record<string, unknown> | undefined): string {
+  if (!order) return "";
+  for (const key of ["eta", "ETA"]) {
+    const v = order[key];
+    if (typeof v === "string" || typeof v === "number") return String(v);
+  }
+  return "";
+}
+
 // renderCartScreen swaps the same #app root for the whole checkout flow.
 export function renderCartScreen(state: AppState, cart: CartState): string {
   switch (cart.status) {
@@ -509,6 +548,10 @@ export function renderCartScreen(state: AppState, cart: CartState): string {
     case "placed":
       return placedView(cart);
     case "error":
-      return errorView(cart);
+      // M5: an over_cap failure keeps the bill visible with an inline notice
+      // instead of the generic full-screen error card, when a bill is
+      // available to show (buildCartError stamps it from the stashed
+      // lastBill). Falls back to the plain error card otherwise.
+      return cart.errorCode === "over_cap" && cart.bill ? overCapView(state, cart) : errorView(cart);
   }
 }
