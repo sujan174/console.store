@@ -7,17 +7,19 @@ import (
 )
 
 type fakeBackend struct {
-	addrs         []api.Address
-	search        []api.Restaurant
-	searchNext    int
-	searchMore    bool
-	searchPageErr error
-	menu          api.Menu
-	itemOpts []api.OptionGroup
-	cart     api.Cart
-	order    api.Order
-	placeErr error
-	placed   int
+	addrs           []api.Address
+	search          []api.Restaurant
+	searchNext      int
+	searchMore      bool
+	searchPageErr   error
+	menu            api.Menu
+	menuCalls       int
+	searchPageCalls int
+	itemOpts        []api.OptionGroup
+	cart            api.Cart
+	order           api.Order
+	placeErr        error
+	placed          int
 
 	// optional scripted behavior for cart flows; nil falls back to `cart`.
 	getFn    func(addressID string) (api.Cart, error)
@@ -47,6 +49,7 @@ func (f *fakeBackend) SearchOrganic(addressID, query string) ([]api.Restaurant, 
 	return f.search, query, nil
 }
 func (f *fakeBackend) SearchOrganicPage(addressID, query string, offset int) ([]api.Restaurant, string, int, bool, error) {
+	f.searchPageCalls++
 	if f.searchPageErr != nil {
 		return nil, query, offset, false, f.searchPageErr
 	}
@@ -55,8 +58,11 @@ func (f *fakeBackend) SearchOrganicPage(addressID, query string, offset int) ([]
 func (f *fakeBackend) PlacesQuery(addressID, query string) ([]api.Restaurant, error) {
 	return f.search, nil
 }
-func (f *fakeBackend) Usuals(addressID string) ([]api.Restaurant, error)     { return f.search, nil }
-func (f *fakeBackend) Menu(addressID, restaurantID string) (api.Menu, error) { return f.menu, nil }
+func (f *fakeBackend) Usuals(addressID string) ([]api.Restaurant, error) { return f.search, nil }
+func (f *fakeBackend) Menu(addressID, restaurantID string) (api.Menu, error) {
+	f.menuCalls++
+	return f.menu, nil
+}
 func (f *fakeBackend) ItemOptions(addressID, restaurantID, itemName, menuItemID string) ([]api.OptionGroup, error) {
 	return f.itemOpts, nil
 }

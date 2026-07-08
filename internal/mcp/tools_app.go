@@ -51,6 +51,10 @@ type OpenStoreOut struct {
 	// means don't bother.
 	NextOffset int  `json:"next_offset,omitempty"`
 	HasMore    bool `json:"has_more,omitempty"`
+	// Loading marks a shell result the widget resolves itself (fetches the
+	// menu / runs the search under its loading animation). Set on a restaurant
+	// open and on a home open that carries a query; absent on a bare home.
+	Loading bool `json:"loading,omitempty"`
 }
 
 func openStoreTool() *mcp.Tool {
@@ -89,7 +93,6 @@ func (s *Server) registerApp(srv *mcp.Server) {
 	addTool(srv, openStoreTool(), s.handleOpenStore)
 }
 
-
 // resolveAddress picks the delivery address for a tool call, in precedence
 // order: an explicit id the caller passed → the locally-preferred active
 // address (AddrPref) → the account's first saved address.
@@ -127,11 +130,9 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 	addr, label := s.resolveAddress(in.AddressID)
 
 	if in.RestaurantID != "" {
-		m, err := s.be.Menu(addr, in.RestaurantID)
-		if err != nil {
-			return nil, OpenStoreOut{}, err
-		}
-		menu := GetMenuOut{RestaurantID: m.RestaurantID, Items: toMenuItemDTOs(m.Items)}
+		// Instant-open: return a shell with NO menu — the widget fetches the
+		// menu itself under its loading animation (one get_menu, the same read
+		// this used to do server-side). resolveAddress stays local/cheap.
 		return nil, OpenStoreOut{
 			Screen:     "restaurant",
 			Address:    AddrRefDTO{ID: addr, Label: label},
@@ -141,8 +142,8 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 			// inside this restaurant" — used for the ambiguous-item case (open
 			// the store already showing the matches so the user picks). WITHOUT a
 			// restaurant_id, `query` is the home search instead (below).
-			Entry: map[string]string{"category": in.Category, "item_id": in.ItemID, "address_id": addr, "search": in.Query},
-			Menu:  &menu,
+			Entry:   map[string]string{"category": in.Category, "item_id": in.ItemID, "address_id": addr, "search": in.Query},
+			Loading: true,
 		}, nil
 	}
 
@@ -150,26 +151,15 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 	for _, c := range config.DefaultCategories() {
 		cats = append(cats, CategoryDTO{Label: c.Label, Query: c.Query})
 	}
-	var rests []RestaurantDTO
-	var nextOffset int
-	var hasMore bool
-	if in.Query != "" {
-		res, _, next, more, err := s.be.SearchOrganicPage(addr, in.Query, 0)
-		if err != nil {
-			return nil, OpenStoreOut{}, err
-		}
-		rests = toRestaurantDTOs(res)
-		nextOffset, hasMore = next, more
-	}
 	recent, _ := localstore.LoadOrders(addr)
+	// Instant-open home: a query returns a loading shell (widget runs the
+	// search itself); a bare open is the plain home with no fetch.
 	return nil, OpenStoreOut{
 		Screen:       "home",
 		Address:      AddrRefDTO{ID: addr, Label: label},
 		Categories:   cats,
-		Restaurants:  rests,
 		RecentOrders: recent,
 		Query:        in.Query,
-		NextOffset:   nextOffset,
-		HasMore:      hasMore,
+		Loading:      in.Query != "",
 	}, nil
 }
