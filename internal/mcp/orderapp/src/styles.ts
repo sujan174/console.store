@@ -133,26 +133,40 @@ body {
   animation: riseIn .2s ease both;
 }
 
-/* --- loading spinner + centered loading block --- */
-.ring {
-  width: 24px;
-  height: 24px;
-  border: 2.5px solid var(--border-strong);
-  border-top-color: var(--sw-orange);
-  border-radius: 50%;
-  animation: spin .7s linear infinite;
-  flex: none;
-}
-.loading-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 48px 0;
-  color: var(--text-secondary);
-  font-size: 13px;
+/* --- scooter-road loader: shared centered loading block --- */
+.scooter-loader {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 48px 0; min-height: 180px;
+  color: var(--text-secondary); font-size: 13px;
   animation: fadeIn .15s ease both;
+}
+.scooter-track { position: relative; width: 240px; max-width: 72%; height: 26px; overflow: hidden; }
+.scooter-road {
+  position: absolute; left: 0; right: 0; bottom: 3px; height: 0;
+  border-bottom: 2px dotted var(--border-strong);
+}
+.scooter-rider {
+  position: absolute; bottom: 0; left: 0; font-size: 20px; line-height: 1;
+  animation: scooter-drive 1.6s linear infinite;
+}
+@keyframes scooter-drive {
+  from { transform: translateX(-28px); }
+  to   { transform: translateX(240px); }
+}
+.scooter-shimmer {
+  width: 240px; max-width: 72%; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--sw-orange, #ff5200), transparent);
+  background-size: 45% 100%; background-repeat: no-repeat;
+  animation: scooter-shimmer 1.6s linear infinite;
+}
+@keyframes scooter-shimmer {
+  from { background-position: -45% 0; }
+  to   { background-position: 145% 0; }
+}
+.scooter-label { font-family: var(--font-mono, ui-monospace, monospace); letter-spacing: .01em; }
+@media (prefers-reduced-motion: reduce) {
+  .scooter-rider, .scooter-shimmer { animation: none; }
+  .scooter-rider { left: 50%; transform: translateX(-50%); }
 }
 
 .num {

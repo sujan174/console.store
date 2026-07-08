@@ -167,12 +167,23 @@ function header(title: string, sub: string): string {
   return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:500">${esc(title)}</div><div style="font-size:12px;color:var(--text-secondary)">${esc(sub)}</div></div></div>`;
 }
 
-// loadingBlock is the shared centered spinner + label used by every in-widget
-// loading view (menu open, home search). The ring is CSS-animated (styles.ts
-// .ring) — reduced-motion users get a static ring, which still reads as a
+// loadingBlock is the shared centered loader used by every in-widget loading
+// view (boot/connect, menu open, home search). It recreates the TUI's
+// "placing your order…" motif (internal/tui/loading.go): a delivery scooter
+// driving endlessly across a dotted road, a moving shimmer strip beneath, and
+// a label. Reduced-motion users get a static, centered scooter — still a clear
 // "working" affordance next to the label.
 export function loadingBlock(label: string): string {
-  return `<div class="loading-wrap"><div class="ring" role="status" aria-label="${esc(label)}"></div><div>${esc(label)}</div></div>`;
+  return (
+    `<div class="scooter-loader" role="status" aria-label="${esc(label)}">` +
+      `<div class="scooter-track">` +
+        `<span class="scooter-road" aria-hidden="true"></span>` +
+        `<span class="scooter-rider" aria-hidden="true">🛵</span>` +
+      `</div>` +
+      `<div class="scooter-shimmer" aria-hidden="true"></div>` +
+      `<div class="scooter-label">${esc(label)}</div>` +
+    `</div>`
+  );
 }
 
 // renderMenuLoading paints the restaurant screen the instant a card is tapped,
