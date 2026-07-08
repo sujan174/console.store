@@ -2433,8 +2433,11 @@ export function bootstrap(): void {
 
   // Paint the animated boot loader at once — replaces the static skeleton label
   // so the first thing the user sees is the centered scooter animation, held
-  // until connect resolves and the first tool result seeds a real screen.
-  root.innerHTML = loadingBlock("Fulfilling your request…");
+  // until connect resolves and the first tool result seeds a real screen. The
+  // .boot-center wrapper fills the fixed-height frame so the loader is
+  // vertically centered WITHOUT making #app a flex container (which would
+  // shrink-wrap and mis-lay every real screen — see styles.ts .boot-center).
+  root.innerHTML = `<div class="boot-center">${loadingBlock("Fulfilling your request…")}</div>`;
 
   app = new App({ name: "consolestore order", version: "0.1.0" });
   app.onhostcontextchanged = () => applyHostStyling();

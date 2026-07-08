@@ -133,6 +133,11 @@ body {
   animation: riseIn .2s ease both;
 }
 
+/* boot-center fills the fixed-height #app so the boot loader sits vertically
+   centered. Used ONLY for the pre-seed boot render — #app itself is a plain
+   scrolling block (never a flex container), so real screens lay out top-down. */
+.boot-center { min-height: 100%; display: flex; align-items: center; justify-content: center; }
+
 /* --- scooter-road loader: shared centered loading block --- */
 .scooter-loader {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
