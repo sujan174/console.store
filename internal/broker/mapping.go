@@ -115,7 +115,7 @@ func mapOptions(in []swiggy.OptionGroup) []api.OptionGroup {
 	for i, g := range in {
 		choices := make([]api.OptionChoice, len(g.Choices))
 		for j, ch := range g.Choices {
-			choices[j] = api.OptionChoice{ID: ch.ID, Name: ch.Name, Price: ch.Price, InStock: ch.InStock}
+			choices[j] = api.OptionChoice{ID: ch.ID, Name: ch.Name, Price: ch.Price, InStock: ch.InStock, Default: ch.Default}
 		}
 		out[i] = api.OptionGroup{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Absolute: g.Absolute, Choices: choices}
 	}

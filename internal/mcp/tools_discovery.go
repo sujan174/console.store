@@ -190,6 +190,7 @@ type OptionChoiceDTO struct {
 	Name    string `json:"name"`
 	Price   int    `json:"price"`
 	InStock bool   `json:"in_stock"`
+	Default bool   `json:"default,omitempty"` // variantsV2 default variation — the widget omits it from the cart wire
 }
 type OptionGroupDTO struct {
 	ID       string            `json:"id"`
@@ -217,7 +218,7 @@ func (s *Server) handleGetItemOptions(ctx context.Context, _ *mcp.CallToolReques
 	for _, g := range groups {
 		dg := OptionGroupDTO{ID: g.ID, Name: g.Name, Min: g.Min, Max: g.Max, Variant: g.Variant, Absolute: g.Absolute}
 		for _, c := range g.Choices {
-			dg.Choices = append(dg.Choices, OptionChoiceDTO{ID: c.ID, Name: c.Name, Price: c.Price, InStock: c.InStock})
+			dg.Choices = append(dg.Choices, OptionChoiceDTO{ID: c.ID, Name: c.Name, Price: c.Price, InStock: c.InStock, Default: c.Default})
 		}
 		out.Groups = append(out.Groups, dg)
 	}

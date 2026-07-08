@@ -82,6 +82,7 @@ type OptionChoice struct {
 	Name    string
 	Price   int
 	InStock bool
+	Default bool // variantsV2 default variation — omitted from the cart wire (Swiggy pre-applies it)
 }
 
 type CartLine struct {

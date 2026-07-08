@@ -28,6 +28,7 @@ func TestBuildOptionsDropsRequiredSingleAddon(t *testing.T) {
 			Name    string  `json:"name"`
 			Price   float64 `json:"price"`
 			InStock int     `json:"inStock"`
+			Default int     `json:"default"`
 		} `json:"variations"`
 	}{{
 		GroupID: "1069887", Name: "Size",
@@ -36,8 +37,9 @@ func TestBuildOptionsDropsRequiredSingleAddon(t *testing.T) {
 			Name    string  `json:"name"`
 			Price   float64 `json:"price"`
 			InStock int     `json:"inStock"`
+			Default int     `json:"default"`
 		}{
-			{ID: "55172371", Name: "Reg", InStock: 1},
+			{ID: "55172371", Name: "Reg", InStock: 1, Default: 1},
 			{ID: "55172372", Name: "XL", InStock: 1},
 		},
 	}}
@@ -98,5 +100,29 @@ func TestBuildOptionsDropsRequiredSingleAddon(t *testing.T) {
 	}
 	if !haveExtras {
 		t.Errorf("optional addon Extras must survive")
+	}
+
+	// The default variation flag must survive parsing — the widget relies on it
+	// to OMIT the default from the cart wire (Swiggy rejects an explicit default
+	// send with INVALID_ADDON).
+	for _, g := range groups {
+		if g.Name != "Size" {
+			continue
+		}
+		var reg, xl *OptionChoice
+		for i := range g.Choices {
+			switch g.Choices[i].Name {
+			case "Reg":
+				reg = &g.Choices[i]
+			case "XL":
+				xl = &g.Choices[i]
+			}
+		}
+		if reg == nil || !reg.Default {
+			t.Errorf("Reg must be marked Default (Swiggy default:1)")
+		}
+		if xl == nil || xl.Default {
+			t.Errorf("XL must NOT be marked Default")
+		}
 	}
 }

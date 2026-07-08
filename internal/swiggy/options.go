@@ -24,6 +24,11 @@ type OptionChoice struct {
 	Name    string
 	Price   int
 	InStock bool
+	// Default marks a variantsV2 variation Swiggy pre-applies (its price is
+	// baked into the item base). Swiggy REJECTS an explicit send of the default
+	// variation (INVALID_ADDON) — it must be omitted from the cart wire, so only
+	// NON-default variations are ever sent. Always false for legacy/addon choices.
+	Default bool
 }
 
 // searchMenuItem decodes the fields of a search_menu result item we need to
@@ -40,6 +45,7 @@ type searchMenuItem struct {
 			Name    string  `json:"name"`
 			Price   float64 `json:"price"`
 			InStock int     `json:"inStock"`
+			Default int     `json:"default"`
 		} `json:"variations"`
 	} `json:"variantsV2"`
 	// Legacy variations are a FLAT list; entries are grouped by their groupId
@@ -97,6 +103,7 @@ func buildOptions(it searchMenuItem) []OptionGroup {
 		for _, v := range vg.Variations {
 			g.Choices = append(g.Choices, OptionChoice{
 				ID: v.ID, Name: v.Name, Price: int(math.Round(v.Price)), InStock: v.InStock == 1,
+				Default: v.Default == 1,
 			})
 		}
 		if len(g.Choices) > 0 {

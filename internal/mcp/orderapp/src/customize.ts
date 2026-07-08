@@ -18,6 +18,9 @@ export interface RawOptionChoice {
   name: string;
   price: number;
   in_stock: boolean;
+  // Swiggy variantsV2 default variation: baked into the base price and REJECTED
+  // if sent explicitly (INVALID_ADDON). Present only on variant choices.
+  default?: boolean;
 }
 
 export interface RawOptionGroup {
@@ -48,6 +51,7 @@ export interface CuratedChoice {
   id: string;
   name: string;
   price: number;
+  default?: boolean; // variantsV2 default variation — omitted from the cart wire
 }
 
 export interface CuratedGroup {
@@ -137,7 +141,7 @@ export function curateGroups(raw: RawOptionGroup[]): CurateResult {
       kind,
       min: kind === "multi" ? Math.max(0, g.min) : 1,
       max: kind === "multi" ? Math.max(1, g.max) : 1,
-      choices: choices.map((c) => ({ id: c.id, name: c.name.trim(), price: c.price })),
+      choices: choices.map((c) => ({ id: c.id, name: c.name.trim(), price: c.price, default: c.default })),
       variant: g.variant,
       absolute: g.absolute,
     };
@@ -254,8 +258,14 @@ export function buildWireSelections(groups: CuratedGroup[], selection: Map<strin
     const chosen = selection.get(g.id);
     if (!chosen) continue;
     for (const choiceId of chosen) {
-      if (g.variant && g.absolute) variants_v2.push({ group_id: g.id, variation_id: choiceId });
-      else if (g.variant) variants_legacy.push({ group_id: g.id, variation_id: choiceId });
+      if (g.variant && g.absolute) {
+        // Swiggy REJECTS an explicit default variation (INVALID_ADDON) — its
+        // price is baked into the item base and it is auto-applied. Send only
+        // NON-default variations; omitting the default leaves the base as-is.
+        const choice = g.choices.find((c) => c.id === choiceId);
+        if (choice?.default) continue;
+        variants_v2.push({ group_id: g.id, variation_id: choiceId });
+      } else if (g.variant) variants_legacy.push({ group_id: g.id, variation_id: choiceId });
       else addons.push({ group_id: g.id, choice_id: choiceId });
     }
   }
