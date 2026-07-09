@@ -293,7 +293,13 @@ export function handleIMClick(el: HTMLElement): boolean {
   }
   const close = el.closest<HTMLElement>("[data-im-picker-close]");
   if (close) {
-    closeIMPicker();
+    // Close on the ✕ button or a true backdrop click. Clicks INSIDE the
+    // sheet card also bubble here (the backdrop wraps the card, and nothing
+    // stops propagation — the pick rows above depend on that), so guard:
+    // an in-card non-row click must not dismiss the picker.
+    if (close.tagName === "BUTTON" || !el.closest("[data-im-sheet]")) {
+      closeIMPicker();
+    }
     return true;
   }
   const inc = el.closest<HTMLElement>("[data-im-inc]");

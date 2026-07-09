@@ -127,8 +127,11 @@ function pickerSheet(): string {
     })
     .join("");
   return (
+    // No stopPropagation on the sheet: ALL clicks must bubble to the root
+    // delegate (handleIMClick) or the variant rows/✕ inside never fire. The
+    // close branch guards on data-im-sheet so in-card clicks don't dismiss.
     `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center" data-im-picker-close>` +
-    `<div class="card" style="width:min(440px,94vw);max-height:70vh;overflow:auto;margin:0 0 12px;padding:14px" onclick="event.stopPropagation()">` +
+    `<div class="card" data-im-sheet style="width:min(440px,94vw);max-height:70vh;overflow:auto;margin:0 0 12px;padding:14px">` +
     `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">` +
     `<div style="font-size:14px;font-weight:600">${esc(p.name)} — pick a pack size</div>` +
     `<button type="button" data-im-picker-close class="btn" style="padding:4px 10px">✕</button>` +
