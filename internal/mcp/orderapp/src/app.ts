@@ -643,6 +643,24 @@ function decPending(itemId: string): void {
   scheduleCartSync();
 }
 
+// cartEditByKey adjusts one pending line (by its exact key, so a customized line
+// is targeted precisely) from the CHECKOUT screen, then re-syncs + re-bills so the
+// authoritative total updates. delta is +1 / -1. Removing the last unit of the last
+// line empties the cart → back to the menu. Unlike the menu's debounced
+// scheduleCartSync, checkout edits re-materialize immediately (one update_cart +
+// prepare_order) so the on-screen bill is never stale.
+function cartEditByKey(key: string, delta: number): void {
+  const line = state.pending.get(key);
+  if (!line) return;
+  line.qty += delta;
+  if (line.qty <= 0) state.pending.delete(key);
+  if (state.pending.size === 0) {
+    closeCart(); // emptied the cart → return to the menu
+    return;
+  }
+  void materializeCart(++cartToken);
+}
+
 // The result of app.callServerTool — inferred from the App class itself so
 // this file never needs to import the SDK's CallToolResult type directly.
 type ToolResult = Awaited<ReturnType<App["callServerTool"]>>;
@@ -765,9 +783,20 @@ function addCustomizedToCart(): void {
   else state.pending.set(key, { key, itemId: item.id, name, price, qty: 1, selections });
 
   state.customize = null;
+  // Opened from the checkout "+" (customizeReturnToCart): re-bill and land back on
+  // the cart instead of the menu, so a customized add flows straight to the total.
+  if (customizeReturnToCart) {
+    customizeReturnToCart = false;
+    void openCart();
+    return;
+  }
   scheduleCartSync();
   render();
 }
+
+// customizeReturnToCart is set when the customize sheet was opened from a checkout
+// bill line's "+"; addCustomizedToCart then returns to the (re-billed) cart.
+let customizeReturnToCart = false;
 
 // --- checkout: the money flow (Task 6) ---
 //
@@ -1541,7 +1570,6 @@ async function placeOrder(): Promise<void> {
 // bumps cartToken) or a superseding place cancels it. The countdown ticks the same
 // interval, so a closed window flips the screen to "expired" without a poll.
 let payTimer: ReturnType<typeof setInterval> | null = null;
-const PAY_POLL_MS = 2500;
 
 function stopPayment(): void {
   if (payTimer) {
@@ -1574,7 +1602,14 @@ function startPayment(token: number, payment: PaymentInfo, current: CartState): 
   render();
   if (expired) return; // never poll a dead window
 
+  // The interval ticks every second for a smooth countdown, but it updates ONLY
+  // the #pay-left text node in place (no render() — a full re-render would rebuild
+  // the whole card + QR each second and flicker the widget). render() is called
+  // only on a real state transition (expired / paid→placing / failed). The paid
+  // poll runs every POLL_EVERY ticks, not every tick, to stay ban-safe.
   let polling = false;
+  let tick = 0;
+  const POLL_EVERY = 3; // → check_payment ~every 3s
   payTimer = setInterval(() => {
     void (async () => {
       if (cartToken !== token || !state.cart || state.cart.status !== "paying") {
@@ -1588,9 +1623,12 @@ function startPayment(token: number, payment: PaymentInfo, current: CartState): 
         render();
         return;
       }
-      // Tick the visible countdown every interval.
-      state.cart = { ...state.cart, payLeftLabel: payLeftLabel(payment.expires_at) };
-      render();
+      // Surgical countdown update — text node only, never a re-render.
+      const leftEl = root?.querySelector<HTMLElement>("#pay-left");
+      if (leftEl) leftEl.textContent = payLeftLabel(payment.expires_at);
+
+      tick++;
+      if (tick % POLL_EVERY !== 0) return; // countdown-only tick
       if (polling || !app) return; // one poll in flight at a time
       polling = true;
       try {
@@ -1621,7 +1659,7 @@ function startPayment(token: number, payment: PaymentInfo, current: CartState): 
         polling = false;
       }
     })();
-  }, PAY_POLL_MS);
+  }, 1000);
 }
 
 // confirmPaidOrder finalizes a paid UPI payment into a placed order. Called once,
@@ -2098,7 +2136,7 @@ function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin],[data-reload]",
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-cart-inc],[data-cart-dec],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin],[data-reload]",
   );
   if (!el) return;
   log("click", { action: Object.keys(el.dataset)[0] ?? "?" });
@@ -2166,8 +2204,23 @@ function onRootClick(evt: MouseEvent): void {
     return;
   }
 
+  // Checkout-screen steppers: edit the exact pending line (by key) and re-bill.
+  const cartIncKey = el.dataset.cartInc;
+  if (cartIncKey !== undefined) {
+    cartEditByKey(cartIncKey, +1);
+    return;
+  }
+  const cartDecKey = el.dataset.cartDec;
+  if (cartDecKey !== undefined) {
+    cartEditByKey(cartDecKey, -1);
+    return;
+  }
+
   const customizeId = el.dataset.customize;
   if (customizeId !== undefined) {
+    // "+" on a customizable checkout line opens the sheet in return-to-cart mode
+    // so a new variant/add-on unit lands back on the bill, not the menu.
+    if (state.cart) customizeReturnToCart = true;
     void openCustomize(customizeId);
     return;
   }

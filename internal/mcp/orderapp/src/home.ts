@@ -60,8 +60,11 @@ function addressDropdown(state: AppState): string {
     `<span style="display:inline-flex;align-items:center;gap:4px">set as default ${icon("lock", 13)}</span>` +
     `</label>`;
 
+  // right:0 anchors the dropdown under the RIGHT-aligned address chip. Without it
+  // an absolutely-positioned box falls to its static position at the LEFT edge of
+  // the full-width header wrapper — the "click top-right, menu opens top-left" bug.
   return (
-    `<div class="card" style="position:absolute;z-index:10;margin-top:6px;min-width:220px;max-width:280px;padding:6px 0">` +
+    `<div class="card" style="position:absolute;right:0;top:100%;z-index:10;margin-top:6px;min-width:220px;max-width:280px;padding:6px 0">` +
     rows +
     defaultToggle +
     `</div>`

@@ -10,7 +10,7 @@
 // Tabler icon font, which was never bundled and rendered blank. No render
 // function signature, data-* attribute, or control-flow branch changed.
 
-import type { AppState, CartBill, CartState, CustomizeState, MenuItemData, PendingLine } from "./app";
+import type { AppState, CartBill, CartBillLine, CartState, CustomizeState, MenuItemData, PendingLine } from "./app";
 import { estimatePrice, type CuratedGroup } from "./customize";
 import { icon } from "./icons";
 
@@ -467,13 +467,44 @@ function billBlock(bill: CartBill): string {
 // billLines renders the server's actual cart lines. A sold-out line
 // (available:false) is dimmed, struck, and badged (surface-kit.md
 // "Sold-out / blocked state").
-function billLines(bill: CartBill): string {
+// cartStepper is the per-line − / qty / + control on the checkout bill. A simple
+// line edits the client cart directly (data-cart-inc/dec on the pending line's
+// key, which re-syncs + re-bills). A customizable line's "+" instead opens the
+// customize sheet (data-customize) so the user picks variants/add-ons for the new
+// unit — you can't blind-add a second customizable unit without choices.
+function cartStepper(line: CartBillLine, state: AppState): string {
+  const menuItem = state.items.find((i) => i.id === line.item_id);
+  const pendingLine = [...state.pending.values()].find((p) => p.itemId === line.item_id);
+  const customizable = !!menuItem?.customizable || !!pendingLine?.selections;
+  const key = pendingLine?.key ?? line.item_id;
+  const plus = customizable
+    ? `<button type="button" data-customize="${esc(line.item_id)}" aria-label="add another ${esc(line.name)} with options">${icon("plus", 14)}</button>`
+    : `<button type="button" data-cart-inc="${esc(key)}" aria-label="add one ${esc(line.name)}">${icon("plus", 14)}</button>`;
+  return (
+    `<div class="stepper">` +
+    `<button type="button" data-cart-dec="${esc(key)}" aria-label="remove one ${esc(line.name)}">${icon("minus", 14)}</button>` +
+    `<span class="num">${line.quantity}</span>` +
+    plus +
+    `</div>`
+  );
+}
+
+function billLines(bill: CartBill, state: AppState, editable: boolean): string {
   return bill.lines
     .map((line) => {
       if (!line.available) {
-        return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:5px 0;opacity:.5"><span style="text-decoration:line-through">${line.quantity} × ${esc(line.name)}</span><span class="badge-soldout">sold out</span></div>`;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:6px 0;opacity:.5"><span style="text-decoration:line-through">${line.quantity} × ${esc(line.name)}</span><span class="badge-soldout">sold out</span></div>`;
       }
-      return `<div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0"><span>${line.quantity} × ${esc(line.name)}</span><span>${rupees(line.price * line.quantity)}</span></div>`;
+      if (!editable) {
+        return `<div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0"><span>${line.quantity} × ${esc(line.name)}</span><span>${rupees(line.price * line.quantity)}</span></div>`;
+      }
+      return (
+        `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0">` +
+        `<span style="flex:1;min-width:0">${esc(line.name)}</span>` +
+        `<span style="color:var(--text-secondary);white-space:nowrap">${rupees(line.price * line.quantity)}</span>` +
+        cartStepper(line, state) +
+        `</div>`
+      );
     })
     .join("");
 }
@@ -563,7 +594,7 @@ function billView(state: AppState, cart: CartState, placing: boolean): string {
     `<div style="font-size:15px;font-weight:500;margin-bottom:2px">${esc(restaurant)}</div>` +
     `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">your order · the real bill</div>` +
     rebuilt +
-    billLines(bill) +
+    billLines(bill, state, !placing) +
     billBlock(bill) +
     addressChip(cart.addressLabel || "") +
     cta
@@ -585,7 +616,7 @@ function overCapView(state: AppState, cart: CartState): string {
     cartBack(restaurant) +
     `<div style="font-size:15px;font-weight:500;margin-bottom:2px">${esc(restaurant)}</div>` +
     `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">your order · the real bill</div>` +
-    billLines(bill) +
+    billLines(bill, state, true) +
     billBlock(bill) +
     `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;padding:10px 12px;background:var(--surface-1);border:1px solid var(--text-warning);border-radius:var(--radius)">` +
     `<span style="color:var(--text-warning);flex:none">${icon("alert-triangle", 16)}</span>` +
@@ -677,16 +708,14 @@ function payingView(cart: CartState): string {
     );
   }
 
-  const left = cart.payLeftLabel
-    ? `<div style="font-size:12px;color:var(--sw-orange);text-align:center;margin-top:2px">expires in ${esc(cart.payLeftLabel)}</div>`
-    : "";
+  // The countdown lives in its own node (#pay-left) so the poll loop updates it
+  // in place with textContent — NEVER a full re-render, which would rebuild the
+  // whole card (and the QR) every tick and flicker the widget (app.ts startPayment).
+  const left = `<div style="font-size:12px;color:var(--sw-orange);text-align:center;margin-top:2px">expires in <span id="pay-left">${esc(cart.payLeftLabel || "")}</span></div>`;
   // The QR SVG is generated by our own server (qrSVG) from the upi:// intent —
   // trusted markup, injected as-is. White plate so it scans on any theme.
   const qr = pay.qr_svg
     ? `<div style="background:#fff;border-radius:12px;padding:12px;width:220px;max-width:70%;margin:12px auto 0;line-height:0">${pay.qr_svg}</div>`
-    : "";
-  const link = pay.pay_url
-    ? `<a href="${esc(pay.pay_url)}" target="_blank" rel="noopener" class="btn btn-block" style="margin-top:14px;text-decoration:none">open payment page ${icon("external-link", 14)}</a>`
     : "";
 
   return (
@@ -697,8 +726,7 @@ function payingView(cart: CartState): string {
         qr +
         `<div style="font-size:12px;color:var(--text-secondary);text-align:center;margin-top:10px">scan with any UPI app · GPay · PhonePe · Paytm</div>` +
         `<div style="display:flex;gap:8px;align-items:center;justify-content:center;font-size:13px;color:var(--text-muted);margin-top:12px">${icon("loader", 14)} waiting for payment…</div>` +
-        link +
-        `<button type="button" data-cart-back class="btn btn-block" style="margin-top:10px">cancel</button>`,
+        `<button type="button" data-cart-back class="btn btn-block" style="margin-top:14px">cancel</button>`,
     )
   );
 }
