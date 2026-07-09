@@ -157,7 +157,7 @@ func (c Customize) SelectedOptions() []catalog.Selection {
 		for _, ch := range g.Choices {
 			if c.picked[g.ID][ch.ID] {
 				out = append(out, catalog.Selection{
-					GroupID: g.ID, ChoiceID: ch.ID, Name: ch.Name, Price: ch.Price,
+					GroupID: g.ID, ChoiceID: ch.ID, SkuID: ch.SkuID, Name: ch.Name, Price: ch.Price,
 					Variant: g.Variant, Absolute: g.Absolute,
 				})
 			}

@@ -19,6 +19,7 @@ const imMinRupees = 99
 
 type IMVariantDTO struct {
 	SpinID  string `json:"spin_id"`
+	SkuID   string `json:"sku_id" jsonschema:"required alongside spin_id when adding this variant via im_update_cart"`
 	Label   string `json:"label"`
 	Price   int    `json:"price"`
 	MRP     int    `json:"mrp,omitempty"`
@@ -38,7 +39,7 @@ func toIMProductDTOs(in []api.IMProduct) []IMProductDTO {
 		d := IMProductDTO{ProductID: p.ID, Name: p.Name, Brand: p.Brand, InStock: p.InStock}
 		for _, v := range p.Variants {
 			d.Variants = append(d.Variants, IMVariantDTO{
-				SpinID: v.SpinID, Label: v.Label, Price: v.Price, MRP: v.MRP, InStock: v.InStock,
+				SpinID: v.SpinID, SkuID: v.SkuID, Label: v.Label, Price: v.Price, MRP: v.MRP, InStock: v.InStock,
 			})
 		}
 		out = append(out, d)
@@ -123,6 +124,7 @@ func (s *Server) handleIMGetCart(ctx context.Context, _ *mcp.CallToolRequest, _ 
 
 type IMCartItemIn struct {
 	SpinID   string `json:"spin_id"`
+	SkuID    string `json:"sku_id" jsonschema:"the skuId from the matching search result variant; required alongside spin_id"`
 	Quantity int    `json:"quantity"`
 }
 type IMUpdateCartIn struct {
@@ -136,7 +138,7 @@ type IMUpdateCartOut struct {
 func toIMCartItems(in []IMCartItemIn) []api.IMCartItem {
 	out := make([]api.IMCartItem, 0, len(in))
 	for _, ci := range in {
-		out = append(out, api.IMCartItem{SpinID: ci.SpinID, Quantity: ci.Quantity})
+		out = append(out, api.IMCartItem{SpinID: ci.SpinID, SkuID: ci.SkuID, Quantity: ci.Quantity})
 	}
 	return out
 }

@@ -25,8 +25,9 @@ type PresetSel struct {
 }
 
 type PresetLine struct {
-	ItemID string      `json:"itemId"` // Swiggy menu_item_id
-	Name   string      `json:"name"`   // display only
+	ItemID string      `json:"itemId"`          // Swiggy menu_item_id (food) or spinId (instamart)
+	SkuID  string      `json:"skuId,omitempty"` // instamart only: paired with ItemID(spinId) for update_cart
+	Name   string      `json:"name"`            // display only
 	Qty    int         `json:"qty"`
 	Sels   []PresetSel `json:"sels,omitempty"`
 }
@@ -165,7 +166,7 @@ func PresetCartItems(p Preset) []api.CartItem {
 func PresetIMCartItems(p Preset) []api.IMCartItem {
 	out := make([]api.IMCartItem, 0, len(p.Lines))
 	for _, l := range p.Lines {
-		out = append(out, api.IMCartItem{SpinID: l.ItemID, Quantity: l.Qty})
+		out = append(out, api.IMCartItem{SpinID: l.ItemID, SkuID: l.SkuID, Quantity: l.Qty})
 	}
 	return out
 }

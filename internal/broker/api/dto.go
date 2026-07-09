@@ -180,7 +180,8 @@ type UpdateCartArgs struct {
 
 // IMVariantSel is one purchasable variation (pack size) of a product.
 type IMVariantSel struct {
-	SpinID  string // SKU id sent to update_cart
+	SpinID  string // variant id sent to update_cart
+	SkuID   string // required alongside SpinID by update_cart
 	Label   string // "250 ml x 4"
 	Price   int    // effective rupees (offer price)
 	MRP     int    // strike-through price; 0 or ==Price when no offer
@@ -227,6 +228,7 @@ type IMCart struct {
 // REPLACES the whole cart with these items).
 type IMCartItem struct {
 	SpinID   string
+	SkuID    string
 	Quantity int
 }
 

@@ -41,6 +41,7 @@ type AddOn struct {
 // for an addon, Price is the extra it adds.
 type Choice struct {
 	ID      string
+	SkuID   string // Instamart only: paired with ID (spinId) for update_cart
 	Name    string
 	Price   int
 	InStock bool
@@ -64,6 +65,7 @@ type OptionGroup struct {
 type Selection struct {
 	GroupID  string
 	ChoiceID string
+	SkuID    string // Instamart only: mirrors the chosen Choice.SkuID
 	Name     string
 	Price    int
 	Variant  bool // variant (variantsV2 or legacy) vs addon
@@ -73,7 +75,8 @@ type Selection struct {
 // Item is one orderable item. SwiggyID maps to a live menu item later.
 type Item struct {
 	ID       string
-	SwiggyID string // live Swiggy menu-item id; empty in mock
+	SwiggyID string // live Swiggy menu-item id (Instamart: the spinId); empty in mock
+	SkuID    string // Instamart only: paired with SwiggyID(spinId) for update_cart
 	Name     string
 	Price    int    // whole rupees
 	Tag      string // "", "new"

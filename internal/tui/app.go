@@ -218,15 +218,22 @@ type Model struct {
 
 	// Instamart live-data state (mirrors the food cart's confirmed/sync fields,
 	// kept separate since the two verticals never share a cart).
-	imQuery        string     // the active category/search query driving the product list
-	imCartPulled   bool       // PullIMCart has fired once this session (re-armed on address change)
-	imPending      bool       // an IMProducts load is in flight (shows "loading…")
-	imLiveCart     api.IMCart // last synced/fetched Instamart cart (real lines + pricing)
-	imCartSyncErr  string     // last Instamart cart-sync error; shown on the IM checkout
-	imOrderErr     string     // last Instamart order-placement error
-	imCartMutating bool       // true while an IM reduce/delete sync is in flight (freezes input)
-	imCartRebuilt  bool       // true after a one-shot cart-expired auto-rebuild, to avoid retry loops
-	imCartFetched  bool       // the IM checkout's live cart fetch has answered (gates the empty state)
+	imQuery       string     // the active category/search query driving the product list
+	imCartPulled  bool       // PullIMCart has fired once this session (re-armed on address change)
+	imPending     bool       // an IMProducts load is in flight (shows "loading…")
+	imLiveCart    api.IMCart // last synced/fetched Instamart cart (real lines + pricing)
+	imCartSyncErr string     // last Instamart cart-sync error; shown on the IM checkout
+	imOrderErr    string     // last Instamart order-placement error
+	// imStoreClosedAddr is the address ID Swiggy last reported as closed/
+	// unserviceable for Instamart ("store is currently unavailable or closed").
+	// Swiggy exposes no upfront serviceability signal — this is learned
+	// reactively from a failed update_cart and gates further add attempts for
+	// the SAME address until it changes (or a sync later succeeds), instead of
+	// letting every add retry the network and fail with the same error.
+	imStoreClosedAddr string
+	imCartMutating    bool // true while an IM reduce/delete sync is in flight (freezes input)
+	imCartRebuilt     bool // true after a one-shot cart-expired auto-rebuild, to avoid retry loops
+	imCartFetched     bool // the IM checkout's live cart fetch has answered (gates the empty state)
 
 	// imConfirmed* is the last Instamart-cart-CONFIRMED state (mirrors
 	// confirmedLines/cartConfirmed for food) — the rollback target for a failed sync.
@@ -1870,6 +1877,7 @@ func (m Model) imCommitAdd(item catalog.Item, sels []catalog.Selection, price in
 	for _, s := range sels {
 		if s.Variant {
 			item.SwiggyID = s.ChoiceID
+			item.SkuID = s.SkuID
 			if s.Name != "" {
 				item.Name = item.Name + " (" + s.Name + ")"
 			}
@@ -3111,7 +3119,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch {
 			case strings.Contains(dm.Err.Error(), "store is currently unavailable or closed"):
 				m = m.rollbackIMCart()
-				m.imCartSyncErr = "store closed right now — try again later"
+				m.imStoreClosedAddr = m.addr.ID
+				m.imCartSyncErr = "store closed for this address — try a different address"
 			case strings.Contains(dm.Err.Error(), "Cart not found") || strings.Contains(dm.Err.Error(), "CART_EXPIRED"):
 				if !m.imCartRebuilt {
 					// One-shot auto-rebuild: resend the current lines against a fresh
@@ -3138,7 +3147,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.imSyncInFlight = false
 		m.imCartSyncErr = ""
 		m.imCartRebuilt = false
-		m.imCartFetched = true // a successful sync is as authoritative as a fetch
+		m.imStoreClosedAddr = "" // a successful sync proves the store is open again
+		m.imCartFetched = true   // a successful sync is as authoritative as a fetch
 		m.imLiveCart = dm.Cart
 		// Mark line availability straight on the lines (the IM cart has no
 		// separate id-set like unavailableItems — spinIds are line-scoped, not
@@ -3955,6 +3965,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.imCartPulled = false                // address changed — Instamart cart binds to address, re-pull next entry
 					m.imLoadedQueries = map[string]bool{} // dedupe is per-address: the snapshot is keyed addr+query
+					m.imStoreClosedAddr = ""              // closed status is per-address; a new address may be open
 					m.screen = scrMenu
 					m.railActive = screens.RailHome
 					m.railFocus = true
@@ -3991,6 +4002,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.homePending = false
 					m.imCartPulled = false                // Instamart cart binds to address, re-pull next entry
 					m.imLoadedQueries = map[string]bool{} // dedupe is per-address: the snapshot is keyed addr+query
+					m.imStoreClosedAddr = ""              // closed status is per-address; a new address may be open
 					if m.screen == scrInstamart {
 						// Switched from inside Instamart — stay there: refetch the go-to
 						// list + re-pull the cart for the new address.
@@ -5239,6 +5251,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.imCartSyncErr = "“" + it.Name + "” is sold out"
 					return m, nil
 				}
+				if m.live && m.imStoreClosedAddr == m.addr.ID {
+					// Swiggy already told us this address's store is closed — don't
+					// waste a network round-trip repeating the same failed add.
+					m.imCartSyncErr = "store closed for this address — try a different address"
+					return m, nil
+				}
 				if m.live && it.Customizable {
 					// Options are pre-synthesized locally (toIMItems) — no network
 					// round-trip needed to open the picker.
@@ -6068,7 +6086,7 @@ func (m Model) imItemsForLines() []api.IMCartItem {
 		if l.Item.SwiggyID == "" {
 			continue
 		}
-		items = append(items, api.IMCartItem{SpinID: l.Item.SwiggyID, Quantity: l.Qty})
+		items = append(items, api.IMCartItem{SpinID: l.Item.SwiggyID, SkuID: l.Item.SkuID, Quantity: l.Qty})
 	}
 	return items
 }
@@ -6222,7 +6240,7 @@ func (m *Model) imAliasSet(name string) []screens.CmdLine {
 		if l.Item.SwiggyID == "" {
 			continue
 		}
-		plines = append(plines, localstore.PresetLine{ItemID: l.Item.SwiggyID, Name: l.Item.Name, Qty: l.Qty})
+		plines = append(plines, localstore.PresetLine{ItemID: l.Item.SwiggyID, SkuID: l.Item.SkuID, Name: l.Item.Name, Qty: l.Qty})
 	}
 	if len(plines) == 0 {
 		return []screens.CmdLine{{Text: "alias: no live items to save (mock cart?)", Color: theme.Fav}}

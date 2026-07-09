@@ -157,7 +157,7 @@ func mapIMProducts(in []swiggy.IMProduct) []api.IMProduct {
 		mp := api.IMProduct{ID: p.ID, Name: p.Name, Brand: p.Brand, InStock: p.InStock && p.Avail}
 		for _, v := range p.Variants {
 			mp.Variants = append(mp.Variants, api.IMVariantSel{
-				SpinID: v.SpinID, Label: v.QtyDesc, Price: v.Price.Rupees(),
+				SpinID: v.SpinID, SkuID: v.SkuID, Label: v.QtyDesc, Price: v.Price.Rupees(),
 				MRP: int(math.Round(v.Price.MRP)), InStock: v.InStock,
 			})
 		}
@@ -184,7 +184,7 @@ func mapIMCart(in swiggy.IMCart) api.IMCart {
 func mapIMCartItems(in []api.IMCartItem) []swiggy.IMCartItem {
 	out := make([]swiggy.IMCartItem, len(in))
 	for i, c := range in {
-		out[i] = swiggy.IMCartItem{SpinID: c.SpinID, Quantity: c.Quantity}
+		out[i] = swiggy.IMCartItem{SpinID: c.SpinID, SkuID: c.SkuID, Quantity: c.Quantity}
 	}
 	return out
 }

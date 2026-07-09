@@ -66,6 +66,7 @@ type CachedPlace struct {
 // sync at prepare/checkout is always the money authority.
 type CachedIMVariant struct {
 	SpinID  string `json:"spinId"`
+	SkuID   string `json:"skuId,omitempty"`
 	Label   string `json:"label,omitempty"`
 	Price   int    `json:"price"`
 	MRP     int    `json:"mrp,omitempty"`

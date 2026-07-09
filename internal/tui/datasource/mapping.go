@@ -80,6 +80,7 @@ func toIMItems(ps []api.IMProduct) []catalog.Item {
 		item := catalog.Item{
 			ID:         p.ID,
 			SwiggyID:   def.SpinID,
+			SkuID:      def.SkuID,
 			Name:       p.Name,
 			Price:      def.Price,
 			Desc:       desc,
@@ -90,7 +91,7 @@ func toIMItems(ps []api.IMProduct) []catalog.Item {
 		if len(p.Variants) > 1 {
 			choices := make([]catalog.Choice, len(p.Variants))
 			for j, v := range p.Variants {
-				choices[j] = catalog.Choice{ID: v.SpinID, Name: v.Label, Price: v.Price, InStock: v.InStock}
+				choices[j] = catalog.Choice{ID: v.SpinID, SkuID: v.SkuID, Name: v.Label, Price: v.Price, InStock: v.InStock}
 			}
 			item.Customizable = true
 			item.Options = []catalog.OptionGroup{{
@@ -116,7 +117,7 @@ func toCachedIM(ps []api.IMProduct) []localstore.CachedIMProduct {
 		cp := localstore.CachedIMProduct{ID: p.ID, Name: p.Name, Brand: p.Brand, InStock: p.InStock}
 		for _, v := range p.Variants {
 			cp.Variants = append(cp.Variants, localstore.CachedIMVariant{
-				SpinID: v.SpinID, Label: v.Label, Price: v.Price, MRP: v.MRP, InStock: v.InStock,
+				SpinID: v.SpinID, SkuID: v.SkuID, Label: v.Label, Price: v.Price, MRP: v.MRP, InStock: v.InStock,
 			})
 		}
 		out[i] = cp
@@ -132,7 +133,7 @@ func fromCachedIM(cs []localstore.CachedIMProduct) []api.IMProduct {
 		p := api.IMProduct{ID: c.ID, Name: c.Name, Brand: c.Brand, InStock: c.InStock}
 		for _, v := range c.Variants {
 			p.Variants = append(p.Variants, api.IMVariantSel{
-				SpinID: v.SpinID, Label: v.Label, Price: v.Price, MRP: v.MRP, InStock: v.InStock,
+				SpinID: v.SpinID, SkuID: v.SkuID, Label: v.Label, Price: v.Price, MRP: v.MRP, InStock: v.InStock,
 			})
 		}
 		out[i] = p

@@ -19,6 +19,7 @@ import (
 // the id sent to update_cart — carts hold variants, never parent products.
 type IMVariant struct {
 	SpinID  string  `json:"spinId"`
+	SkuID   string  `json:"skuId"`               // required alongside spinId by update_cart (added by Swiggy 2026-07)
 	QtyDesc string  `json:"quantityDescription"` // "250 ml x 4"
 	Name    string  `json:"displayName"`
 	Brand   string  `json:"brandName"`
@@ -80,9 +81,12 @@ func (c *Client) IMGoToItems(ctx context.Context, addressID string) ([]IMProduct
 }
 
 // IMCartItem is the SENT shape for update_cart items (which REPLACES the whole
-// cart server-side).
+// cart server-side). Swiggy requires both spinId and skuId per item (added
+// 2026-07); omitting skuId fails the whole call ("Each item must include both
+// spinId and skuId from search_products").
 type IMCartItem struct {
 	SpinID   string `json:"spinId"`
+	SkuID    string `json:"skuId"`
 	Quantity int    `json:"quantity"`
 }
 
