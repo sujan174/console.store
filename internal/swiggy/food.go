@@ -83,13 +83,26 @@ const searchPageSize = 8
 // from, and whether more may exist. On the common case (a raw page already
 // carries ≥ searchPageSize real restaurants) it is a single round trip.
 func (c *Client) SearchOrganicPage(ctx context.Context, addressID, query string, offset int) ([]Restaurant, int, bool, error) {
-	// Ban-safety cap: never walk more than this many raw pages in one call,
-	// so a query drowning in ads can't fan out into a request burst.
-	const maxRawPages = 3
+	// Page caps. softRawPages is the normal ceiling once we've found at least one
+	// restaurant. hardRawPages is an EXTENDED ceiling that only applies while a
+	// page has surfaced ZERO restaurants — Swiggy ranks a wall of dish stubs ahead
+	// of some brand-name restaurants (e.g. "blue tokai" returns ~50 dishes before
+	// the roastery card at offset 50), and the normal cap would return nothing.
+	// We stop the instant any restaurant appears, so ordinary queries still cost a
+	// single page; only a dish-buried query pays the extra (serialized) round trips.
+	const (
+		softRawPages = 3
+		hardRawPages = 8
+	)
 	var out []Restaurant
 	seen := map[string]bool{}
 	more := false
-	for p := 0; p < maxRawPages; p++ {
+	for p := 0; p < hardRawPages; p++ {
+		// Past the soft cap, keep walking ONLY while we still have nothing
+		// (a dish wall). As soon as a restaurant is in hand, stop.
+		if p >= softRawPages && len(out) > 0 {
+			break
+		}
 		page, err := c.searchRestaurantsPage(ctx, addressID, query, offset)
 		if err != nil {
 			if p == 0 {
@@ -125,14 +138,26 @@ func (c *Client) searchFill(ctx context.Context, addressID, query string, offset
 		// filtering), avoiding a 2nd sequential Swiggy round trip on the common
 		// case — still ample for a first screen.
 		searchWant = 8
-		// Cap any single query at 2 pages (~20-30 restaurants — ample for a terminal
-		// list). Keeps our request volume gentle so we don't look like a scraper to
-		// Swiggy's anomaly detection; sparse categories just show fewer results.
-		searchMaxPages = 2
+		// Normal ceiling once we've found at least one restaurant (~20-30 — ample
+		// for a terminal list). Keeps request volume gentle so we don't look like a
+		// scraper to Swiggy's anomaly detection.
+		softMaxPages = 2
+		// Extended ceiling that applies ONLY while every page so far has yielded
+		// zero restaurants — Swiggy buries some brand-name restaurants under a wall
+		// of dish stubs (e.g. "blue tokai" → ~50 dishes, then the roastery at
+		// offset 50), and the soft cap alone would return nothing. We stop the
+		// moment a restaurant appears, so ordinary queries never pay the extra
+		// (serialized, one-at-a-time) round trips.
+		hardMaxPages = 8
 	)
 	var out []Restaurant
 	seen := map[string]bool{}
-	for p := 0; p < searchMaxPages; p++ {
+	for p := 0; p < hardMaxPages; p++ {
+		// Past the soft cap, keep walking ONLY while we still have nothing (a dish
+		// wall). As soon as a restaurant is in hand, stop.
+		if p >= softMaxPages && len(out) > 0 {
+			break
+		}
 		page, err := c.searchRestaurantsPage(ctx, addressID, query, offset)
 		if err != nil {
 			if p == 0 {
