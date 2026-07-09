@@ -133,30 +133,38 @@ type pendingRaw struct {
 	OrderID2 string `json:"order_id"`
 	PaasID   string `json:"paasId"`
 	PaasID2  string `json:"paas_id"`
-	CartID   string `json:"cartId"`
-	CartID2  string `json:"cart_id"`
-	// UPI intent string — Swiggy's key is unconfirmed; accept the likely spellings.
-	UPIIntent string    `json:"upiIntent"`
-	UPIString string    `json:"upiString"`
-	QRString  string    `json:"qrString"`
-	QR        string    `json:"qr"`
-	IntentURL string    `json:"intentUrl"`
-	Lat       flexFloat `json:"lat"`
-	Lng       flexFloat `json:"lng"`
-	Amount    flexFloat `json:"amount"`
-	ToPay     flexFloat `json:"to_pay"`
+	// cartId arrives as a NUMBER in the live shape — flexID tolerates number|string.
+	CartID  flexID `json:"cartId"`
+	CartID2 flexID `json:"cart_id"`
+	// The live UPI string field is `upiIntentUrl`; keep the other spellings as
+	// tolerant fallbacks in case a future/alternate flow differs.
+	UPIIntentURL string    `json:"upiIntentUrl"`
+	UPIIntent    string    `json:"upiIntent"`
+	UPIString    string    `json:"upiString"`
+	QRString     string    `json:"qrString"`
+	QR           string    `json:"qr"`
+	IntentURL    string    `json:"intentUrl"`
+	Lat          flexFloat `json:"lat"`
+	Lng          flexFloat `json:"lng"`
+	// Live amount is `paidAmount`; amount/to_pay are tolerant fallbacks.
+	PaidAmount flexFloat `json:"paidAmount"`
+	Amount     flexFloat `json:"amount"`
+	ToPay      flexFloat `json:"to_pay"`
 }
 
 func (r pendingRaw) pending() PendingPayment {
-	amt := float64(r.Amount)
+	amt := float64(r.PaidAmount)
+	if amt == 0 {
+		amt = float64(r.Amount)
+	}
 	if amt == 0 {
 		amt = float64(r.ToPay)
 	}
 	return PendingPayment{
 		OrderID:   firstNonEmpty(r.OrderID, r.OrderID2),
 		PaasID:    firstNonEmpty(r.PaasID, r.PaasID2),
-		UPIString: firstNonEmpty(r.UPIIntent, r.UPIString, r.QRString, r.QR, r.IntentURL),
-		CartID:    firstNonEmpty(r.CartID, r.CartID2),
+		UPIString: firstNonEmpty(r.UPIIntentURL, r.UPIIntent, r.UPIString, r.QRString, r.QR, r.IntentURL),
+		CartID:    firstNonEmpty(r.CartID.val(), r.CartID2.val()),
 		Lat:       float64(r.Lat),
 		Lng:       float64(r.Lng),
 		Amount:    int(math.Round(amt)),

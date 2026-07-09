@@ -130,6 +130,52 @@ func TestPlaceUPIIntentApp(t *testing.T) {
 	}
 }
 
+// TestPlaceUPIDecodesLiveShape uses the EXACT place_food_order(UPI) success
+// payload harvested from a real order 2026-07-09: the UPI string is under
+// `upiIntentUrl`, cartId is a NUMBER, and the amount is `paidAmount`.
+func TestPlaceUPIDecodesLiveShape(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	srv := newFakeMCP(t, map[string]toolFn{
+		"place_food_order": func(map[string]any) (any, error) {
+			return map[string]any{
+				"orderId":       "242566743091071",
+				"transactionId": "266672343000722",
+				"paasId":        "266672343000722",
+				"upiIntentUrl":  "upi://pay?pa=swiggyupi@axb&pn=Swiggy&am=343.00&cu=INR&tr=266672343000722",
+				"bridgeUrl":     "https://mcp.swiggy.com/deeplink-redirect?link=abc",
+				"isQrFlow":      true,
+				"paymentMethod": "UPI",
+				"status":        "PENDING_PAYMENT",
+				"paidAmount":    343,
+				"addressId":     "d93o1lc1d96l2taqfdn0",
+				"cartId":        1022034748,
+				"lat":           12.9888772,
+				"lng":           77.6580956,
+			}, nil
+		},
+	})
+	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
+	p, err := c.PlaceFoodOrderUPI(context.Background(), PlaceUPIRequest{AddressID: "d93o1lc1d96l2taqfdn0", Method: PaymentMethod{Kind: "qr", PaymentCode: "UPI"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.OrderID != "242566743091071" || p.PaasID != "266672343000722" {
+		t.Fatalf("ids = %+v", p)
+	}
+	if p.UPIString != "upi://pay?pa=swiggyupi@axb&pn=Swiggy&am=343.00&cu=INR&tr=266672343000722" {
+		t.Fatalf("upi string not decoded from upiIntentUrl: %q", p.UPIString)
+	}
+	if p.CartID != "1022034748" {
+		t.Fatalf("cartId (number) not decoded: %q", p.CartID)
+	}
+	if p.Amount != 343 {
+		t.Fatalf("paidAmount not decoded: %d", p.Amount)
+	}
+	if p.Lat == 0 || p.Lng == 0 {
+		t.Fatalf("lat/lng not decoded: %+v", p)
+	}
+}
+
 // Swiggy sometimes uses snake_case + numbers-as-strings + alternate UPI keys —
 // the decoder must tolerate all of them.
 func TestPlaceUPIDecodesPendingSnake(t *testing.T) {
