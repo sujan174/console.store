@@ -1,7 +1,7 @@
 // Instamart screens — pure functions of IMState (+ the shared address label).
 // No tool calls here; instamart.ts owns all logic, matching the home.ts /
 // screens.ts convention.
-import { im, storeClosedHere, type IMProductData } from "./instamart";
+import { im, pendingCount, pendingTotal, qtyForProduct, storeClosedHere, type IMProductData } from "./instamart";
 import { brandBar, esc, loadingBlock, rupees } from "./screens";
 import { icon } from "./icons";
 
@@ -73,20 +73,81 @@ function noteBanner(): string {
   return `<div style="margin-top:10px;font-size:12px;color:var(--text-danger)">${esc(im.syncNote)}</div>`;
 }
 
-// productCard: Task 4 adds add/stepper/picker affordances; the scaffold shows
-// name + default variant price so Task 3 is visually verifiable.
 function productCard(p: IMProductData): string {
   const def = p.variants.find((v) => v.in_stock) ?? p.variants[0];
   const sold = !p.in_stock || !def || !p.variants.some((v) => v.in_stock);
+  const qty = qtyForProduct(p);
+  const multi = p.variants.filter((v) => v.in_stock).length > 1;
+  let action: string;
+  if (sold) action = `<span class="badge-soldout">sold out</span>`;
+  else if (qty > 0 && !multi) {
+    const spin = p.variants.find((v) => v.in_stock)!.spin_id;
+    action =
+      `<span style="display:inline-flex;align-items:center;gap:8px">` +
+      `<button type="button" data-im-dec="${esc(spin)}" class="btn" style="padding:4px 10px">−</button>` +
+      `<span style="font-size:13px;font-weight:600">${qty}</span>` +
+      `<button type="button" data-im-inc="${esc(spin)}" class="btn" style="padding:4px 10px">+</button>` +
+      `</span>`;
+  } else {
+    action = `<button type="button" data-im-add="${esc(p.product_id)}" class="btn btn-primary" style="flex:none">add${qty > 0 ? ` (${qty})` : ""}</button>`;
+  }
   return (
     `<div class="card">` +
     `<div style="display:flex;align-items:center;gap:10px">` +
     `<div style="flex:1;min-width:0">` +
     `<div style="font-size:14px;font-weight:600">${esc(p.name)}</div>` +
-    `<div style="font-size:12px;color:var(--text-secondary);margin-top:3px">${esc([p.brand, def?.label].filter(Boolean).join(" · "))}</div>` +
+    `<div style="font-size:12px;color:var(--text-secondary);margin-top:3px">` +
+    esc([p.brand, def?.label, multi ? `${p.variants.length} pack sizes` : ""].filter(Boolean).join(" · ")) +
     `</div>` +
-    (sold ? `<span class="badge-soldout">sold out</span>` : `<span style="font-size:13px;font-weight:600">${rupees(def!.price)}</span>`) +
     `</div>` +
+    (sold ? "" : `<span style="font-size:13px;font-weight:600;margin-right:8px">${rupees(def!.price)}</span>`) +
+    action +
+    `</div>` +
+    `</div>`
+  );
+}
+
+// pickerSheet: the pack-size chooser (one row per variant, tap = add).
+function pickerSheet(): string {
+  const p = im.picker;
+  if (!p) return "";
+  const rows = p.variants
+    .map((v) => {
+      if (!v.in_stock)
+        return `<div style="display:flex;justify-content:space-between;padding:10px 12px;color:var(--text-muted);font-size:13px"><span>${esc(v.label)}</span><span class="badge-soldout">sold out</span></div>`;
+      return (
+        `<div data-im-pick="${esc(p.product_id)}" data-im-spin="${esc(v.spin_id)}" data-im-sku="${esc(v.sku_id)}" ` +
+        `data-im-label="${esc(v.label)}" data-im-price="${v.price}" ` +
+        `style="display:flex;justify-content:space-between;padding:10px 12px;cursor:pointer;border-radius:var(--radius-sm)" ` +
+        `onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">` +
+        `<span style="font-size:13px">${esc(v.label)}</span>` +
+        `<span style="font-size:13px;font-weight:600">${rupees(v.price)}${v.mrp && v.mrp > v.price ? ` <s style="color:var(--text-muted);font-weight:400">${rupees(v.mrp)}</s>` : ""}</span>` +
+        `</div>`
+      );
+    })
+    .join("");
+  return (
+    `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center" data-im-picker-close>` +
+    `<div class="card" style="width:min(440px,94vw);max-height:70vh;overflow:auto;margin:0 0 12px;padding:14px" onclick="event.stopPropagation()">` +
+    `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">` +
+    `<div style="font-size:14px;font-weight:600">${esc(p.name)} — pick a pack size</div>` +
+    `<button type="button" data-im-picker-close class="btn" style="padding:4px 10px">✕</button>` +
+    `</div>` +
+    rows +
+    `</div>` +
+    `</div>`
+  );
+}
+
+// imCartBar: the sticky "view cart" bar. Its total is a LABELED estimate.
+function imCartBar(): string {
+  const n = pendingCount();
+  if (n === 0) return "";
+  return (
+    `<div style="position:sticky;bottom:0;margin-top:14px;padding-top:8px">` +
+    `<button type="button" data-im-open-cart class="btn btn-primary" style="width:100%;display:flex;justify-content:space-between;padding:12px 16px">` +
+    `<span>${n} item${n === 1 ? "" : "s"} · est ${rupees(pendingTotal())}</span><span>view cart →</span>` +
+    `</button>` +
     `</div>`
   );
 }
@@ -113,7 +174,9 @@ export function renderIM(addressLabel: string): string {
     closedBanner() +
     noteBanner() +
     productList() +
+    imCartBar() +
     `</div>` +
-    `</div>`
+    `</div>` +
+    pickerSheet()
   );
 }

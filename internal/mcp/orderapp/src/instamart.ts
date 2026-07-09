@@ -172,7 +172,90 @@ export function imSubmitSearch(q: string): void {
   if (q.trim()) void imSearch(q.trim(), true);
 }
 
-// Placeholder handlers — Task 4 fills browse/picker/cart interactions.
+export function productBySpinOrId(id: string): IMProductData | undefined {
+  return im.products.find((p) => p.product_id === id || p.variants.some((v) => v.spin_id === id));
+}
+
+export function openIMPicker(productId: string): void {
+  const p = im.products.find((x) => x.product_id === productId);
+  if (!p) return;
+  im.picker = p;
+  d().requestRender();
+}
+export function closeIMPicker(): void {
+  im.picker = null;
+  d().requestRender();
+}
+
+// addIMVariant puts one unit of a chosen variant into the client cart.
+// Blocked while the store-closed latch matches this address (Swiggy would
+// reject the eventual write with the same error — don't build a doomed cart).
+export function addIMVariant(p: IMProductData, v: { spin_id: string; sku_id: string; label: string; price: number }): void {
+  if (storeClosedHere()) {
+    im.syncNote = "store closed for this address — try a different address";
+    d().requestRender();
+    return;
+  }
+  const existing = im.pending.get(v.spin_id);
+  if (existing) existing.qty += 1;
+  else
+    im.pending.set(v.spin_id, {
+      spinId: v.spin_id,
+      skuId: v.sku_id,
+      name: p.name,
+      label: v.label,
+      price: v.price,
+      qty: 1,
+    });
+  im.picker = null;
+  d().requestRender();
+}
+
+// addIMProduct: single-variant products add directly; multi-variant opens the
+// pack-size picker (never pick a size silently).
+export function addIMProduct(productId: string): void {
+  const p = im.products.find((x) => x.product_id === productId);
+  if (!p) return;
+  const inStock = p.variants.filter((v) => v.in_stock);
+  if (inStock.length === 1) addIMVariant(p, inStock[0]);
+  else if (inStock.length > 1) openIMPicker(productId);
+}
+
+export function incIMLine(spinId: string): void {
+  const l = im.pending.get(spinId);
+  if (l) {
+    l.qty += 1;
+    d().requestRender();
+  }
+}
+export function decIMLine(spinId: string): void {
+  const l = im.pending.get(spinId);
+  if (!l) return;
+  l.qty -= 1;
+  if (l.qty <= 0) im.pending.delete(spinId);
+  d().requestRender();
+}
+
+// qtyForProduct sums this product's variants in the pending cart (the browse
+// card's stepper shows the product-level count, like the TUI's browse rows).
+export function qtyForProduct(p: IMProductData): number {
+  let n = 0;
+  for (const v of p.variants) n += im.pending.get(v.spin_id)?.qty ?? 0;
+  return n;
+}
+// pendingTotal is the LABELED ESTIMATE for the cart bar only — the checkout
+// total always comes from im_prepare_order (money invariant).
+export function pendingTotal(): number {
+  let n = 0;
+  for (const l of im.pending.values()) n += l.price * l.qty;
+  return n;
+}
+export function pendingCount(): number {
+  let n = 0;
+  for (const l of im.pending.values()) n += l.qty;
+  return n;
+}
+
 export function handleIMClick(el: HTMLElement): boolean {
   const cat = el.closest<HTMLElement>("[data-im-cat]");
   if (cat) {
@@ -188,6 +271,39 @@ export function handleIMClick(el: HTMLElement): boolean {
   const foodTab = el.closest<HTMLElement>("[data-food-tab]");
   if (foodTab) {
     d().switchToFood();
+    return true;
+  }
+  const add = el.closest<HTMLElement>("[data-im-add]");
+  if (add) {
+    addIMProduct(add.dataset.imAdd ?? "");
+    return true;
+  }
+  const pick = el.closest<HTMLElement>("[data-im-pick]");
+  if (pick) {
+    // picker sheet: data-im-pick = productId, data-im-spin/sku/label/price on the row
+    const p = im.products.find((x) => x.product_id === pick.dataset.imPick);
+    if (p)
+      addIMVariant(p, {
+        spin_id: pick.dataset.imSpin ?? "",
+        sku_id: pick.dataset.imSku ?? "",
+        label: pick.dataset.imLabel ?? "",
+        price: Number(pick.dataset.imPrice ?? 0),
+      });
+    return true;
+  }
+  const close = el.closest<HTMLElement>("[data-im-picker-close]");
+  if (close) {
+    closeIMPicker();
+    return true;
+  }
+  const inc = el.closest<HTMLElement>("[data-im-inc]");
+  if (inc) {
+    incIMLine(inc.dataset.imInc ?? "");
+    return true;
+  }
+  const dec = el.closest<HTMLElement>("[data-im-dec]");
+  if (dec) {
+    decIMLine(dec.dataset.imDec ?? "");
     return true;
   }
   return false;
