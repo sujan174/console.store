@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import PayClient from "./PayClient";
 
 export const metadata = {
   title: "pay — consolestore",
@@ -27,6 +28,10 @@ export default async function Pay({ searchParams }) {
   const upi = Array.isArray(raw) ? raw[0] : raw || "";
   const valid = upi.startsWith("upi://");
   const amt = valid ? amountFromUPI(upi) : 0;
+  // exp: the payment-window deadline (unix millis) the terminal passed. The
+  // client component enforces it live so a hours-old page can't invite a payment.
+  const expRaw = Array.isArray(sp?.exp) ? sp.exp[0] : sp?.exp;
+  const exp = expRaw ? parseInt(expRaw, 10) || 0 : 0;
 
   let svg = "";
   if (valid) {
@@ -62,45 +67,7 @@ export default async function Pay({ searchParams }) {
       </div>
 
       {valid ? (
-        <>
-          <div style={{ color: "#e9ebf7", fontSize: "22px", fontWeight: 600 }}>
-            scan to pay{amt ? ` ₹${amt}` : ""}
-          </div>
-          <div
-            style={{
-              background: "#ffffff",
-              padding: "18px",
-              borderRadius: "16px",
-              boxShadow: "0 0 40px rgba(147,168,255,.15)",
-              width: "min(340px, 82vw)",
-              lineHeight: 0
-            }}
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
-          <div style={{ fontSize: "13.5px", color: "#b6bce0", lineHeight: 1.7 }}>
-            scan with any UPI app · GPay · PhonePe · Paytm · BHIM
-          </div>
-          <a
-            href={upi}
-            style={{
-              marginTop: "4px",
-              display: "inline-block",
-              padding: "12px 22px",
-              borderRadius: "10px",
-              background: "#eab560",
-              color: "#030307",
-              fontWeight: 700,
-              fontFamily: mono,
-              textDecoration: "none"
-            }}
-          >
-            open in your UPI app ↗
-          </a>
-          <div style={{ fontSize: "12px", color: "#5c608a", maxWidth: "360px", lineHeight: 1.6 }}>
-            on your phone the button opens your UPI app directly. on a computer,
-            scan the code above. this order stays pending until you pay.
-          </div>
-        </>
+        <PayClient svg={svg} amt={amt} upi={upi} exp={exp} />
       ) : (
         <div style={{ color: "#e9ebf7", fontSize: "16px", maxWidth: "420px", lineHeight: 1.7 }}>
           no payment to show — open this from the consolestore terminal's payment
