@@ -60,8 +60,15 @@ func (f *railFake) UpdateCart(string, string, string, []api.CartItem) (api.Cart,
 func (f *railFake) GetCart(string, string) (api.Cart, error) { return api.Cart{}, f.err }
 func (f *railFake) ClearCart() error                         { return f.err }
 func (f *railFake) PlaceOrder(string) (api.Order, error)     { return api.Order{}, f.err }
-func (f *railFake) TrackOrder(string) (api.Tracking, error)  { return api.Tracking{}, f.err }
-func (f *railFake) ActiveOrders(string) ([]api.Order, error) { return nil, f.err }
+func (f *railFake) PlaceUPI(string) (api.PendingPayment, bool, error) {
+	return api.PendingPayment{}, false, f.err
+}
+func (f *railFake) PollPayment(api.PendingPayment) (api.PaymentStatus, error) {
+	return api.PayPending, f.err
+}
+func (f *railFake) ConfirmOrder(api.PendingPayment) (api.Order, error) { return api.Order{}, f.err }
+func (f *railFake) TrackOrder(string) (api.Tracking, error)            { return api.Tracking{}, f.err }
+func (f *railFake) ActiveOrders(string) ([]api.Order, error)           { return nil, f.err }
 
 func (f *railFake) IMSearch(string, string) ([]api.IMProduct, error) { return nil, f.err }
 func (f *railFake) IMGoTo(string) ([]api.IMProduct, error)           { return nil, f.err }

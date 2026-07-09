@@ -23,6 +23,9 @@ type inprocService interface {
 	GetCart(ctx context.Context, accountID, addressID, restaurantName string) (api.Cart, error)
 	ClearCart(ctx context.Context, accountID string) error
 	PlaceOrder(ctx context.Context, accountID, addressID string) (api.Order, error)
+	PlaceOrderUPI(ctx context.Context, accountID, addressID string) (api.PendingPayment, bool, error)
+	PollPayment(ctx context.Context, accountID string, p api.PendingPayment) (api.PaymentStatus, error)
+	ConfirmOrder(ctx context.Context, accountID string, p api.PendingPayment) (api.Order, error)
 	TrackOrder(ctx context.Context, accountID, orderID string) (api.Tracking, error)
 	ActiveFoodOrders(ctx context.Context, accountID, addressID string) ([]api.Order, error)
 	Logout(ctx context.Context, accountID string) error
@@ -100,6 +103,18 @@ func (p InProc) ClearCart(accountID string) error {
 
 func (p InProc) PlaceOrder(accountID, addressID string) (api.Order, error) {
 	return p.svc.PlaceOrder(context.Background(), accountID, addressID)
+}
+
+func (p InProc) PlaceOrderUPI(accountID, addressID string) (api.PendingPayment, bool, error) {
+	return p.svc.PlaceOrderUPI(context.Background(), accountID, addressID)
+}
+
+func (p InProc) PollPayment(accountID string, pp api.PendingPayment) (api.PaymentStatus, error) {
+	return p.svc.PollPayment(context.Background(), accountID, pp)
+}
+
+func (p InProc) ConfirmOrder(accountID string, pp api.PendingPayment) (api.Order, error) {
+	return p.svc.ConfirmOrder(context.Background(), accountID, pp)
 }
 
 func (p InProc) TrackOrder(accountID, orderID string) (api.Tracking, error) {

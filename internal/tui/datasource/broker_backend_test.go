@@ -178,6 +178,18 @@ func (f *fakeRPC) TrackOrder(accountID, orderID string) (api.Tracking, error) {
 	f.lastAccount = accountID
 	return api.Tracking{}, f.err
 }
+func (f *fakeRPC) PlaceOrderUPI(accountID, addressID string) (api.PendingPayment, bool, error) {
+	f.lastAccount = accountID
+	return api.PendingPayment{}, false, f.err
+}
+func (f *fakeRPC) PollPayment(accountID string, p api.PendingPayment) (api.PaymentStatus, error) {
+	f.lastAccount = accountID
+	return api.PayPending, f.err
+}
+func (f *fakeRPC) ConfirmOrder(accountID string, p api.PendingPayment) (api.Order, error) {
+	f.lastAccount = accountID
+	return api.Order{}, f.err
+}
 func (f *fakeRPC) ActiveFoodOrders(accountID, addressID string) ([]api.Order, error) {
 	f.lastAccount = accountID
 	return nil, f.err

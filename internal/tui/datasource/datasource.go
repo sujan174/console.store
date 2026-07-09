@@ -40,6 +40,12 @@ type Backend interface {
 	GetCart(addressID, restaurantName string) (api.Cart, error)
 	ClearCart() error
 	PlaceOrder(addressID string) (api.Order, error)
+	// PlaceUPI starts an online (UPI) order; bool is false when the user has no
+	// UPI method (caller falls back to PlaceOrder). PollPayment reads the pending
+	// payment's state; ConfirmOrder finalizes a paid order.
+	PlaceUPI(addressID string) (api.PendingPayment, bool, error)
+	PollPayment(p api.PendingPayment) (api.PaymentStatus, error)
+	ConfirmOrder(p api.PendingPayment) (api.Order, error)
 	TrackOrder(orderID string) (api.Tracking, error)
 	ActiveOrders(addressID string) ([]api.Order, error)
 	Logout() error
@@ -117,6 +123,20 @@ type (
 	OrderPlacedMsg struct {
 		Order api.Order
 		Err   error
+	}
+	// UPIPlacedMsg carries the pending UPI payment from PlaceUPICmd. UPI is false
+	// when the user has no UPI method (the root then runs the Cash PlaceOrderCmd).
+	UPIPlacedMsg struct {
+		Pending api.PendingPayment
+		UPI     bool
+		Err     error
+	}
+	// PaymentPolledMsg carries one check_payment_status result. Token guards a
+	// stale poll after the user abandoned/superseded the payment.
+	PaymentPolledMsg struct {
+		Token  int
+		Status api.PaymentStatus
+		Err    error
 	}
 	// UsualsLoadedMsg signals the account's most-ordered restaurants were
 	// fetched into the snapshot (under UsualsKey). Err non-nil on failure;
@@ -370,6 +390,34 @@ func ClearCartCmd(b Backend) tea.Cmd {
 func PlaceOrderCmd(b Backend, snap *swiggysnap.Snapshot, addressID string) tea.Cmd {
 	return func() tea.Msg {
 		order, err := b.PlaceOrder(addressID)
+		return OrderPlacedMsg{Order: order, Err: err}
+	}
+}
+
+// PlaceUPICmd starts an online (UPI) order and returns the pending payment (or
+// UPI=false when the user is Cash-only). The root renders the QR from the
+// returned UPIString and begins polling.
+func PlaceUPICmd(b Backend, addressID string) tea.Cmd {
+	return func() tea.Msg {
+		p, upi, err := b.PlaceUPI(addressID)
+		return UPIPlacedMsg{Pending: p, UPI: upi, Err: err}
+	}
+}
+
+// PollPaymentCmd reads the pending payment's current state once. token is echoed
+// back so the root discards a poll from an abandoned/superseded payment.
+func PollPaymentCmd(b Backend, p api.PendingPayment, token int) tea.Cmd {
+	return func() tea.Msg {
+		st, err := b.PollPayment(p)
+		return PaymentPolledMsg{Token: token, Status: st, Err: err}
+	}
+}
+
+// ConfirmOrderCmd finalizes a paid pending order to PLACED (reuses OrderPlacedMsg
+// so the placed/tracking transition is identical to the Cash path).
+func ConfirmOrderCmd(b Backend, p api.PendingPayment) tea.Cmd {
+	return func() tea.Msg {
+		order, err := b.ConfirmOrder(p)
 		return OrderPlacedMsg{Order: order, Err: err}
 	}
 }

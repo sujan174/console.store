@@ -166,9 +166,16 @@ func TestLoadUsualsCachesUnderUsualsKey(t *testing.T) {
 	}
 }
 
-func (f *fakeBackend) TrackOrder(string) (api.Tracking, error)  { return f.tracking, f.err }
-func (f *fakeBackend) ActiveOrders(string) ([]api.Order, error) { return f.orders, f.err }
-func (f *fakeBackend) Logout() error                            { return f.err }
+func (f *fakeBackend) TrackOrder(string) (api.Tracking, error) { return f.tracking, f.err }
+func (f *fakeBackend) PlaceUPI(string) (api.PendingPayment, bool, error) {
+	return api.PendingPayment{}, false, f.err
+}
+func (f *fakeBackend) PollPayment(api.PendingPayment) (api.PaymentStatus, error) {
+	return api.PayPending, f.err
+}
+func (f *fakeBackend) ConfirmOrder(api.PendingPayment) (api.Order, error) { return api.Order{}, f.err }
+func (f *fakeBackend) ActiveOrders(string) ([]api.Order, error)           { return f.orders, f.err }
+func (f *fakeBackend) Logout() error                                      { return f.err }
 
 func (f *fakeBackend) IMSearch(_, query string) ([]api.IMProduct, error) {
 	f.imSearchQuery = query

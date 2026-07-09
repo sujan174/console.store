@@ -43,6 +43,57 @@ type liveFake struct {
 	imSearchCalls int              // count of IMSearch calls (rail-load dedupe tests)
 	imGoToCalls   int              // count of IMGoTo calls (rail-load dedupe tests)
 	placeCalls    int              // count of PlaceOrder calls (place-safety gate tests)
+
+	// UPI payment scripting (checkout flow tests).
+	upiNoUPI      bool                // PlaceUPI returns UPI=false (Cash fallback)
+	upiPending    api.PendingPayment  // returned by PlaceUPI (defaults filled if zero)
+	payStatuses   []api.PaymentStatus // consumed one per PollPayment; last value repeats
+	payIdx        int
+	confirmOrder  api.Order // returned by ConfirmOrder (defaults filled if zero)
+	placeUPICalls int
+	pollCalls     int
+	confirmCalls  int
+}
+
+func (f *liveFake) PlaceUPI(string) (api.PendingPayment, bool, error) {
+	f.placeUPICalls++
+	if f.upiNoUPI {
+		return api.PendingPayment{}, false, f.err
+	}
+	p := f.upiPending
+	if p.OrderID == "" {
+		p.OrderID = "O1"
+	}
+	if p.UPIString == "" {
+		p.UPIString = "upi://pay?pa=test@okaxis&am=346&cu=INR"
+	}
+	if p.Amount == 0 {
+		p.Amount = 346
+	}
+	return p, true, f.err
+}
+
+func (f *liveFake) PollPayment(api.PendingPayment) (api.PaymentStatus, error) {
+	f.pollCalls++
+	st := api.PayPending
+	if n := len(f.payStatuses); n > 0 {
+		if f.payIdx < n {
+			st = f.payStatuses[f.payIdx]
+			f.payIdx++
+		} else {
+			st = f.payStatuses[n-1]
+		}
+	}
+	return st, f.err
+}
+
+func (f *liveFake) ConfirmOrder(api.PendingPayment) (api.Order, error) {
+	f.confirmCalls++
+	o := f.confirmOrder
+	if o.ID == "" {
+		o.ID, o.Status = "O1", "PLACED"
+	}
+	return o, f.err
 }
 
 func (f *liveFake) Addresses() ([]api.Address, error) { return f.addrs, f.err }
