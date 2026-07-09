@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -5840,14 +5841,29 @@ func clampIdx(i, n int) int {
 // buildCheckout assembles the merged checkout screen. The live item list is
 // driven by the authoritative m.lines (carries add-on/variant selections);
 // liveCart feeds only the bill via billFromLive().
-// payLinkFor is the browser link shown on the payment screen: Swiggy's hosted
-// bridge page when present (renders a reliable QR + UPI app buttons), else the
-// raw upi:// intent.
+// payBaseURL is the hosted pay page that renders a scannable QR + "open in your
+// UPI app" button from a upi:// intent. Override with CONSOLE_PAY_URL to test
+// against a local dev server (e.g. http://localhost:3000/pay) before deploy.
+func payBaseURL() string {
+	if v := os.Getenv("CONSOLE_PAY_URL"); v != "" {
+		return v
+	}
+	return "https://consolestore.in/pay"
+}
+
+// payLinkFor is the http(s) browser page for the payment screen's button:
+// Swiggy's hosted bridge page when it provides one, else our own /pay page
+// carrying the upi:// intent (Swiggy usually returns only the upi://, which no
+// desktop browser can open — so we wrap it in a page that draws the QR). Enter
+// on the payment screen opens this. Empty only when there's no upi:// at all.
 func payLinkFor(p api.PendingPayment) string {
-	if p.BridgeURL != "" {
+	if strings.HasPrefix(p.BridgeURL, "http") {
 		return p.BridgeURL
 	}
-	return p.UPIString
+	if p.UPIString != "" {
+		return payBaseURL() + "?upi=" + url.QueryEscape(p.UPIString)
+	}
+	return ""
 }
 
 func (m Model) buildCheckout() screens.Checkout {
