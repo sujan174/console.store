@@ -268,32 +268,6 @@ body {
   100% { opacity: 0; }
 }
 
-/* Loader escape hatch: a fixed corner button shown only while a loading view is
-   up (boot / menu open / home search). Lives on <body>, outside the rewritten
-   #app root, so it stays put across every screen. Hidden by default; the
-   .is-visible class (toggled from render()) fades + slides it in. */
-.loader-home-btn {
-  position: fixed; top: 12px; right: 12px; z-index: 50;
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 11px; border-radius: 999px;
-  font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; line-height: 1;
-  color: var(--text-secondary);
-  background: var(--surface-2, rgba(20, 20, 28, .82));
-  border: 1px solid var(--border, rgba(255, 255, 255, .12));
-  box-shadow: var(--shadow, 0 2px 10px rgba(0, 0, 0, .3));
-  cursor: pointer;
-  opacity: 0; transform: translateY(-6px); pointer-events: none;
-  transition: opacity .18s ease, transform .18s ease, color .15s ease, border-color .15s ease;
-}
-.loader-home-btn.is-visible { opacity: 1; transform: none; pointer-events: auto; }
-.loader-home-btn:hover { color: var(--text-primary); border-color: var(--sw-orange); }
-.loader-home-btn:active { transform: translateY(1px); }
-.loader-home-btn svg { width: 13px; height: 13px; flex: none; }
-@media (prefers-reduced-motion: reduce) {
-  .loader-home-btn { transition: opacity .18s ease; transform: none; }
-  .loader-home-btn.is-visible { transform: none; }
-}
-
 /* cs-line: the mono orange prompt line used on the recovery / status card. */
 .cs-line { font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; color: var(--sw-orange); }
 
