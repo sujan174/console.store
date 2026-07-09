@@ -11,10 +11,10 @@
   "dependencies": {
     "next": "^16.0.10",
     "pg": "^8.13.1",
+    "qrcode": "^1.5.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"
   },
-  "devDependencies": {},
   "engines": {
     "node": ">=20"
   }
