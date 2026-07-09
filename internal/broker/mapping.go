@@ -172,7 +172,7 @@ func mapIMProducts(in []swiggy.IMProduct) []api.IMProduct {
 func mapIMCart(in swiggy.IMCart) api.IMCart {
 	lines := make([]api.IMCartLine, len(in.Items))
 	for i, l := range in.Items {
-		lines[i] = api.IMCartLine{SpinID: l.SpinID, Name: l.Name, Quantity: l.Quantity, Price: l.Price, Available: l.Available}
+		lines[i] = api.IMCartLine{SpinID: l.SpinID, SkuID: l.SkuID, Name: l.Name, Quantity: l.Quantity, Price: l.Price, Available: l.Available}
 	}
 	return api.IMCart{
 		AddrID: in.AddrID, AddrLat: in.AddrLat, AddrLng: in.AddrLng,

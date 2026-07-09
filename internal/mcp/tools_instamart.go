@@ -49,6 +49,7 @@ func toIMProductDTOs(in []api.IMProduct) []IMProductDTO {
 
 type IMCartLineDTO struct {
 	SpinID    string `json:"spin_id"`
+	SkuID     string `json:"sku_id,omitempty"`
 	Name      string `json:"name"`
 	Quantity  int    `json:"quantity"`
 	Price     int    `json:"price"`
@@ -72,7 +73,7 @@ func imCartToDTO(c api.IMCart) IMCartDTO {
 	}
 	for _, l := range c.Lines {
 		d.Lines = append(d.Lines, IMCartLineDTO{
-			SpinID: l.SpinID, Name: l.Name, Quantity: l.Quantity, Price: l.Price, Available: l.Available,
+			SpinID: l.SpinID, SkuID: l.SkuID, Name: l.Name, Quantity: l.Quantity, Price: l.Price, Available: l.Available,
 		})
 	}
 	if len(d.Lines) == 0 {

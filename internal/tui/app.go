@@ -2024,7 +2024,7 @@ func imLinesFromCart(local []screens.CartLine, c api.IMCart) []screens.CartLine 
 	var lines []screens.CartLine
 	for _, l := range c.Lines {
 		line := screens.CartLine{
-			Item:        catalog.Item{ID: "im-" + l.SpinID, SwiggyID: l.SpinID, Name: l.Name, Price: l.Price, Section: catalog.SectionInstamart},
+			Item:        catalog.Item{ID: "im-" + l.SpinID, SwiggyID: l.SpinID, SkuID: l.SkuID, Name: l.Name, Price: l.Price, Section: catalog.SectionInstamart},
 			Qty:         l.Quantity,
 			Price:       l.Price,
 			Unavailable: !l.Available,

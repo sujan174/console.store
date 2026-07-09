@@ -93,6 +93,7 @@ type IMCartItem struct {
 // IMCartLine is one typed cart line from get_cart/update_cart.
 type IMCartLine struct {
 	SpinID    string
+	SkuID     string
 	Name      string
 	Quantity  int
 	Price     int // per-unit rupees
@@ -192,6 +193,7 @@ func imNum(raw json.RawMessage) float64 {
 type imCartItemRaw struct {
 	SpinID      flexID          `json:"spinId"`
 	SpinIDSnake flexID          `json:"spin_id"`
+	SkuID       flexID          `json:"skuId"`
 	ItemID      flexID          `json:"itemId"`
 	ItemName    string          `json:"itemName"`
 	Name        string          `json:"name"`
@@ -245,7 +247,7 @@ func (r imCartItemRaw) toLine() IMCartLine {
 		avail = *r.IsAvailable
 	}
 	return IMCartLine{
-		SpinID: id, Name: name, Quantity: r.Quantity,
+		SpinID: id, SkuID: r.SkuID.val(), Name: name, Quantity: r.Quantity,
 		Price: int(math.Round(price)), Available: avail,
 	}
 }

@@ -46,6 +46,18 @@ func TestIMGetCartEmptyMessage(t *testing.T) {
 	}
 }
 
+func TestIMGetCartCarriesSkuID(t *testing.T) {
+	be := &fakeBackend{imCart: api.IMCart{Lines: []api.IMCartLine{{SpinID: "SP1", SkuID: "SK1", Name: "Bread", Quantity: 1, Price: 30, Available: true}}, Total: 30, ItemTotal: 30}}
+	s := NewServer(be, &fakeAuth{token: true})
+	_, out, err := s.handleIMGetCart(context.Background(), nil, IMGetCartIn{})
+	if err != nil {
+		t.Fatalf("handleIMGetCart: %v", err)
+	}
+	if len(out.Cart.Lines) != 1 || out.Cart.Lines[0].SkuID != "SK1" {
+		t.Fatalf("sku_id not on DTO: %+v", out.Cart.Lines)
+	}
+}
+
 func TestIMUpdateCartReplacesAndReturnsBill(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	be := &fakeBackend{imCart: api.IMCart{

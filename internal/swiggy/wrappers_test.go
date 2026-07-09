@@ -2,6 +2,7 @@ package swiggy
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -197,6 +198,18 @@ func TestGetIMCartDecodesLiveShape(t *testing.T) {
 	}
 	if len(cart.PaymentMethods) != 1 || cart.PaymentMethods[0] != "Cash on Delivery" {
 		t.Fatalf("payment methods = %v", cart.PaymentMethods)
+	}
+}
+
+func TestIMCartLineDecodesSkuID(t *testing.T) {
+	raw := `{"selectedAddress":"a1","items":[{"spinId":"SP1","skuId":"SK1","itemName":"Bread","quantity":1,"discountedFinalPrice":30,"isInStockAndAvailable":true}]}`
+	var env imCartEnvelope
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	c := env.toCart()
+	if len(c.Items) != 1 || c.Items[0].SkuID != "SK1" {
+		t.Fatalf("SkuID not decoded: %+v", c.Items)
 	}
 }
 

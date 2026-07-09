@@ -200,6 +200,7 @@ type IMProduct struct {
 // IMCartLine is one line of the live Instamart cart.
 type IMCartLine struct {
 	SpinID    string
+	SkuID     string
 	Name      string
 	Quantity  int
 	Price     int // per-unit rupees
