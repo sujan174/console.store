@@ -288,6 +288,47 @@ func (s *Service) PlaceOrder(ctx context.Context, accountID, addressID string) (
 	return mapped, nil
 }
 
+// PlaceOrderUPI starts an online (UPI) food order. It fetches the live payment
+// options and, if a scan-to-pay QR method exists, places with it and returns the
+// PendingPayment (order is PENDING_PAYMENT until confirmed). The bool is false
+// when the user has NO UPI/QR method (a legacy Cash-only user) — the caller then
+// falls back to the Cash PlaceOrder. Place is arming-gated inside swiggy.
+func (s *Service) PlaceOrderUPI(ctx context.Context, accountID, addressID string) (api.PendingPayment, bool, error) {
+	fc := s.foodClient(accountID)
+	opts, err := fc.PaymentOptions(ctx, addressID)
+	if err != nil {
+		return api.PendingPayment{}, false, err
+	}
+	if opts.QR == nil {
+		return api.PendingPayment{}, false, nil // no scan-to-pay method → use Cash path
+	}
+	p, err := fc.PlaceFoodOrderUPI(ctx, swiggy.PlaceUPIRequest{AddressID: addressID, Method: *opts.QR})
+	if err != nil {
+		return api.PendingPayment{}, true, err
+	}
+	return mapPending(p), true, nil
+}
+
+// PollPayment reads the current state of a pending UPI payment (read-only).
+func (s *Service) PollPayment(ctx context.Context, accountID string, p api.PendingPayment) (api.PaymentStatus, error) {
+	st, err := s.foodClient(accountID).CheckPaymentStatus(ctx, unmapPending(p))
+	return api.PaymentStatus(st), err
+}
+
+// ConfirmOrder finalizes a paid pending order to PLACED and counts it (the UPI
+// path's real completion point, so telemetry fires here rather than at place).
+func (s *Service) ConfirmOrder(ctx context.Context, accountID string, p api.PendingPayment) (api.Order, error) {
+	o, err := s.foodClient(accountID).ConfirmOrder(ctx, unmapPending(p))
+	if err != nil {
+		return api.Order{}, err
+	}
+	mapped := mapOrder(o)
+	if shouldPingOrder(mapped, nil) {
+		telemetry.OrderPlaced()
+	}
+	return mapped, nil
+}
+
 // TrackOrder returns the live status + ETA for an order (read-only; not gated
 // by live-orders arming).
 func (s *Service) TrackOrder(ctx context.Context, accountID, orderID string) (api.Tracking, error) {

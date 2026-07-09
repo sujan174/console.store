@@ -102,6 +102,68 @@ func TestServiceAddressesMapsDTO(t *testing.T) {
 	}
 }
 
+func TestPlaceOrderUPIPicksQR(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	var placed bool
+	mcp := fakeMCP(t, map[string]func(map[string]any) any{
+		"get_payment_options": func(map[string]any) any {
+			return map[string]any{"platforms": map[string]any{"desktop": map[string]any{
+				"methods": []map[string]any{{"id": "PayWithQR", "kind": "qr"}}}}}
+		},
+		"place_food_order": func(map[string]any) any {
+			placed = true
+			return map[string]any{"orderId": "O1", "paasId": "P1", "upiIntent": "upi://pay?pa=x", "cartId": "C1", "amount": 346}
+		},
+	})
+	store := &fakeStore{tokens: map[string]string{"acct-X": "tok"}}
+	svc := NewService(Config{Store: store, Auth: &fakeAuthz{}, FoodBaseURL: mcp.URL, HTTPClient: mcp.Client()})
+	p, upi, err := svc.PlaceOrderUPI(context.Background(), "acct-X", "addr-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !upi || !placed || p.OrderID != "O1" || p.UPIString == "" || p.AddressID != "addr-1" {
+		t.Fatalf("upi=%v placed=%v pending=%+v", upi, placed, p)
+	}
+}
+
+func TestPlaceOrderUPINoUPIFallback(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	var placed bool
+	mcp := fakeMCP(t, map[string]func(map[string]any) any{
+		"get_payment_options": func(map[string]any) any {
+			return map[string]any{"cod": map[string]any{"available": true}} // no QR/UPI
+		},
+		"place_food_order": func(map[string]any) any { placed = true; return map[string]any{"orderId": "O1"} },
+	})
+	store := &fakeStore{tokens: map[string]string{"acct-X": "tok"}}
+	svc := NewService(Config{Store: store, Auth: &fakeAuthz{}, FoodBaseURL: mcp.URL, HTTPClient: mcp.Client()})
+	_, upi, err := svc.PlaceOrderUPI(context.Background(), "acct-X", "addr-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upi || placed {
+		t.Fatalf("expected no-UPI fallback (upi=false, no place); got upi=%v placed=%v", upi, placed)
+	}
+}
+
+func TestConfirmOrderMapsOrder(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	mcp := fakeMCP(t, map[string]func(map[string]any) any{
+		"confirm_order": func(map[string]any) any {
+			return map[string]any{"orderId": "O1", "status": "PLACED", "totalAmount": 346, "restaurantName": "Starbucks"}
+		},
+	})
+	store := &fakeStore{tokens: map[string]string{"acct-X": "tok"}}
+	svc := NewService(Config{Store: store, Auth: &fakeAuthz{}, FoodBaseURL: mcp.URL, HTTPClient: mcp.Client()})
+	o, err := svc.ConfirmOrder(context.Background(), "acct-X", api.PendingPayment{OrderID: "O1", AddressID: "addr-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.ID != "O1" || o.Status != "PLACED" || o.Restaurant != "Starbucks" {
+		t.Fatalf("order = %+v", o)
+	}
+}
+
 func TestServiceLogoutPurgesAndDropsClient(t *testing.T) {
 	store := &fakeStore{tokens: map[string]string{"acct-X": "tok"}}
 	svc := NewService(Config{Store: store, Auth: &fakeAuthz{}, FoodBaseURL: "http://unused"})

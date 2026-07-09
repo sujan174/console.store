@@ -93,6 +93,45 @@ type CartLine struct {
 	Available bool // false when Swiggy reports the cart item as out of stock
 }
 
+// PaymentMethod is one selectable payment option (get_payment_options). Kind is
+// "qr", "intent", or "cod".
+type PaymentMethod struct {
+	ID          string
+	DisplayName string
+	Kind        string
+	PaymentCode string
+}
+
+// PaymentOptions is the live payment picker for the current cart. QR is the
+// terminal scan-to-pay method (nil when the user isn't UPI-eligible).
+type PaymentOptions struct {
+	QR           *PaymentMethod
+	Intents      []PaymentMethod
+	CODAvailable bool
+}
+
+// PendingPayment is a placed-but-unpaid food order awaiting UPI payment. Carry
+// it verbatim between place → poll → confirm; UPIString is what the TUI renders
+// as a QR.
+type PendingPayment struct {
+	OrderID   string
+	PaasID    string
+	UPIString string
+	CartID    string
+	AddressID string
+	Lat, Lng  float64
+	Amount    int
+}
+
+// PaymentStatus mirrors swiggy.PaymentStatus (same ordering).
+type PaymentStatus int
+
+const (
+	PayPending PaymentStatus = iota
+	PaySuccess
+	PayFailed
+)
+
 type Cart struct {
 	CartID string
 	// Restaurant is the name of the restaurant the cart belongs to (from Swiggy's

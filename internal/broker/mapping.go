@@ -86,6 +86,20 @@ func mapOrder(in swiggy.Order) api.Order {
 	return api.Order{ID: string(in.ID), Status: in.Status, Restaurant: in.Restaurant, Total: in.Total, ETA: in.ETA}
 }
 
+func mapPending(p swiggy.PendingPayment) api.PendingPayment {
+	return api.PendingPayment{
+		OrderID: p.OrderID, PaasID: p.PaasID, UPIString: p.UPIString, CartID: p.CartID,
+		AddressID: p.AddressID, Lat: p.Lat, Lng: p.Lng, Amount: p.Amount,
+	}
+}
+
+func unmapPending(p api.PendingPayment) swiggy.PendingPayment {
+	return swiggy.PendingPayment{
+		OrderID: p.OrderID, PaasID: p.PaasID, UPIString: p.UPIString, CartID: p.CartID,
+		AddressID: p.AddressID, Lat: p.Lat, Lng: p.Lng, Amount: p.Amount,
+	}
+}
+
 func mapCartItems(in []api.CartItem) []swiggy.CartItem {
 	out := make([]swiggy.CartItem, len(in))
 	for i, c := range in {
