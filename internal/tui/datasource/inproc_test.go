@@ -113,6 +113,14 @@ func (f *fakeService) ConfirmOrder(_ context.Context, a string, _ api.PendingPay
 	f.gotAccount = a
 	return api.Order{}, nil
 }
+func (f *fakeService) PaymentOptions(_ context.Context, a, _ string) (api.PaymentOptions, error) {
+	f.gotAccount = a
+	return api.PaymentOptions{}, nil
+}
+func (f *fakeService) PlaceOrderCOD(_ context.Context, a, _ string) (api.Order, error) {
+	f.gotAccount = a
+	return api.Order{}, nil
+}
 func (f *fakeService) ActiveFoodOrders(_ context.Context, a, _ string) ([]api.Order, error) {
 	f.gotAccount = a
 	return nil, nil

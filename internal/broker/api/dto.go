@@ -117,6 +117,7 @@ type PendingPayment struct {
 	OrderID   string
 	PaasID    string
 	UPIString string
+	BridgeURL string
 	CartID    string
 	AddressID string
 	Lat, Lng  float64

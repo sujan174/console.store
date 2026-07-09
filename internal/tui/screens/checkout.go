@@ -30,18 +30,20 @@ type Checkout struct {
 	viewportH  int  // terminal height; windows the item list so the page never overflows
 	cartWait   bool // live cart fetch in flight — an empty cart shows a loader, never "empty"
 	hour       int  // local hour (0–23) for the loaders' late-night copy
-	// UPI payment sub-state: 0 idle, 1 waiting (QR up), 2 confirming, 3 failed.
+	// UPI payment sub-state: 0 idle, 1 waiting, 2 confirming, 3 failed.
 	payStage int
-	payUPI   string // UPI intent string, rendered as a scan-to-pay QR
+	payUPI   string // upi:// intent — encoded as the scan QR (when it fits)
+	payLink  string // hosted payment page (bridgeUrl) — the clickable "open in browser" link
 	payTotal int
 }
 
 // WithPayment attaches the UPI payment sub-state (stage 0=idle,1=waiting,
-// 2=confirming,3=failed). When non-idle the checkout renders the scan-to-pay QR
-// instead of the cart summary.
-func (c Checkout) WithPayment(stage int, upiString string, amount int) Checkout {
+// 2=confirming,3=failed): the UPI intent (QR), the hosted browser link, and the
+// amount. When non-idle the checkout renders the payment view.
+func (c Checkout) WithPayment(stage int, upiString, payLink string, amount int) Checkout {
 	c.payStage = stage
 	c.payUPI = upiString
+	c.payLink = payLink
 	c.payTotal = amount
 	return c
 }
@@ -254,16 +256,41 @@ func (c Checkout) paymentView(frame int) string {
 		if amt == 0 { // place response didn't carry an amount — use the synced bill
 			amt = c.payAmount()
 		}
-		b.WriteString("  " + theme.BrightStyle.Render(fmt.Sprintf("scan to pay  ₹%d", amt)) + "\n")
-		b.WriteString("  " + theme.DimStyle.Render("cash on delivery is disabled — pay by UPI") + "\n\n")
-		if code := qr.Render(c.payUPI); code != "" {
-			b.WriteString(code + "\n")
+		b.WriteString("  " + theme.BrightStyle.Render(fmt.Sprintf("pay  ₹%d", amt)) + theme.DimStyle.Render("  ·  UPI") + "\n\n")
+
+		// Draw the scan QR only when it reliably fits the terminal (a clipped or
+		// wrapped QR is unscannable). The browser link below is the always-there
+		// path when it doesn't fit — or when the terminal's transparency/theme
+		// keeps the QR from painting.
+		w := components.ContentWidth()
+		qrRows := c.viewportH - 12 // rows left after the header/labels/hint chrome
+		if c.payUPI != "" && qr.FitsIn(c.payUPI, w, qrRows) {
+			if code := qr.Render(c.payUPI); code != "" {
+				b.WriteString(code + "\n")
+				b.WriteString("  " + theme.DimStyle.Render("scan with any UPI app · GPay · PhonePe · Paytm") + "\n")
+			}
+		} else if c.payUPI != "" {
+			b.WriteString("  " + theme.DimStyle.Render("enlarge the terminal to show the scan QR, or:") + "\n")
 		}
-		b.WriteString("  " + theme.DimStyle.Render("scan with any UPI app · GPay · PhonePe · Paytm") + "\n")
-		b.WriteString("  " + theme.DimStyle.Render("waiting for payment ") + theme.GoldStyle.Render(spinAt(frame)) + "\n\n")
-		b.WriteString(components.Hint("esc", "cancel"))
+
+		// Always offer the hosted payment page as a clickable link (OSC-8) — opens
+		// in the browser, which renders a reliable QR + the UPI app buttons. Not
+		// auto-opened; the user clicks it or presses o.
+		if link := c.payLink; link != "" {
+			b.WriteString("  " + hyperlink(link, theme.GreenStyle.Render("❯ open payment page ↗")) +
+				theme.FaintStyle.Render("  (or press o)") + "\n")
+		}
+		b.WriteString("\n  " + theme.DimStyle.Render("waiting for payment ") + theme.GoldStyle.Render(spinAt(frame)) + "\n\n")
+		b.WriteString(components.Hint("esc", "cancel") + theme.FaintStyle.Render("   o open in browser"))
 	}
 	return b.String()
+}
+
+// hyperlink wraps label in an OSC-8 terminal hyperlink pointing at url — clickable
+// in VS Code / iTerm / most modern terminals; degrades to just the label text
+// elsewhere (the o key opens it as a fallback).
+func hyperlink(url, label string) string {
+	return "\x1b]8;;" + url + "\x1b\\" + label + "\x1b]8;;\x1b\\"
 }
 
 // padTo right-pads s with spaces to the given display width.

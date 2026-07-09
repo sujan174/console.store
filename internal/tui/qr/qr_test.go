@@ -21,14 +21,40 @@ func TestMatrixSquareAndMinSize(t *testing.T) {
 	}
 }
 
-func TestRenderNonEmptyEqualWidthLines(t *testing.T) {
-	out := Render("upi://pay?pa=test@okaxis&am=346&cu=INR")
-	if out == "" {
-		t.Fatal("Render returned empty for a valid payload")
+// Half-block rendering is ~2x shorter than wide-cell: rows ≈ cols/2.
+func TestDimsHalfBlock(t *testing.T) {
+	cols, rows, err := Dims("upi://pay?pa=test@okaxis&am=346&cu=INR")
+	if err != nil {
+		t.Fatal(err)
 	}
+	if cols <= 0 || rows <= 0 {
+		t.Fatalf("bad dims %dx%d", cols, rows)
+	}
+	if rows != (cols+1)/2 {
+		t.Fatalf("rows=%d want ceil(cols/2)=%d (cols=%d)", rows, (cols+1)/2, cols)
+	}
+	// The rendered output height matches the reported rows.
+	out := Render("upi://pay?pa=test@okaxis&am=346&cu=INR")
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	if len(lines) < 21 {
-		t.Fatalf("rendered %d lines, want >= 21 (module rows + quiet zone)", len(lines))
+	if len(lines) != rows {
+		t.Fatalf("rendered %d lines, Dims said %d rows", len(lines), rows)
+	}
+}
+
+func TestFitsIn(t *testing.T) {
+	data := "upi://pay?pa=test@okaxis&am=346&cu=INR"
+	cols, rows, _ := Dims(data)
+	if !FitsIn(data, cols, rows) {
+		t.Fatalf("must fit in its own exact dims (%dx%d)", cols, rows)
+	}
+	if FitsIn(data, cols-1, rows) {
+		t.Fatal("must NOT fit when a column short")
+	}
+	if FitsIn(data, cols, rows-1) {
+		t.Fatal("must NOT fit when a row short")
+	}
+	if !FitsIn(data, 0, 0) {
+		t.Fatal("unbounded (0,0) must always fit")
 	}
 }
 

@@ -86,16 +86,31 @@ func mapOrder(in swiggy.Order) api.Order {
 	return api.Order{ID: string(in.ID), Status: in.Status, Restaurant: in.Restaurant, Total: in.Total, ETA: in.ETA}
 }
 
+func mapPaymentMethod(m *swiggy.PaymentMethod) *api.PaymentMethod {
+	if m == nil {
+		return nil
+	}
+	return &api.PaymentMethod{ID: m.ID, DisplayName: m.DisplayName, Kind: m.Kind, PaymentCode: m.PaymentCode}
+}
+
+func mapPaymentOptions(o swiggy.PaymentOptions) api.PaymentOptions {
+	out := api.PaymentOptions{CODAvailable: o.CODAvailable, QR: mapPaymentMethod(o.QR)}
+	for i := range o.Intents {
+		out.Intents = append(out.Intents, *mapPaymentMethod(&o.Intents[i]))
+	}
+	return out
+}
+
 func mapPending(p swiggy.PendingPayment) api.PendingPayment {
 	return api.PendingPayment{
-		OrderID: p.OrderID, PaasID: p.PaasID, UPIString: p.UPIString, CartID: p.CartID,
+		OrderID: p.OrderID, PaasID: p.PaasID, UPIString: p.UPIString, BridgeURL: p.BridgeURL, CartID: p.CartID,
 		AddressID: p.AddressID, Lat: p.Lat, Lng: p.Lng, Amount: p.Amount,
 	}
 }
 
 func unmapPending(p api.PendingPayment) swiggy.PendingPayment {
 	return swiggy.PendingPayment{
-		OrderID: p.OrderID, PaasID: p.PaasID, UPIString: p.UPIString, CartID: p.CartID,
+		OrderID: p.OrderID, PaasID: p.PaasID, UPIString: p.UPIString, BridgeURL: p.BridgeURL, CartID: p.CartID,
 		AddressID: p.AddressID, Lat: p.Lat, Lng: p.Lng, Amount: p.Amount,
 	}
 }

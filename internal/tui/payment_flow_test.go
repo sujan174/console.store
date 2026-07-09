@@ -34,15 +34,18 @@ func TestUPIPlacedShowsQR(t *testing.T) {
 	be := &liveFake{}
 	m := upiCheckoutModel(t, be)
 	m2, _ := m.Update(datasource.UPIPlacedMsg{UPI: true, Pending: api.PendingPayment{
-		OrderID: "O1", UPIString: "upi://pay?pa=test@okaxis&am=346", Amount: 346,
+		OrderID: "O1", UPIString: "upi://pay?pa=test@okaxis&am=346",
+		BridgeURL: "https://mcp.swiggy.com/deeplink-redirect?link=abc", Amount: 346,
 	}})
 	um := m2.(Model)
 	if um.paymentStage != payWaiting {
 		t.Fatalf("paymentStage = %v, want payWaiting", um.paymentStage)
 	}
 	v := um.checkout.View(0)
-	if !strings.Contains(v, "scan to pay") {
-		t.Fatalf("checkout must show scan-to-pay QR prompt:\n%s", v)
+	// The amount and the always-present clickable browser link must show (the QR
+	// itself only renders when it fits the terminal).
+	if !strings.Contains(v, "pay") || !strings.Contains(v, "open payment page") {
+		t.Fatalf("payment view must show the amount + browser link:\n%s", v)
 	}
 }
 

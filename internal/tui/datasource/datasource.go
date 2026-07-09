@@ -46,6 +46,11 @@ type Backend interface {
 	PlaceUPI(addressID string) (api.PendingPayment, bool, error)
 	PollPayment(p api.PendingPayment) (api.PaymentStatus, error)
 	ConfirmOrder(p api.PendingPayment) (api.Order, error)
+	// PaymentOptions returns which methods the cart supports (QR/UPI, COD) so the
+	// checkout can build the payment-method picker. PlaceCOD places a
+	// cash-on-delivery order.
+	PaymentOptions(addressID string) (api.PaymentOptions, error)
+	PlaceCOD(addressID string) (api.Order, error)
 	TrackOrder(orderID string) (api.Tracking, error)
 	ActiveOrders(addressID string) ([]api.Order, error)
 	Logout() error
@@ -137,6 +142,12 @@ type (
 		Token  int
 		Status api.PaymentStatus
 		Err    error
+	}
+	// PaymentOptionsMsg carries the cart's available payment methods for the
+	// checkout picker (whether UPI/QR and COD are offered).
+	PaymentOptionsMsg struct {
+		Options api.PaymentOptions
+		Err     error
 	}
 	// UsualsLoadedMsg signals the account's most-ordered restaurants were
 	// fetched into the snapshot (under UsualsKey). Err non-nil on failure;
@@ -418,6 +429,22 @@ func PollPaymentCmd(b Backend, p api.PendingPayment, token int) tea.Cmd {
 func ConfirmOrderCmd(b Backend, p api.PendingPayment) tea.Cmd {
 	return func() tea.Msg {
 		order, err := b.ConfirmOrder(p)
+		return OrderPlacedMsg{Order: order, Err: err}
+	}
+}
+
+// PaymentOptionsCmd fetches the cart's available payment methods for the picker.
+func PaymentOptionsCmd(b Backend, addressID string) tea.Cmd {
+	return func() tea.Msg {
+		opts, err := b.PaymentOptions(addressID)
+		return PaymentOptionsMsg{Options: opts, Err: err}
+	}
+}
+
+// PlaceCODCmd places a cash-on-delivery order (reuses OrderPlacedMsg → tracking).
+func PlaceCODCmd(b Backend, addressID string) tea.Cmd {
+	return func() tea.Msg {
+		order, err := b.PlaceCOD(addressID)
 		return OrderPlacedMsg{Order: order, Err: err}
 	}
 }

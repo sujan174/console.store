@@ -317,6 +317,33 @@ func (s *Service) PlaceOrderUPI(ctx context.Context, accountID, addressID string
 	return mapPending(p), true, nil
 }
 
+// PaymentOptions fetches the live payment picker for the current cart (which
+// methods are available: scan-to-pay QR, UPI apps, cash-on-delivery). Read-only;
+// used to build the checkout payment-method chooser.
+func (s *Service) PaymentOptions(ctx context.Context, accountID, addressID string) (api.PaymentOptions, error) {
+	opts, err := s.foodClient(accountID).PaymentOptions(ctx, addressID)
+	if err != nil {
+		return api.PaymentOptions{}, err
+	}
+	return mapPaymentOptions(opts), nil
+}
+
+// PlaceOrderCOD places a cash-on-delivery order. Swiggy renamed the method id to
+// "COD" (the legacy "Cash" token now returns "cash temporarily disabled"), so we
+// send "COD". Gated by the same live-orders arming as the UPI/Cash place; counts
+// toward order telemetry on success.
+func (s *Service) PlaceOrderCOD(ctx context.Context, accountID, addressID string) (api.Order, error) {
+	o, err := s.foodClient(accountID).PlaceFoodOrder(ctx, swiggy.PlaceFoodOrderRequest{AddressID: addressID, PaymentMethod: "COD"})
+	if err != nil {
+		return api.Order{}, err
+	}
+	mapped := mapOrder(o)
+	if shouldPingOrder(mapped, nil) {
+		telemetry.OrderPlaced()
+	}
+	return mapped, nil
+}
+
 // PollPayment reads the current state of a pending UPI payment (read-only).
 func (s *Service) PollPayment(ctx context.Context, accountID string, p api.PendingPayment) (api.PaymentStatus, error) {
 	st, err := s.foodClient(accountID).CheckPaymentStatus(ctx, unmapPending(p))

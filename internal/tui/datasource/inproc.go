@@ -26,6 +26,8 @@ type inprocService interface {
 	PlaceOrderUPI(ctx context.Context, accountID, addressID string) (api.PendingPayment, bool, error)
 	PollPayment(ctx context.Context, accountID string, p api.PendingPayment) (api.PaymentStatus, error)
 	ConfirmOrder(ctx context.Context, accountID string, p api.PendingPayment) (api.Order, error)
+	PaymentOptions(ctx context.Context, accountID, addressID string) (api.PaymentOptions, error)
+	PlaceOrderCOD(ctx context.Context, accountID, addressID string) (api.Order, error)
 	TrackOrder(ctx context.Context, accountID, orderID string) (api.Tracking, error)
 	ActiveFoodOrders(ctx context.Context, accountID, addressID string) ([]api.Order, error)
 	Logout(ctx context.Context, accountID string) error
@@ -115,6 +117,14 @@ func (p InProc) PollPayment(accountID string, pp api.PendingPayment) (api.Paymen
 
 func (p InProc) ConfirmOrder(accountID string, pp api.PendingPayment) (api.Order, error) {
 	return p.svc.ConfirmOrder(context.Background(), accountID, pp)
+}
+
+func (p InProc) PaymentOptions(accountID, addressID string) (api.PaymentOptions, error) {
+	return p.svc.PaymentOptions(context.Background(), accountID, addressID)
+}
+
+func (p InProc) PlaceOrderCOD(accountID, addressID string) (api.Order, error) {
+	return p.svc.PlaceOrderCOD(context.Background(), accountID, addressID)
 }
 
 func (p InProc) TrackOrder(accountID, orderID string) (api.Tracking, error) {

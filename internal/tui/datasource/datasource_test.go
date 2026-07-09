@@ -174,8 +174,12 @@ func (f *fakeBackend) PollPayment(api.PendingPayment) (api.PaymentStatus, error)
 	return api.PayPending, f.err
 }
 func (f *fakeBackend) ConfirmOrder(api.PendingPayment) (api.Order, error) { return api.Order{}, f.err }
-func (f *fakeBackend) ActiveOrders(string) ([]api.Order, error)           { return f.orders, f.err }
-func (f *fakeBackend) Logout() error                                      { return f.err }
+func (f *fakeBackend) PaymentOptions(string) (api.PaymentOptions, error) {
+	return api.PaymentOptions{}, f.err
+}
+func (f *fakeBackend) PlaceCOD(string) (api.Order, error)       { return f.order, f.err }
+func (f *fakeBackend) ActiveOrders(string) ([]api.Order, error) { return f.orders, f.err }
+func (f *fakeBackend) Logout() error                            { return f.err }
 
 func (f *fakeBackend) IMSearch(_, query string) ([]api.IMProduct, error) {
 	f.imSearchQuery = query

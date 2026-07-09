@@ -55,6 +55,9 @@ type liveFake struct {
 	placeUPICalls int
 	pollCalls     int
 	confirmCalls  int
+	payOptions    api.PaymentOptions // returned by PaymentOptions
+	codOrder      api.Order          // returned by PlaceCOD (defaults filled if zero)
+	codCalls      int
 }
 
 func (f *liveFake) PlaceUPI(string) (api.PendingPayment, bool, error) {
@@ -94,6 +97,19 @@ func (f *liveFake) ConfirmOrder(api.PendingPayment) (api.Order, error) {
 	o := f.confirmOrder
 	if o.ID == "" {
 		o.ID, o.Status = "O1", "PLACED"
+	}
+	return o, f.err
+}
+
+func (f *liveFake) PaymentOptions(string) (api.PaymentOptions, error) {
+	return f.payOptions, f.err
+}
+
+func (f *liveFake) PlaceCOD(string) (api.Order, error) {
+	f.codCalls++
+	o := f.codOrder
+	if o.ID == "" {
+		o.ID, o.Status = "COD1", "PLACED"
 	}
 	return o, f.err
 }

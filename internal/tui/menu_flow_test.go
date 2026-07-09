@@ -67,8 +67,12 @@ func (f *railFake) PollPayment(api.PendingPayment) (api.PaymentStatus, error) {
 	return api.PayPending, f.err
 }
 func (f *railFake) ConfirmOrder(api.PendingPayment) (api.Order, error) { return api.Order{}, f.err }
-func (f *railFake) TrackOrder(string) (api.Tracking, error)            { return api.Tracking{}, f.err }
-func (f *railFake) ActiveOrders(string) ([]api.Order, error)           { return nil, f.err }
+func (f *railFake) PaymentOptions(string) (api.PaymentOptions, error) {
+	return api.PaymentOptions{}, f.err
+}
+func (f *railFake) PlaceCOD(string) (api.Order, error)       { return api.Order{}, f.err }
+func (f *railFake) TrackOrder(string) (api.Tracking, error)  { return api.Tracking{}, f.err }
+func (f *railFake) ActiveOrders(string) ([]api.Order, error) { return nil, f.err }
 
 func (f *railFake) IMSearch(string, string) ([]api.IMProduct, error) { return nil, f.err }
 func (f *railFake) IMGoTo(string) ([]api.IMProduct, error)           { return nil, f.err }

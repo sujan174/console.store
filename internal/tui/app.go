@@ -3755,6 +3755,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
+		// While a UPI payment is waiting, 'o' opens the hosted payment page in the
+		// browser (a fallback for terminals where the OSC-8 link isn't clickable or
+		// the QR won't render). Never auto-opened — this is on demand.
+		if m.screen == scrCheckout && m.checkoutVertical == 0 && m.paymentStage == payWaiting && k.String() == "o" {
+			if link := payLinkFor(m.pending); link != "" {
+				return m, openBrowserCmd(link)
+			}
+			return m, nil
+		}
 		// Help modal captures keys while open: scroll with ↑/↓ (or j/k), close on
 		// esc / q / ? / H / enter. It overlays whatever screen is behind it.
 		if m.helpOpen {
@@ -5829,6 +5838,16 @@ func clampIdx(i, n int) int {
 // buildCheckout assembles the merged checkout screen. The live item list is
 // driven by the authoritative m.lines (carries add-on/variant selections);
 // liveCart feeds only the bill via billFromLive().
+// payLinkFor is the browser link shown on the payment screen: Swiggy's hosted
+// bridge page when present (renders a reliable QR + UPI app buttons), else the
+// raw upi:// intent.
+func payLinkFor(p api.PendingPayment) string {
+	if p.BridgeURL != "" {
+		return p.BridgeURL
+	}
+	return p.UPIString
+}
+
 func (m Model) buildCheckout() screens.Checkout {
 	return screens.NewCheckout(m.cartHeader(), m.addr, m.cartScreenLines(), m.cartEta()).
 		WithBill(m.billFromLive()).
@@ -5836,7 +5855,7 @@ func (m Model) buildCheckout() screens.Checkout {
 		WithOrderErr(m.orderErr).
 		WithMutating(m.cartMutating).
 		WithCartWait(m.live && (!m.cartLoaded || m.cartSyncPending || m.cartSyncInFlight)).
-		WithPayment(int(m.paymentStage), m.pending.UPIString, m.pending.Amount).
+		WithPayment(int(m.paymentStage), m.pending.UPIString, payLinkFor(m.pending), m.pending.Amount).
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.cartScreenLines())))
 }
 

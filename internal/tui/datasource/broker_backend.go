@@ -25,6 +25,8 @@ type brokerRPC interface {
 	PlaceOrderUPI(accountID, addressID string) (api.PendingPayment, bool, error)
 	PollPayment(accountID string, p api.PendingPayment) (api.PaymentStatus, error)
 	ConfirmOrder(accountID string, p api.PendingPayment) (api.Order, error)
+	PaymentOptions(accountID, addressID string) (api.PaymentOptions, error)
+	PlaceOrderCOD(accountID, addressID string) (api.Order, error)
 	TrackOrder(accountID, orderID string) (api.Tracking, error)
 	ActiveFoodOrders(accountID, addressID string) ([]api.Order, error)
 	Logout(accountID string) error
@@ -169,6 +171,16 @@ func (b *BrokerBackend) PollPayment(p api.PendingPayment) (api.PaymentStatus, er
 
 func (b *BrokerBackend) ConfirmOrder(p api.PendingPayment) (api.Order, error) {
 	o, err := b.rpc.ConfirmOrder(b.accountID, p)
+	return o, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) PaymentOptions(addressID string) (api.PaymentOptions, error) {
+	o, err := b.rpc.PaymentOptions(b.accountID, addressID)
+	return o, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) PlaceCOD(addressID string) (api.Order, error) {
+	o, err := b.rpc.PlaceOrderCOD(b.accountID, addressID)
 	return o, wrapAuthErr(err)
 }
 

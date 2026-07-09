@@ -190,6 +190,14 @@ func (f *fakeRPC) ConfirmOrder(accountID string, p api.PendingPayment) (api.Orde
 	f.lastAccount = accountID
 	return api.Order{}, f.err
 }
+func (f *fakeRPC) PaymentOptions(accountID, addressID string) (api.PaymentOptions, error) {
+	f.lastAccount = accountID
+	return api.PaymentOptions{}, f.err
+}
+func (f *fakeRPC) PlaceOrderCOD(accountID, addressID string) (api.Order, error) {
+	f.lastAccount = accountID
+	return api.Order{}, f.err
+}
 func (f *fakeRPC) ActiveFoodOrders(accountID, addressID string) ([]api.Order, error) {
 	f.lastAccount = accountID
 	return nil, f.err

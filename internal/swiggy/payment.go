@@ -24,8 +24,14 @@ type PaymentMethod struct {
 // Intents are mobile UPI apps; CODAvailable mirrors Swiggy's (optimistic) cod
 // flag — note place_food_order may still reject Cash even when this is true.
 type PaymentOptions struct {
-	QR           *PaymentMethod
-	Intents      []PaymentMethod
+	QR      *PaymentMethod
+	Intents []PaymentMethod
+	// COD is the pay-on-delivery method when Swiggy offers it (nil otherwise). Its
+	// ID is what to send as place_food_order.paymentMethod — Swiggy renamed the
+	// method id to "COD" (the legacy "Cash" token is what our earlier place sent
+	// and got "cash temporarily disabled" back), so we send whatever id the live
+	// options report.
+	COD          *PaymentMethod
 	CODAvailable bool
 }
 
@@ -46,7 +52,9 @@ type paymentOptionsEnvelope struct {
 		Methods []rawPayMethod `json:"methods"`
 	} `json:"platforms"`
 	COD struct {
-		Available bool `json:"available"`
+		Available   bool   `json:"available"`
+		ID          string `json:"id"`
+		DisplayName string `json:"displayName"`
 	} `json:"cod"`
 	AllMethods []rawPayMethod `json:"allMethods"`
 }
@@ -71,6 +79,13 @@ func (c *Client) PaymentOptions(ctx context.Context, addressID string) (PaymentO
 	}
 
 	out := PaymentOptions{CODAvailable: env.COD.Available}
+	if env.COD.Available {
+		id := env.COD.ID
+		if id == "" {
+			id = "COD"
+		}
+		out.COD = &PaymentMethod{ID: id, DisplayName: env.COD.DisplayName, Kind: "cod"}
+	}
 	seen := map[string]bool{}
 	add := func(m rawPayMethod) {
 		if m.ID == "" || seen[m.ID] {
@@ -110,7 +125,8 @@ func (c *Client) PaymentOptions(ctx context.Context, addressID string) (PaymentO
 type PendingPayment struct {
 	OrderID   string
 	PaasID    string
-	UPIString string
+	UPIString string // upiIntentUrl — the raw upi:// intent
+	BridgeURL string // hosted mcp.swiggy.com/deeplink-redirect page (browser-friendly)
 	CartID    string
 	AddressID string // echoed from the place request; required by status/confirm
 	Lat, Lng  float64
@@ -144,6 +160,7 @@ type pendingRaw struct {
 	QRString     string    `json:"qrString"`
 	QR           string    `json:"qr"`
 	IntentURL    string    `json:"intentUrl"`
+	BridgeURL    string    `json:"bridgeUrl"`
 	Lat          flexFloat `json:"lat"`
 	Lng          flexFloat `json:"lng"`
 	// Live amount is `paidAmount`; amount/to_pay are tolerant fallbacks.
@@ -164,6 +181,7 @@ func (r pendingRaw) pending() PendingPayment {
 		OrderID:   firstNonEmpty(r.OrderID, r.OrderID2),
 		PaasID:    firstNonEmpty(r.PaasID, r.PaasID2),
 		UPIString: firstNonEmpty(r.UPIIntentURL, r.UPIIntent, r.UPIString, r.QRString, r.QR, r.IntentURL),
+		BridgeURL: r.BridgeURL,
 		CartID:    firstNonEmpty(r.CartID.val(), r.CartID2.val()),
 		Lat:       float64(r.Lat),
 		Lng:       float64(r.Lng),
