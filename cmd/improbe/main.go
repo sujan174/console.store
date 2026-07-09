@@ -81,6 +81,52 @@ func run() error {
 		return trackLoop(ctx, swiggy.NewClient(swiggy.InstamartBaseURL, ts, swiggy.WithMinInterval(600*time.Millisecond)))
 	}
 
+	// FOOD_TOOLS=1: dump the FOOD endpoint's tools/list (read-only) so we can see
+	// place_food_order's inputSchema — in particular whether paymentMethod
+	// enumerates any non-Cash (online) value. Never places anything.
+	if os.Getenv("FOOD_TOOLS") == "1" {
+		bearer, err := ts.Token(ctx)
+		if err != nil {
+			return err
+		}
+		sid, err := rawInit(ctx, httpc, swiggy.FoodBaseURL, bearer)
+		if err != nil {
+			return fmt.Errorf("food initialize: %w", err)
+		}
+		tools, err := rawCall(ctx, httpc, swiggy.FoodBaseURL, bearer, sid, map[string]any{
+			"jsonrpc": "2.0", "id": 3, "method": "tools/list",
+		})
+		if err != nil {
+			return fmt.Errorf("food tools/list: %w", err)
+		}
+		log.Printf("FOOD tools/list = %s", tools)
+		return nil
+	}
+
+	// PAY_OPTS=1: fetch the live payment options for the current food cart
+	// (read-only). Shows whether UPI is available for this user and the shape the
+	// payment picker returns. Never places anything.
+	if os.Getenv("PAY_OPTS") == "1" {
+		fc := swiggy.NewClient(swiggy.FoodBaseURL, ts, swiggy.WithMinInterval(600*time.Millisecond))
+		rawAddr, err := fc.CallTool(ctx, "get_addresses", nil)
+		if err != nil {
+			return fmt.Errorf("get_addresses: %w", err)
+		}
+		var wrap struct {
+			Addresses []struct {
+				ID string `json:"id"`
+			} `json:"addresses"`
+		}
+		_ = json.Unmarshal(rawAddr, &wrap)
+		if len(wrap.Addresses) == 0 {
+			return fmt.Errorf("no addresses")
+		}
+		addr := wrap.Addresses[0].ID
+		raw, err := fc.CallTool(ctx, "get_payment_options", map[string]any{"addressId": addr})
+		log.Printf("PAY_OPTS get_payment_options err=%v raw=%.100000s", err, string(raw))
+		return nil
+	}
+
 	// 1) Raw tools/list against the Instamart endpoint.
 	bearer, err := ts.Token(ctx)
 	if err != nil {
