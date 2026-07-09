@@ -122,6 +122,7 @@ type PendingPayment struct {
 	AddressID string
 	Lat, Lng  float64
 	Amount    int
+	ExpiresAt int64 // unix millis; payment window deadline (Swiggy's 5 min)
 }
 
 // PaymentStatus mirrors swiggy.PaymentStatus (same ordering).

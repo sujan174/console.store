@@ -7,6 +7,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // PaymentMethod is one selectable payment method from get_payment_options.
@@ -131,6 +132,11 @@ type PendingPayment struct {
 	AddressID string // echoed from the place request; required by status/confirm
 	Lat, Lng  float64
 	Amount    int
+	// ExpiresAt is the unix-millis deadline after which the payment window is
+	// closed: Swiggy's maxTimeToPollForInMs (5 min) added to placement time. Past
+	// it the order is marked FAILED and a late payment is refunded async, so every
+	// surface (terminal, /pay page, widget) MUST stop offering the QR/link then.
+	ExpiresAt int64
 }
 
 // PlaceUPIRequest places an online-payment food order at AddressID using Method
@@ -167,7 +173,13 @@ type pendingRaw struct {
 	PaidAmount flexFloat `json:"paidAmount"`
 	Amount     flexFloat `json:"amount"`
 	ToPay      flexFloat `json:"to_pay"`
+	// maxTimeToPollForInMs is the payment window Swiggy allows (5 min). 0 → default.
+	MaxPollMs flexFloat `json:"maxTimeToPollForInMs"`
 }
+
+// defaultPayWindowMs is the fallback payment window when the response omits
+// maxTimeToPollForInMs — Swiggy's observed value is 5 minutes.
+const defaultPayWindowMs = 300000
 
 func (r pendingRaw) pending() PendingPayment {
 	amt := float64(r.PaidAmount)
@@ -225,6 +237,11 @@ func (c *Client) PlaceFoodOrderUPI(ctx context.Context, req PlaceUPIRequest) (Pe
 	}
 	p := pr.pending()
 	p.AddressID = req.AddressID
+	window := int64(pr.MaxPollMs)
+	if window <= 0 {
+		window = defaultPayWindowMs
+	}
+	p.ExpiresAt = time.Now().UnixMilli() + window
 	if p.OrderID == "" && p.PaasID == "" {
 		return PendingPayment{}, fmt.Errorf("swiggy: place returned no order id or paas id (payment not started)")
 	}

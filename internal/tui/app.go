@@ -2124,10 +2124,14 @@ func (m Model) onTick() (Model, tea.Cmd) {
 	if m.screen == scrCheckout && m.checkoutVertical == 0 && m.paymentStage == payWaiting {
 		m.payElapsed++
 		m.payPollTick++
-		if m.payElapsed >= paymentTimeoutTicks {
+		// Close the window at Swiggy's real deadline (maxTimeToPollForInMs) so we
+		// stop polling AND stop inviting payment the moment a late pay would just be
+		// refunded. Fall back to the tick cap only if the deadline is unknown.
+		expired := m.pending.ExpiresAt > 0 && time.Now().UnixMilli() >= m.pending.ExpiresAt
+		if expired || (m.pending.ExpiresAt <= 0 && m.payElapsed >= paymentTimeoutTicks) {
 			m.paymentStage = payFailed
 			m.payToken++ // invalidate any in-flight poll
-			m.orderErr = "payment timed out — nothing was charged. try again."
+			m.orderErr = "payment window closed — nothing was charged. place the order again."
 			m.checkout = m.buildCheckout()
 			return m, nil
 		}
@@ -5854,16 +5858,34 @@ func payBaseURL() string {
 // payLinkFor is the http(s) browser page for the payment screen's button:
 // Swiggy's hosted bridge page when it provides one, else our own /pay page
 // carrying the upi:// intent (Swiggy usually returns only the upi://, which no
-// desktop browser can open — so we wrap it in a page that draws the QR). Enter
-// on the payment screen opens this. Empty only when there's no upi:// at all.
+// desktop browser can open — so we wrap it in a page that draws the QR). The
+// expiry is passed through so the /pay page self-invalidates at the same 5-min
+// deadline. Empty only when there's no upi:// at all.
 func payLinkFor(p api.PendingPayment) string {
 	if strings.HasPrefix(p.BridgeURL, "http") {
 		return p.BridgeURL
 	}
-	if p.UPIString != "" {
-		return payBaseURL() + "?upi=" + url.QueryEscape(p.UPIString)
+	if p.UPIString == "" {
+		return ""
 	}
-	return ""
+	link := payBaseURL() + "?upi=" + url.QueryEscape(p.UPIString)
+	if p.ExpiresAt > 0 {
+		link += "&exp=" + strconv.FormatInt(p.ExpiresAt, 10)
+	}
+	return link
+}
+
+// payExpiresInSec is the seconds left in the payment window (0 once past it),
+// driving the checkout countdown. m.nowUnix is refreshed every tick.
+func (m Model) payExpiresInSec() int {
+	if m.pending.ExpiresAt <= 0 {
+		return 0
+	}
+	left := m.pending.ExpiresAt/1000 - m.nowUnix
+	if left < 0 {
+		return 0
+	}
+	return int(left)
 }
 
 func (m Model) buildCheckout() screens.Checkout {
@@ -5873,7 +5895,7 @@ func (m Model) buildCheckout() screens.Checkout {
 		WithOrderErr(m.orderErr).
 		WithMutating(m.cartMutating).
 		WithCartWait(m.live && (!m.cartLoaded || m.cartSyncPending || m.cartSyncInFlight)).
-		WithPayment(int(m.paymentStage), m.pending.UPIString, payLinkFor(m.pending), m.pending.Amount).
+		WithPayment(int(m.paymentStage), payLinkFor(m.pending), m.pending.Amount, m.payExpiresInSec()).
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.cartScreenLines())))
 }
 

@@ -9,7 +9,6 @@ import (
 
 	"consolestore/internal/catalog"
 	"consolestore/internal/tui/components"
-	"consolestore/internal/tui/qr"
 	"consolestore/internal/tui/theme"
 )
 
@@ -32,19 +31,20 @@ type Checkout struct {
 	hour       int  // local hour (0–23) for the loaders' late-night copy
 	// UPI payment sub-state: 0 idle, 1 waiting, 2 confirming, 3 failed.
 	payStage int
-	payUPI   string // upi:// intent — encoded as the scan QR (when it fits)
-	payLink  string // hosted payment page (bridgeUrl) — the clickable "open in browser" link
+	payLink  string // hosted pay page (our /pay?upi=… or Swiggy bridge) — opened in the browser
 	payTotal int
+	payExpS  int // seconds left in the payment window (0 = unknown/expired)
 }
 
 // WithPayment attaches the UPI payment sub-state (stage 0=idle,1=waiting,
-// 2=confirming,3=failed): the UPI intent (QR), the hosted browser link, and the
-// amount. When non-idle the checkout renders the payment view.
-func (c Checkout) WithPayment(stage int, upiString, payLink string, amount int) Checkout {
+// 2=confirming,3=failed): the hosted browser payment link, the amount, and the
+// seconds left before the payment window closes. No in-terminal QR — the browser
+// page (opened with enter) renders a reliable QR that can't go stale here.
+func (c Checkout) WithPayment(stage int, payLink string, amount, expiresInSec int) Checkout {
 	c.payStage = stage
-	c.payUPI = upiString
 	c.payLink = payLink
 	c.payTotal = amount
+	c.payExpS = expiresInSec
 	return c
 }
 
@@ -258,34 +258,17 @@ func (c Checkout) paymentView(frame int) string {
 		}
 		b.WriteString("  " + theme.BrightStyle.Render(fmt.Sprintf("pay  ₹%d", amt)) + theme.DimStyle.Render("  ·  UPI") + "\n\n")
 
-		// Draw the scan QR only when it reliably fits the terminal WIDTH (a wrapped
-		// QR is unscannable). Height is unbounded — a tall QR just scrolls. Note it
-		// still won't paint on terminals with transparency / a background image, so
-		// the plain-text options below are ALWAYS shown as the reliable path.
-		hasQR := false
-		if c.payUPI != "" && qr.FitsIn(c.payUPI, components.ContentWidth(), 0) {
-			if code := qr.Render(c.payUPI); code != "" {
-				b.WriteString(code + "\n")
-				b.WriteString("  " + theme.DimStyle.Render("scan with any UPI app · GPay · PhonePe · Paytm") + "\n\n")
-				hasQR = true
-			}
-		}
-
-		// Action line. A hosted page (http) becomes a clean button — press enter to
-		// open it in the browser (same idiom as sign-in), no raw URL shown. A bare
-		// upi:// has no browser page, so the QR is the path; only when the QR can't
-		// be shown do we surface the upi:// as a copy-into-a-UPI-app fallback.
-		switch {
-		case strings.HasPrefix(c.payLink, "http"):
-			b.WriteString("  " + theme.GreenStyle.Render("❯ press enter") +
-				theme.BrightStyle.Render(" to open the payment page in your browser") + "\n")
-		case c.payLink != "" && !hasQR:
-			b.WriteString("  " + theme.FavStyle.Render("⚠ this terminal can't show the scan QR.") + "\n")
-			b.WriteString("  " + theme.DimStyle.Render("copy this into a UPI app on your phone:") + "\n")
-			b.WriteString("  " + theme.FaintStyle.Render(c.payLink) + "\n")
+		// No in-terminal QR — a scannable QR that can't go stale lives on the
+		// browser page (opened with enter). Show the enter-to-open button + a live
+		// countdown so a hours-old screen never invites a (refund-causing) payment.
+		b.WriteString("  " + theme.GreenStyle.Render("❯ press enter") +
+			theme.BrightStyle.Render(" to open the payment page & scan the QR") + "\n")
+		if c.payExpS > 0 {
+			b.WriteString("  " + theme.DimStyle.Render("expires in ") +
+				theme.GoldStyle.Render(fmt.Sprintf("%d:%02d", c.payExpS/60, c.payExpS%60)) + "\n")
 		}
 		b.WriteString("\n  " + theme.DimStyle.Render("waiting for payment ") + theme.GoldStyle.Render(spinAt(frame)) + "\n\n")
-		b.WriteString(components.Hint("esc", "cancel") + theme.FaintStyle.Render("   (unpaid orders expire on their own)"))
+		b.WriteString(components.Hint("esc", "cancel") + theme.FaintStyle.Render("   pay within the window or place again"))
 	}
 	return b.String()
 }

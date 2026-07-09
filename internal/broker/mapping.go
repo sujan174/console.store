@@ -104,14 +104,14 @@ func mapPaymentOptions(o swiggy.PaymentOptions) api.PaymentOptions {
 func mapPending(p swiggy.PendingPayment) api.PendingPayment {
 	return api.PendingPayment{
 		OrderID: p.OrderID, PaasID: p.PaasID, UPIString: p.UPIString, BridgeURL: p.BridgeURL, CartID: p.CartID,
-		AddressID: p.AddressID, Lat: p.Lat, Lng: p.Lng, Amount: p.Amount,
+		AddressID: p.AddressID, Lat: p.Lat, Lng: p.Lng, Amount: p.Amount, ExpiresAt: p.ExpiresAt,
 	}
 }
 
 func unmapPending(p api.PendingPayment) swiggy.PendingPayment {
 	return swiggy.PendingPayment{
 		OrderID: p.OrderID, PaasID: p.PaasID, UPIString: p.UPIString, BridgeURL: p.BridgeURL, CartID: p.CartID,
-		AddressID: p.AddressID, Lat: p.Lat, Lng: p.Lng, Amount: p.Amount,
+		AddressID: p.AddressID, Lat: p.Lat, Lng: p.Lng, Amount: p.Amount, ExpiresAt: p.ExpiresAt,
 	}
 }
 
