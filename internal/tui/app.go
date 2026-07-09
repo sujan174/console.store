@@ -3755,11 +3755,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
-		// While a UPI payment is waiting, 'o' opens the hosted payment page in the
-		// browser (a fallback for terminals where the OSC-8 link isn't clickable or
-		// the QR won't render). Never auto-opened — this is on demand.
-		if m.screen == scrCheckout && m.checkoutVertical == 0 && m.paymentStage == payWaiting && k.String() == "o" {
-			if link := payLinkFor(m.pending); link != "" {
+		// While a UPI payment is waiting, Enter (or 'o') opens the hosted payment
+		// page in the browser — same idiom as the sign-in button. Only for a real
+		// http(s) page; a bare upi:// has no browser target (the QR is that path),
+		// so we don't fire an OS "no handler" popup for it. On demand, never auto.
+		if m.screen == scrCheckout && m.checkoutVertical == 0 && m.paymentStage == payWaiting &&
+			(k.String() == "enter" || k.String() == "o") {
+			if link := payLinkFor(m.pending); strings.HasPrefix(link, "http") {
 				return m, openBrowserCmd(link)
 			}
 			return m, nil

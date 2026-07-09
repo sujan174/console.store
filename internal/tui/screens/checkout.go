@@ -271,23 +271,21 @@ func (c Checkout) paymentView(frame int) string {
 			}
 		}
 
-		// Always-visible actionable line — plain text, never hidden behind an OSC-8
-		// hyperlink (some terminals swallow those). A hosted page (http) opens in
-		// the browser via 'o'; a bare upi:// can only be scanned/opened on a phone.
+		// Action line. A hosted page (http) becomes a clean button — press enter to
+		// open it in the browser (same idiom as sign-in), no raw URL shown. A bare
+		// upi:// has no browser page, so the QR is the path; only when the QR can't
+		// be shown do we surface the upi:// as a copy-into-a-UPI-app fallback.
 		switch {
 		case strings.HasPrefix(c.payLink, "http"):
-			b.WriteString("  " + theme.BrightStyle.Render("❯ press ") + theme.GreenStyle.Render("o") +
+			b.WriteString("  " + theme.GreenStyle.Render("❯ press enter") +
 				theme.BrightStyle.Render(" to open the payment page in your browser") + "\n")
-			b.WriteString("  " + theme.FaintStyle.Render(c.payLink) + "\n")
-		case c.payLink != "":
-			if !hasQR {
-				b.WriteString("  " + theme.FavStyle.Render("⚠ this terminal can't show the scan QR.") + "\n")
-			}
-			b.WriteString("  " + theme.DimStyle.Render("scan the QR with your phone, or copy this into a UPI app:") + "\n")
+		case c.payLink != "" && !hasQR:
+			b.WriteString("  " + theme.FavStyle.Render("⚠ this terminal can't show the scan QR.") + "\n")
+			b.WriteString("  " + theme.DimStyle.Render("copy this into a UPI app on your phone:") + "\n")
 			b.WriteString("  " + theme.FaintStyle.Render(c.payLink) + "\n")
 		}
 		b.WriteString("\n  " + theme.DimStyle.Render("waiting for payment ") + theme.GoldStyle.Render(spinAt(frame)) + "\n\n")
-		b.WriteString(components.Hint("esc", "cancel"))
+		b.WriteString(components.Hint("esc", "cancel") + theme.FaintStyle.Render("   (unpaid orders expire on their own)"))
 	}
 	return b.String()
 }
