@@ -9,6 +9,8 @@ import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from
 import { injectStyles } from "./styles";
 import { bootLoader, esc, groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading, renderRecovery, renderSignIn } from "./screens";
 import { renderHome } from "./home";
+import { handleIMClick, handleIMKeydown, im, imEnter, imOnAddressChange, imSeed, initIM } from "./instamart";
+import { renderIM } from "./imScreens";
 import {
   buildWireSelections,
   curateGroups,
@@ -51,6 +53,9 @@ export interface OpenStoreEntry {
   // open_store). Set for the ambiguous-item case: open the menu already
   // filtered to these matches so the user picks. Empty otherwise.
   search?: string;
+  // "instamart" when the carried intent opens the grocery vertical after
+  // sign-in (the server threads it through the entry map).
+  vertical?: string;
 }
 
 // AddrRefDTO mirrors internal/mcp/tools_card.go's AddrRefDTO — both fields
@@ -126,7 +131,10 @@ export interface RecentOrder {
 // ever populated on this branch). `restaurant`/`entry`/`menu` are therefore
 // all optional — home omits them.
 export interface OpenStoreOut {
-  screen: "home" | "restaurant" | "signed_out";
+  screen: "home" | "restaurant" | "signed_out" | "instamart";
+  // "instamart" when this shell opens the grocery vertical (also carried
+  // through a signed_out shell so resume returns to the right vertical).
+  vertical?: string;
   authorize_url?: string;
   address: AddrRefDTO;
   restaurant?: OpenStoreRestaurant;
@@ -262,6 +270,9 @@ export interface AppState {
   // precedence: screen==="home" short-circuits straight to renderHome();
   // everything else keeps its existing cart/customize/focused/menu order.
   screen: "home" | "restaurant" | "signin";
+  // Which vertical owns the viewport. Food's screens render exactly as before
+  // when "food"; "instamart" short-circuits renderScreen to renderIM().
+  vertical: "food" | "instamart";
   // Signed-out gate (Task 2): the authorize URL to open, whether the sign-in
   // button has already been tapped (drives the "waiting for sign-in" line),
   // and the carried intent (restaurant/query/item/category) to resume once
@@ -274,6 +285,7 @@ export interface AppState {
     query?: string;
     item_id?: string;
     category?: string;
+    vertical?: string;
   };
   // The delivery address open_store resolved, on BOTH screens (home's
   // address-picker slot — Task 8 — and, on the restaurant screen, the same
@@ -382,6 +394,7 @@ export interface AppState {
 
 export const state: AppState = {
   screen: "home",
+  vertical: "food",
   authorizeURL: "",
   signinOpened: false,
   signinIntent: {},
@@ -424,6 +437,17 @@ export const state: AppState = {
 
 let root: HTMLElement | null = null;
 let app: App | null = null;
+
+// callTool is the seam Instamart's module uses to reach the bridge without
+// importing the App instance (kept module-local above).
+export async function callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+  if (!app) throw new Error("bridge not connected");
+  return app.callServerTool({ name, arguments: args });
+}
+// requestRender lets sibling modules trigger a repaint after mutating their state.
+export function requestRender(): void {
+  render();
+}
 
 // render precedence (highest first): the top-level screen router (home vs
 // restaurant) → within "restaurant", cart/checkout → customize sheet →
@@ -579,6 +603,10 @@ function renderScreen(root: HTMLElement): void {
     root.innerHTML = renderSignIn(state);
     return;
   }
+  if (state.vertical === "instamart") {
+    root.innerHTML = renderIM(state.address?.label ?? "");
+    return;
+  }
   if (state.screen === "home") {
     root.innerHTML = renderHome(state);
     return;
@@ -681,12 +709,12 @@ function cartEditByKey(key: string, delta: number): void {
 
 // The result of app.callServerTool — inferred from the App class itself so
 // this file never needs to import the SDK's CallToolResult type directly.
-type ToolResult = Awaited<ReturnType<App["callServerTool"]>>;
+export type ToolResult = Awaited<ReturnType<App["callServerTool"]>>;
 
 // A tool failure's message is "<code>: <human text>" carried as a text
 // content block (order-app-tool-schemas.md). Extract it defensively — an
 // options fetch failure must render a short message, never throw.
-function toolErrorText(result: ToolResult): string {
+export function toolErrorText(result: ToolResult): string {
   for (const block of result.content ?? []) {
     if (block.type === "text" && block.text) return block.text;
   }
@@ -2120,6 +2148,9 @@ async function chooseAddress(id: string, label: string, asDefault: boolean): Pro
     state.addrPickerOpen = false;
     state.addrSetDefault = false;
     state.closedNoteId = null;
+    // Instamart's catalog + cart bind to the address — reset its products and
+    // closed latch so the next IM view fetches against the new address.
+    imOnAddressChange();
     render();
 
     const addressId = state.addressId;
@@ -2153,8 +2184,11 @@ function onRootClickSafe(evt: MouseEvent): void {
 function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
+  // Instamart owns its own clicks (categories, search, food-tab) — delegate
+  // first so app.ts never has to know their shape. Returns true when handled.
+  if (handleIMClick(target as HTMLElement)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-dec-item],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-cart-inc],[data-cart-dec],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin],[data-reload]",
+    "[data-add],[data-inc],[data-dec],[data-dec-item],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-cart-inc],[data-cart-dec],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin],[data-reload],[data-im-tab]",
   );
   if (!el) return;
   log("click", { action: Object.keys(el.dataset)[0] ?? "?" });
@@ -2169,6 +2203,16 @@ function onRootClick(evt: MouseEvent): void {
   if (el.dataset.signin !== undefined) {
     if (app && state.authorizeURL) void app.openLink({ url: state.authorizeURL });
     state.signinOpened = true;
+    render();
+    return;
+  }
+
+  // Instamart tab on a food screen — switch verticals; load the first view if
+  // instamart hasn't fetched products yet (handleIMClick above owns the reverse
+  // food-tab direction on an IM screen).
+  if (el.dataset.imTab !== undefined) {
+    state.vertical = "instamart";
+    if (im.products.length === 0) imEnter();
     render();
     return;
   }
@@ -2431,6 +2475,7 @@ function onRootClick(evt: MouseEvent): void {
 // onRootKeydown handles Enter in the home search box (submitHomeSearch is
 // otherwise only reachable via the search button's click, delegated above).
 function onRootKeydown(evt: KeyboardEvent): void {
+  if (handleIMKeydown(evt)) return;
   if (evt.key !== "Enter") return;
   const target = evt.target;
   if (!(target instanceof HTMLInputElement)) return;
@@ -2769,6 +2814,20 @@ async function resumeAfterSignin(): Promise<void> {
     console.error("[order-app] resume list_addresses failed", err);
   }
   const intent = state.signinIntent;
+  // Instamart intent resumes straight onto the grocery vertical — no food
+  // open_store shell to build; imEnter() loads the seeded query/first category.
+  if (intent.vertical === "instamart") {
+    // Leave the signin gate: renderScreen's signin guard runs before the
+    // vertical short-circuit, so the underlying screen must be non-signin.
+    state.screen = "home";
+    state.vertical = "instamart";
+    state.address = addr;
+    state.addressId = addr.id || null;
+    im.query = intent.query ?? "";
+    imEnter();
+    render();
+    return;
+  }
   let shell: OpenStoreOut;
   if (intent.restaurant_id || intent.restaurant_name) {
     const entry: OpenStoreEntry = {
@@ -2815,6 +2874,7 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
       query: sc.query,
       item_id: sc.entry?.item_id,
       category: sc.entry?.category,
+      vertical: sc.entry?.vertical ?? sc.vertical,
     };
     render();
     startAuthPoll();
@@ -2832,6 +2892,17 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   // which is fine — that's the latest token claiming ownership.
   menuToken++;
   state.address = sc.address ?? null;
+
+  if (sc.screen === "instamart") {
+    // Grocery vertical. The underlying screen is "home" (non-signin) so the
+    // signin guard doesn't fire; the vertical short-circuit paints renderIM.
+    state.screen = "home";
+    state.vertical = "instamart";
+    state.addressId = sc.address?.id || null;
+    imSeed(sc);
+    render();
+    return;
+  }
 
   if (sc.screen === "home") {
     state.screen = "home";
@@ -3062,6 +3133,20 @@ export function bootstrap(): void {
     }
     seedFromOpenStore(sc);
   };
+
+  // Wire the Instamart module's bridge seam before connect, so a fast
+  // open_store{vertical:"instamart"} push finds its deps ready.
+  initIM({
+    callTool,
+    requestRender,
+    errorText: toolErrorText,
+    addressId: () => state.addressId ?? state.address?.id ?? null,
+    addressLabel: () => state.address?.label ?? "",
+    switchToFood: () => {
+      state.vertical = "food";
+      render();
+    },
+  });
 
   app.connect().then(
     () => {

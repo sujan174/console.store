@@ -9,6 +9,7 @@
 
 import type { AddressOption, AppState, HomeRestaurant, RecentOrder } from "./app";
 import { brandBar, esc, loadingBlock, rupees } from "./screens";
+import { verticalTabs } from "./imScreens";
 import { icon } from "./icons";
 
 // addressSlot is the picker's trigger: the active address (or a neutral
@@ -262,6 +263,7 @@ export function renderHome(state: AppState): string {
     `<div class="store-layout">` +
     sidebar(state) +
     `<div class="content">` +
+    verticalTabs("food") +
     searchBarSlot(state) +
     restaurantListSlot(state) +
     recentOrdersSlot(state) +
