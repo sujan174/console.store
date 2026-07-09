@@ -9,6 +9,7 @@ import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from
 import { injectStyles } from "./styles";
 import { bootLoader, esc, groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading, renderRecovery, renderSignIn } from "./screens";
 import { renderHome } from "./home";
+import { icon } from "./icons";
 import {
   buildWireSelections,
   curateGroups,
@@ -460,6 +461,7 @@ function render(): void {
     }
   }
   syncWatchdog();
+  updateHomeButton();
 }
 
 // --- loading watchdog -------------------------------------------------------
@@ -481,6 +483,63 @@ const WATCHDOG_RESUME_MS = 3500; // shorter window after returning to the tab
 
 function isLoadingNow(): boolean {
   return bootPending || state.menuLoading || state.homeLoading;
+}
+
+// --- loader escape hatch (corner "home" button) -----------------------------
+// A fixed corner button shown ONLY while a loading view is up (boot, menu open,
+// home search). It lets the user bail out of any spinner straight to home. The
+// button lives on <body> — OUTSIDE the #app root that render() rewrites — so it
+// survives every innerHTML swap and stays put across screens; visibility is
+// toggled from render() (and the one-off boot paint) via isLoadingNow().
+let homeButton: HTMLButtonElement | null = null;
+
+function ensureHomeButton(): void {
+  if (homeButton) return;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "loader-home-btn";
+  b.setAttribute("aria-label", "reload — back to home");
+  b.innerHTML = `${icon("refresh", 13)}<span>home</span>`;
+  b.addEventListener("click", (e) => {
+    e.preventDefault();
+    goHome();
+  });
+  document.body.appendChild(b);
+  homeButton = b;
+}
+
+function updateHomeButton(): void {
+  ensureHomeButton();
+  homeButton!.classList.toggle("is-visible", isLoadingNow());
+}
+
+// goHome is the corner button's action. On a COLD boot — no open_store result
+// has arrived yet, so there is no home data to render — it reloads the widget
+// (re-runs the handshake), exactly like the recovery button. Once any data has
+// been seeded (bootPending flipped false), it instead cancels every in-flight
+// loader and jumps straight to the already-seeded home with zero network.
+function goHome(): void {
+  if (bootPending) {
+    location.reload();
+    return;
+  }
+  // Supersede any in-flight menu/home fetch so a late resolve can't paint over
+  // the home we're about to show.
+  menuToken++;
+  searchToken++;
+  state.menuLoading = false;
+  state.homeLoading = false;
+  state.homeLoadingMore = false;
+  state.stalled = false;
+  clearWatchdog();
+  // Drop transient overlays/edit state so home renders clean.
+  state.conflict = null;
+  state.customize = null;
+  state.cart = null;
+  state.focusedItemId = null;
+  state.menuQuery = "";
+  state.screen = "home";
+  render();
 }
 
 function clearWatchdog(): void {
@@ -3027,6 +3086,7 @@ export function bootstrap(): void {
   // Arm the boot watchdog: if no open_store result arrives (bridge never
   // delivered), flip to the recovery screen instead of an eternal boot.
   bootPending = true;
+  updateHomeButton(); // boot paint bypasses render() — surface the escape hatch now
   armWatchdog(WATCHDOG_MS);
   // Returning to a suspended tab is the main freeze trigger — surface recovery
   // fast when it happens mid-load.
