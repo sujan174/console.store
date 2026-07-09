@@ -120,7 +120,10 @@ func (s *Server) handleSearchRestaurants(ctx context.Context, _ *mcp.CallToolReq
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, SearchRestaurantsOut{}, err
 	}
-	addr, _ := s.resolveAddress(in.AddressID)
+	addr, _, err := s.requireAddress(in.AddressID)
+	if err != nil {
+		return nil, SearchRestaurantsOut{}, err
+	}
 	res, effective, next, more, err := s.be.SearchOrganicPage(addr, in.Query, in.Offset)
 	if err != nil {
 		return nil, SearchRestaurantsOut{}, err
@@ -169,7 +172,10 @@ func (s *Server) handleGetMenu(ctx context.Context, _ *mcp.CallToolRequest, in G
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, GetMenuOut{}, err
 	}
-	addr, _ := s.resolveAddress(in.AddressID)
+	addr, _, err := s.requireAddress(in.AddressID)
+	if err != nil {
+		return nil, GetMenuOut{}, err
+	}
 	m, err := s.be.Menu(addr, in.RestaurantID)
 	if err != nil {
 		return nil, GetMenuOut{}, err

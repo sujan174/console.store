@@ -2,10 +2,29 @@ package mcp
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"consolestore/internal/broker/api"
 )
+
+// When no address can be resolved (no explicit id, no locked/last-used pref, and
+// the address list is empty/unavailable), the resolution tools must return a
+// typed no_address error instead of forwarding an empty addressId to Swiggy —
+// which hard-fails "addressId is required" and makes the agent retry in a loop
+// (the behavior that burned through the rate limit, seen live 2026-07-09).
+func TestSearchRestaurantsNoAddressReturnsTypedError(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // isolate: no locked/last-used pref
+	be := &fakeBackend{}                     // addrs empty → resolveAddress yields ""
+	s := NewServer(be, &fakeAuth{token: true})
+	_, _, err := s.handleSearchRestaurants(context.Background(), nil, SearchRestaurantsIn{Query: "burger"})
+	if err == nil || !strings.Contains(err.Error(), codeNoAddress) {
+		t.Fatalf("want a %q error, got %v", codeNoAddress, err)
+	}
+	if be.searchPageCalls != 0 {
+		t.Fatalf("must NOT call Swiggy with an empty address; searchPageCalls=%d", be.searchPageCalls)
+	}
+}
 
 func TestListAddressesRequiresAuth(t *testing.T) {
 	s := NewServer(&fakeBackend{}, &fakeAuth{token: false})

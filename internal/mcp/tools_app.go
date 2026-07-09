@@ -126,6 +126,20 @@ func (s *Server) resolveAddress(explicit string) (id, label string) {
 	return "", ""
 }
 
+// requireAddress resolves the active address for a resolution tool, returning a
+// typed no_address error when none can be resolved. Forwarding an empty
+// addressId to Swiggy instead hard-fails ("addressId is required") and makes
+// agents retry in a loop — the behavior that burned through the rate limit
+// (live 2026-07-09). A clean, actionable error tells the agent to pick an
+// address (list_addresses + set_address, or open_store) first.
+func (s *Server) requireAddress(explicit string) (id, label string, err error) {
+	id, label = s.resolveAddress(explicit)
+	if id == "" {
+		return "", "", codedErr(codeNoAddress, "no delivery address is set — call list_addresses then set_address (or open_store) to choose one before searching")
+	}
+	return id, label, nil
+}
+
 func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in OpenStoreIn) (*mcp.CallToolResult, OpenStoreOut, error) {
 	// Signed out: open the app on a Sign-in screen instead of erroring (which
 	// left the widget unopened and forced the agent to hand the user a link).
