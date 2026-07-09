@@ -64,7 +64,7 @@ export const MARKUP = String.raw`
        headline + paragraph copy. -->
   <header id="top" style="position:relative;z-index:2;min-height:calc(100vh - 72px);display:flex;flex-direction:column">
 
-    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:100%;max-width:1100px;margin:0 auto;padding:18px clamp(24px,6vw,56px) 0">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:100%;max-width:1100px;margin:0 auto;padding:18px clamp(24px,6vw,56px) 16vh">
       <h1 class="hero-head" style="font-weight:700;font-size:clamp(32px,5.8vw,66px);line-height:1.1;letter-spacing:-.025em;color:#e9ebf7;margin:0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .24s">Great food is now just<br>a <span class="hero-cmd">command<span class="hero-caret" aria-hidden="true"></span></span> away.</h1>
 
       <p style="margin:28px 0 0;max-width:54ch;font-size:16.5px;line-height:1.8;color:#b6bce0;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .5s">consolestore orders real food — <span style="color:#cdd3f0">coffee, dinner, quick snacks</span> — straight from your terminal, or straight from Claude. No browser tabs, no forms, no cookie walls. <span style="color:#cdd3f0">You type, you eat.</span></p>
@@ -93,7 +93,7 @@ export const MARKUP = String.raw`
           <span>Windows</span><span style="color:#2d2f48">·</span>
           <span style="color:#b08cf5">+ Claude</span>
         </div>
-        <div data-install-hint style="font-size:11px;color:#2d2f48">beta channel · armed builds place real orders, the default stays safe.</div>
+        <div data-install-hint style="font-size:11.5px;color:#8088b0">beta channel · armed builds place real orders, the default stays safe.</div>
       </div>
     </div>
   </header>
@@ -157,7 +157,7 @@ export const MARKUP = String.raw`
   </aside>
 
   <!-- AGENT — order from wherever you already work -->
-  <section id="agent" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:48px clamp(24px,6vw,56px) 32px" data-reveal>
+  <section id="agent" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:72px clamp(24px,6vw,56px) 56px" data-reveal>
     <div class="run-grid">
       <div>
         <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.3);border-radius:999px;padding:5px 13px;margin-bottom:16px">✳ AI AGENT · MCP + SKILLS</span>
@@ -191,7 +191,7 @@ export const MARKUP = String.raw`
   </section>
 
   <!-- TERMINAL DEMO -->
-  <section id="run" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:48px clamp(24px,6vw,56px) 32px" data-reveal>
+  <section id="run" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:72px clamp(24px,6vw,56px) 56px" data-reveal>
     <div class="run-grid">
       <div>
         <div style="font-size:11px;letter-spacing:2px;color:#eab560;margin-bottom:14px">// watch it run</div>
@@ -220,7 +220,7 @@ export const MARKUP = String.raw`
   </section>
 
   <!-- AGENT SPEED + CLAUDE UI — the fast path, rendered as a real UI card inside Claude -->
-  <section id="fast" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:48px clamp(24px,6vw,56px) 32px" data-reveal>
+  <section id="fast" style="position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:72px clamp(24px,6vw,56px) 56px" data-reveal>
     <div class="run-grid">
       <div>
         <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.3);border-radius:999px;padding:5px 13px;margin-bottom:16px">✳ IN CLAUDE · LIVE UI</span>
