@@ -214,27 +214,68 @@ body {
 .load-screen { min-height: 100%; display: flex; flex-direction: column; }
 .load-body { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; }
 
-/* consolestore boot sequence: a short terminal log that fades in line-by-line
-   (animation-delay set inline per line) above the driving scooter — the boot-up
-   beat while the first tool result resolves. */
-.boot-wrap { display: flex; flex-direction: column; align-items: center; }
-.boot-seq {
+/* consolestore boot screen: an oversized wordmark that rises + breathes, the
+   driving scooter beneath it, and one status line that cycles the current
+   action. All CSS-only (the boot render is set once, never re-rendered). */
+.boot-wrap { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+
+/* The wordmark — big, mono, one orange prompt. Rises in from a tighter tracked
+   state, then breathes a soft orange glow so it feels alive during the wait. */
+.boot-brand {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 13px; line-height: 1.7; color: var(--text-secondary);
-  text-align: left; min-width: 220px; margin-bottom: 4px;
+  font-size: 30px; font-weight: 600; letter-spacing: .01em;
+  color: var(--text-primary); white-space: nowrap; line-height: 1;
+  animation: boot-brand-in .6s cubic-bezier(.2,.8,.2,1) both,
+             boot-brand-glow 3.4s ease-in-out .6s infinite;
 }
-.boot-seq > div { opacity: 0; animation: bootline .45s ease forwards; }
-.boot-seq .p { color: var(--sw-orange); }
-.boot-seq .head { color: var(--text-primary); }
-.boot-seq .ok::before { content: "\\2713 "; color: var(--sw-orange); }
-.boot-seq .run::before { content: "\\25B8 "; color: var(--sw-orange); }
-@keyframes bootline { to { opacity: 1; } }
+.boot-brand .p { color: var(--sw-orange); }
+@keyframes boot-brand-in {
+  from { opacity: 0; transform: translateY(10px) scale(.94); letter-spacing: .18em; }
+  to   { opacity: 1; transform: none; letter-spacing: .01em; }
+}
+@keyframes boot-brand-glow {
+  0%, 100% { text-shadow: 0 0 0 rgba(255, 82, 0, 0); }
+  50%      { text-shadow: 0 0 16px rgba(255, 82, 0, .38); }
+}
+
+/* Scooter block: reuse the shared scooter-track/road/rider/shimmer motif, just
+   stacked tighter under the wordmark than the standalone loadingBlock. */
+.boot-scoot { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+
+/* Status slot: a single fixed-height line. The three phases are stacked in the
+   same spot and crossfade on one shared timeline so exactly one "current
+   action" shows at a time — a looping proxy for live progress. */
+.boot-status {
+  position: relative; height: 20px; min-width: 210px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px; color: var(--text-secondary); text-align: center;
+}
+.boot-phase {
+  position: absolute; left: 0; right: 0; top: 0; opacity: 0;
+  animation: boot-phase 5.4s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 1.8s);
+}
+.boot-phase::before { content: "\\25B8 "; color: var(--sw-orange); }
+.boot-phase::after {
+  content: "\\2588"; color: var(--sw-orange); margin-left: 3px;
+  animation: cs-blink 1.1s steps(1) infinite;
+}
+@keyframes boot-phase {
+  0%   { opacity: 0; transform: translateY(3px); }
+  6%   { opacity: 1; transform: none; }
+  28%  { opacity: 1; transform: none; }
+  34%  { opacity: 0; transform: translateY(-3px); }
+  100% { opacity: 0; }
+}
 
 /* cs-line: the mono orange prompt line used on the recovery / status card. */
 .cs-line { font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; color: var(--sw-orange); }
 
 @media (prefers-reduced-motion: reduce) {
-  .boot-seq > div { opacity: 1; animation: none; }
+  .boot-brand { animation: none; }
+  .boot-phase { animation: none; }
+  .boot-phase:not(:first-child) { display: none; }
+  .boot-phase:first-child { opacity: 1; }
 }
 
 .num {

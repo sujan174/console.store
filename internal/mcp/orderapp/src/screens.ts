@@ -224,23 +224,33 @@ export function loadingBlock(label: string = ""): string {
   );
 }
 
-// bootLoader is the consolestore boot-up animation shown while the widget waits
-// for its first tool result (open_store) to arrive and resolve. A short
-// terminal boot log types itself out (CSS-staggered fade, zero JS timer),
-// capped by the driving scooter — an on-brand "warming up" beat instead of a
-// bare spinner. Fast opens flash past it; slow ones get a branded wait.
+// bootLoader is the consolestore boot-up screen shown while the widget waits for
+// its first tool result (open_store) to arrive and resolve. An oversized
+// consolestore wordmark rises + breathes, the delivery scooter drives beneath
+// it, and ONE status line below cycles through the current action (CSS-only
+// crossfade, zero JS timer). Fast opens flash past it; slow ones get a branded
+// wait. The boot render is set once and never re-rendered, so the live action
+// is approximated by the looping phase cycle rather than a bound label.
 export function bootLoader(): string {
-  const line = (delay: string, cls: string, text: string): string =>
-    `<div class="${cls}" style="animation-delay:${delay}">${esc(text)}</div>`;
+  const phase = (i: number, text: string): string =>
+    `<span class="boot-phase" style="--i:${i}">${esc(text)}</span>`;
   return (
     `<div class="boot-wrap">` +
-      `<div class="boot-seq" aria-hidden="true">` +
-        `<div class="head" style="animation-delay:.05s"><span class="p">~ %</span> consolestore</div>` +
-        line(".55s", "ok", "connecting to swiggy") +
-        line("1.05s", "ok", "warming up the kitchen") +
-        line("1.55s", "run", "fetching your request") +
+      `<div class="boot-brand" aria-hidden="true">` +
+        `<span class="p">~ %</span> consolestore<span class="cs-cursor">█</span>` +
       `</div>` +
-      loadingBlock() +
+      `<div class="boot-scoot" aria-hidden="true">` +
+        `<div class="scooter-track">` +
+          `<span class="scooter-road"></span>` +
+          `<span class="scooter-rider">🛵</span>` +
+        `</div>` +
+        `<div class="scooter-shimmer"></div>` +
+      `</div>` +
+      `<div class="boot-status" role="status">` +
+        phase(0, "connecting to swiggy") +
+        phase(1, "warming up the kitchen") +
+        phase(2, "fetching restaurant menu") +
+      `</div>` +
     `</div>`
   );
 }
