@@ -24,6 +24,7 @@ type OpenStoreIn struct {
 	Category       string `json:"category,omitempty"`
 	ItemID         string `json:"item_id,omitempty"`
 	Query          string `json:"query,omitempty"`
+	Vertical       string `json:"vertical,omitempty"`
 }
 
 // CategoryDTO is one dev-curated cuisine chip on the store home.
@@ -34,9 +35,11 @@ type CategoryDTO struct {
 
 // OpenStoreOut seeds the app so it paints without a second round-trip. Screen
 // discriminates the two shapes the app can open into: "home" (categories +
-// optional search results + recent orders) or "restaurant" (a menu).
+// optional search results + recent orders), "restaurant" (a menu), or
+// "instamart" (the grocery vertical).
 type OpenStoreOut struct {
-	Screen string `json:"screen"` // "home" | "restaurant"
+	Screen   string `json:"screen"`             // "home" | "restaurant" | "instamart"
+	Vertical string `json:"vertical,omitempty"` // "instamart" when Screen is the instamart shell (or carried through signed_out)
 	// AuthorizeURL is set ONLY on a "signed_out" shell — the browser OAuth URL
 	// the widget's Sign-in button opens (via app.openLink). Empty otherwise.
 	AuthorizeURL string                   `json:"authorize_url,omitempty"`
@@ -71,7 +74,9 @@ func openStoreTool() *mcp.Tool {
 			"searches for it, opens its menu, and prefills the in-menu search with `query` if given " +
 			"(the item/dish); restaurant_id → open that restaurant's menu directly when you already " +
 			"hold the id (e.g. a reorder). Prefer restaurant_name over resolving the id yourself. " +
-			"Never call this twice in one turn.",
+			"Never call this twice in one turn. For GROCERIES (Instamart — milk, snacks, " +
+			"drinks, essentials) pass vertical:\"instamart\" with an optional product query; " +
+			"the same app opens on the grocery vertical.",
 		Meta: mcp.Meta{
 			"ui":             map[string]any{"resourceUri": appResourceURI},
 			"ui/resourceUri": appResourceURI,
@@ -168,8 +173,9 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 		}
 		out := OpenStoreOut{
 			Screen:       "signed_out",
+			Vertical:     in.Vertical,
 			AuthorizeURL: url,
-			Entry:        map[string]string{"item_id": in.ItemID, "search": in.Query, "category": in.Category},
+			Entry:        map[string]string{"item_id": in.ItemID, "search": in.Query, "category": in.Category, "vertical": in.Vertical},
 			Query:        in.Query,
 			Categories:   cats,
 		}
@@ -179,6 +185,24 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 		return nil, out, nil
 	}
 	addr, label := s.resolveAddress(in.AddressID)
+
+	if in.Vertical == "instamart" {
+		// Instamart shell: the widget loads products itself (query if given,
+		// else the first curated category) under its loader — same instant-open
+		// pattern as the restaurant shell. Loading is therefore always true.
+		imCats := make([]CategoryDTO, 0)
+		for _, c := range config.DefaultIMCategories() {
+			imCats = append(imCats, CategoryDTO{Label: c.Label, Query: c.Query})
+		}
+		return nil, OpenStoreOut{
+			Screen:     "instamart",
+			Vertical:   "instamart",
+			Address:    AddrRefDTO{ID: addr, Label: label},
+			Categories: imCats,
+			Query:      in.Query,
+			Loading:    true,
+		}, nil
+	}
 
 	if in.RestaurantID != "" {
 		// Instant-open: return a shell with NO menu — the widget fetches the

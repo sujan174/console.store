@@ -261,3 +261,37 @@ func TestOpenStoreSignedOutReturnsSignInShell(t *testing.T) {
 		t.Fatalf("categories should ride along for the home-resume rail")
 	}
 }
+
+func TestOpenStoreInstamartShell(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	be := &fakeBackend{addrs: []api.Address{{ID: "a1", Label: "Home", Full: "12 Main St"}}}
+	s := NewServer(be, &fakeAuth{token: true})
+	_, out, err := s.handleOpenStore(context.Background(), nil, OpenStoreIn{Vertical: "instamart", Query: "red bull"})
+	if err != nil {
+		t.Fatalf("handleOpenStore: %v", err)
+	}
+	if out.Screen != "instamart" || out.Vertical != "instamart" {
+		t.Fatalf("screen/vertical = %q/%q, want instamart/instamart", out.Screen, out.Vertical)
+	}
+	if len(out.Categories) == 0 {
+		t.Fatalf("instamart shell carries no categories")
+	}
+	if out.Categories[0].Label != "Energy Drinks" {
+		t.Fatalf("categories are not DefaultIMCategories: %+v", out.Categories[0])
+	}
+	if out.Query != "red bull" || !out.Loading {
+		t.Fatalf("query/loading = %q/%v, want red bull/true", out.Query, out.Loading)
+	}
+}
+
+func TestOpenStoreSignedOutCarriesVertical(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s := NewServer(&fakeBackend{}, &fakeAuth{token: false, url: "https://auth.example/x"})
+	_, out, err := s.handleOpenStore(context.Background(), nil, OpenStoreIn{Vertical: "instamart", Query: "milk"})
+	if err != nil {
+		t.Fatalf("handleOpenStore: %v", err)
+	}
+	if out.Screen != "signed_out" || out.Vertical != "instamart" || out.Entry["vertical"] != "instamart" {
+		t.Fatalf("signed_out shell lost the vertical: %+v", out)
+	}
+}
