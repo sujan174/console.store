@@ -59,6 +59,15 @@ function pendingQty(pending: Map<string, PendingLine>, itemId: string): number {
   return pending.get(itemId)?.qty ?? 0;
 }
 
+// pendingAggQty sums every pending line for one menu item across ALL its variants
+// (customized lines key by selectionKey, not item id — TUI parity: qty is
+// aggregated by item id). Used for the in-cart count shown on the menu.
+function pendingAggQty(pending: Map<string, PendingLine>, itemId: string): number {
+  let n = 0;
+  for (const line of pending.values()) if (line.itemId === itemId) n += line.qty;
+  return n;
+}
+
 function pendingCount(pending: Map<string, PendingLine>): number {
   let n = 0;
   for (const line of pending.values()) n += line.qty;
@@ -124,8 +133,19 @@ function itemControl(item: MenuItemData, qty: number): string {
     return `<span class="badge-soldout">sold out</span>`;
   }
   if (item.customizable) {
-    // One unified "add" affordance: tapping it opens the customize sheet
-    // (options are picked there, then added). No separate "customize" label.
+    // Customizable item already in the cart → show its aggregate count with a
+    // stepper (TUI parity): "+" opens the customize sheet for another variant,
+    // "−" removes one unit of the last-added variant (data-dec-item). qty===0
+    // falls through to a plain "add" that opens the sheet for the first pick.
+    if (qty > 0) {
+      return (
+        `<div class="stepper">` +
+        `<button type="button" data-dec-item="${esc(item.id)}" aria-label="remove one ${esc(item.name)}">${icon("minus", 14)}</button>` +
+        `<span class="num">${qty}</span>` +
+        `<button type="button" data-customize="${esc(item.id)}" aria-label="add another ${esc(item.name)} with options">${icon("plus", 14)}</button>` +
+        `</div>`
+      );
+    }
     return `<button type="button" data-customize="${esc(item.id)}" class="btn">${icon("plus", 14)} add</button>`;
   }
   if (qty > 0) {
@@ -141,7 +161,8 @@ function itemControl(item: MenuItemData, qty: number): string {
 }
 
 function itemRow(item: MenuItemData, pending: Map<string, PendingLine>, index: number): string {
-  const qty = pendingQty(pending, item.id);
+  // Aggregate across variants so a customized item shows its true in-cart count.
+  const qty = pendingAggQty(pending, item.id);
   const nameWeight = qty > 0 ? 500 : 400;
   const customizeNote = item.customizable && item.in_stock ? " · customizable" : "";
   const style = item.in_stock ? `--i:${Math.min(index, 12)}` : `--i:${Math.min(index, 12)};opacity:.5`;
@@ -464,44 +485,52 @@ function billBlock(bill: CartBill): string {
   );
 }
 
-// billLines renders the server's actual cart lines. A sold-out line
-// (available:false) is dimmed, struck, and badged (surface-kit.md
-// "Sold-out / blocked state").
-// cartStepper is the per-line − / qty / + control on the checkout bill. A simple
-// line edits the client cart directly (data-cart-inc/dec on the pending line's
-// key, which re-syncs + re-bills). A customizable line's "+" instead opens the
-// customize sheet (data-customize) so the user picks variants/add-ons for the new
-// unit — you can't blind-add a second customizable unit without choices.
-function cartStepper(line: CartBillLine, state: AppState): string {
-  const menuItem = state.items.find((i) => i.id === line.item_id);
-  const pendingLine = [...state.pending.values()].find((p) => p.itemId === line.item_id);
-  const customizable = !!menuItem?.customizable || !!pendingLine?.selections;
-  const key = pendingLine?.key ?? line.item_id;
+// cartStepper is the per-line − / qty / + control on the editable checkout, keyed
+// by the PENDING line's own key so each variant is targeted exactly (two variants
+// of one item are distinct lines — a server bill line only carries item_id and
+// would collide). A customizable line's "+" opens the customize sheet for a NEW
+// variant (data-customize); a simple line's "+" just increments (data-cart-inc).
+// Both re-sync + re-bill via app.ts.
+function cartStepper(line: PendingLine, state: AppState): string {
+  const menuItem = state.items.find((i) => i.id === line.itemId);
+  const customizable = !!line.selections || !!menuItem?.customizable;
   const plus = customizable
-    ? `<button type="button" data-customize="${esc(line.item_id)}" aria-label="add another ${esc(line.name)} with options">${icon("plus", 14)}</button>`
-    : `<button type="button" data-cart-inc="${esc(key)}" aria-label="add one ${esc(line.name)}">${icon("plus", 14)}</button>`;
+    ? `<button type="button" data-customize="${esc(line.itemId)}" aria-label="add another ${esc(line.name)} with options">${icon("plus", 14)}</button>`
+    : `<button type="button" data-cart-inc="${esc(line.key)}" aria-label="add one ${esc(line.name)}">${icon("plus", 14)}</button>`;
   return (
     `<div class="stepper">` +
-    `<button type="button" data-cart-dec="${esc(key)}" aria-label="remove one ${esc(line.name)}">${icon("minus", 14)}</button>` +
-    `<span class="num">${line.quantity}</span>` +
+    `<button type="button" data-cart-dec="${esc(line.key)}" aria-label="remove one ${esc(line.name)}">${icon("minus", 14)}</button>` +
+    `<span class="num">${line.qty}</span>` +
     plus +
     `</div>`
   );
 }
 
+// billLines renders the itemized cart lines above the bill totals. When editable
+// (the normal bill view) it renders the LOCAL pending lines — each with its own
+// stepper keyed by the pending key, so multi-variant items edit correctly and
+// prices are the per-line estimate (the authoritative total is billBlock, from
+// prepare_order). When not editable (an order is placing) it renders the server's
+// bill lines read-only. A sold-out line is dimmed, struck, and badged.
 function billLines(bill: CartBill, state: AppState, editable: boolean): string {
-  return bill.lines
+  if (!editable) {
+    return bill.lines
+      .map((line) =>
+        line.available
+          ? `<div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0"><span>${line.quantity} × ${esc(line.name)}</span><span>${rupees(line.price * line.quantity)}</span></div>`
+          : `<div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:6px 0;opacity:.5"><span style="text-decoration:line-through">${line.quantity} × ${esc(line.name)}</span><span class="badge-soldout">sold out</span></div>`,
+      )
+      .join("");
+  }
+  return [...state.pending.values()]
     .map((line) => {
-      if (!line.available) {
-        return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:6px 0;opacity:.5"><span style="text-decoration:line-through">${line.quantity} × ${esc(line.name)}</span><span class="badge-soldout">sold out</span></div>`;
-      }
-      if (!editable) {
-        return `<div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0"><span>${line.quantity} × ${esc(line.name)}</span><span>${rupees(line.price * line.quantity)}</span></div>`;
+      if (line.available === false) {
+        return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:6px 0;opacity:.5"><span style="text-decoration:line-through">${line.qty} × ${esc(line.name)}</span><span class="badge-soldout">sold out</span></div>`;
       }
       return (
         `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0">` +
         `<span style="flex:1;min-width:0">${esc(line.name)}</span>` +
-        `<span style="color:var(--text-secondary);white-space:nowrap">${rupees(line.price * line.quantity)}</span>` +
+        `<span style="color:var(--text-secondary);white-space:nowrap">${rupees(line.price * line.qty)}</span>` +
         cartStepper(line, state) +
         `</div>`
       );

@@ -599,8 +599,12 @@ function renderScreen(root: HTMLElement): void {
     root.innerHTML = renderMenu(state) + renderConflict(state, state.conflict.foreignRestaurant);
     return;
   }
-  if (state.cart) root.innerHTML = renderCartScreen(state, state.cart);
-  else if (state.customize) root.innerHTML = renderCustomizeScreen(state, state.customize);
+  // Customize is a modal and takes precedence over the cart: opening the sheet
+  // from a checkout bill line's "+" must SHOW the sheet, not stay masked behind
+  // the cart. (Normal menu→customize has state.cart null, so order is moot there;
+  // openCart nulls state.customize, so the cart never renders with a stale sheet.)
+  if (state.customize) root.innerHTML = renderCustomizeScreen(state, state.customize);
+  else if (state.cart) root.innerHTML = renderCartScreen(state, state.cart);
   else if (state.focusedItemId && isFocusableSimpleItem(state.focusedItemId))
     root.innerHTML = renderFocusedItem(state, state.focusedItemId);
   else root.innerHTML = renderMenu(state);
@@ -640,6 +644,20 @@ function decPending(itemId: string): void {
   if (!line) return;
   line.qty -= 1;
   if (line.qty <= 0) state.pending.delete(itemId);
+  scheduleCartSync();
+}
+
+// decLastByItem removes one unit of a customizable item from the MENU stepper —
+// the last-added variant line for that item id (TUI parity: decLastByItem). Menu
+// context, so it debounces a cart sync (no bill here); the real bill is pulled at
+// checkout. "+" on the menu opens the customize sheet instead (a new variant).
+function decLastByItem(itemId: string): void {
+  let lastKey: string | undefined;
+  for (const [key, line] of state.pending) if (line.itemId === itemId) lastKey = key;
+  if (lastKey === undefined) return;
+  const line = state.pending.get(lastKey)!;
+  line.qty -= 1;
+  if (line.qty <= 0) state.pending.delete(lastKey);
   scheduleCartSync();
 }
 
@@ -2136,7 +2154,7 @@ function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-cart-inc],[data-cart-dec],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin],[data-reload]",
+    "[data-add],[data-inc],[data-dec],[data-dec-item],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-cart-inc],[data-cart-dec],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin],[data-reload]",
   );
   if (!el) return;
   log("click", { action: Object.keys(el.dataset)[0] ?? "?" });
@@ -2204,6 +2222,14 @@ function onRootClick(evt: MouseEvent): void {
     return;
   }
 
+  // Menu stepper "−" on a customizable item: drop one unit of its last variant.
+  const decItemId = el.dataset.decItem;
+  if (decItemId !== undefined) {
+    decLastByItem(decItemId);
+    render();
+    return;
+  }
+
   // Checkout-screen steppers: edit the exact pending line (by key) and re-bill.
   const cartIncKey = el.dataset.cartInc;
   if (cartIncKey !== undefined) {
@@ -2218,9 +2244,11 @@ function onRootClick(evt: MouseEvent): void {
 
   const customizeId = el.dataset.customize;
   if (customizeId !== undefined) {
-    // "+" on a customizable checkout line opens the sheet in return-to-cart mode
-    // so a new variant/add-on unit lands back on the bill, not the menu.
-    if (state.cart) customizeReturnToCart = true;
+    // Opened from a checkout bill line's "+" (state.cart set) → return-to-cart
+    // mode so the new unit lands back on the re-billed cart; from the menu →
+    // normal (back to menu). Assign unconditionally so a cancelled cart-customize
+    // never leaves the flag set for a later menu-customize.
+    customizeReturnToCart = !!state.cart;
     void openCustomize(customizeId);
     return;
   }
