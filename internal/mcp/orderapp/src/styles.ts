@@ -207,6 +207,36 @@ body {
   .scooter-rider { left: 50%; transform: translateX(-50%); }
 }
 
+/* load-screen fills the fixed-height #app as a flex column so a loading view
+   centers its scooter in the space BELOW the chrome (brand bar + back button),
+   instead of top-aligning it right under the header (which read as "too high").
+   .load-body takes the remaining height and centers the loader within it. */
+.load-screen { min-height: 100%; display: flex; flex-direction: column; }
+.load-body { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; }
+
+/* consolestore boot sequence: a short terminal log that fades in line-by-line
+   (animation-delay set inline per line) above the driving scooter — the boot-up
+   beat while the first tool result resolves. */
+.boot-wrap { display: flex; flex-direction: column; align-items: center; }
+.boot-seq {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px; line-height: 1.7; color: var(--text-secondary);
+  text-align: left; min-width: 220px; margin-bottom: 4px;
+}
+.boot-seq > div { opacity: 0; animation: bootline .45s ease forwards; }
+.boot-seq .p { color: var(--sw-orange); }
+.boot-seq .head { color: var(--text-primary); }
+.boot-seq .ok::before { content: "\\2713 "; color: var(--sw-orange); }
+.boot-seq .run::before { content: "\\25B8 "; color: var(--sw-orange); }
+@keyframes bootline { to { opacity: 1; } }
+
+/* cs-line: the mono orange prompt line used on the recovery / status card. */
+.cs-line { font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; color: var(--sw-orange); }
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-seq > div { opacity: 1; animation: none; }
+}
+
 .num {
   font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
   font-variant-numeric: tabular-nums;

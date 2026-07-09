@@ -16,6 +16,7 @@ export type IconName =
   | "loader"
   | "chevron-down"
   | "search"
+  | "refresh"
   | "eye";
 
 const PATHS: Record<IconName, string> = {
@@ -30,6 +31,7 @@ const PATHS: Record<IconName, string> = {
   loader: `<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>`,
   "chevron-down": `<path d="m6 9 6 6 6-6"/>`,
   search: `<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>`,
+  refresh: `<path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>`,
   eye: `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>`,
 };
 

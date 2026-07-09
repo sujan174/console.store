@@ -171,13 +171,13 @@ function header(title: string, sub: string): string {
 }
 
 // brandBar is the persistent console.store wordmark that marks every screen as
-// ours: a mono `~ % console food` prompt with a blinking cursor, plus an
+// ours: a mono `~ % consolestore` prompt with a blinking cursor, plus an
 // optional right-aligned slot (the home passes its interactive address
 // picker). Content stays host-native; only this chrome carries the brand.
 export function brandBar(rightSlot: string = ""): string {
   return (
     `<div class="cs-brandbar">` +
-    `<span class="cs-wordmark"><span class="p">~ %</span> console <span class="d">food</span><span class="cs-cursor" aria-hidden="true">█</span></span>` +
+    `<span class="cs-wordmark"><span class="p">~ %</span> consolestore<span class="cs-cursor" aria-hidden="true">█</span></span>` +
     (rightSlot ? `<div>${rightSlot}</div>` : "") +
     `</div>`
   );
@@ -188,16 +188,59 @@ export function brandBar(rightSlot: string = ""): string {
 // "placing your order…" motif (internal/tui/loading.go): a delivery scooter
 // driving endlessly across a dotted road, a moving shimmer strip beneath, and
 // a label. Reduced-motion users get a static, centered scooter — still a clear
-// "working" affordance next to the label.
-export function loadingBlock(label: string): string {
+// "working" affordance next to the label. An empty label renders the scooter
+// alone (the boot sequence supplies its own status lines above it).
+export function loadingBlock(label: string = ""): string {
   return (
-    `<div class="scooter-loader" role="status" aria-label="${esc(label)}">` +
+    `<div class="scooter-loader" role="status" aria-label="${esc(label || "loading")}">` +
       `<div class="scooter-track">` +
         `<span class="scooter-road" aria-hidden="true"></span>` +
         `<span class="scooter-rider" aria-hidden="true">🛵</span>` +
       `</div>` +
       `<div class="scooter-shimmer" aria-hidden="true"></div>` +
-      `<div class="scooter-label">${esc(label)}</div>` +
+      (label ? `<div class="scooter-label">${esc(label)}</div>` : "") +
+    `</div>`
+  );
+}
+
+// bootLoader is the consolestore boot-up animation shown while the widget waits
+// for its first tool result (open_store) to arrive and resolve. A short
+// terminal boot log types itself out (CSS-staggered fade, zero JS timer),
+// capped by the driving scooter — an on-brand "warming up" beat instead of a
+// bare spinner. Fast opens flash past it; slow ones get a branded wait.
+export function bootLoader(): string {
+  const line = (delay: string, cls: string, text: string): string =>
+    `<div class="${cls}" style="animation-delay:${delay}">${esc(text)}</div>`;
+  return (
+    `<div class="boot-wrap">` +
+      `<div class="boot-seq" aria-hidden="true">` +
+        `<div class="head" style="animation-delay:.05s"><span class="p">~ %</span> consolestore</div>` +
+        line(".55s", "ok", "connecting to swiggy") +
+        line("1.05s", "ok", "warming up the kitchen") +
+        line("1.55s", "run", "fetching your request") +
+      `</div>` +
+      loadingBlock() +
+    `</div>`
+  );
+}
+
+// renderRecovery is the "session paused" escape hatch: when a loading view has
+// been stuck past the watchdog window (the host suspended the widget's bridge
+// on a chat switch, orphaning the in-flight tool call so it never settles), we
+// stop spinning forever and offer a one-tap reload that re-runs the handshake.
+export function renderRecovery(): string {
+  return (
+    `<h2 class="sr-only">Session paused</h2>` +
+    `<div class="load-screen">` +
+      brandBar() +
+      `<div class="load-body">` +
+        `<div class="card" style="max-width:400px;text-align:center">` +
+          `<div class="cs-line">~ % session paused</div>` +
+          `<div style="font-size:15px;font-weight:600;margin:6px 0 4px">the connection dropped</div>` +
+          `<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">switching chats paused this order session, so it stopped loading. reload to pick up right where you left off.</div>` +
+          `<button type="button" data-reload class="btn btn-primary btn-block" style="margin-top:16px">${icon("refresh", 15)} reload</button>` +
+        `</div>` +
+      `</div>` +
     `</div>`
   );
 }
@@ -208,13 +251,21 @@ export function loadingBlock(label: string): string {
 // frame doesn't jump when the real menu swaps in.
 export function renderMenuLoading(state: AppState): string {
   const title = state.restaurant?.name || state.restaurant?.id || "menu";
-  const back = `<button type="button" data-menu-back class="btn" style="margin-bottom:10px">${icon("arrow-left", 14)} search</button>`;
+  const back = `<button type="button" data-menu-back class="btn">${icon("arrow-left", 14)} search</button>`;
+  // Live step label: `finding <name>` while a name is still being resolved to a
+  // restaurant (no id yet), else `reading <name> menu`. state.loadingLabel wins
+  // when a resolve path set an explicit step.
+  const label =
+    state.loadingLabel ||
+    (state.restaurantId ? `~ % reading ${title} menu` : `~ % finding ${title}`);
+  // Center the scooter in the frame BELOW the chrome (brand bar + back), so the
+  // header text no longer shoves it toward the top — .load-body flexes to fill.
   return (
     `<h2 class="sr-only">Opening ${esc(title)}'s menu…</h2>` +
-    brandBar() +
-    back +
-    header(title, "loading the menu…") +
-    loadingBlock("~ % loading menu")
+    `<div class="load-screen">` +
+      `<div>${brandBar()}${back}</div>` +
+      `<div class="load-body">${loadingBlock(label)}</div>` +
+    `</div>`
   );
 }
 

@@ -7,7 +7,7 @@
 import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
-import { esc, groupByCategory, loadingBlock, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading, renderSignIn } from "./screens";
+import { bootLoader, esc, groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading, renderRecovery, renderSignIn } from "./screens";
 import { renderHome } from "./home";
 import {
   buildWireSelections,
@@ -349,6 +349,16 @@ export interface AppState {
   // resolves — the restaurant screen paints a loading view immediately (no
   // dead time), and a second tap supersedes rather than being dropped.
   menuLoading: boolean;
+  // loadingLabel is the live step shown under the scooter for the current
+  // resolve (e.g. "~ % finding Truffles", "~ % reading Truffles menu"), so the
+  // loader narrates the real request stage instead of a generic line. Cleared
+  // when a screen resolves.
+  loadingLabel: string | null;
+  // stalled flips true when the loading watchdog fires — a loading view has
+  // been up past its window because the host suspended the widget's bridge on a
+  // chat switch (the in-flight tool call is orphaned and never settles). It
+  // takes top render precedence: the "session paused — reload" recovery screen.
+  stalled: boolean;
 }
 
 export const state: AppState = {
@@ -389,6 +399,8 @@ export const state: AppState = {
   homeHasMore: false,
   homeLoadingMore: false,
   menuLoading: false,
+  loadingLabel: null,
+  stalled: false,
 };
 
 let root: HTMLElement | null = null;
@@ -428,6 +440,72 @@ function render(): void {
       /* last resort — leave whatever was there */
     }
   }
+  syncWatchdog();
+}
+
+// --- loading watchdog -------------------------------------------------------
+// The widget's loaders resolve only when a callServerTool / ontoolresult
+// settles. When the host suspends this iframe's bridge on a chat switch, the
+// in-flight request is ORPHANED — it never responds and never rejects, so the
+// try/catch around each call never fires and the scooter spins forever. The
+// watchdog is the escape hatch: whenever a loading view is up, arm a timer; if
+// it's still loading when the timer fires, flip to the "session paused"
+// recovery screen. It is independent of whether any promise settles, so it
+// catches every stall mode (orphaned call, un-replayed open_store push, dead
+// bridge) uniformly.
+let watchdog: number | null = null;
+// bootPending is true from first paint until the first open_store result seeds
+// a real screen — the boot loader has no screen flag of its own to key off.
+let bootPending = true;
+const WATCHDOG_MS = 12000; // normal stuck-loader window
+const WATCHDOG_RESUME_MS = 3500; // shorter window after returning to the tab
+
+function isLoadingNow(): boolean {
+  return bootPending || state.menuLoading || state.homeLoading;
+}
+
+function clearWatchdog(): void {
+  if (watchdog !== null) {
+    clearTimeout(watchdog);
+    watchdog = null;
+  }
+}
+
+function armWatchdog(ms: number): void {
+  clearWatchdog();
+  watchdog = window.setTimeout(() => {
+    watchdog = null;
+    if (isLoadingNow() && !state.stalled) {
+      state.stalled = true;
+      render();
+    }
+  }, ms);
+}
+
+// syncWatchdog runs after every render: keep a timer armed exactly while a
+// loading view is showing, clear it otherwise. Already-armed timers are left
+// running (a stuck load produces NO further renders, so the one armed timer is
+// what eventually fires).
+function syncWatchdog(): void {
+  if (state.stalled) {
+    clearWatchdog();
+    return;
+  }
+  if (isLoadingNow()) {
+    if (watchdog === null) armWatchdog(WATCHDOG_MS);
+  } else {
+    clearWatchdog();
+  }
+}
+
+// onVisibilityChange fires when the user returns to the widget's tab/chat. If a
+// loader is still up, the bridge was likely suspended while away — shorten the
+// watchdog so recovery surfaces quickly instead of making them wait the full
+// window (or forever, if the timer was throttled while hidden).
+function onVisibilityChange(): void {
+  if (document.visibilityState !== "visible") return;
+  if (state.stalled || !isLoadingNow()) return;
+  armWatchdog(WATCHDOG_RESUME_MS);
 }
 
 // debugBarHTML surfaces the cart-sync internals IN the widget (DEBUG only), so a
@@ -472,6 +550,12 @@ function renderScreen(root: HTMLElement): void {
     pending: state.pending.size,
     syncBusy: state.cartSyncBusy,
   });
+  // Stalled loader takes top precedence: the bridge dropped mid-load, so show
+  // the "session paused — reload" recovery instead of an eternal scooter.
+  if (state.stalled) {
+    root.innerHTML = renderRecovery();
+    return;
+  }
   if (state.screen === "signin") {
     root.innerHTML = renderSignIn(state);
     return;
@@ -1510,6 +1594,7 @@ async function runHomeSearch(addressId: string, query: string): Promise<void> {
     });
     if (token !== searchToken) return; // superseded — discard stale response (newer call owns homeLoading)
     state.homeLoading = false;
+    state.stalled = false; // a real result arrived — clear any watchdog stall
     if (result.isError) {
       render(); // non-fatal — drop the spinner, leave the current list showing
       return;
@@ -1644,6 +1729,7 @@ async function openRestaurant(id: string, fallbackName?: string): Promise<void> 
   state.activeCategory = null;
   resetRestaurantScopedState();
   state.menuLoading = true;
+  state.loadingLabel = `~ % reading ${state.restaurant.name || "the"} menu`;
   render();
 
   try {
@@ -1667,6 +1753,7 @@ async function openRestaurant(id: string, fallbackName?: string): Promise<void> 
     state.categories = [...groupByCategory(state.items).keys()];
     state.activeCategory = state.categories[0] ?? null;
     state.menuLoading = false;
+    state.stalled = false; // a real result arrived — clear any watchdog stall
     render();
   } catch (err) {
     if (token !== menuToken) return; // superseded — discard
@@ -1859,10 +1946,17 @@ function onRootClick(evt: MouseEvent): void {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin]",
+    "[data-add],[data-inc],[data-dec],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin],[data-reload]",
   );
   if (!el) return;
   log("click", { action: Object.keys(el.dataset)[0] ?? "?" });
+
+  if (el.dataset.reload !== undefined) {
+    // Recovery: reload the iframe so the host re-runs the initialize handshake
+    // and re-delivers the open_store result, resuming from the boot loader.
+    location.reload();
+    return;
+  }
 
   if (el.dataset.signin !== undefined) {
     if (app && state.authorizeURL) void app.openLink({ url: state.authorizeURL });
@@ -2263,6 +2357,7 @@ async function fetchMenuThenApply(restaurantId: string, deepLink: DeepLink): Pro
     state.restaurantId = sc?.restaurant_id || restaurantId;
     state.items = Array.isArray(sc?.items) ? sc.items : [];
     state.menuLoading = false;
+    state.stalled = false; // a real result arrived — clear any watchdog stall
     applyMenuDeepLink(deepLink);
   } catch (err) {
     if (token !== menuToken) return;
@@ -2316,6 +2411,7 @@ function showHomeChooser(name: string, results: HomeRestaurant[], nextOffset: nu
   state.homeHasMore = hasMore;
   state.homeLoading = false;
   state.homeLoadingMore = false;
+  state.stalled = false; // a real result arrived — clear any watchdog stall
   render();
 }
 
@@ -2470,6 +2566,11 @@ async function resumeAfterSignin(): Promise<void> {
 }
 
 function seedFromOpenStore(sc: OpenStoreOut): void {
+  // Any open_store result means the boot handshake delivered — stop the boot
+  // watchdog, and auto-heal a prior stall if the host re-delivered late.
+  bootPending = false;
+  state.stalled = false;
+  clearWatchdog();
   if (sc.screen === "signed_out") {
     state.screen = "signin";
     state.authorizeURL = sc.authorize_url ?? "";
@@ -2593,6 +2694,9 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   state.categories = [];
   state.activeCategory = null;
   state.menuLoading = true;
+  state.loadingLabel = state.restaurantId
+    ? `~ % reading ${state.restaurant?.name || "the"} menu`
+    : `~ % finding ${state.restaurant?.name || "your restaurant"}`;
   render();
   if (state.restaurantId) {
     void fetchMenuThenApply(state.restaurantId, deepLink);
@@ -2681,13 +2785,19 @@ export function bootstrap(): void {
   root.addEventListener("input", onRootInput);
   root.addEventListener("scroll", onRootScroll, { passive: true });
 
-  // Paint the animated boot loader at once — replaces the static skeleton label
-  // so the first thing the user sees is the centered scooter animation, held
-  // until connect resolves and the first tool result seeds a real screen. The
-  // .boot-center wrapper fills the fixed-height frame so the loader is
-  // vertically centered WITHOUT making #app a flex container (which would
-  // shrink-wrap and mis-lay every real screen — see styles.ts .boot-center).
-  root.innerHTML = `<div class="boot-center">${loadingBlock("~ % fulfilling your request")}</div>`;
+  // Paint the consolestore boot animation at once — a staggered terminal boot
+  // log capped by the driving scooter — held until connect resolves and the
+  // first open_store result seeds a real screen. The .boot-center wrapper fills
+  // the fixed-height frame so it's vertically centered WITHOUT making #app a
+  // flex container (which would shrink-wrap real screens — see styles.ts).
+  root.innerHTML = `<div class="boot-center">${bootLoader()}</div>`;
+  // Arm the boot watchdog: if no open_store result arrives (bridge never
+  // delivered), flip to the recovery screen instead of an eternal boot.
+  bootPending = true;
+  armWatchdog(WATCHDOG_MS);
+  // Returning to a suspended tab is the main freeze trigger — surface recovery
+  // fast when it happens mid-load.
+  document.addEventListener("visibilitychange", onVisibilityChange);
 
   app = new App({ name: "consolestore order", version: "0.1.0" });
   app.onhostcontextchanged = () => applyHostStyling();
