@@ -90,6 +90,12 @@ type Client struct {
 	// production enables it via WithMinInterval).
 	limiter *rateLimiter
 
+	// writeLimiter additionally throttles cart WRITES (update_food_cart), which
+	// Swiggy caps tighter than reads. The customize wizard's variant/add-on
+	// discovery fires a burst of probe writes; this token bucket lets a light
+	// item burst through, then throttles a heavy sweep to a safe rate. nil = off.
+	writeLimiter *writeLimiter
+
 	mu      sync.Mutex
 	session string // cached Mcp-Session-Id; "" until initialized
 }
@@ -126,6 +132,26 @@ func WithMinInterval(d time.Duration) Option {
 			c.limiter = newRateLimiter(d)
 		}
 	}
+}
+
+// WithWriteLimit adds a token-bucket throttle on cart WRITE tools: up to `burst`
+// writes go back-to-back (so a lightly-customized item stays snappy), then one
+// token refills every `refill` — capping a heavy customize-wizard probe sweep to
+// a steady rate under Swiggy's write ceiling. burst<=0 or refill<=0 disables it.
+func WithWriteLimit(burst int, refill time.Duration) Option {
+	return func(c *Client) {
+		if burst > 0 && refill > 0 {
+			c.writeLimiter = newWriteLimiter(burst, refill)
+		}
+	}
+}
+
+// writeTools are the bursty cart-mutation tools the writeLimiter throttles. Order
+// placement (place_food_order/checkout) is deliberately EXCLUDED — it's a one-off
+// the user is waiting on, never a burst, and must never be delayed.
+var writeTools = map[string]bool{
+	"update_food_cart": true,
+	"update_cart":      true, // Instamart
 }
 
 // nonIdempotentTools must never be auto-retried — a transient failure may have
@@ -253,6 +279,13 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 		// so a quit/superseded request never stalls. No-op unless WithMinInterval.
 		if err := c.limiter.wait(ctx); err != nil {
 			return nil, err
+		}
+		// Extra throttle for cart writes (tighter Swiggy ceiling) — only on the
+		// FIRST attempt, so a 429 retry's backoff isn't compounded by the bucket.
+		if attempt == 0 && writeTools[name] {
+			if err := c.writeLimiter.wait(ctx); err != nil {
+				return nil, err
+			}
 		}
 		var err error
 		res, err = rpc(ctx, c.http, c.base, bearer, sid, map[string]any{

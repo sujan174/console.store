@@ -60,3 +60,75 @@ func (l *rateLimiter) wait(ctx context.Context) error {
 		return ctx.Err()
 	}
 }
+
+// writeLimiter is a TOKEN BUCKET gating cart WRITES specifically. Swiggy caps
+// write tools (update_food_cart) tighter than the steady read rate, and the
+// customize wizard's variant/add-on discovery fires a burst of probe writes
+// (each add-to-cart reads valid_addons — Swiggy's intended, if chatty, design).
+// A plain min-interval would make even a light item feel sluggish, so this
+// instead allows `burst` writes back-to-back (light items stay instant) then
+// refills one token every `refill`, throttling a heavy sweep to a safe steady
+// rate. burst<=0 or refill<=0 disables it (a no-op, e.g. under tests).
+type writeLimiter struct {
+	mu     sync.Mutex
+	tokens float64
+	burst  float64
+	refill time.Duration // time to regain one token
+	last   time.Time     // when tokens were last recomputed / reserved to
+	now    func() time.Time
+}
+
+func newWriteLimiter(burst int, refill time.Duration) *writeLimiter {
+	return &writeLimiter{tokens: float64(burst), burst: float64(burst), refill: refill, now: time.Now}
+}
+
+// reserve claims one write token and returns how long the caller must wait.
+// Correct for SEQUENTIAL callers — cart writes are single-flight (the TUI never
+// has two cart syncs in flight), so there is never a concurrent reservation to
+// race. Refills tokens for elapsed time (capped at burst); when empty, returns
+// the wait for one token to refill and advances `last` into that future slot so
+// a rapid follow-up write queues behind it.
+func (l *writeLimiter) reserve() time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	if l.last.IsZero() {
+		l.last = now
+	}
+	if elapsed := now.Sub(l.last); elapsed > 0 {
+		l.tokens += float64(elapsed) / float64(l.refill)
+		if l.tokens > l.burst {
+			l.tokens = l.burst
+		}
+		l.last = now
+	}
+	// Consume one token, borrowing (going negative) when empty. The wait is the
+	// time for the deficit to refill; the deeper the debt, the longer — so rapid
+	// back-to-back writes queue at the refill rate.
+	var wait time.Duration
+	if l.tokens < 1 {
+		wait = time.Duration((1 - l.tokens) * float64(l.refill))
+	}
+	l.tokens--
+	return wait
+}
+
+// wait blocks until a write token is available, honoring ctx. nil limiter,
+// burst<=0, or refill<=0 is a no-op.
+func (l *writeLimiter) wait(ctx context.Context) error {
+	if l == nil || l.burst <= 0 || l.refill <= 0 {
+		return ctx.Err()
+	}
+	d := l.reserve()
+	if d <= 0 {
+		return ctx.Err()
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}

@@ -24,6 +24,44 @@ func TestRateLimiterSpacesReservations(t *testing.T) {
 	}
 }
 
+func TestWriteLimiterBurstThenThrottle(t *testing.T) {
+	base := time.Unix(1_000_000, 0)
+	l := newWriteLimiter(3, time.Second) // 3-token burst, refill 1/sec
+	l.now = func() time.Time { return base }
+
+	// The burst goes instantly (light items stay snappy).
+	for i := 0; i < 3; i++ {
+		if got := l.reserve(); got != 0 {
+			t.Fatalf("burst reservation %d wait = %v, want 0", i, got)
+		}
+	}
+	// Burst exhausted → the next writes throttle to the refill rate (~1s each).
+	if got := l.reserve(); got != time.Second {
+		t.Fatalf("post-burst wait = %v, want 1s", got)
+	}
+	if got := l.reserve(); got != 2*time.Second {
+		t.Fatalf("second post-burst wait = %v, want 2s (queued behind the first)", got)
+	}
+	// After idling, tokens refill (capped at burst) and writes go free again.
+	l.now = func() time.Time { return base.Add(10 * time.Second) }
+	if got := l.reserve(); got != 0 {
+		t.Fatalf("idle reservation wait = %v, want 0", got)
+	}
+}
+
+func TestWriteLimiterNoOpWhenDisabled(t *testing.T) {
+	var nilL *writeLimiter
+	if err := nilL.wait(context.Background()); err != nil {
+		t.Fatalf("nil write limiter should be a no-op, got %v", err)
+	}
+	if err := newWriteLimiter(0, time.Second).wait(context.Background()); err != nil {
+		t.Fatalf("zero-burst write limiter should be a no-op, got %v", err)
+	}
+	if err := newWriteLimiter(3, 0).wait(context.Background()); err != nil {
+		t.Fatalf("zero-refill write limiter should be a no-op, got %v", err)
+	}
+}
+
 func TestRateLimiterNoOpWhenZero(t *testing.T) {
 	if err := newRateLimiter(0).wait(context.Background()); err != nil {
 		t.Fatalf("zero-interval limiter should be a no-op, got %v", err)

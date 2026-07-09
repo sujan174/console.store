@@ -44,6 +44,13 @@ type Config struct {
 	// MinInterval throttles outbound Swiggy calls (one per interval, serialized)
 	// so a launch/nav burst can't trip Swiggy's anomaly detection. 0 = no throttle.
 	MinInterval time.Duration
+	// WriteBurst/WriteInterval add a token-bucket throttle on cart WRITES
+	// (update_food_cart) on top of MinInterval: WriteBurst writes go back-to-back,
+	// then one refills every WriteInterval — so the customize wizard's probe sweep
+	// can't overshoot Swiggy's tighter write ceiling. 0 disables. See
+	// swiggy.WithWriteLimit.
+	WriteBurst    int
+	WriteInterval time.Duration
 }
 
 type Service struct {
@@ -115,7 +122,8 @@ func (s *Service) foodClient(accountID string) *swiggy.Client {
 	c := swiggy.NewClient(s.cfg.FoodBaseURL,
 		newStoreTokenSource(s.cfg.Store, s.cfg.Refresher, accountID),
 		swiggy.WithHTTPClient(s.cfg.HTTPClient),
-		swiggy.WithMinInterval(s.cfg.MinInterval))
+		swiggy.WithMinInterval(s.cfg.MinInterval),
+		swiggy.WithWriteLimit(s.cfg.WriteBurst, s.cfg.WriteInterval))
 	s.food[accountID] = c
 	return c
 }
@@ -397,7 +405,8 @@ func (s *Service) imClient(accountID string) *swiggy.Client {
 	c := swiggy.NewClient(s.cfg.ImBaseURL,
 		newStoreTokenSource(s.cfg.Store, s.cfg.Refresher, accountID),
 		swiggy.WithHTTPClient(s.cfg.HTTPClient),
-		swiggy.WithMinInterval(s.cfg.MinInterval))
+		swiggy.WithMinInterval(s.cfg.MinInterval),
+		swiggy.WithWriteLimit(s.cfg.WriteBurst, s.cfg.WriteInterval))
 	s.im[accountID] = c
 	return c
 }

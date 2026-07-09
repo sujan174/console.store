@@ -195,6 +195,11 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 		// anomaly detection (the cause of the account-restriction we hit).
 		// Tunable via CONSOLE_SWIGGY_MIN_INTERVAL_MS without a release.
 		MinInterval: swiggyMinInterval(),
+		// Extra token-bucket throttle on cart WRITES (Swiggy caps these tighter):
+		// a light item bursts through, a heavy customize-wizard probe sweep is
+		// paced. Tunable via CONSOLE_SWIGGY_WRITE_BURST / _WRITE_INTERVAL_MS.
+		WriteBurst:    swiggyWriteBurst(),
+		WriteInterval: swiggyWriteInterval(),
 	})
 	be = datasource.NewBrokerBackend(datasource.NewInProc(svc), localstore.LocalAccountID)
 
@@ -387,6 +392,30 @@ func swiggyMinInterval() time.Duration {
 		}
 	}
 	return 500 * time.Millisecond
+}
+
+// swiggyWriteBurst / swiggyWriteInterval configure the cart-write token bucket.
+// Default: 6 writes may go back-to-back (covers a lightly-customized item),
+// then one refills every 2s (~30/min steady) — under Swiggy's write ceiling that
+// a heavy customize-wizard probe sweep was overshooting (the 429 → "cart didn't
+// sync"). Override via CONSOLE_SWIGGY_WRITE_BURST (0 disables) and
+// CONSOLE_SWIGGY_WRITE_INTERVAL_MS without a release.
+func swiggyWriteBurst() int {
+	if v := os.Getenv("CONSOLE_SWIGGY_WRITE_BURST"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			return n
+		}
+	}
+	return 6
+}
+
+func swiggyWriteInterval() time.Duration {
+	if v := os.Getenv("CONSOLE_SWIGGY_WRITE_INTERVAL_MS"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms >= 0 {
+			return time.Duration(ms) * time.Millisecond
+		}
+	}
+	return 2 * time.Second
 }
 
 // seedSnapshot pre-populates snap with the config's restaurant + curated items
