@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -130,8 +133,119 @@ type PlaceOrderIn struct {
 	ConfirmationID string `json:"confirmation_id"`
 }
 type PlaceOrderOut struct {
-	Order OrderDTO `json:"order"`
+	// Exactly one of Order / Payment is set. Order = a placed order (instamart, or
+	// a legacy no-UPI food user). Payment = a UPI scan-to-pay handoff: show the QR
+	// and/or PayURL, poll check_payment, then confirm_order once paid.
+	Order   *OrderDTO   `json:"order,omitempty"`
+	Payment *PaymentDTO `json:"payment,omitempty"`
 }
+
+// PaymentDTO is a UPI scan-to-pay handoff for a PENDING_PAYMENT food order. The
+// client renders QRSVG inline (self-contained SVG) or offers PayURL (the hosted
+// /pay page, which also renders the QR) as a fallback, shows the ExpiresAt
+// countdown, then polls check_payment and calls confirm_order when paid.
+type PaymentDTO struct {
+	PaymentID string `json:"payment_id"`
+	Amount    int    `json:"amount"`
+	UPIString string `json:"upi_string"` // the raw upi:// intent (deep-links a UPI app)
+	QRSVG     string `json:"qr_svg"`     // inline SVG of upi_string, ready to embed
+	PayURL    string `json:"pay_url"`    // hosted /pay page (QR + open-in-app), a fallback
+	ExpiresAt int64  `json:"expires_at"` // unix millis; the payment window closes here
+	Note      string `json:"note"`
+}
+
+// payURLBase is where the hosted scan-to-pay page lives (CONSOLE_PAY_URL overrides
+// for local testing). Mirrors the TUI's payBaseURL so both surfaces point at the
+// same page.
+func payURLBase() string {
+	if v := strings.TrimSpace(os.Getenv("CONSOLE_PAY_URL")); v != "" {
+		return v
+	}
+	return "https://consolestore.in/pay"
+}
+
+func toPaymentDTO(id string, p api.PendingPayment) *PaymentDTO {
+	payURL := ""
+	if p.UPIString != "" {
+		payURL = fmt.Sprintf("%s?upi=%s&exp=%d", payURLBase(), url.QueryEscape(p.UPIString), p.ExpiresAt)
+	}
+	return &PaymentDTO{
+		PaymentID: id, Amount: p.Amount, UPIString: p.UPIString,
+		QRSVG: qrSVG(p.UPIString), PayURL: payURL, ExpiresAt: p.ExpiresAt,
+		Note: "show the user the QR to scan (or the pay link) and the amount; poll check_payment every couple of seconds, then call confirm_order once it reports paid. If the window closes, tell them nothing was charged and to place again.",
+	}
+}
+
+type CheckPaymentIn struct {
+	PaymentID string `json:"payment_id"`
+}
+type CheckPaymentOut struct {
+	Status  string `json:"status"` // "pending" | "paid" | "failed" | "expired"
+	Paid    bool   `json:"paid"`
+	Failed  bool   `json:"failed"`
+	Expired bool   `json:"expired"`
+	Note    string `json:"note"`
+}
+
+func (s *Server) handleCheckPayment(ctx context.Context, _ *mcp.CallToolRequest, in CheckPaymentIn) (*mcp.CallToolResult, CheckPaymentOut, error) {
+	if err := s.requireAuth(ctx); err != nil {
+		return nil, CheckPaymentOut{}, err
+	}
+	e, ok := s.payments.get(in.PaymentID)
+	if !ok {
+		return nil, CheckPaymentOut{}, codedErr(codeConfirmationExpired, "unknown or expired payment_id — place the order again")
+	}
+	// The payment window closed: paying now would only be refunded, so report it
+	// as expired without polling and drop the entry (nothing can confirm it).
+	if paymentExpired(e.pay) {
+		s.payments.remove(in.PaymentID)
+		return nil, CheckPaymentOut{Status: "expired", Expired: true,
+			Note: "the payment window closed — nothing was charged. place the order again for a fresh QR."}, nil
+	}
+	st, err := s.be.PollPayment(e.pay)
+	if err != nil {
+		return nil, CheckPaymentOut{}, err
+	}
+	switch st {
+	case api.PaySuccess:
+		return nil, CheckPaymentOut{Status: "paid", Paid: true, Note: "payment received — call confirm_order to finalize the order."}, nil
+	case api.PayFailed:
+		s.payments.remove(in.PaymentID)
+		return nil, CheckPaymentOut{Status: "failed", Failed: true, Note: "the payment failed — nothing was charged. place the order again."}, nil
+	default:
+		return nil, CheckPaymentOut{Status: "pending", Note: "still waiting for the payment — keep polling until paid or expired."}, nil
+	}
+}
+
+func (s *Server) handleConfirmOrder(ctx context.Context, _ *mcp.CallToolRequest, in CheckPaymentIn) (*mcp.CallToolResult, PlaceOrderOut, error) {
+	if err := s.requireAuth(ctx); err != nil {
+		return nil, PlaceOrderOut{}, err
+	}
+	e, ok := s.payments.get(in.PaymentID)
+	if !ok {
+		return nil, PlaceOrderOut{}, codedErr(codeConfirmationExpired, "unknown or expired payment_id — place the order again")
+	}
+	if paymentExpired(e.pay) {
+		s.payments.remove(in.PaymentID)
+		return nil, PlaceOrderOut{}, codedErr(codeConfirmationExpired, "the payment window closed — nothing was charged. place the order again")
+	}
+	order, err := s.be.ConfirmOrder(e.pay) // never retried
+	if err != nil {
+		return nil, PlaceOrderOut{}, fmt.Errorf("confirm failed: %w — run list_active_orders before retrying in case it was placed", err)
+	}
+	s.payments.remove(in.PaymentID)
+	s.recordFoodPlacement(e.ord, order)
+	return nil, PlaceOrderOut{Order: toOrderDTOPtr(order)}, nil
+}
+
+// paymentExpired reports whether a pending payment is past its window. ExpiresAt
+// unset (0) means Swiggy gave no deadline — treat as never-expired here and let the
+// live poll decide (a missing deadline shouldn't hard-fail an in-progress payment).
+func paymentExpired(p api.PendingPayment) bool {
+	return p.ExpiresAt > 0 && nowUnixMilli() >= p.ExpiresAt
+}
+
+func nowUnixMilli() int64 { return time.Now().UnixMilli() }
 
 func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, in PlaceOrderIn) (*mcp.CallToolResult, PlaceOrderOut, error) {
 	if err := s.requireAuth(ctx); err != nil {
@@ -152,11 +266,34 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	if cartHash(p.addressID, c) != p.hash || c.Total != p.total {
 		return nil, PlaceOrderOut{}, codedErr(codeCartChanged, "cart changed since prepare_order — call prepare_order again to re-confirm")
 	}
-	order, err := s.be.PlaceOrder(p.addressID) // never retried
+	// Swiggy disabled COD, so the default path is an online UPI payment: place a
+	// PENDING_PAYMENT order, hand the client a scan-to-pay QR + link, and let it
+	// poll (check_payment) and finalize (confirm_order). The bookkeeping runs at
+	// confirm — the order isn't real until the money clears. A legacy no-UPI user
+	// (ok == false) still gets the immediate COD path.
+	pend, ok, err := s.be.PlaceUPI(p.addressID) // never retried
 	if err != nil {
 		return nil, PlaceOrderOut{}, fmt.Errorf("order failed: %w — run list_active_orders before retrying in case it was placed", err)
 	}
-	// Persist for `console status`/tracking and accrete the taste card.
+	if ok {
+		payID := s.payments.put(pend, p)
+		return nil, PlaceOrderOut{Payment: toPaymentDTO(payID, pend)}, nil
+	}
+	order, err := s.be.PlaceCOD(p.addressID) // never retried
+	if err != nil {
+		return nil, PlaceOrderOut{}, fmt.Errorf("order failed: %w — run list_active_orders before retrying in case it was placed", err)
+	}
+	s.recordFoodPlacement(p, order)
+	return nil, PlaceOrderOut{Order: toOrderDTOPtr(order)}, nil
+}
+
+// recordFoodPlacement accretes the caches after a food order is truly placed —
+// immediately for COD, and at confirm_order time for UPI (the order isn't real
+// until the money clears). Persists the active order for `console status`/tracking,
+// records the placement identity/address, auto-saves the placed lines for the app's
+// previous-orders list, keeps addrpref current, and observes taste. Best-effort:
+// none of it is allowed to fail the placement.
+func (s *Server) recordFoodPlacement(p pendingOrder, order api.Order) {
 	etaLo, etaHi := localstore.ParseETAMinutes(order.ETA)
 	_ = localstore.SaveActiveOrder(localstore.ActiveOrder{
 		OrderID: order.ID, Restaurant: order.Restaurant, ETALoMin: etaLo, ETAHiMin: etaHi,
@@ -213,7 +350,6 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	// The cart write was consumed by this order: keep it (save_preset and taste
 	// still read it) but never let it seed a rebuild of a fresh cart.
 	s.markCartWritePlaced()
-	return nil, PlaceOrderOut{Order: toOrderDTO(order)}, nil
 }
 
 // placeIMOrder re-verifies and places an Instamart order from a confirmation
@@ -253,7 +389,7 @@ func (s *Server) placeIMOrder(p pendingOrder) (*mcp.CallToolResult, PlaceOrderOu
 	// it, but leftovers have been seen live lingering in the Swiggy app cart.
 	// Best-effort — clear_cart maps "Cart not found" (already empty) to success.
 	_ = s.be.IMClearCart()
-	return nil, PlaceOrderOut{Order: toOrderDTO(order)}, nil
+	return nil, PlaceOrderOut{Order: toOrderDTOPtr(order)}, nil
 }
 
 type OrderPresetIn struct {

@@ -153,9 +153,9 @@ you still call these directly for Instamart and the text fallback:
 If the client can't render the app, fall back to the plain tool flow the app
 otherwise runs for you: `search_restaurants` → `get_menu` → (on real intent
 only) `get_item_options` → `update_cart` → `prepare_order` → confirm →
-`place_order`. The invariants and ban-safety rules above apply exactly the
-same way. Present the bill as a clear itemized breakdown before asking for
-confirmation:
+`place_order` → (food) UPI payment. The invariants and ban-safety rules above
+apply exactly the same way. Present the bill as a clear itemized breakdown
+before asking for confirmation:
 
 ```
 Blue Tokai Coffee Roasters
@@ -174,6 +174,29 @@ The bill can look like it doesn't add up (a coupon/offer is opaque
 server-side) — that's normal, not an error; the to-pay/`total` is always the
 authoritative, charged amount. Never invent a reason for a mismatch and never
 hide it.
+
+## UPI payment (food) — place → pay → confirm
+
+Swiggy disabled cash-on-delivery, so a **food** `place_order` does NOT return a
+placed order — it returns a `payment` object (the order sits PENDING_PAYMENT
+until the user pays by UPI). Instamart and legacy no-UPI users still return a
+placed `order` directly; branch on which field is present.
+
+When `place_order` returns `payment`:
+
+1. Show the user the **`qr_svg`** (a ready-to-embed scan-to-pay QR) or, if you
+   can't render inline SVG, the **`pay_url`** link (our hosted page renders the
+   same QR + an "open in UPI app" button). State the `amount`.
+2. The payment window closes at **`expires_at`** (unix ms; ~5 minutes). Tell the
+   user to pay before then.
+3. Poll **`check_payment {payment_id}`** every couple of seconds. It reports
+   `pending` / `paid` / `failed` / `expired`. Keep polling only while `pending`.
+4. On **`paid`**, call **`confirm_order {payment_id}`** exactly once → the placed
+   `order`. This is the real completion — never call it before `paid`, never
+   retry it.
+5. On **`failed`** or **`expired`**: nothing was charged. Tell the user and offer
+   to place again (a fresh `prepare_order` → `place_order`). Paying an expired
+   link would only be refunded — `confirm_order` refuses past the window.
 
 ## Recoveries, receipts, and error codes
 

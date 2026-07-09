@@ -253,6 +253,13 @@ func toOrderDTO(o api.Order) OrderDTO {
 	return OrderDTO{ID: o.ID, Status: o.Status, Restaurant: o.Restaurant, Total: o.Total, ETA: o.ETA, Vertical: "food"}
 }
 
+// toOrderDTOPtr is toOrderDTO for the pointer-valued PlaceOrderOut.Order slot
+// (place_order/confirm_order return either an order OR a payment).
+func toOrderDTOPtr(o api.Order) *OrderDTO {
+	d := toOrderDTO(o)
+	return &d
+}
+
 func toIMOrderDTO(o api.IMOrder) OrderDTO {
 	restaurant := "Instamart"
 	return OrderDTO{ID: o.ID, Status: o.Status, Restaurant: restaurant, Total: o.Total, ETA: o.ETA, Vertical: "instamart"}

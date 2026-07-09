@@ -210,25 +210,44 @@ export interface CartBill {
 // Loosely-typed order summary from place_order's result.structuredContent.order.
 export type OrderSummary = Record<string, unknown>;
 
+// A UPI scan-to-pay handoff from place_order (result.structuredContent.payment).
+// Swiggy disabled COD, so a food order is placed PENDING_PAYMENT: the user scans
+// the QR (or opens the pay link), we poll check_payment, then confirm_order once
+// paid. expires_at is the window deadline (unix ms) — past it, paying is refunded,
+// so the screen invalidates.
+export interface PaymentInfo {
+  payment_id: string;
+  amount: number;
+  upi_string: string;
+  qr_svg: string;
+  pay_url: string;
+  expires_at: number;
+}
+
 // The checkout state machine (swaps the same #app root — no new message):
 //   loading  — a get_cart / update_cart / prepare_order call is in flight.
 //   conflict — get_cart found a NON-empty foreign cart; keep/clear prompt
 //              (guarded BEFORE any write — invariant 3).
 //   bill     — the server's prepared bill + confirmation_id is showing.
 //   placing  — place_order is in flight (button pressed).
+//   paying   — a UPI payment is pending: showing the QR + countdown, polling.
 //   placed   — the order was placed; showing the confirmation.
 //   error    — a tool failure mapped by its code prefix.
 export interface CartState {
-  status: "loading" | "conflict" | "bill" | "placing" | "placed" | "error";
+  status: "loading" | "conflict" | "bill" | "placing" | "paying" | "placed" | "error";
   // loading label.
   message?: string;
   // conflict: the name of the foreign cart's restaurant.
   foreignRestaurant?: string;
-  // bill / placing: the prepared bill + its confirmation id + delivery label.
+  // bill / placing / paying: the prepared bill + its confirmation id + delivery label.
   confirmationId?: string;
   bill?: CartBill;
   addressLabel?: string;
   rebuilt?: string;
+  // paying: the UPI handoff + whether the window has closed + a live "MM:SS" left.
+  payment?: PaymentInfo;
+  payExpired?: boolean;
+  payLeftLabel?: string;
   // placed: the order summary.
   order?: OrderSummary;
   // error: the human message, its code prefix, and whether a re-sync is offered.
@@ -1488,7 +1507,13 @@ async function placeOrder(): Promise<void> {
       return;
     }
 
-    const sc = result.structuredContent as { order?: OrderSummary } | undefined;
+    const sc = result.structuredContent as { order?: OrderSummary; payment?: PaymentInfo } | undefined;
+    // Food orders come back as a UPI payment handoff (Swiggy disabled COD); a
+    // legacy no-UPI user (or instamart) still returns a placed order directly.
+    if (sc?.payment && sc.payment.payment_id) {
+      startPayment(token, sc.payment, current);
+      return;
+    }
     state.pending = new Map();
     state.cart = {
       status: "placed",
@@ -1506,10 +1531,137 @@ async function placeOrder(): Promise<void> {
   }
 }
 
+// --- UPI payment: poll + countdown (Task: widget UPI parity) ---
+//
+// After place_order returns a `payment`, the order sits PENDING_PAYMENT until the
+// user pays via UPI. We show the QR + a live countdown and poll check_payment on a
+// single interval; on `paid` we call confirm_order (the ONLY finalize, never
+// auto-retried) and on `failed`/`expired` we stop and show the notice. The whole
+// loop is guarded by the checkout identity token — closing the cart (closeCart
+// bumps cartToken) or a superseding place cancels it. The countdown ticks the same
+// interval, so a closed window flips the screen to "expired" without a poll.
+let payTimer: ReturnType<typeof setInterval> | null = null;
+const PAY_POLL_MS = 2500;
+
+function stopPayment(): void {
+  if (payTimer) {
+    clearInterval(payTimer);
+    payTimer = null;
+  }
+}
+
+// payLeftLabel formats the time remaining as "M:SS" (or "" once the window closed).
+function payLeftLabel(expiresAt: number): string {
+  if (!expiresAt) return "";
+  const secLeft = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+  const mm = Math.floor(secLeft / 60);
+  const ss = String(secLeft % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
+function startPayment(token: number, payment: PaymentInfo, current: CartState): void {
+  stopPayment();
+  const expired = payment.expires_at > 0 && Date.now() >= payment.expires_at;
+  state.cart = {
+    status: "paying",
+    payment,
+    payExpired: expired,
+    payLeftLabel: payLeftLabel(payment.expires_at),
+    bill: current.bill,
+    addressLabel: current.addressLabel,
+    confirmationId: current.confirmationId,
+  };
+  render();
+  if (expired) return; // never poll a dead window
+
+  let polling = false;
+  payTimer = setInterval(() => {
+    void (async () => {
+      if (cartToken !== token || !state.cart || state.cart.status !== "paying") {
+        stopPayment();
+        return;
+      }
+      // Window closed while waiting → flip to expired, stop polling. No charge.
+      if (payment.expires_at > 0 && Date.now() >= payment.expires_at) {
+        stopPayment();
+        state.cart = { ...state.cart, payExpired: true, payLeftLabel: "" };
+        render();
+        return;
+      }
+      // Tick the visible countdown every interval.
+      state.cart = { ...state.cart, payLeftLabel: payLeftLabel(payment.expires_at) };
+      render();
+      if (polling || !app) return; // one poll in flight at a time
+      polling = true;
+      try {
+        const res = await app.callServerTool({
+          name: "check_payment",
+          arguments: { payment_id: payment.payment_id },
+        });
+        if (cartToken !== token) return;
+        const st = res.structuredContent as
+          | { status?: string; paid?: boolean; failed?: boolean; expired?: boolean }
+          | undefined;
+        if (res.isError) return; // transient — keep polling until paid or expired
+        if (st?.paid) {
+          stopPayment();
+          await confirmPaidOrder(token, payment, current);
+        } else if (st?.expired) {
+          stopPayment();
+          state.cart = { ...state.cart, payExpired: true, payLeftLabel: "" };
+          render();
+        } else if (st?.failed) {
+          stopPayment();
+          state.cart = buildCartError("the payment failed — nothing was charged. place the order again.");
+          render();
+        }
+      } catch {
+        // Network blip — swallow and let the next tick retry.
+      } finally {
+        polling = false;
+      }
+    })();
+  }, PAY_POLL_MS);
+}
+
+// confirmPaidOrder finalizes a paid UPI payment into a placed order. Called once,
+// only after check_payment reports paid; confirm_order is never auto-retried.
+async function confirmPaidOrder(token: number, payment: PaymentInfo, current: CartState): Promise<void> {
+  if (!app) return;
+  state.cart = { status: "placing", bill: current.bill, addressLabel: current.addressLabel };
+  render();
+  try {
+    const res = await app.callServerTool({
+      name: "confirm_order",
+      arguments: { payment_id: payment.payment_id },
+    });
+    if (cartToken !== token) return;
+    if (res.isError) {
+      state.cart = buildCartError(toolErrorText(res));
+      render();
+      return;
+    }
+    const sc = res.structuredContent as { order?: OrderSummary } | undefined;
+    state.pending = new Map();
+    state.cart = {
+      status: "placed",
+      order: sc?.order ?? {},
+      bill: current.bill,
+      addressLabel: current.addressLabel,
+    };
+    render();
+  } catch (err) {
+    if (cartToken !== token) return;
+    state.cart = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    render();
+  }
+}
+
 // closeCart returns to the menu, discarding any in-flight checkout by bumping
 // the identity token (a late response then no-ops).
 function closeCart(): void {
   cartToken++;
+  stopPayment();
   state.cart = null;
   render();
 }

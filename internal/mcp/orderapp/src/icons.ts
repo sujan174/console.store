@@ -17,6 +17,7 @@ export type IconName =
   | "chevron-down"
   | "search"
   | "refresh"
+  | "external-link"
   | "eye";
 
 const PATHS: Record<IconName, string> = {
@@ -32,6 +33,7 @@ const PATHS: Record<IconName, string> = {
   "chevron-down": `<path d="m6 9 6 6 6-6"/>`,
   search: `<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>`,
   refresh: `<path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>`,
+  "external-link": `<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/>`,
   eye: `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>`,
 };
 

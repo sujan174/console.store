@@ -21,6 +21,21 @@ type fakeBackend struct {
 	placeErr        error
 	placed          int
 
+	// UPI payment fakes. The default is the legacy COD fallback (PlaceUPI
+	// ok=false → PlaceCOD), so existing food place_order tests stay immediate-
+	// placement regression coverage. Set upi=true to exercise the online path:
+	// PlaceUPI returns `pending`, then PollPayment/ConfirmOrder drive check/confirm.
+	upi          bool
+	pending      api.PendingPayment
+	placeUPIErr  error
+	placedUPI    int
+	polls        int
+	payStatus    api.PaymentStatus
+	payErr       error
+	confirmOrder api.Order
+	confirmErr   error
+	confirmed    int
+
 	// optional scripted behavior for cart flows; nil falls back to `cart`.
 	getFn    func(addressID string) (api.Cart, error)
 	updateFn func(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error)
@@ -86,6 +101,34 @@ func (f *fakeBackend) PlaceOrder(addressID string) (api.Order, error) {
 		return api.Order{}, f.placeErr
 	}
 	return f.order, nil
+}
+func (f *fakeBackend) PlaceUPI(addressID string) (api.PendingPayment, bool, error) {
+	if !f.upi {
+		return api.PendingPayment{}, false, nil // legacy no-UPI user → COD fallback
+	}
+	if f.placeUPIErr != nil {
+		return api.PendingPayment{}, true, f.placeUPIErr
+	}
+	f.placedUPI++
+	return f.pending, true, nil
+}
+func (f *fakeBackend) PlaceCOD(addressID string) (api.Order, error) {
+	f.placed++ // same "an order was placed" counter the COD/legacy tests assert on
+	if f.placeErr != nil {
+		return api.Order{}, f.placeErr
+	}
+	return f.order, nil
+}
+func (f *fakeBackend) PollPayment(p api.PendingPayment) (api.PaymentStatus, error) {
+	f.polls++
+	return f.payStatus, f.payErr
+}
+func (f *fakeBackend) ConfirmOrder(p api.PendingPayment) (api.Order, error) {
+	f.confirmed++
+	if f.confirmErr != nil {
+		return api.Order{}, f.confirmErr
+	}
+	return f.confirmOrder, nil
 }
 func (f *fakeBackend) TrackOrder(orderID string) (api.Tracking, error)    { return api.Tracking{}, nil }
 func (f *fakeBackend) ActiveOrders(addressID string) ([]api.Order, error) { return nil, nil }

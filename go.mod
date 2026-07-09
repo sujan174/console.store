@@ -43,4 +43,5 @@ require (
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
+	rsc.io/qr v0.2.0 // indirect
 )

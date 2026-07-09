@@ -35,6 +35,14 @@ type Backend interface {
 	UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error)
 	ClearCart() error
 	PlaceOrder(addressID string) (api.Order, error)
+	// UPI online payment (Swiggy disabled COD). PlaceUPI starts a pending
+	// payment; the bool is false for a legacy no-UPI user (caller falls back to
+	// PlaceCOD). PollPayment reads a pending payment's state; ConfirmOrder
+	// finalizes it once paid. Carry the api.PendingPayment verbatim between them.
+	PlaceUPI(addressID string) (api.PendingPayment, bool, error)
+	PlaceCOD(addressID string) (api.Order, error)
+	PollPayment(p api.PendingPayment) (api.PaymentStatus, error)
+	ConfirmOrder(p api.PendingPayment) (api.Order, error)
 	TrackOrder(orderID string) (api.Tracking, error)
 	ActiveOrders(addressID string) ([]api.Order, error)
 
@@ -61,9 +69,10 @@ type Authenticator interface {
 }
 
 type Server struct {
-	be      Backend
-	auth    Authenticator
-	pending *confirmStore
+	be       Backend
+	auth     Authenticator
+	pending  *confirmStore
+	payments *paymentStore
 
 	// mu guards optNames and lastCart, the process-local memory caches that
 	// bridge get_item_options / update_cart / order_preset into a taste
@@ -74,7 +83,7 @@ type Server struct {
 }
 
 func NewServer(be Backend, auth Authenticator) *Server {
-	return &Server{be: be, auth: auth, pending: newConfirmStore(), optNames: map[string]namedChoice{}}
+	return &Server{be: be, auth: auth, pending: newConfirmStore(), payments: newPaymentStore(), optNames: map[string]namedChoice{}}
 }
 
 type ServerInfoIn struct{}
@@ -164,7 +173,9 @@ func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "update_cart", Description: "set the cart lines for a restaurant (replaces the cart; a cart from another restaurant is auto-replaced and reported in replaced_cart)"}, s.handleUpdateCart)
 	addTool(srv, &mcp.Tool{Name: "clear_cart", Description: "empty the cart"}, s.handleClearCart)
 	addTool(srv, &mcp.Tool{Name: "prepare_order", Description: "sync the cart and return the real bill + a confirmation_id (does NOT place; auto-moves the cart when the address changed and rebuilds it if Swiggy expired it — see the rebuilt field)"}, s.handlePrepareOrder)
-	addTool(srv, &mcp.Tool{Name: "place_order", Description: "place the order for a confirmation_id from prepare_order or im_prepare_order (real, charges COD; never call without user confirmation)"}, s.handlePlaceOrder)
+	addTool(srv, &mcp.Tool{Name: "place_order", Description: "place the order for a confirmation_id from prepare_order or im_prepare_order (real; never call without user confirmation). Food orders return a `payment` (UPI scan-to-pay: show the QR/pay link, poll check_payment, then confirm_order when paid); instamart and legacy no-UPI users return a placed `order` directly."}, s.handlePlaceOrder)
+	addTool(srv, &mcp.Tool{Name: "check_payment", Description: "poll a pending UPI payment (payment_id from place_order): reports paid/failed/expired. Read-only — call every couple of seconds while the user pays, until paid or expired."}, s.handleCheckPayment)
+	addTool(srv, &mcp.Tool{Name: "confirm_order", Description: "finalize a paid UPI order (payment_id from place_order) into a placed order. Call ONLY after check_payment reports paid; refuses once the payment window has closed."}, s.handleConfirmOrder)
 	addTool(srv, &mcp.Tool{Name: "order_preset", Description: "load a saved preset (food or instamart) into the cart and return a bill + confirmation_id (does NOT place)"}, s.handleOrderPreset)
 	addTool(srv, &mcp.Tool{Name: "sign_in", Description: "start Swiggy sign-in; returns a browser URL (opened automatically when possible)"}, s.handleSignIn)
 	addTool(srv, &mcp.Tool{Name: "auth_status", Description: "whether the user is signed in — and, when signed in, the opening card snapshot (default/last address, favorites, taste, suggestions, policies) so no separate get_card is needed to start"}, s.handleAuthStatus)
