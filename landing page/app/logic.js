@@ -1,9 +1,12 @@
-// Behaviour ported from Claude Design "Console Store Landing.dc.html".
-// The DCLogic React class is rewritten as a framework-free mount(root) that
-// returns a cleanup fn. Canvas + animation code is kept verbatim: ambient
-// particle field, the hero ASCII-cell wordmark (left-to-right scramble
-// assembly), the scramble-reveal footer wordmark, the live TUI terminal, the
-// animated headless CLI, and the scroll-driven TUI/CLI toggle.
+// Behaviour ported from Claude Design "Console Store Landing.dc.html",
+// rewritten as a framework-free mount(root) that returns a cleanup fn.
+// Owns: the ambient city canvas, the hero ASCII-cell wordmark, the footer
+// scramble wordmark, the stats chip/drawer, and three demo animators whose
+// every visible string is copied from the real app (see
+// docs/superpowers/specs/2026-07-10-landing-authenticity-design.md):
+//   startTerminal — the TUI replay (internal/tui screens)
+//   startAgent    — Claude + MCP tool-call transcript (internal/mcp tools)
+//   startCliStrip — headless `console order` / `console status` (internal/cli)
 
 export function mount(root) {
   if (!root) return () => {};
@@ -31,8 +34,7 @@ export function mount(root) {
     footwm: root.querySelector('[data-ref="footwm"]'),
     term: root.querySelector('[data-ref="term"]'),
     key: root.querySelector('[data-ref="key"]'),
-    palette: root.querySelector('[data-ref="palette"]'),
-    cli: root.querySelector('[data-ref="cli"]'),
+    clistrip: root.querySelector('[data-ref="clistrip"]'),
     agent: root.querySelector('[data-ref="agent"]'),
     toast: root.querySelector('[data-ref="toast"]'),
     statstab: root.querySelector('[data-ref="statstab"]'),
@@ -174,95 +176,6 @@ export function mount(root) {
     scrambleObservers.push(io);
   };
 
-  // ===== TUI / CLI scroll-driven toggle =====
-  let cleanupKeys = () => {};
-  (() => {
-    const section = root.querySelector("#keys");
-    const wrap = root.querySelector("[data-panel-wrap]");
-    const ind = root.querySelector("[data-toggle-ind]");
-    const hint = root.querySelector("[data-keys-hint]");
-    const btn = { tui: root.querySelector('[data-toggle="tui"]'), cli: root.querySelector('[data-toggle="cli"]') };
-    const panel = { tui: root.querySelector('[data-panel="tui"]'), cli: root.querySelector('[data-panel="cli"]') };
-    if (!section || !wrap || !panel.tui || !panel.cli) return;
-    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-    const smooth = (x, a, b) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
-    const placeInd = (t) => {
-      if (!ind || !btn.tui || !btn.cli) return;
-      // interpolate BOTH width and x between the two pills — AGENT is narrower
-      // than TERMINAL, so a fixed width overflowed the track on the right.
-      const w = btn.tui.offsetWidth + (btn.cli.offsetWidth - btn.tui.offsetWidth) * t;
-      ind.style.width = w + "px";
-      ind.style.transform = "translateX(" + (btn.cli.offsetLeft - btn.tui.offsetLeft) * t + "px)";
-    };
-    const colorBtns = (which) => {
-      if (btn.tui) btn.tui.style.color = which === "tui" ? "#e9ebf7" : "#565b80";
-      if (btn.cli) btn.cli.style.color = which === "cli" ? "#e9ebf7" : "#565b80";
-    };
-    // Mobile: plain click toggle (no room for a scroll-driven cross-fade).
-    const desktop = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 821px)").matches;
-    if (!desktop) {
-      const show = (which) => {
-        panel.tui.style.display = which === "tui" ? "block" : "none";
-        panel.cli.style.display = which === "cli" ? "block" : "none";
-        placeInd(which === "cli" ? 1 : 0);
-        colorBtns(which);
-      };
-      const handlers = [];
-      Object.keys(btn).forEach((k) => { if (!btn[k]) return; const h = () => show(k); btn[k].addEventListener("click", h); handlers.push([btn[k], h]); });
-      show("tui");
-      requestAnimationFrame(() => placeInd(0));
-      if (hint) hint.textContent = "tap to switch — order it yourself at the prompt, or hand it to your agent.";
-      cleanupKeys = () => handlers.forEach(([b, h]) => b.removeEventListener("click", h));
-      return;
-    }
-    // Desktop: scroll through the section to cross-fade TERMINAL -> AGENT; the
-    // pills also jump to a phase on click. (This is the one scroll-driven touch
-    // kept by request; it doesn't snap the page.)
-    if (hint) hint.textContent = "scroll — or click — to switch between the terminal and your agent.";
-    wrap.style.position = "relative";
-    [panel.tui, panel.cli].forEach((p) => {
-      p.style.position = "absolute";
-      p.style.top = "0";
-      p.style.left = "0";
-      p.style.right = "0";
-      p.style.display = "block";
-      p.style.transition = "opacity .25s ease, transform .25s ease";
-      p.style.willChange = "opacity, transform";
-    });
-    const sizeWrap = () => { wrap.style.height = Math.max(panel.tui.offsetHeight, panel.cli.offsetHeight) + "px"; };
-    const apply = () => {
-      const total = section.offsetHeight - window.innerHeight;
-      const passed = -section.getBoundingClientRect().top;
-      const p = total > 0 ? clamp(passed / total, 0, 1) : 0;
-      const t = smooth(p, 0.35, 0.65);
-      panel.tui.style.opacity = String(1 - t);
-      panel.tui.style.transform = "translateY(" + -16 * t + "px)";
-      panel.tui.style.pointerEvents = t < 0.5 ? "auto" : "none";
-      panel.cli.style.opacity = String(t);
-      panel.cli.style.transform = "translateY(" + 16 * (1 - t) + "px)";
-      panel.cli.style.pointerEvents = t >= 0.5 ? "auto" : "none";
-      placeInd(t);
-      colorBtns(t < 0.5 ? "tui" : "cli");
-    };
-    sizeWrap();
-    const onResize = () => { sizeWrap(); apply(); };
-    window.addEventListener("scroll", apply, { passive: true });
-    window.addEventListener("resize", onResize);
-    const clickHandlers = [];
-    const scrollToPhase = (which) => {
-      const total = section.offsetHeight - window.innerHeight;
-      const top = section.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo({ top: top + total * (which === "cli" ? 0.82 : 0.16), behavior: "smooth" });
-    };
-    Object.keys(btn).forEach((k) => { if (!btn[k]) return; const h = () => scrollToPhase(k); btn[k].addEventListener("click", h); clickHandlers.push([btn[k], h]); });
-    apply();
-    cleanupKeys = () => {
-      window.removeEventListener("scroll", apply);
-      window.removeEventListener("resize", onResize);
-      clickHandlers.forEach(([b, h]) => b.removeEventListener("click", h));
-    };
-  })();
-
   // scroll reveal
   const initReveal = () => {
     if (reduce) return;
@@ -284,19 +197,6 @@ export function mount(root) {
   // browsers without scroll-driven animations get the content shown statically
   // (handled in CSS). Nothing to wire up here.
 
-  // ---- scroll nudge: fade it out once scrolling starts (fallback for browsers
-  // without scroll-driven CSS timelines; supporting ones fade via @supports) ----
-  const initNudge = () => {
-    const nudge = root.querySelector("[data-scroll-nudge]");
-    if (!nudge) return;
-    const supported = typeof CSS !== "undefined" && CSS.supports && CSS.supports("animation-timeline: scroll()");
-    if (supported) return;
-    const onScroll = () => { nudge.style.transition = "opacity .3s"; nudge.style.opacity = window.scrollY > 140 ? "0" : "1"; };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    S.nudgeCleanup = () => window.removeEventListener("scroll", onScroll);
-  };
-
   // FAQ accordion
   const faqHandlers = [];
   const initFaq = () => {
@@ -312,46 +212,6 @@ export function mount(root) {
       q.addEventListener("click", h);
       faqHandlers.push([q, h]);
     });
-  };
-
-  // command-palette click-to-type
-  let setPaletteOverride = null;
-  const cmdHandlers = [];
-  const initCmdClicks = () => {
-    root.querySelectorAll("[data-cmd]").forEach((rowEl) => {
-      const name = rowEl.getAttribute("data-cmd-name");
-      if (!name) return;
-      rowEl.style.cursor = "pointer";
-      const h = () => { if (setPaletteOverride) setPaletteOverride(name); };
-      rowEl.addEventListener("click", h);
-      cmdHandlers.push([rowEl, h]);
-    });
-  };
-
-  // The pitch "feature map" window: clicking flies into it — the window scales
-  // up and the rest of the pitch fades to the starfield — then lands on
-  // /features. Reduced-motion (or missing element) just follows the link.
-  const initFeaturesZoom = () => {
-    const win = root.querySelector('[data-action="features-zoom"]');
-    if (!win) return;
-    const href = win.getAttribute("href") || "/features";
-    const pitch = root.querySelector("#pitch");
-    // Clearing the zoom state is critical for the browser Back button: when the
-    // page is restored from the back-forward cache, its DOM comes back with the
-    // `.zooming` classes still applied — the window scaled away and the pitch at
-    // opacity 0 — leaving the whole section blank. pageshow fires on that restore.
-    const resetZoom = () => { win.classList.remove("zooming"); if (pitch) pitch.classList.remove("zooming"); };
-    const h = (e) => {
-      if (reduce || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; // let the browser handle new-tab / reduced-motion
-      e.preventDefault();
-      if (pitch) pitch.classList.add("zooming");
-      win.classList.add("zooming");
-      S.timers.push(setTimeout(() => { if (!S.dead) window.location.assign(href); }, 560));
-    };
-    win.addEventListener("click", h);
-    window.addEventListener("pageshow", resetZoom);
-    cmdHandlers.push([win, h]);
-    S.featZoomCleanup = () => window.removeEventListener("pageshow", resetZoom);
   };
 
   // ---- live stats: one /stats fetch feeds the right-edge tab → pop-out drawer
@@ -586,173 +446,6 @@ export function mount(root) {
   const EMPTY_STATS = { orders: 0, installs: 0, active: 0, orders_week: 0, installs_week: 0, series: [] };
   const statsState = { data: null };
 
-  // ---- keyboard navigation: terminal-style section paging. ↑/↓ (or PageUp/Down)
-  // step between sections; ↵ / Space advances; Tab toggles the live-stats drawer;
-  // Home/End jump to ends. Reinforces the keyboard-driven product. The "press ↵"
-  // cue + the bottom legend teach it; both fade once the visitor starts driving. ----
-  const navHandlers = [];
-  const initKeyboardNav = () => {
-    const sections = Array.from(
-      root.querySelectorAll("#top, #pitch, #run, #keys, #features, #why, #faq, footer")
-    );
-    if (!sections.length) return;
-    const cue = root.querySelector('[data-ref="enterCue"]');
-    const legend = root.querySelector('[data-ref="keyhint"]');
-    let used = false;
-    const markUsed = () => {
-      if (used || S.dead) return;
-      used = true;
-      if (cue) cue.classList.add("spent");
-      if (legend) legend.classList.add("dim");
-    };
-    // Stops = the Y positions ↑/↓ snap to. A short section is CENTERED in the
-    // viewport; a full-height / tall one is top-aligned; the #keys scrolly gets
-    // TWO stops (TUI at 16% through it, CLI at 82%) so arrows step through its
-    // transition instead of skipping it. Rebuilt on resize / after layout settles.
-    // Absolute document top from layout (offsetTop chain) — unaffected by the
-    // `data-reveal` scroll-timeline transforms, unlike getBoundingClientRect.
-    const docTop = (el) => {
-      let y = 0, n = el;
-      while (n) { y += n.offsetTop; n = n.offsetParent; }
-      return y;
-    };
-    const buildStops = () => {
-      const vh = window.innerHeight;
-      const maxY = Math.max(0, document.documentElement.scrollHeight - vh);
-      const clampY = (y) => Math.max(0, Math.min(maxY, Math.round(y)));
-      const raw = [];
-      sections.forEach((s, idx) => {
-        const topY = docTop(s);
-        const h = s.offsetHeight;
-        if (idx === 0) {
-          raw.push(0); // hero → the very top, so the nav stays in frame
-        } else if (s.id === "keys") {
-          const total = Math.max(1, h - vh);
-          raw.push(clampY(topY + total * 0.16)); // TUI view
-          raw.push(clampY(topY + total * 0.82)); // CLI view
-        } else if (h >= vh * 0.82) {
-          raw.push(clampY(topY)); // near-full / tall section → align top
-        } else {
-          raw.push(clampY(topY - (vh - h) / 2)); // short section → center it
-        }
-      });
-      raw.sort((a, b) => a - b);
-      const stops = [];
-      raw.forEach((y) => { if (!stops.length || y - stops[stops.length - 1] > 6) stops.push(y); });
-      return stops;
-    };
-    let stops = buildStops();
-    const rebuild = () => { stops = buildStops(); };
-    // goY drives every programmatic jump (keys + scroll-snap settle). It marks a
-    // short suppression window so the wheel/touch scroll-snap doesn't fire on the
-    // smooth-scroll churn it itself produces. Exposed on S so initScrollSnap reuses
-    // the exact same stop model (centered short / top-aligned tall / two #keys stops).
-    const goY = (y) => {
-      S.suppressSnapUntil = performance.now() + 700;
-      window.scrollTo({ top: y, behavior: reduce ? "auto" : "smooth" });
-    };
-    S.navStops = () => stops;
-    S.navGoY = goY;
-    const nextStop = () => {
-      const y = window.scrollY + 6;
-      const t = stops.find((s) => s > y);
-      goY(t != null ? t : stops[stops.length - 1]);
-    };
-    const prevStop = () => {
-      const y = window.scrollY - 6;
-      let t = stops[0];
-      for (const s of stops) { if (s < y) t = s; }
-      goY(t);
-    };
-    const onKey = (e) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target || {};
-      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
-      if (e.key === "Tab") {
-        e.preventDefault();
-        if (S.statsIsOpen && S.statsIsOpen()) S.closeStats && S.closeStats();
-        else S.openStats && S.openStats();
-        markUsed();
-        return;
-      }
-      if (S.statsIsOpen && S.statsIsOpen()) return; // drawer owns keys while open (Esc closes)
-      switch (e.key) {
-        case "ArrowDown":
-        case "PageDown":
-        case "Enter":
-        case " ":
-          e.preventDefault(); nextStop(); markUsed(); break;
-        case "ArrowUp":
-        case "PageUp":
-          e.preventDefault(); prevStop(); markUsed(); break;
-        case "Home":
-          e.preventDefault(); goY(stops[0]); markUsed(); break;
-        case "End":
-          e.preventDefault(); goY(stops[stops.length - 1]); markUsed(); break;
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    navHandlers.push([document, "keydown", onKey]);
-    // Recompute stops when layout changes (resize) and once more after the hero /
-    // fonts settle, since section offsets shift during the opening animation.
-    const onResize = () => rebuild();
-    window.addEventListener("resize", onResize);
-    navHandlers.push([window, "resize", onResize]);
-    S.timers.push(setTimeout(rebuild, 1200));
-    S.timers.push(setTimeout(rebuild, 3200));
-    // Mouse/touch affordances: the cue advances, the legend's stats chip opens it.
-    if (cue) {
-      const h = () => { nextStop(); markUsed(); };
-      cue.addEventListener("click", h);
-      navHandlers.push([cue, "click", h]);
-    }
-    const statBtn = legend && legend.querySelector("[data-open-stats]");
-    if (statBtn) {
-      const h = () => { if (S.openStats) S.openStats(); markUsed(); };
-      statBtn.addEventListener("click", h);
-      navHandlers.push([statBtn, "click", h]);
-    }
-    // fade the cue + legend in once the hero has settled (transition-driven so the
-    // later .spent/.dim class swaps aren't fighting a held keyframe).
-    if (cue) S.timers.push(setTimeout(() => { if (!S.dead) cue.classList.add("show"); }, reduce ? 200 : 1700));
-    if (legend) S.timers.push(setTimeout(() => { if (!S.dead) legend.classList.add("show"); }, reduce ? 250 : 2100));
-    S.navCleanup = () => navHandlers.forEach(([el, ev, h]) => el.removeEventListener(ev, h));
-  };
-
-  // ---- gentle scroll-snap: free-scroll settles onto the SAME section stops the
-  // keyboard nav uses. We never preventDefault the wheel/touch (that's the janky
-  // path) — native momentum runs, then ~150ms after the gesture stops we ease to
-  // the nearest stop *only if it's within ~0.62vh* (proximity, not mandatory: you
-  // can still rest mid-way through tall content without being yanked). The #keys
-  // 180vh scrolly is handled for free — its TUI/CLI stops are part of the model,
-  // so a scroll there settles onto one phase instead of stranding mid-transition.
-  // Disabled under reduced-motion. ----
-  const initScrollSnap = () => {
-    if (reduce) return;
-    let idleTimer = 0;
-    const proximity = () => window.innerHeight * 0.62;
-    const snap = () => {
-      if (S.dead) return;
-      if (performance.now() < (S.suppressSnapUntil || 0)) return;
-      if (S.statsIsOpen && S.statsIsOpen()) return; // drawer open → leave the page alone
-      const stops = S.navStops ? S.navStops() : null;
-      if (!stops || !stops.length) return;
-      const y = window.scrollY;
-      let best = stops[0], bd = Math.abs(stops[0] - y);
-      for (const s of stops) { const d = Math.abs(s - y); if (d < bd) { bd = d; best = s; } }
-      if (bd <= 3) return;            // already parked on a stop
-      if (bd > proximity()) return;   // mid long-content → don't yank
-      (S.navGoY || ((t) => window.scrollTo({ top: t, behavior: "smooth" })))(best);
-    };
-    const onScroll = () => {
-      if (performance.now() < (S.suppressSnapUntil || 0)) return; // our own smooth-scroll
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(snap, 150); // settle once the gesture stops
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    S.snapCleanup = () => { window.removeEventListener("scroll", onScroll); clearTimeout(idleTimer); };
-  };
-
   // Cinematic "console city" backdrop — a bespoke generative Tokyo-Night
   // skyline rendered on the single fixed [data-ref=ambient] canvas (replaces the
   // old rotating starfield). Three parallax depth bands of towers built from
@@ -866,283 +559,334 @@ export function mount(root) {
     tick();
   };
 
-  // command palette typer
-  const startPalette = () => {
-    const el = refs.palette;
-    if (!el) return;
-    const cmds = ["checkout", "track", "address", "help", "arm"];
-    let ci = 0;
-    let overrideUntil = 0;
-    setPaletteOverride = (txt) => { el.textContent = txt; overrideUntil = performance.now() + 2800; };
-    const typeOne = async () => {
-      if (S.dead) return;
-      if (performance.now() < overrideUntil) { await wait(220); return typeOne(); }
-      const word = cmds[ci % cmds.length];
-      for (let i = 0; i <= word.length; i++) { if (S.dead) return; if (performance.now() < overrideUntil) return typeOne(); el.textContent = word.slice(0, i); await wait(70); }
-      await wait(1400);
-      if (performance.now() < overrideUntil) return typeOne();
-      for (let i = word.length; i >= 0; i--) { if (S.dead) return; el.textContent = word.slice(0, i); await wait(34); }
-      await wait(300);
-      ci++;
-      typeOne();
-    };
-    typeOne();
-  };
-
-  // CLI animator
+  // Shared demo palette (Tokyo Night, matches internal/tui/theme + internal/cli/style.go).
   const cliColors = { A: "#565b80", V: "#9aa0c4", B: "#e9ebf7", G: "#8ee08a", Cy: "#7fe0ff", Au: "#eab560" };
-  const startCli = async () => {
-    const el = refs.cli;
-    if (!el) return;
-    const { A, V, B, G, Cy, Au } = cliColors;
-    const cur = '<span style="display:inline-block;width:8px;height:14px;background:#93a8ff;vertical-align:middle;animation:blink 1s step-end infinite"></span>';
-    const rowB = (l, r, rc) => '<div style="display:flex;justify-content:space-between"><span style="color:' + A + '">&nbsp;&nbsp;' + l + '</span><span style="color:' + rc + '">' + r + "</span></div>";
-    const note = (c, t) => '<div style="color:' + c + '">&nbsp;&nbsp;' + t + "</div>";
-    const set = (h) => { if (el) el.innerHTML = h; };
-    const prompt = '<span style="color:' + A + '">~ %</span> ';
-    const orderCmd = "console order dinner";
-    const colorOrder = (n) => { const head = orderCmd.slice(0, Math.min(n, 13)); const arg = n > 14 ? orderCmd.slice(14, n) : ""; return '<span style="color:' + B + '">' + head + "</span>" + (n > 13 ? " " : "") + (arg ? '<span style="color:' + Au + '">' + arg + "</span>" : ""); };
-    // A saved alias list, so the reorder command reads as "scripting your usuals".
-    const aliasCmd = "console alias list";
-    while (!S.dead) {
-      // 1) list saved aliases (presets)
-      for (let i = 0; i <= aliasCmd.length; i++) { if (S.dead) return; set("<div>" + prompt + '<span style="color:' + B + '">' + aliasCmd.slice(0, i) + "</span>" + cur + "</div>"); await wait(46); }
-      let acc = "<div>" + prompt + '<span style="color:' + B + '">' + aliasCmd + "</span></div>";
-      await wait(340);
-      acc += rowB("dinner", "Meghana Foods · food · 3 items", V);
-      acc += rowB("coffee", "Blue Tokai · food · 1 item", V);
-      acc += rowB("energy-drinks", "Instamart · 4 items", V);
-      set(acc);
-      await wait(1100);
-      acc += '<div style="height:12px"></div>';
-      // 2) order a saved alias
-      const head0 = acc;
-      for (let i = 0; i <= orderCmd.length; i++) { if (S.dead) return; set(head0 + "<div>" + prompt + colorOrder(i) + cur + "</div>"); await wait(50); }
-      acc = head0 + "<div>" + prompt + colorOrder(orderCmd.length) + "</div>";
-      await wait(360);
-      const billLines = [rowB("from", "Meghana Foods", V), rowB("2 × Chicken Biryani", "₹398", G), rowB("to pay", "₹438", Cy), note(A, "press ↵ to place · ⌃C to cancel")];
-      for (const ln of billLines) { if (S.dead) return; acc += ln; set(acc); await wait(280); }
-      await wait(720);
-      acc += note(G, "✓ order placed · arriving ~35 min");
-      set(acc);
-      await wait(1500);
-      acc += '<div style="height:12px"></div>';
-      // 3) check status
-      const statusCmd = "console order status";
-      for (let i = 0; i <= statusCmd.length; i++) { if (S.dead) return; set(acc + "<div>" + prompt + '<span style="color:' + B + '">' + statusCmd.slice(0, i) + "</span>" + cur + "</div>"); await wait(52); }
-      acc += "<div>" + prompt + '<span style="color:' + B + '">' + statusCmd + "</span></div>";
-      await wait(340);
-      acc += '<div><span style="color:' + Cy + '">&nbsp;&nbsp;◐ on the way to you</span><span style="color:' + V + '"> · 6 mins</span></div>';
-      set(acc);
-      await wait(2800);
-      set("");
-      await wait(520);
-    }
-  };
-  const staticCli = () => {
-    const el = refs.cli;
-    if (!el) return;
-    const { A, V, B, G, Cy, Au } = cliColors;
-    el.innerHTML =
-      '<div><span style="color:' + A + '">~ %</span> <span style="color:' + B + '">console order</span> <span style="color:' + Au + '">dinner</span></div>' +
-      '<div style="display:flex;justify-content:space-between"><span style="color:' + A + '">&nbsp;&nbsp;to pay</span><span style="color:' + Cy + '">₹438</span></div>' +
-      '<div style="color:' + G + '">&nbsp;&nbsp;✓ order placed</div>' +
-      '<div style="height:14px"></div>' +
-      '<div><span style="color:' + A + '">~ %</span> <span style="color:' + B + '">console order status</span></div>' +
-      '<div><span style="color:' + Cy + '">&nbsp;&nbsp;◐ on the way to you</span><span style="color:' + V + '"> · 6 mins</span></div>';
-  };
 
-  // Agent chat animator — a mock AI agent ordering food through the console MCP
-  // tools: user asks, agent calls tools, shows the real bill, places on approval.
-  const startAgent = async () => {
-    const el = refs.agent;
-    if (!el) return;
-    const { A, V, B, G, Cy, Au } = cliColors;
+  // Agent chat animator — Claude ordering through the real console MCP tools.
+  // The tool names and their order are the ACTUAL Instamart sequence
+  // (internal/mcp: im_search_products → im_update_cart → im_prepare_order →
+  // place_order; prepare returns the bill, place happens only after the yes).
+  const agentParts = () => {
+    const { A, V, G, Cy } = cliColors;
     const P = "#b08cf5";
-    const set = (h) => { if (el) el.innerHTML = h; };
     const cur = '<span style="display:inline-block;width:7px;height:13px;background:#93a8ff;vertical-align:middle;animation:blink 1s step-end infinite"></span>';
     const you = (t) => '<div style="margin:0 0 14px;text-align:right"><span style="display:inline-block;background:#14162a;border:1px solid rgba(147,168,255,.16);border-radius:12px 12px 3px 12px;padding:8px 13px;color:#e9ebf7;font-size:12.5px;max-width:80%">' + t + "</span></div>";
     const tool = (name, ok) => '<div style="margin:0 0 8px;color:' + A + ';font-size:11.5px"><span style="color:' + P + '">●</span> consolestore · <span style="color:' + V + '">' + name + "</span>" + (ok ? ' <span style="color:' + G + '">✓</span>' : "") + "</div>";
-    const toolBody = (h) => '<div style="margin:-4px 0 10px 14px;color:' + A + ';font-size:11.5px;line-height:1.7">' + h + "</div>";
+    const toolBody = (h) => '<div style="margin:-2px 0 12px 14px;color:' + A + ';font-size:11.5px;line-height:1.7">' + h + "</div>";
     const bot = (t) => '<div style="margin:0 0 14px;display:flex;gap:8px;align-items:flex-start"><span style="color:' + P + ';font-size:12px;flex:none;margin-top:1px">✳</span><span style="color:#cdd3f0;font-size:12.5px;line-height:1.6">' + t + "</span></div>";
+    const bill = toolBody('Red Bull Energy Drink 250 ml ×4 · Instamart<br><span style="color:' + Cy + '">to pay ₹460</span> <span style="color:' + A + '">· to Home · COD</span>');
+    const ask = '₹460 to Home — four Red Bulls from Instamart. place it?';
+    const done = 'placed ✓ — order 1042. I’ll keep an eye on it.';
+    return { P, cur, you, tool, toolBody, bot, bill, ask, done };
+  };
+  const startAgent = async () => {
+    const el = refs.agent;
+    if (!el) return;
+    const p = agentParts();
+    const set = (h) => { if (el) el.innerHTML = h; };
     const typeBot = async (acc, t) => {
-      for (let i = 0; i <= t.length; i++) { if (S.dead) return acc; set(acc + '<div style="margin:0 0 14px;display:flex;gap:8px;align-items:flex-start"><span style="color:' + P + ';font-size:12px;flex:none;margin-top:1px">✳</span><span style="color:#cdd3f0;font-size:12.5px;line-height:1.6">' + t.slice(0, i) + cur + "</span></div>"); await wait(16); }
-      return acc + bot(t);
+      for (let i = 0; i <= t.length; i++) { if (S.dead) return acc; set(acc + '<div style="margin:0 0 14px;display:flex;gap:8px;align-items:flex-start"><span style="color:' + p.P + ';font-size:12px;flex:none;margin-top:1px">✳</span><span style="color:#cdd3f0;font-size:12.5px;line-height:1.6">' + t.slice(0, i) + p.cur + "</span></div>"); await wait(16); }
+      return acc + p.bot(t);
     };
     while (!S.dead) {
       let acc = "";
-      set(acc = you("order my usual dinner")); await wait(700);
-      acc += tool("search_restaurants"); set(acc); await wait(650);
-      acc += tool("prepare_order"); set(acc); await wait(300);
-      acc += toolBody('Meghana Foods · Chicken Biryani ×2, Butter Naan<br><span style="color:' + Cy + '">to pay ₹438</span> <span style="color:' + A + '">· to Home</span>'); set(acc); await wait(700);
-      acc = await typeBot(acc, "That’s ₹438 to Home — want me to place it?"); if (S.dead) return; set(acc); await wait(1100);
-      acc += you("yes, go ahead"); set(acc); await wait(650);
-      acc += tool("place_order", true); set(acc); await wait(500);
-      acc = await typeBot(acc, "Ordered — Meghana Foods, arriving in ~35 min. I’ll track it."); if (S.dead) return; set(acc);
-      await wait(3200);
+      set(acc = p.you("grab me an energy drink from instamart")); await wait(750);
+      acc += p.tool("im_search_products", true); set(acc); await wait(620);
+      acc += p.tool("im_update_cart", true); set(acc); await wait(420);
+      acc += p.tool("im_prepare_order", true); set(acc); await wait(320);
+      acc += p.bill; set(acc); await wait(750);
+      acc = await typeBot(acc, p.ask); if (S.dead) return; set(acc); await wait(1200);
+      acc += p.you("yes, go"); set(acc); await wait(650);
+      acc += p.tool("place_order", true); set(acc); await wait(520);
+      acc = await typeBot(acc, p.done); if (S.dead) return; set(acc);
+      await wait(3400);
       set(""); await wait(520);
     }
   };
   const staticAgent = () => {
     const el = refs.agent;
     if (!el) return;
-    const { A, V, Cy, G } = cliColors;
-    const P = "#b08cf5";
+    const p = agentParts();
     el.innerHTML =
-      '<div style="margin:0 0 14px;text-align:right"><span style="display:inline-block;background:#14162a;border:1px solid rgba(147,168,255,.16);border-radius:12px 12px 3px 12px;padding:8px 13px;color:#e9ebf7;font-size:12.5px">order my usual dinner</span></div>' +
-      '<div style="margin:0 0 8px;color:' + A + ';font-size:11.5px"><span style="color:' + P + '">●</span> consolestore · <span style="color:' + V + '">place_order</span> <span style="color:' + G + '">✓</span></div>' +
-      '<div style="margin:0 0 14px;display:flex;gap:8px"><span style="color:' + P + '">✳</span><span style="color:#cdd3f0;font-size:12.5px">Ordered — arriving in ~35 min.</span></div>';
+      p.you("grab me an energy drink from instamart") +
+      p.tool("im_search_products", true) +
+      p.tool("im_update_cart", true) +
+      p.tool("im_prepare_order", true) +
+      p.bill +
+      p.bot(p.ask) +
+      p.you("yes, go") +
+      p.tool("place_order", true) +
+      p.bot(p.done);
   };
 
-  // TUI screen factory
+  // Headless-CLI strip — `console order dinner` + `console status`, output
+  // mirrored from internal/cli (render.go bill labels, order.go confirm prompt
+  // and placed line, status.go block format).
+  const cliParts = () => {
+    const { A, V, B, G, Au } = cliColors;
+    const BL = "#93a8ff";
+    const line = (h) => "<div>" + h + "</div>";
+    const sp = (c, t, b) => '<span style="color:' + c + (b ? ";font-weight:600" : "") + '">' + t + "</span>";
+    const row = (l, r, lc, rc, b) => '<div style="display:flex;justify-content:space-between;max-width:340px"><span style="color:' + lc + (b ? ";font-weight:600" : "") + '">&nbsp;&nbsp;' + l + '</span><span style="color:' + rc + (b ? ";font-weight:600" : "") + '">' + r + "</span></div>";
+    const rule = '<div style="color:#2d2f48;max-width:340px;overflow:hidden;white-space:nowrap">&nbsp;&nbsp;' + "─".repeat(40) + "</div>";
+    const prompt = sp(A, "~ %") + " ";
+    const cur = '<span style="display:inline-block;width:8px;height:14px;background:#93a8ff;vertical-align:middle;animation:blink 1s step-end infinite"></span>';
+    const orderOut =
+      line("&nbsp;&nbsp;" + sp(Au, "Meghana Foods", true) + "&nbsp;&nbsp;" + sp(A, "→") + "&nbsp;&nbsp;" + sp(A, "Home")) +
+      '<div style="height:8px"></div>' +
+      row("2 × Chicken Biryani", "₹398", V, B) +
+      rule +
+      row("item total", "₹398", A, B) +
+      row("delivery", "₹29", A, B) +
+      rule +
+      row("to pay", "₹427", Au, G, true);
+    const confirm = line(sp(G, "press Enter to place this order") + " " + sp(A, "· Ctrl-C / n to cancel"));
+    const placed = line(sp(G, "✓ order placed — 999 · eta 30-40 mins"));
+    const statusOut =
+      line(sp(A, "order ") + sp(BL, "999") + "  " + sp(Au, "Meghana Foods", true)) +
+      row("status&nbsp;&nbsp;Out for delivery", "", V, V) +
+      row("eta&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;11 mins", "", V, V) +
+      row("total&nbsp;&nbsp;&nbsp;₹427", "", V, V);
+    return { line, sp, prompt, cur, orderOut, confirm, placed, statusOut, gap: '<div style="height:12px"></div>' };
+  };
+  const staticCliStrip = () => {
+    const el = refs.clistrip;
+    if (!el) return;
+    const p = cliParts();
+    el.innerHTML =
+      p.line(p.prompt + p.sp("#e9ebf7", "console order ") + p.sp("#eab560", "dinner")) +
+      p.orderOut + p.confirm + p.placed + p.gap +
+      p.line(p.prompt + p.sp("#e9ebf7", "console status")) +
+      p.statusOut;
+  };
+  const startCliStrip = async () => {
+    const el = refs.clistrip;
+    if (!el) return;
+    const p = cliParts();
+    const set = (h) => { if (el) el.innerHTML = h; };
+    const B = "#e9ebf7", Au = "#eab560";
+    const typeCmd = async (head, cmd, argAt) => {
+      for (let i = 0; i <= cmd.length; i++) {
+        if (S.dead) return "";
+        const done = cmd.slice(0, i);
+        const colored = argAt && i > argAt ? p.sp(B, done.slice(0, argAt)) + p.sp(Au, done.slice(argAt)) : p.sp(B, done);
+        set(head + "<div>" + p.prompt + colored + p.cur + "</div>");
+        await wait(48);
+      }
+      const full = argAt ? p.sp(B, cmd.slice(0, argAt)) + p.sp(Au, cmd.slice(argAt)) : p.sp(B, cmd);
+      return head + "<div>" + p.prompt + full + "</div>";
+    };
+    while (!S.dead) {
+      let acc = await typeCmd("", "console order dinner", 14); if (S.dead) return;
+      await wait(420);
+      acc += p.orderOut; set(acc); await wait(900);
+      acc += p.confirm; set(acc); await wait(1300);
+      acc += p.placed; set(acc); await wait(1600);
+      acc += p.gap;
+      acc = await typeCmd(acc, "console status", 0); if (S.dead) return;
+      await wait(380);
+      acc += p.statusOut; set(acc);
+      await wait(3200);
+      set(""); await wait(500);
+    }
+  };
+
+  // TUI screen factory — every frame mirrors the real bubbletea app
+  // (internal/tui/screens: splash.go, brand.go, rail.go, menu.go,
+  // restaurant.go, checkout.go, tracking.go/ordertrack.go). Strings are
+  // copied verbatim from those files — if the app's copy changes, change it here.
   const screens = () => {
-    const C = { text: "#a9b1d6", item: "#9aa5c4", bright: "#e9ebf7", dim: "#565b80", faint: "#2d2f48", blue: "#93a8ff", cyan: "#7fe0ff", green: "#8ee08a", gold: "#eab560", red: "#ff7d96", purple: "#b08cf5", sel: "#1a1b2e" };
+    const C = { text: "#a9b1d6", item: "#9aa5c4", bright: "#e9ebf7", dim: "#565b80", faint: "#2d2f48", blue: "#93a8ff", cyan: "#7dcfff", green: "#8ee08a", gold: "#eab560", red: "#ff7d96", purple: "#b08cf5", sel: "#1a1b2e" };
     const sp = (c, t, b) => '<span style="color:' + c + (b ? ";font-weight:600" : "") + '">' + (t || "") + "</span>";
     const line = (h) => "<div>" + (h || "&nbsp;") + "</div>";
     const row = (l, r, bg) => '<div style="display:flex;justify-content:space-between;gap:24px' + (bg ? ";background:" + C.sel + ";margin:0 -10px;padding:0 10px" : "") + '">' + l + "<span>" + r + "</span></div>";
     const gap = (h) => '<div style="height:' + h + 'px"></div>';
-    const div = (label) => line(sp(C.faint, "──────────") + " " + sp(C.dim, label) + " " + sp(C.faint, "──────────"));
-    // ---- real-TUI chrome (top status bar, FOOD/Instamart tabs, category rail) ----
+    const secRule = (label) => '<div style="text-align:center">' + sp(C.faint, "────── ") + sp(C.gold, label) + sp(C.faint, " ──────") + "</div>";
     const dense = (h) => '<div style="font-size:11.5px;line-height:1.62">' + h + "</div>";
-    const goldTab = (t) => '<span style="background:' + C.gold + ';color:#1a1408;font-weight:700;padding:1px 8px;border-radius:3px">' + t + "</span>";
+    // ---- top brand banner (screens/brand.go BrandBanner): brand + version,
+    // deliver-to segment, cart chip, full-width gold rule ----
     const chrome = (cart) =>
-      '<div style="display:flex;align-items:center;padding-bottom:7px;border-bottom:1px solid ' + C.faint + '">' +
-      sp(C.bright, "consolestore", true) + sp(C.gold, ".in", true) + sp(C.dim, "&nbsp; v0.1.0-beta.20") +
-      '<span style="margin-left:auto">' + sp(C.dim, "deliver to ") + sp(C.gold, "⊕ ") + sp(C.text, "Home") + sp(C.faint, " ⌄") + sp(C.faint, " &nbsp;·&nbsp; ") + cart + "</span></div>";
-    const tabsRow = (which) =>
-      '<div style="display:flex;align-items:center;padding:7px 0 9px">' +
-      (which === "food" ? goldTab("FOOD") : sp(C.dim, "FOOD")) + "&nbsp;&nbsp;&nbsp;" +
-      (which === "im" ? goldTab("Instamart") : sp(C.dim, "Instamart")) +
-      '<span style="margin-left:auto">' + sp(C.dim, "tab ") + sp(C.faint, "switch") + "</span></div>";
+      '<div style="display:flex;align-items:center;padding-bottom:5px">' +
+      sp(C.blue, "▍ ", true) + sp(C.bright, "consolestore.in", true) + sp(C.purple, "&nbsp;&nbsp;v0.1.0-beta.20") +
+      '<span style="margin-left:auto;padding-left:14px;flex:none">' + sp(C.dim, "deliver to ") + sp(C.green, "⊕ ") + sp(C.bright, "Home") + sp(C.faint, " ⌄") + sp(C.faint, " &nbsp;·&nbsp; ") + cart + "</span></div>" +
+      '<div style="border-bottom:1px solid rgba(234,181,96,.38)"></div>';
+    const cartEmpty = sp(C.dim, "🛒 cart empty");
+    const cartOne = sp(C.gold, "🛒 cart · 1 · ₹139");
+    // ---- FOOD / Instamart tabs (menu.go verticalTabs + keycapHint) ----
+    const goldTab = (t) => '<span style="background:' + C.gold + ';color:#1a1408;font-weight:700;padding:1px 8px;border-radius:3px">' + t + "</span>";
+    const tabsRow = () =>
+      '<div style="display:flex;align-items:center;padding:7px 0 8px">' +
+      goldTab("FOOD") + "&nbsp;&nbsp;&nbsp;&nbsp;" + sp(C.dim, "Instamart") +
+      '<span style="margin-left:auto">' + sp(C.dim, "tab") + sp(C.faint, " switch") + "</span></div>";
     const hintBar = (t) => '<div style="margin-top:12px">' + sp(C.faint, t) + "</div>";
+    // ---- category rail (rail.go + config.DefaultCategories, exact order) ----
     const CATS = ["Home", "Coffee", "Burgers", "Pizza", "Sandwich", "Rolls", "Momos", "North Indian", "South Indian", "Chinese", "Biryani", "Shawarma", "Cake", "Shakes"];
     const rail = (sel) => {
       const items = CATS.map((c, i) => i === sel
         ? '<div style="display:flex"><span style="color:' + C.gold + '">▌ </span>' + sp(C.bright, c, true) + "</div>"
         : '<div style="padding-left:11px">' + sp(C.item, c) + "</div>").join("");
-      return '<div style="flex:none;width:116px;padding-right:12px;border-right:1px solid ' + C.faint + '">' +
-        sp(C.dim, "explore") + '<div style="height:3px"></div>' + sp(C.dim, "⌕ Search") + '<div style="height:7px"></div>' +
+      return '<div style="flex:none;width:118px;padding-right:12px;border-right:1px solid ' + C.faint + '">' +
+        sp(C.faint, "&nbsp;explore") + '<div style="height:4px"></div>' + sp(C.dim, "⌕ Search") +
+        '<div style="border-bottom:1px solid ' + C.faint + ';margin:6px 0 7px;width:82px"></div>' +
         '<div style="line-height:1.72">' + items + "</div></div>";
     };
-    const twoPane = (sel, content) => '<div style="display:flex;padding-top:9px">' + rail(sel) + '<div style="flex:1;padding-left:15px;min-width:0">' + content + "</div></div>";
-    const COFFEE = ["Blue Tokai Coffee Roasters", "abcoffee", "Theobroma", "Third Wave Coffee", "Chaayos", "Starbucks Coffee", "Kink Coffee", "Namaste", "Krispy Kreme", "McDonald's", "Subko Coffee Roasters", "Chai Point"];
+    const twoPane = (sel, content) => '<div style="display:flex;padding-top:8px">' + rail(sel) + '<div style="flex:1;padding-left:15px;min-width:0">' + content + "</div></div>";
+    const COFFEE = ["Blue Tokai Coffee Roasters", "abcoffee", "Theobroma", "Third Wave Coffee", "Chaayos", "Starbucks Coffee", "Subko Coffee Roasters", "Krispy Kreme", "McDonald's", "Chai Point"];
     const MENU = [["Hot Espresso", "5.0", "139"], ["Hot Americano", "4.9", "139"], ["Hot Cappuccino", "4.6", "149"], ["Iced Americano", "4.4", "169"], ["Hot Latte", "4.2", "159"], ["Iced Vanilla Latte", "4.4", "209"], ["Iced Irish Latte", "5.0", "209"], ["Signature Cold Coffee", "4.4", "199"], ["Strawberry Milkshake", "5.0", "199"], ["Iced Mocha", "4.3", "199"], ["Hot Flat White", "5.0", "169"]];
+    // ---- splash (splash.go): prompt line, wordmark + phrase box, tagline,
+    // Swiggy provenance, home buttons, hint ----
     const splash = () =>
       [
-        line(sp(C.dim, "~ % ") + sp(C.text, "store")),
+        line(sp(C.dim, "~ % ") + sp(C.text, "console") + sp(C.faint, "&nbsp;&nbsp;&nbsp;# v0.1.0-beta.20 · beta")),
         gap(14),
-        '<div style="font-weight:800;font-size:26px;letter-spacing:-.02em;line-height:1.1"><span style="color:#aebcff">console</span><span style="color:#eab560;font-size:.62em;vertical-align:.06em">store</span></div>',
+        '<div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap"><div style="font-weight:800;font-size:26px;letter-spacing:-.02em;line-height:1.1"><span style="color:#aebcff">console</span><span style="color:#eab560;font-size:.62em;vertical-align:.06em">store</span></div><span style="border:1px dashed rgba(234,181,96,.5);color:' + C.gold + ';font-size:10px;padding:2px 8px;border-radius:4px;margin-bottom:3px">✦ Real devs eat in the terminal</span></div>',
         gap(8),
         line(sp(C.dim, "coffee · food · quick snacks")),
-        gap(16),
+        line(sp(C.dim, "orders fulfilled through ") + sp(C.gold, "Swiggy", true)),
+        gap(14),
         line(sp(C.blue, "▌", true) + '<span style="background:' + C.sel + ';color:#e9ebf7;padding:0 7px"> enter store </span>'),
         line(sp(C.dim, "&nbsp;&nbsp;settings")),
         gap(10),
-        line(sp(C.faint, "&nbsp;&nbsp;q quit")),
+        line(sp(C.faint, "&nbsp;&nbsp;? help&nbsp;&nbsp; · &nbsp;&nbsp;q quit")),
       ].join("");
+    // ---- browse (menu.go): Home = usuals + popular; category = detail strip +
+    // restaurant list. Selected row = blue "▌ > " cursor on the selection bg. ----
+    const placeRows = (names, selIdx) => names.map((r, i) => i === selIdx
+      ? '<div style="display:flex;background:' + C.sel + ';margin:0 -8px;padding:0 8px"><span style="color:' + C.blue + '">▌ </span>' + sp("#ffffff", "> " + r, true) + "</div>"
+      : '<div style="padding-left:13px">' + sp(C.item, r) + "</div>").join("");
     const browse = (catSel) => {
-      const showList = catSel === 1; // Coffee → restaurants; Home → empty state
       let content;
-      if (!showList) {
-        content = '<div style="color:' + C.dim + ';padding-top:4px">no restaurants nearby</div>';
+      if (catSel === 0) {
+        content =
+          secRule("your usuals") +
+          '<div style="line-height:1.68">' + placeRows(["Blue Tokai Coffee Roasters", "Meghana Foods"], 0) + "</div>" +
+          '<div style="height:6px"></div>' +
+          secRule("popular near you") +
+          '<div style="line-height:1.68">' + placeRows(["Theobroma", "Third Wave Coffee", "Chaayos"], -1) + "</div>";
       } else {
-        const detail = "<div>" + sp(C.bright, "abcoffee", true) + sp(C.faint, "&nbsp;&nbsp;") + sp(C.gold, "4.3 ★") + sp(C.faint, "&nbsp;&nbsp;") + sp(C.dim, "35-40 MINS") + sp(C.faint, "&nbsp;&nbsp;") + sp(C.gold, "60% OFF") + "</div>";
-        const rows = COFFEE.map((r, i) => i === 1
-          ? '<div style="display:flex;background:' + C.sel + ';margin:0 -8px;padding:0 8px"><span style="color:' + C.gold + '">▌ </span>' + sp("#ffffff", "> " + r, true) + "</div>"
-          : '<div style="padding-left:13px">' + sp(C.item, r) + "</div>").join("");
-        content = detail + '<div style="text-align:center;margin:3px 0">' + sp(C.gold, "Coffee") + "</div>" + '<div style="line-height:1.68">' + rows + "</div>";
+        const detail = "<div>" + sp(C.bright, "abcoffee", true) + sp(C.faint, "&nbsp; · &nbsp;") + sp(C.gold, "4.3 ★") + sp(C.faint, "&nbsp; · &nbsp;") + sp(C.dim, "35-40 mins") + sp(C.faint, "&nbsp; · &nbsp;") + sp(C.gold, "60% OFF") + "</div>";
+        content = detail + secRule("Coffee") + '<div style="line-height:1.68">' + placeRows(COFFEE, 1) + "</div>";
       }
-      return dense(chrome(sp(C.dim, "🛒 cart empty")) + tabsRow("food") + twoPane(catSel, content) + hintBar("↑↓ move   ↵ open   / search   i info   c cart   : cmd"));
+      return dense(chrome(cartEmpty) + tabsRow() + twoPane(catSel, content) + hintBar("↑↓ move &nbsp; ↵ open &nbsp; / search &nbsp; i info &nbsp; c cart &nbsp; : cmd"));
     };
-    const search = (q) => {
-      const res = [["Meghana Foods", "★4.4 · 28 min"], ["Biryani Blues", "★4.2 · 31 min"], ["Paradise", "★4.5 · 26 min"]];
-      const caret = '<span style="display:inline-block;width:8px;height:14px;background:' + C.blue + ';vertical-align:middle;animation:blink 1s step-end infinite"></span>';
-      const rows = res.map((p, i) => (i === 0 ? row(sp(C.blue, "▌ ", true) + sp("#ffffff", "> " + p[0], true), sp(C.gold, p[1]), true) : row(sp(C.item, "&nbsp;&nbsp;&nbsp;&nbsp;" + p[0]), sp(C.dim, p[1]), false))).join("");
-      return [line(sp(C.blue, "⌕ " + q) + caret), gap(6), line(sp(C.dim, "3 results")), gap(10), rows, gap(14), line(sp(C.faint, "↑↓ move   ↵ open   esc back"))].join("");
-    };
+    // ---- restaurant menu (restaurant.go): esc + name header, rating · eta,
+    // category bar, item rows w/ fixed rating+price columns, in-cart stepper ----
     const resto = (added) => {
       const qty = added ? 1 : 0;
       const rows = MENU.map((m, i) => {
         const rating = sp(C.gold, m[1] + " ★");
-        const price = sp(C.text, "₹" + m[2]);
+        const price = sp(C.cyan, "₹" + m[2]);
         if (i === 0) {
-          const step = qty > 0 ? sp(C.gold, "-") + sp(C.bright, " ×" + qty + " ", true) + sp(C.gold, "+") : sp(C.faint, "- ×0 +");
-          return '<div style="display:flex;align-items:center;background:' + C.sel + ';margin:0 -8px;padding:1px 8px"><span style="color:' + C.gold + '">▌ </span>' + sp("#ffffff", "> " + m[0], true) + '<span style="margin-left:auto;display:flex;gap:13px;align-items:center">' + step + rating + price + "</span></div>";
+          const step = qty > 0 ? sp(C.red, "−") + sp(C.green, " ×" + qty + " ", true) + sp(C.green, "+") : "";
+          const bar = qty > 0 ? sp(C.green, "▌ ", true) : sp(C.gold, "▌ ", true);
+          return '<div style="display:flex;align-items:center;background:' + C.sel + ';margin:0 -8px;padding:1px 8px">' + bar + sp("#ffffff", "> " + m[0], true) + '<span style="margin-left:auto;display:flex;gap:13px;align-items:center">' + step + rating + price + "</span></div>";
         }
         return '<div style="display:flex;align-items:center;padding-left:13px">' + sp(C.item, m[0]) + '<span style="margin-left:auto;display:flex;gap:13px">' + rating + price + "</span></div>";
       }).join("");
-      const cartTxt = qty > 0 ? sp(C.gold, "🛒 cart · 1 · ₹139") : sp(C.dim, "🛒 cart empty");
       return dense(
-        chrome(cartTxt) +
-        '<div style="padding:7px 0 4px">' + sp(C.blue, "esc ") + sp(C.bright, "abcoffee", true) + sp(C.faint, "&nbsp;&nbsp;") + sp(C.gold, "4.3 ★") + sp(C.faint, "&nbsp;·&nbsp;") + sp(C.dim, "35-40 MINS") + "</div>" +
-        '<div style="padding-bottom:6px">' + sp(C.bright, "All", true) + sp(C.faint, " · ") + sp(C.dim, "99 Store") + sp(C.faint, " · ") + sp(C.dim, "Items at 169") + sp(C.faint, " · ") + sp(C.dim, "Recommended ›") + "</div>" +
-        '<div style="line-height:1.72">' + rows + "</div>" +
-        hintBar("↑↓ move   ↵/+ add   - remove   c cart   esc back")
+        chrome(qty > 0 ? cartOne : cartEmpty) +
+        '<div style="padding:7px 0 3px">' + sp(C.cyan, "esc") + "&nbsp;&nbsp;" + sp(C.bright, "abcoffee", true) + "</div>" +
+        '<div style="padding-bottom:5px">' + sp(C.gold, "4.3 ★") + sp(C.faint, "&nbsp; · &nbsp;") + sp(C.dim, "35-40 mins") + "</div>" +
+        '<div style="padding-bottom:6px"><span style="color:' + C.gold + ';text-decoration:underline;text-underline-offset:3px">All</span>' + sp(C.faint, " · ") + sp(C.dim, "99 Store") + sp(C.faint, " · ") + sp(C.dim, "Items at 169") + sp(C.faint, " · ") + sp(C.dim, "Recommended") + sp(C.faint, " ›") + "</div>" +
+        '<div style="line-height:1.7">' + rows + "</div>" +
+        hintBar("↑↓ move &nbsp; ↵/+ add &nbsp; − remove &nbsp; ←→ category &nbsp; / search &nbsp; c cart &nbsp; esc back")
       );
     };
+    // ---- merged cart/checkout (checkout.go + cart.go renderBill) ----
     const checkout = () =>
-      [
-        line(sp(C.bright, "cart · checkout", true)),
-        gap(8),
-        line(sp(C.dim, "abcoffee")),
-        row(sp(C.item, "Hot Espresso ") + sp(C.dim, "×1"), sp(C.green, "₹139")),
-        gap(6),
-        line(sp(C.faint, "─────────────────────────────")),
-        row(sp(C.dim, "item total"), sp(C.text, "₹139")),
-        row(sp(C.dim, "delivery"), sp(C.text, "₹39")),
-        row(sp(C.dim, "coupon ") + sp(C.purple, "WELCOME50"), sp(C.green, "-₹50")),
-        line(sp(C.faint, "─────────────────────────────")),
-        row(sp(C.bright, "to pay", true), sp(C.cyan, "₹128", true)),
-        gap(12),
-        line(sp(C.red, "▌", true) + '<span style="background:rgba(224,175,104,.14);color:' + C.gold + ';padding:0 7px"> place order </span>' + sp(C.faint, "  armed")),
-        gap(10),
-        line(sp(C.faint, "↵ confirm   esc back")),
-      ].join("");
+      dense(
+        chrome(cartOne) +
+        '<div style="padding:8px 0 2px">' + sp(C.bright, "checkout", true) + sp(C.faint, " &nbsp;·&nbsp; ") + sp(C.dim, "abcoffee") + "</div>" +
+        '<div style="padding-bottom:6px">' + sp(C.dim, "deliver to ") + sp(C.text, "FD 46 Enclave") + sp(C.faint, " &nbsp;·&nbsp; ") + sp(C.dim, "Home") + "</div>" +
+        row(sp(C.green, "▌ ", true) + sp(C.bright, "Hot Espresso", true) + "&nbsp;&nbsp;" + sp(C.red, "−") + sp(C.green, " ×1 ", true) + sp(C.green, "+"), sp(C.text, "₹139"), true) +
+        gap(6) +
+        line(sp(C.faint, "╌".repeat(34))) +
+        row(sp(C.dim, "item total"), sp(C.text, "₹139")) +
+        row(sp(C.dim, "delivery"), sp(C.text, "₹29")) +
+        row(sp(C.dim, "taxes &amp; charges"), sp(C.text, "₹18")) +
+        line(sp(C.faint, "╌".repeat(34))) +
+        row(sp(C.bright, "to pay", true), sp(C.cyan, "₹186", true)) +
+        gap(10) +
+        line(sp(C.green, "▌", true) + '<span style="background:' + C.sel + ';color:#e9ebf7;padding:0 7px"> ❯ place order </span>') +
+        gap(4) +
+        line(sp(C.gold, "pay the rider — cash / UPI") + sp(C.faint, " &nbsp;·&nbsp; ") + sp(C.dim, "can\'t cancel once placed")) +
+        hintBar("↑↓ move &nbsp; ←→ qty &nbsp; ⌫ remove &nbsp; ↵ place order &nbsp; esc back")
+      );
+    // ---- placed confirmation (checkout.go confirm view, incl. the speed receipt) ----
+    const confirm = () =>
+      dense(
+        chrome(cartEmpty) +
+        gap(12) +
+        line(sp(C.green, "╔══════════════════════╗")) +
+        line(sp(C.green, "║ &nbsp;&nbsp;order placed&nbsp; ✓ &nbsp;&nbsp; ║")) +
+        line(sp(C.green, "╚══════════════════════╝")) +
+        gap(8) +
+        line(sp(C.text, "abcoffee") + sp(C.faint, " · ") + sp(C.dim, "ETA 25-30 min") + sp(C.faint, " · ") + sp(C.dim, "999")) +
+        gap(10) +
+        line(sp(C.gold, "⚡ ordered in 2.1s · 4 keystrokes")) +
+        line(sp(C.dim, "this session best 1.8s &nbsp;·&nbsp; phone app ~45s")) +
+        gap(12) +
+        line(sp(C.faint, "↵ track &nbsp;&nbsp;&nbsp;&nbsp; esc back to menu"))
+      );
+    // ---- live tracking (tracking.go: rider sprite on the road + TrackStages +
+    // StatusDisplay friendly phrases) ----
     const track = (step) => {
-      const steps = [["confirmed", "order placed"], ["preparing", "kitchen is on it"], ["on the way", "~12 min"], ["delivered", "enjoy"]];
-      const rows = steps
-        .map((s, i) => {
-          let mark, col;
-          if (i < step) { mark = "●"; col = C.green; }
-          else if (i === step) { mark = "◐"; col = C.gold; }
-          else { mark = "○"; col = C.faint; }
-          return row(sp(col, mark + " ") + sp(i <= step ? C.bright : C.dim, s[0]), sp(C.dim, s[1]));
-        })
-        .join("");
-      const filled = Math.round((step / 3) * 28);
-      return [line(sp(C.green, "✓ ") + sp(C.bright, "order placed", true) + sp(C.dim, " · abcoffee")), gap(12), rows, gap(12), line(sp(C.green, "█".repeat(filled)) + sp(C.faint, "░".repeat(28 - filled)))].join("");
+      const stages = ["order confirmed", "preparing", "out for delivery", "delivered"];
+      const phrase = ["order confirmed", "kitchen\'s on it — preparing your order", "on the way to you · ~12 min", "delivered ✓ · enjoy your order!"][step];
+      const N = 26;
+      const pos = Math.min(N - 2, Math.round((step / 3) * (N - 2)));
+      const wheels = ["◐◓", "◓◑", "◑◒", "◒◐"][step];
+      const pad = (n) => "&nbsp;".repeat(Math.max(0, n));
+      const stageRows = stages.map((s, i) => {
+        let mark, col;
+        if (i < step) { mark = "●"; col = C.green; }
+        else if (i === step) { mark = "◐"; col = C.gold; }
+        else { mark = "○"; col = C.faint; }
+        return line(sp(col, mark + " ") + sp(i <= step ? C.bright : C.dim, s));
+      }).join("");
+      return dense(
+        chrome(cartEmpty) +
+        '<div style="padding:8px 0 2px;display:flex;justify-content:space-between">' + sp(C.cyan, "← tracking · 999") + sp(C.dim, "abcoffee") + "</div>" +
+        '<div style="display:flex;justify-content:space-between">' + sp(C.gold, "abcoffee") + sp(C.cyan, "Home") + "</div>" +
+        gap(10) +
+        line(pad(pos + 2) + sp(C.text, "_o")) +
+        line(pad(pos + 1) + sp(C.text, "-\\&lt;") + sp(C.faint, " ~&nbsp;~")) +
+        line(sp(C.green, "═".repeat(pos)) + sp(C.gold, wheels) + sp(C.faint, "─".repeat(Math.max(0, N - pos - 2)))) +
+        gap(10) +
+        stageRows +
+        gap(8) +
+        line(sp(C.dim, step >= 3 ? "status&nbsp; " : "ETA&nbsp; ") + sp(step >= 3 ? C.green : C.gold, phrase)) +
+        line(sp(C.faint, "rider contact &amp; live map → open the Swiggy app")) +
+        hintBar("d done &nbsp; esc back to menu")
+      );
     };
-    return { splash, browse, search, resto, checkout, track };
+    return { splash, browse, resto, checkout, confirm, track };
   };
 
   const setKey = (label) => { if (refs.key) refs.key.textContent = label; };
-  const staticTerminal = () => { if (refs.term) refs.term.innerHTML = screens().browse(0); };
+  const staticTerminal = () => { if (refs.term) refs.term.innerHTML = screens().browse(1); };
   const startTerminal = async () => {
     const el = refs.term;
     if (!el) return;
     const Sc = screens();
     const set = (html) => { if (el) el.innerHTML = html; };
-    const typeSsh = async () => {
-      const cmd = "store";
+    const typeCmd = async () => {
+      const cmd = "console";
       for (let i = 0; i <= cmd.length; i++) { if (S.dead) return; set('<div><span style="color:#565b80">~ % </span><span style="color:#a9b1d6">' + cmd.slice(0, i) + '</span><span style="display:inline-block;width:8px;height:14px;background:#93a8ff;vertical-align:middle;animation:blink 1s step-end infinite"></span></div>'); await wait(58); }
       await wait(420);
     };
-    const typeSearch = async () => {
-      const q = "biryani";
-      for (let i = 0; i <= q.length; i++) { if (S.dead) return; set(Sc.search(q.slice(0, i))); setKey("/ " + q.slice(0, i)); await wait(95); }
-      await wait(500);
-    };
     while (!S.dead) {
-      setKey("run"); await typeSsh(); if (S.dead) return;
-      set(Sc.splash()); setKey("boot"); await wait(2100); if (S.dead) return;
-      setKey("↵ enter"); set(Sc.browse(0)); await wait(1100); if (S.dead) return;
-      setKey("↓ Coffee"); set(Sc.browse(1)); await wait(1500); if (S.dead) return;
+      setKey("run"); await typeCmd(); if (S.dead) return;
+      set(Sc.splash()); setKey("boot"); await wait(2300); if (S.dead) return;
+      setKey("↵ enter store"); set(Sc.browse(0)); await wait(1400); if (S.dead) return;
+      setKey("↓ Coffee"); set(Sc.browse(1)); await wait(1600); if (S.dead) return;
       setKey("↵ open"); set(Sc.resto(false)); await wait(1400); if (S.dead) return;
       setKey("+ add"); set(Sc.resto(true)); await wait(1500); if (S.dead) return;
-      setKey("c cart"); set(Sc.checkout()); await wait(2200); if (S.dead) return;
-      setKey("↵ confirm");
-      for (let st = 0; st <= 3; st++) { if (S.dead) return; set(Sc.track(st)); await wait(820); }
-      setKey("✓ done"); await wait(1800); if (S.dead) return;
+      setKey("c cart"); set(Sc.checkout()); await wait(2400); if (S.dead) return;
+      setKey("↵ place"); set(Sc.confirm()); await wait(2000); if (S.dead) return;
+      setKey("↵ track");
+      for (let st = 0; st <= 3; st++) { if (S.dead) return; set(Sc.track(st)); await wait(900); }
+      setKey("✓ delivered"); await wait(1800); if (S.dead) return;
     }
   };
 
@@ -1344,10 +1088,7 @@ export function mount(root) {
   // boot
   if (refs.toast) refs.toast.style.display = "none";
   initReveal();
-  initNudge();
   initFaq();
-  initCmdClicks();
-  initFeaturesZoom();
   initStats();
   initWaitlist();
 
@@ -1371,8 +1112,7 @@ export function mount(root) {
     initFooterWordmark();
     startAmbient();
     startTerminal();
-    startPalette();
-    startCli();
+    startCliStrip();
     startAgent();
     const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
     const bail = () => { showWordmarkFallback(); startWordmark(); };
@@ -1408,9 +1148,8 @@ export function mount(root) {
     showWordmarkFallback();
     startWordmark();
     staticTerminal();
-    staticCli();
+    staticCliStrip();
     staticAgent();
-    if (refs.palette) refs.palette.textContent = "checkout";
   }
 
   return () => {
@@ -1423,16 +1162,10 @@ export function mount(root) {
     copyEls.forEach((el) => el.removeEventListener("click", copyInstall));
     if (S.shareCleanup) S.shareCleanup();
     faqHandlers.forEach(([q, h]) => q.removeEventListener("click", h));
-    cmdHandlers.forEach(([el, h]) => el.removeEventListener("click", h));
     wmHandlers.forEach(([el, h]) => el.removeEventListener("click", h));
     scrambleObservers.forEach((io) => io.disconnect());
     if (S.heroCleanup) S.heroCleanup();
-    if (S.nudgeCleanup) S.nudgeCleanup();
     if (S.statsCleanup) S.statsCleanup();
-    if (S.navCleanup) S.navCleanup();
-    if (S.snapCleanup) S.snapCleanup();
-    if (S.featZoomCleanup) S.featZoomCleanup();
     if (S.waitlistCleanup) S.waitlistCleanup();
-    cleanupKeys();
   };
 }

@@ -492,6 +492,16 @@ a {
   text-shadow: 0 0 10px rgba(147, 168, 255, 0.4);
 }
 
+/* ---- hero "two ways in" chips: ask Claude / the terminal shop ---- */
+.way-chip {
+  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+}
+.way-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(147, 168, 255, 0.45);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+
 /* ---- sticky top bar (shared by home, /features, /how-to via .site-nav) ----
    Full-width blurred bar that stays pinned on scroll; the content stays in a
    centered 1100px column via .site-nav-inner. */

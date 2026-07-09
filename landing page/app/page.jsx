@@ -17,14 +17,16 @@ export default function Home() {
       {/* Crawlable brand/keyword text. The visual wordmark is a <canvas>, so
           this gives search engines and screen readers real, indexable copy. */}
       <header className="sr-only">
-        <h1>consolestore — order food from your terminal, or from Claude</h1>
+        <h1>consolestore — order food from your terminal, or just ask Claude</h1>
         <p>
           consolestore (also written consolestore.in) is a terminal-native CLI
-          and TUI for ordering food through Swiggy — and an MCP server that lets
-          Claude (Claude Desktop and Claude Code) place real orders for you.
-          Browse restaurants, reorder a saved preset, or just tell Claude “order
-          my usual” — real orders from the command line or your AI agent, no
-          browser, no mouse.
+          and TUI for ordering food and Instamart groceries through Swiggy —
+          and an MCP server with a full ordering app that runs inside Claude
+          (Claude Desktop and Claude Code). Browse restaurants, reorder a saved
+          preset in one line (console order dinner), or just tell Claude “order
+          my usual” — real Swiggy orders with a real bill and your explicit
+          confirmation, from the command line or your AI agent. No browser, no
+          mouse.
         </p>
       </header>
       <div ref={hostRef} dangerouslySetInnerHTML={{ __html: MARKUP }} />
