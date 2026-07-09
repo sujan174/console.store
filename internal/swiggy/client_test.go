@@ -139,3 +139,28 @@ func TestCallToolNeverRetriesCheckout(t *testing.T) {
 		t.Fatalf("checkout must be attempted exactly once, got %d", got)
 	}
 }
+
+// TestParseToolResultMergesMeta covers Swiggy relocating upiIntentUrl from
+// structuredContent into result._meta (live 2026-07-09) — the merge must expose
+// it to decoders so the payment screen still gets the UPI string.
+func TestParseToolResultMergesMeta(t *testing.T) {
+	body := []byte(`{"result":{
+		"_meta":{"upiIntentUrl":"upi://pay?pa=x&am=394"},
+		"content":[{"type":"text","text":"PENDING"}],
+		"structuredContent":{"orderId":"O1","paasId":"P1","cartId":123}
+	},"jsonrpc":"2.0","id":2}`)
+	raw, err := parseToolResult(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["upiIntentUrl"] != "upi://pay?pa=x&am=394" {
+		t.Fatalf("_meta.upiIntentUrl not merged into result: %v", got)
+	}
+	if got["orderId"] != "O1" {
+		t.Fatalf("structuredContent lost after merge: %v", got)
+	}
+}

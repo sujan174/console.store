@@ -329,8 +329,12 @@ func parseToolResult(body []byte) (json.RawMessage, error) {
 		} `json:"error"`
 		Result *struct {
 			StructuredContent json.RawMessage `json:"structuredContent"`
-			IsError           bool            `json:"isError"`
-			Content           []struct {
+			// Meta carries out-of-band fields Swiggy sometimes puts OUTSIDE
+			// structuredContent — e.g. place_food_order's upiIntentUrl moved into
+			// result._meta (2026-07-09). Merge it in so decoders still see it.
+			Meta    json.RawMessage `json:"_meta"`
+			IsError bool            `json:"isError"`
+			Content []struct {
 				Type string `json:"type"`
 				Text string `json:"text"`
 			} `json:"content"`
@@ -352,7 +356,7 @@ func parseToolResult(body []byte) (json.RawMessage, error) {
 		}
 		return nil, &MCPError{Code: -1, Message: msg}
 	}
-	st := env.Result.StructuredContent
+	st := mergeMeta(env.Result.StructuredContent, env.Result.Meta)
 	if len(st) > 0 && string(st) != "{}" && string(st) != "null" {
 		return st, nil
 	}
@@ -360,4 +364,31 @@ func parseToolResult(body []byte) (json.RawMessage, error) {
 		return json.RawMessage(env.Result.Content[0].Text), nil
 	}
 	return json.RawMessage("null"), nil
+}
+
+// mergeMeta folds result._meta's keys into the structuredContent object so
+// decoders see fields Swiggy relocated out of structuredContent (e.g.
+// place_food_order's upiIntentUrl). structuredContent wins on any key conflict.
+// Returns structured unchanged when meta is empty/not an object, or when
+// structured is present but not a JSON object (never drops real content).
+func mergeMeta(structured, meta json.RawMessage) json.RawMessage {
+	var m map[string]json.RawMessage
+	if len(meta) == 0 || json.Unmarshal(meta, &m) != nil || len(m) == 0 {
+		return structured
+	}
+	base := map[string]json.RawMessage{}
+	if len(structured) > 0 && string(structured) != "null" {
+		if err := json.Unmarshal(structured, &base); err != nil {
+			return structured // not an object — leave it (e.g. text/array content)
+		}
+	}
+	for k, v := range m {
+		if _, ok := base[k]; !ok {
+			base[k] = v
+		}
+	}
+	if out, err := json.Marshal(base); err == nil {
+		return out
+	}
+	return structured
 }
