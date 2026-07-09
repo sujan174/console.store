@@ -163,9 +163,94 @@ function productList(): string {
   return `<div style="margin-top:14px" class="stagger">${im.products.map(productCard).join("")}</div>`;
 }
 
+function billRow(label: string, value: string, strong = false): string {
+  return (
+    `<div style="display:flex;justify-content:space-between;font-size:${strong ? "14px;font-weight:700" : "13px"};padding:3px 0${strong ? ";border-top:1px solid var(--border);margin-top:6px;padding-top:8px" : ""}">` +
+    `<span>${esc(label)}</span><span>${value}</span></div>`
+  );
+}
+
+export function renderIMCart(): string {
+  const c = im.cart!;
+  if (c.status === "loading") return loadingBlock(c.message ?? "~ % working");
+  if (c.status === "error") {
+    const closed = c.errorCode === "store_closed";
+    return (
+      `<div class="card" style="margin-top:14px">` +
+      `<div style="font-size:14px;font-weight:600;color:var(--text-danger)">${esc(c.error ?? "something went wrong")}</div>` +
+      `<div style="display:flex;gap:8px;margin-top:12px">` +
+      `<button type="button" data-im-cart-back class="btn">← back</button>` +
+      (closed ? "" : `<button type="button" data-im-retry-bill class="btn btn-primary">retry</button>`) +
+      `<button type="button" data-im-clear-cart class="btn">clear cart</button>` +
+      `</div>` +
+      `</div>`
+    );
+  }
+  if (c.status === "placed") {
+    return (
+      `<div class="card" style="margin-top:14px;text-align:center;padding:24px">` +
+      `<div style="font-size:16px;font-weight:700">🎉 order placed</div>` +
+      `<div style="font-size:13px;color:var(--text-secondary);margin-top:6px">cash on delivery · typically 10–20 min</div>` +
+      `<div style="font-size:13px;margin-top:6px">to pay: <b>${rupees(c.bill?.to_pay ?? 0)}</b></div>` +
+      `<button type="button" data-im-cart-back class="btn" style="margin-top:14px">back to instamart</button>` +
+      `</div>`
+    );
+  }
+  // bill / placing
+  const placing = c.status === "placing";
+  const bill = c.bill!;
+  const blocked = bill.lines.some((l) => !l.available);
+  const lineRows = bill.lines
+    .map((l) => {
+      const sold = !l.available;
+      return (
+        `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)${sold ? ";opacity:.55" : ""}">` +
+        `<div style="flex:1;min-width:0;font-size:13px">${esc(l.name)}${sold ? ` <span class="badge-soldout">sold out</span>` : ""}</div>` +
+        `<button type="button" data-im-cart-dec="${esc(l.spin_id)}" class="btn" style="padding:3px 9px"${placing ? " disabled" : ""}>−</button>` +
+        `<span style="font-size:13px;min-width:18px;text-align:center">${l.quantity}</span>` +
+        `<button type="button" data-im-cart-inc="${esc(l.spin_id)}" class="btn" style="padding:3px 9px"${placing ? " disabled" : ""}>+</button>` +
+        `<span style="font-size:13px;font-weight:600;min-width:64px;text-align:right">${rupees(l.price * l.quantity)}</span>` +
+        `</div>`
+      );
+    })
+    .join("");
+  return (
+    `<div style="margin-top:14px">` +
+    `<button type="button" data-im-cart-back class="btn" style="margin-bottom:10px"${placing ? " disabled" : ""}>← keep shopping</button>` +
+    `<div class="card">` +
+    `<div style="font-size:14px;font-weight:700;margin-bottom:8px">instamart cart${c.addressLabel ? ` · to ${esc(c.addressLabel)}` : ""}</div>` +
+    lineRows +
+    `<div style="margin-top:10px">` +
+    billRow("item total", rupees(bill.item_total)) +
+    billRow("delivery", bill.delivery === 0 ? "FREE" : rupees(bill.delivery)) +
+    billRow("handling + taxes", rupees(bill.handling + bill.taxes)) +
+    billRow("to pay (COD)", rupees(bill.to_pay), true) +
+    `</div>` +
+    (blocked ? `<div style="font-size:12px;color:var(--text-danger);margin-top:8px">a sold-out item blocks this order — remove it first</div>` : "") +
+    `<button type="button" data-im-place class="btn btn-primary" style="width:100%;margin-top:12px;padding:12px"${placing || blocked ? " disabled" : ""}>` +
+    (placing ? "placing…" : `place order · ${rupees(bill.to_pay)} COD`) +
+    `</button>` +
+    `<div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">real order · cannot be cancelled · pay cash on delivery</div>` +
+    `</div>` +
+    `</div>`
+  );
+}
+
 // renderIM paints the whole instamart vertical. addressLabel comes from the
 // caller (app.ts owns the shared address state).
 export function renderIM(addressLabel: string): string {
+  if (im.cart) {
+    return (
+      `<h2 class="sr-only">consolestore instamart — cart and checkout.</h2>` +
+      imHeader(addressLabel) +
+      `<div class="store-layout">` +
+      `<div class="content">` +
+      verticalTabs("instamart") +
+      renderIMCart() +
+      `</div>` +
+      `</div>`
+    );
+  }
   return (
     `<h2 class="sr-only">consolestore instamart — browse categories, search groceries, build a cart.</h2>` +
     imHeader(addressLabel) +

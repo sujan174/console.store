@@ -256,6 +256,176 @@ export function pendingCount(): number {
   return n;
 }
 
+function billFrom(raw: unknown): IMBill {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const lines = Array.isArray(o.lines) ? (o.lines as IMBillLine[]) : [];
+  const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : 0);
+  return {
+    lines,
+    item_total: num(o.item_total),
+    delivery: num(o.delivery),
+    handling: num(o.handling),
+    taxes: num(o.taxes),
+    to_pay: num(o.to_pay),
+    payment_methods: Array.isArray(o.payment_methods) ? (o.payment_methods as string[]) : undefined,
+    message: typeof o.message === "string" ? o.message : undefined,
+  };
+}
+
+function splitIMError(text: string): { code: string; message: string } {
+  const m = /^([a-z_]+):\s*(.*)$/s.exec(text.trim());
+  return m ? { code: m[1], message: m[2] } : { code: "", message: text };
+}
+
+// markClosedIfSo latches the per-address closed flag off the raw error text.
+function markClosedIfSo(text: string): boolean {
+  if (!text.toLowerCase().includes(STORE_CLOSED_MARKER)) return false;
+  im.closedAddrId = d().addressId();
+  return true;
+}
+
+// seedIMCartOnce pulls the server's existing IM cart ONE time so a cart built
+// in the Swiggy app shows up as editable lines. Lines without a sku_id (old
+// carts predating Swiggy's requirement) still render; the first sync will
+// fail with Swiggy's own message and the clear-cart affordance recovers.
+async function seedIMCartOnce(): Promise<void> {
+  if (im.seeded) return;
+  im.seeded = true;
+  try {
+    const result = await d().callTool("im_get_cart", {});
+    const scont = (result as { structuredContent?: { cart?: unknown } }).structuredContent;
+    const bill = billFrom(scont?.cart);
+    for (const l of bill.lines) {
+      if (!im.pending.has(l.spin_id) && l.quantity > 0) {
+        im.pending.set(l.spin_id, {
+          spinId: l.spin_id,
+          skuId: l.sku_id ?? "",
+          name: l.name,
+          label: "",
+          price: l.price,
+          qty: l.quantity,
+          available: l.available,
+        });
+      }
+    }
+  } catch {
+    /* empty cart surfaces as an error server-side — treat as empty */
+  }
+}
+
+// openIMCart: seed once, then sync (ONE im_update_cart with the full desired
+// lines — it REPLACES the server cart) and prepare the authoritative bill.
+export async function openIMCart(): Promise<void> {
+  im.cart = { status: "loading", message: "~ % syncing instamart cart" };
+  d().requestRender();
+  await seedIMCartOnce();
+  if (im.pending.size === 0) {
+    im.cart = { status: "error", error: "your instamart cart is empty — add something first", errorCode: "" };
+    d().requestRender();
+    return;
+  }
+  await imSyncAndBill();
+}
+
+async function imSyncAndBill(): Promise<void> {
+  const addressId = d().addressId();
+  const items = Array.from(im.pending.values()).map((l) => ({
+    spin_id: l.spinId,
+    sku_id: l.skuId,
+    quantity: l.qty,
+  }));
+  try {
+    const result = await d().callTool("im_update_cart", { address_id: addressId ?? undefined, items });
+    if ((result as { isError?: boolean }).isError) throw new Error(d().errorText(result));
+    // A successful WRITE proves the store is open again — clear the latch.
+    im.closedAddrId = null;
+    im.syncNote = null;
+  } catch (e) {
+    const text = String((e as Error)?.message ?? e);
+    if (markClosedIfSo(text)) {
+      im.cart = { status: "error", error: "store closed for this address — try a different address", errorCode: "store_closed" };
+    } else {
+      const { code, message } = splitIMError(text);
+      im.cart = { status: "error", error: message, errorCode: code };
+    }
+    d().requestRender();
+    return;
+  }
+  // Bill: the server's number is the ONLY total shown on this screen.
+  try {
+    const result = await d().callTool("im_prepare_order", { address_id: addressId ?? undefined });
+    if ((result as { isError?: boolean }).isError) throw new Error(d().errorText(result));
+    const scont = (result as { structuredContent?: { confirmation_id?: string; bill?: unknown } }).structuredContent;
+    im.cart = {
+      status: "bill",
+      confirmationId: scont?.confirmation_id ?? "",
+      bill: billFrom(scont?.bill),
+      addressLabel: d().addressLabel(),
+    };
+  } catch (e) {
+    const { code, message } = splitIMError(String((e as Error)?.message ?? e));
+    // under_min / over_cap keep the cart editable — show the reason, stay open.
+    im.cart = { status: "error", error: message, errorCode: code };
+  }
+  d().requestRender();
+}
+
+export function closeIMCart(): void {
+  im.cart = null;
+  d().requestRender();
+}
+
+// imEditLine adjusts a line from the CART screen then re-syncs + re-bills so
+// the shown bill is never stale.
+export async function imEditLine(spinId: string, delta: number): Promise<void> {
+  const l = im.pending.get(spinId);
+  if (!l) return;
+  l.qty += delta;
+  if (l.qty <= 0) im.pending.delete(spinId);
+  if (im.pending.size === 0) {
+    im.cart = { status: "error", error: "your instamart cart is empty — add something first", errorCode: "" };
+    d().requestRender();
+    return;
+  }
+  im.cart = { status: "loading", message: "~ % updating cart" };
+  d().requestRender();
+  await imSyncAndBill();
+}
+
+export async function imClearCart(): Promise<void> {
+  im.pending.clear();
+  im.cart = { status: "loading", message: "~ % clearing cart" };
+  d().requestRender();
+  try {
+    await d().callTool("im_clear_cart", {});
+  } catch {
+    /* already-empty comes back as an error — fine */
+  }
+  im.cart = null;
+  d().requestRender();
+}
+
+// imPlace: the ONLY entry to place_order, fired by the button press (safety
+// invariant 1). Never retried; on any error the order may still exist.
+export async function imPlace(): Promise<void> {
+  const current = im.cart;
+  if (!current || current.status !== "bill" || !current.confirmationId) return;
+  if (current.bill?.lines.some((l) => !l.available)) return; // sold-out line blocks placement
+  im.cart = { ...current, status: "placing" };
+  d().requestRender();
+  try {
+    const result = await d().callTool("place_order", { confirmation_id: current.confirmationId });
+    if ((result as { isError?: boolean }).isError) throw new Error(d().errorText(result));
+    const scont = (result as { structuredContent?: { order?: Record<string, unknown> } }).structuredContent;
+    im.pending.clear();
+    im.cart = { status: "placed", order: scont?.order ?? {}, bill: current.bill, addressLabel: current.addressLabel };
+  } catch (e) {
+    const { code, message } = splitIMError(String((e as Error)?.message ?? e));
+    im.cart = { ...current, status: "error", error: message, errorCode: code };
+  }
+  d().requestRender();
+}
+
 export function handleIMClick(el: HTMLElement): boolean {
   const cat = el.closest<HTMLElement>("[data-im-cat]");
   if (cat) {
@@ -310,6 +480,38 @@ export function handleIMClick(el: HTMLElement): boolean {
   const dec = el.closest<HTMLElement>("[data-im-dec]");
   if (dec) {
     decIMLine(dec.dataset.imDec ?? "");
+    return true;
+  }
+  if (el.closest("[data-im-open-cart]")) {
+    void openIMCart();
+    return true;
+  }
+  if (el.closest("[data-im-cart-back]")) {
+    closeIMCart();
+    return true;
+  }
+  const cinc = el.closest<HTMLElement>("[data-im-cart-inc]");
+  if (cinc) {
+    void imEditLine(cinc.dataset.imCartInc ?? "", 1);
+    return true;
+  }
+  const cdec = el.closest<HTMLElement>("[data-im-cart-dec]");
+  if (cdec) {
+    void imEditLine(cdec.dataset.imCartDec ?? "", -1);
+    return true;
+  }
+  if (el.closest("[data-im-clear-cart]")) {
+    void imClearCart();
+    return true;
+  }
+  if (el.closest("[data-im-place]")) {
+    void imPlace();
+    return true;
+  }
+  if (el.closest("[data-im-retry-bill]")) {
+    im.cart = { status: "loading", message: "~ % retrying" };
+    d().requestRender();
+    void imSyncAndBill();
     return true;
   }
   return false;
