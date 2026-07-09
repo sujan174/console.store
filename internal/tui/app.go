@@ -3257,7 +3257,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		m.imCartSyncErr = ""
+		if m.imStoreClosedAddr != m.addr.ID {
+			// A plain cart read succeeding says nothing about whether the store
+			// still accepts NEW writes for this address — don't let it silently
+			// clear a closed-store banner set from an actual update_cart failure.
+			m.imCartSyncErr = ""
+		}
 		m.imLiveCart = dm.Cart
 		for i := range m.imLines {
 			for _, l := range dm.Cart.Lines {
@@ -5978,6 +5983,13 @@ func (m *Model) openIMCheckoutCmd() tea.Cmd {
 	// lines on screen the fetch is a silent bill refresh, not a loading state.
 	if len(m.imLines) == 0 {
 		m.imCartFetched = false
+	}
+	if m.imStoreClosedAddr == m.addr.ID {
+		// get_cart itself will likely succeed (it just reads the existing cart) —
+		// that success must NOT wipe this banner, since the address is still
+		// closed for NEW writes. IMCartLoadedMsg's success branch checks the same
+		// flag before clearing imCartSyncErr.
+		m.imCartSyncErr = "store closed for this address — try a different address"
 	}
 	m.screen = scrCheckout
 	if !m.live {
