@@ -42,10 +42,10 @@ func TestUPIPlacedShowsQR(t *testing.T) {
 		t.Fatalf("paymentStage = %v, want payWaiting", um.paymentStage)
 	}
 	v := um.checkout.View(0)
-	// The amount and the always-present clickable browser link must show (the QR
-	// itself only renders when it fits the terminal).
-	if !strings.Contains(v, "pay") || !strings.Contains(v, "open payment page") {
-		t.Fatalf("payment view must show the amount + browser link:\n%s", v)
+	// The amount + an always-visible actionable line must show (bridgeUrl present
+	// → the "open the payment page in your browser" prompt).
+	if !strings.Contains(v, "pay") || !strings.Contains(v, "payment page") {
+		t.Fatalf("payment view must show the amount + a visible payment path:\n%s", v)
 	}
 }
 

@@ -258,39 +258,38 @@ func (c Checkout) paymentView(frame int) string {
 		}
 		b.WriteString("  " + theme.BrightStyle.Render(fmt.Sprintf("pay  ₹%d", amt)) + theme.DimStyle.Render("  ·  UPI") + "\n\n")
 
-		// Draw the scan QR only when it reliably fits the terminal (a clipped or
-		// wrapped QR is unscannable). The browser link below is the always-there
-		// path when it doesn't fit — or when the terminal's transparency/theme
-		// keeps the QR from painting.
-		w := components.ContentWidth()
-		qrRows := c.viewportH - 12 // rows left after the header/labels/hint chrome
-		if c.payUPI != "" && qr.FitsIn(c.payUPI, w, qrRows) {
+		// Draw the scan QR only when it reliably fits the terminal WIDTH (a wrapped
+		// QR is unscannable). Height is unbounded — a tall QR just scrolls. Note it
+		// still won't paint on terminals with transparency / a background image, so
+		// the plain-text options below are ALWAYS shown as the reliable path.
+		hasQR := false
+		if c.payUPI != "" && qr.FitsIn(c.payUPI, components.ContentWidth(), 0) {
 			if code := qr.Render(c.payUPI); code != "" {
 				b.WriteString(code + "\n")
-				b.WriteString("  " + theme.DimStyle.Render("scan with any UPI app · GPay · PhonePe · Paytm") + "\n")
+				b.WriteString("  " + theme.DimStyle.Render("scan with any UPI app · GPay · PhonePe · Paytm") + "\n\n")
+				hasQR = true
 			}
-		} else if c.payUPI != "" {
-			b.WriteString("  " + theme.DimStyle.Render("enlarge the terminal to show the scan QR, or:") + "\n")
 		}
 
-		// Always offer the hosted payment page as a clickable link (OSC-8) — opens
-		// in the browser, which renders a reliable QR + the UPI app buttons. Not
-		// auto-opened; the user clicks it or presses o.
-		if link := c.payLink; link != "" {
-			b.WriteString("  " + hyperlink(link, theme.GreenStyle.Render("❯ open payment page ↗")) +
-				theme.FaintStyle.Render("  (or press o)") + "\n")
+		// Always-visible actionable line — plain text, never hidden behind an OSC-8
+		// hyperlink (some terminals swallow those). A hosted page (http) opens in
+		// the browser via 'o'; a bare upi:// can only be scanned/opened on a phone.
+		switch {
+		case strings.HasPrefix(c.payLink, "http"):
+			b.WriteString("  " + theme.BrightStyle.Render("❯ press ") + theme.GreenStyle.Render("o") +
+				theme.BrightStyle.Render(" to open the payment page in your browser") + "\n")
+			b.WriteString("  " + theme.FaintStyle.Render(c.payLink) + "\n")
+		case c.payLink != "":
+			if !hasQR {
+				b.WriteString("  " + theme.FavStyle.Render("⚠ this terminal can't show the scan QR.") + "\n")
+			}
+			b.WriteString("  " + theme.DimStyle.Render("scan the QR with your phone, or copy this into a UPI app:") + "\n")
+			b.WriteString("  " + theme.FaintStyle.Render(c.payLink) + "\n")
 		}
 		b.WriteString("\n  " + theme.DimStyle.Render("waiting for payment ") + theme.GoldStyle.Render(spinAt(frame)) + "\n\n")
-		b.WriteString(components.Hint("esc", "cancel") + theme.FaintStyle.Render("   o open in browser"))
+		b.WriteString(components.Hint("esc", "cancel"))
 	}
 	return b.String()
-}
-
-// hyperlink wraps label in an OSC-8 terminal hyperlink pointing at url — clickable
-// in VS Code / iTerm / most modern terminals; degrades to just the label text
-// elsewhere (the o key opens it as a fallback).
-func hyperlink(url, label string) string {
-	return "\x1b]8;;" + url + "\x1b\\" + label + "\x1b]8;;\x1b\\"
 }
 
 // padTo right-pads s with spaces to the given display width.
