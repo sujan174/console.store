@@ -172,11 +172,24 @@ func (c *Client) PlaceFoodOrderUPI(ctx context.Context, req PlaceUPIRequest) (Pe
 	if !liveOrdersEnabled() {
 		return PendingPayment{}, ErrOrdersDisabled
 	}
-	raw, err := c.CallTool(ctx, "place_food_order", map[string]any{
+	// Swiggy's contract (place_food_order / get_payment_options docs): paymentMethod
+	// is the payment CODE ("UPI"), NOT the method id ("PayWithQR" is rejected as an
+	// "Unsupported payment method"). Then a desktop QR method uses generateUPIQR;
+	// a mobile app method echoes its id byte-for-byte into intentApp.
+	code := req.Method.PaymentCode
+	if code == "" {
+		code = "UPI"
+	}
+	args := map[string]any{
 		"addressId":     req.AddressID,
-		"paymentMethod": req.Method.ID,
-		"generateUPIQR": true,
-	})
+		"paymentMethod": code,
+	}
+	if req.Method.Kind == "intent" && req.Method.ID != "" {
+		args["intentApp"] = req.Method.ID
+	} else {
+		args["generateUPIQR"] = true // desktop scan-to-pay QR
+	}
+	raw, err := c.CallTool(ctx, "place_food_order", args)
 	if err != nil {
 		return PendingPayment{}, err
 	}

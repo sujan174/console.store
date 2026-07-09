@@ -86,7 +86,7 @@ func TestPlaceUPIDecodesPendingCamel(t *testing.T) {
 		},
 	})
 	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
-	p, err := c.PlaceFoodOrderUPI(context.Background(), PlaceUPIRequest{AddressID: "a1", Method: PaymentMethod{ID: "PayWithQR"}})
+	p, err := c.PlaceFoodOrderUPI(context.Background(), PlaceUPIRequest{AddressID: "a1", Method: PaymentMethod{ID: "PayWithQR", Kind: "qr", PaymentCode: "UPI"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +96,37 @@ func TestPlaceUPIDecodesPendingCamel(t *testing.T) {
 	if p.Lat == 0 || p.Lng == 0 || p.Amount != 346 {
 		t.Fatalf("numeric fields = %+v", p)
 	}
-	if gotArgs["paymentMethod"] != "PayWithQR" || gotArgs["generateUPIQR"] != true {
-		t.Fatalf("place args = %v; want paymentMethod=PayWithQR generateUPIQR=true", gotArgs)
+	// The desktop QR method must send the payment CODE "UPI" (not the id
+	// "PayWithQR", which Swiggy rejects) + generateUPIQR.
+	if gotArgs["paymentMethod"] != "UPI" || gotArgs["generateUPIQR"] != true {
+		t.Fatalf("place args = %v; want paymentMethod=UPI generateUPIQR=true", gotArgs)
+	}
+	if _, hasIntent := gotArgs["intentApp"]; hasIntent {
+		t.Fatalf("desktop QR must NOT send intentApp; args=%v", gotArgs)
+	}
+}
+
+// A mobile UPI-app method sends paymentMethod=UPI + intentApp=<app id>, no QR.
+func TestPlaceUPIIntentApp(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	var gotArgs map[string]any
+	srv := newFakeMCP(t, map[string]toolFn{
+		"place_food_order": func(a map[string]any) (any, error) {
+			gotArgs = a
+			return map[string]any{"orderId": "O1", "paasId": "P1", "upiIntent": "upi://x"}, nil
+		},
+	})
+	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
+	_, err := c.PlaceFoodOrderUPI(context.Background(), PlaceUPIRequest{AddressID: "a1",
+		Method: PaymentMethod{ID: "gpay://upi/", Kind: "intent", PaymentCode: "UPI"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotArgs["paymentMethod"] != "UPI" || gotArgs["intentApp"] != "gpay://upi/" {
+		t.Fatalf("intent args = %v; want paymentMethod=UPI intentApp=gpay://upi/", gotArgs)
+	}
+	if _, hasQR := gotArgs["generateUPIQR"]; hasQR {
+		t.Fatalf("intent-app place must NOT send generateUPIQR; args=%v", gotArgs)
 	}
 }
 
