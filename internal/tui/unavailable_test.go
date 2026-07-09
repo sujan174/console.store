@@ -84,9 +84,20 @@ func TestAvailableCartAllowsOrder(t *testing.T) {
 	out, placeCmd := m.Update(datasource.CartSyncedMsg{Cart: availCart})
 	m = out.(Model)
 	if placeCmd == nil {
-		t.Fatal("an all-available, price-matched cart should place the order")
+		t.Fatal("an all-available, price-matched cart should begin placing the order")
 	}
-	if _, ok := placeCmd().(datasource.OrderPlacedMsg); !ok {
+	// Placement now routes through the UPI check first; a Cash-only account (the
+	// fake default) comes back UPI=false and falls back to the Cash place.
+	upiMsg, ok := placeCmd().(datasource.UPIPlacedMsg)
+	if !ok {
+		t.Fatalf("place should first fire the UPI check; got %T", placeCmd())
+	}
+	out, cashCmd := m.Update(upiMsg)
+	m = out.(Model)
+	if cashCmd == nil {
+		t.Fatal("a Cash-only account must fall back to the Cash place")
+	}
+	if _, ok := cashCmd().(datasource.OrderPlacedMsg); !ok {
 		t.Fatal("expected the order to be placed")
 	}
 }

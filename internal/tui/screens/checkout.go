@@ -9,6 +9,7 @@ import (
 
 	"consolestore/internal/catalog"
 	"consolestore/internal/tui/components"
+	"consolestore/internal/tui/qr"
 	"consolestore/internal/tui/theme"
 )
 
@@ -29,6 +30,20 @@ type Checkout struct {
 	viewportH  int  // terminal height; windows the item list so the page never overflows
 	cartWait   bool // live cart fetch in flight — an empty cart shows a loader, never "empty"
 	hour       int  // local hour (0–23) for the loaders' late-night copy
+	// UPI payment sub-state: 0 idle, 1 waiting (QR up), 2 confirming, 3 failed.
+	payStage int
+	payUPI   string // UPI intent string, rendered as a scan-to-pay QR
+	payTotal int
+}
+
+// WithPayment attaches the UPI payment sub-state (stage 0=idle,1=waiting,
+// 2=confirming,3=failed). When non-idle the checkout renders the scan-to-pay QR
+// instead of the cart summary.
+func (c Checkout) WithPayment(stage int, upiString string, amount int) Checkout {
+	c.payStage = stage
+	c.payUPI = upiString
+	c.payTotal = amount
+	return c
 }
 
 func NewCheckout(restaurant string, addr catalog.Address, lines []CartLine, eta string) Checkout {
@@ -205,7 +220,50 @@ func (c Checkout) View(frame int) string {
 	if c.placed {
 		return c.confirmView(frame)
 	}
+	if c.payStage != 0 {
+		return c.paymentView(frame)
+	}
 	return c.summaryView(frame)
+}
+
+// paymentView renders the UPI scan-to-pay flow: a QR of the UPI intent the user
+// scans with any UPI app, then a "paid → placing" beat, or a failure with a way
+// back. Shown when Swiggy has disabled Cash and the order awaits online payment.
+func (c Checkout) paymentView(frame int) string {
+	var b strings.Builder
+	title := theme.BrandStyle.Render("payment")
+	if c.restaurant != "" {
+		title += theme.FaintStyle.Render("  ·  ") + theme.DimStyle.Render(c.restaurant)
+	}
+	b.WriteString("  " + title + "\n")
+	b.WriteString(components.Divider() + "\n\n")
+
+	switch c.payStage {
+	case 3: // failed / timed out
+		msg := c.orderErr
+		if msg == "" {
+			msg = "payment failed — nothing was charged."
+		}
+		b.WriteString("  " + theme.FavStyle.Render("⚠ "+msg) + "\n\n")
+		b.WriteString(components.Hint("esc", "back to cart"))
+	case 2: // paid, finalizing
+		b.WriteString("  " + theme.GreenStyle.Render("✓ paid") +
+			theme.DimStyle.Render("  ·  placing your order… ") + theme.GoldStyle.Render(spinAt(frame)) + "\n")
+	default: // waiting for payment
+		amt := c.payTotal
+		if amt == 0 { // place response didn't carry an amount — use the synced bill
+			amt = c.payAmount()
+		}
+		b.WriteString("  " + theme.BrightStyle.Render(fmt.Sprintf("scan to pay  ₹%d", amt)) + "\n")
+		b.WriteString("  " + theme.DimStyle.Render("cash on delivery is disabled — pay by UPI") + "\n\n")
+		if code := qr.Render(c.payUPI); code != "" {
+			b.WriteString(code + "\n")
+		}
+		b.WriteString("  " + theme.DimStyle.Render("scan with any UPI app · GPay · PhonePe · Paytm") + "\n")
+		b.WriteString("  " + theme.DimStyle.Render("waiting for payment ") + theme.GoldStyle.Render(spinAt(frame)) + "\n\n")
+		b.WriteString(components.Hint("esc", "cancel"))
+	}
+	return b.String()
 }
 
 // padTo right-pads s with spaces to the given display width.

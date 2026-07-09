@@ -44,8 +44,10 @@ type liveFake struct {
 	imGoToCalls   int              // count of IMGoTo calls (rail-load dedupe tests)
 	placeCalls    int              // count of PlaceOrder calls (place-safety gate tests)
 
-	// UPI payment scripting (checkout flow tests).
-	upiNoUPI      bool                // PlaceUPI returns UPI=false (Cash fallback)
+	// UPI payment scripting (checkout flow tests). Default is Cash (UPI=false) so
+	// every existing place-flow test keeps exercising the legacy path unchanged;
+	// set upiEnabled to drive the UPI-QR flow.
+	upiEnabled    bool                // PlaceUPI returns UPI=true when set
 	upiPending    api.PendingPayment  // returned by PlaceUPI (defaults filled if zero)
 	payStatuses   []api.PaymentStatus // consumed one per PollPayment; last value repeats
 	payIdx        int
@@ -57,7 +59,7 @@ type liveFake struct {
 
 func (f *liveFake) PlaceUPI(string) (api.PendingPayment, bool, error) {
 	f.placeUPICalls++
-	if f.upiNoUPI {
+	if !f.upiEnabled {
 		return api.PendingPayment{}, false, f.err
 	}
 	p := f.upiPending
@@ -317,13 +319,24 @@ func TestLivePlaceOrderTransitionsToConfirm(t *testing.T) {
 		t.Fatal("expected the final pre-place sync command")
 	}
 
-	// The pre-place sync lands re-priced to the confirmed total → NOW it places.
+	// The pre-place sync lands re-priced to the confirmed total → NOW it places,
+	// routing through the UPI check. A Cash-only account (fake default) comes back
+	// UPI=false and falls back to the Cash place.
 	out, placeCmd := m.Update(datasource.CartSyncedMsg{Cart: syncedCart})
 	m = out.(Model)
 	if placeCmd == nil {
 		t.Fatal("a price-matched final sync must fire the place command")
 	}
-	if _, ok := placeCmd().(datasource.OrderPlacedMsg); !ok {
+	upiMsg, ok := placeCmd().(datasource.UPIPlacedMsg)
+	if !ok {
+		t.Fatalf("place should fire the UPI check first; got %T", placeCmd())
+	}
+	out, cashCmd := m.Update(upiMsg)
+	m = out.(Model)
+	if cashCmd == nil {
+		t.Fatal("a Cash-only account must fall back to the Cash place")
+	}
+	if _, ok := cashCmd().(datasource.OrderPlacedMsg); !ok {
 		t.Fatal("expected the place command to place the order")
 	}
 

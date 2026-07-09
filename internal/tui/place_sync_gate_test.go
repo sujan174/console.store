@@ -93,7 +93,18 @@ func TestConfirmPlaceOrderSuccessfulSyncPlaces(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("a successful, price-matched sync must fire the place command")
 	}
-	if _, ok := cmd().(datasource.OrderPlacedMsg); !ok {
+	// Placement routes through the UPI check first; a Cash-only account (fake
+	// default) comes back UPI=false and falls back to the Cash place.
+	upiMsg, ok := cmd().(datasource.UPIPlacedMsg)
+	if !ok {
+		t.Fatalf("place should fire the UPI check first; got %T", cmd())
+	}
+	out, cashCmd := mm.Update(upiMsg)
+	mm = out.(Model)
+	if cashCmd == nil {
+		t.Fatal("a Cash-only account must fall back to the Cash place")
+	}
+	if _, ok := cashCmd().(datasource.OrderPlacedMsg); !ok {
 		t.Fatal("expected the place command to place the order")
 	}
 	if be.placeCalls != 1 {

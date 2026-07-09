@@ -89,6 +89,23 @@ const (
 	scrWelcome // first-run onboarding: food animation + intro card (appended last so no other iota shifts)
 )
 
+// paymentStage is the UPI online-payment sub-state on the food checkout page.
+type paymentStage int
+
+const (
+	payIdle       paymentStage = iota // no online payment in flight (Cash path, or pre-place)
+	payWaiting                        // QR shown; polling for the user to pay
+	payConfirming                     // paid — finalizing the order (confirm_order)
+	payFailed                         // payment failed / cancelled / timed out
+)
+
+// paymentPollTicks is the check_payment_status cadence in 60ms ticks (~4s), and
+// paymentTimeoutTicks bounds the wait (~5 min) before we give up on the payment.
+const (
+	paymentPollTicks    = 66
+	paymentTimeoutTicks = 5000
+)
+
 type Model struct {
 	repo    catalog.Repository
 	addr    catalog.Address
@@ -317,7 +334,16 @@ type Model struct {
 	authClient   AuthClient // polls callback completion + starts re-auth; nil on the mock path
 	seeded       bool       // true when catalog/swiggy.Snapshot was pre-seeded from config; skips live init loads
 
-	placingOrder bool     // true while PlaceOrderCmd is in-flight; blocks double-fire
+	placingOrder bool // true while PlaceOrderCmd is in-flight; blocks double-fire
+	// UPI payment sub-state on the food checkout. When Swiggy has disabled Cash,
+	// place returns a PENDING_PAYMENT order + a UPI intent; the user scans the QR,
+	// we poll for payment, then confirm. paymentStage drives the checkout render;
+	// payToken guards a stale poll after the user abandons/supersedes.
+	paymentStage paymentStage
+	pending      api.PendingPayment
+	payToken     int
+	payPollTick  int      // ticks since the last poll fired (cadence)
+	payElapsed   int      // total ticks in payWaiting (timeout)
 	cartSyncErr  string   // last cart-sync error; shown in status bar (non-fatal)
 	orderErr     string   // last order-placement error; shown in status bar
 	liveCart     api.Cart // last synced/fetched Swiggy cart (real lines + pricing)
@@ -2092,6 +2118,23 @@ func (m Model) Init() tea.Cmd {
 // onTick advances time-based screen state; extended by later tasks.
 func (m Model) onTick() (Model, tea.Cmd) {
 	m.nowUnix = time.Now().Unix()
+	// UPI payment: while the QR is up, poll check_payment_status on cadence and
+	// give up after the timeout (nothing is charged for an unpaid pending order).
+	if m.screen == scrCheckout && m.checkoutVertical == 0 && m.paymentStage == payWaiting {
+		m.payElapsed++
+		m.payPollTick++
+		if m.payElapsed >= paymentTimeoutTicks {
+			m.paymentStage = payFailed
+			m.payToken++ // invalidate any in-flight poll
+			m.orderErr = "payment timed out — nothing was charged. try again."
+			m.checkout = m.buildCheckout()
+			return m, nil
+		}
+		if m.payPollTick >= paymentPollTicks && m.backend != nil {
+			m.payPollTick = 0
+			return m, datasource.PollPaymentCmd(m.backend, m.pending, m.payToken)
+		}
+	}
 	if m.screen == scrSplash {
 		// Resolve the decode, then keep ticking so the idle shimmer animates.
 		if m.decodeStep < render.DecodeSteps {
@@ -2932,7 +2975,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.checkout = m.buildCheckout()
 				return m, nil
 			default:
-				return m, datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID)
+				// UPI-first: PlaceUPI fetches payment options and, if the user has a
+				// scan-to-pay method, places an online order (bool=true) and we show
+				// the QR. A Cash-only user comes back bool=false and we fall through
+				// to the legacy Cash place (handled in the UPIPlacedMsg case).
+				return m, datasource.PlaceUPICmd(m.backend, m.addr.ID)
 			}
 		}
 		if m.cartConfirmPending {
@@ -3259,8 +3306,61 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.needsAuth = true // no client (mock) → just show the gate
 		return m, nil
+	case datasource.UPIPlacedMsg:
+		if dm.Err != nil {
+			m.placingOrder = false
+			m.orderErr = "order failed: " + dm.Err.Error()
+			if m.screen == scrCheckout && m.checkoutVertical == 0 {
+				m.checkout = m.buildCheckout()
+			}
+			return m, nil
+		}
+		if !dm.UPI {
+			// Cash-only user (no UPI method) — fall back to the legacy Cash place.
+			// placingOrder stays true; OrderPlacedMsg resolves it.
+			return m, datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID)
+		}
+		// Online order placed as PENDING_PAYMENT — show the QR and start polling.
+		m.placingOrder = false
+		m.pending = dm.Pending
+		m.paymentStage = payWaiting
+		m.payToken++
+		m.payPollTick = 0
+		m.payElapsed = 0
+		m.orderErr = ""
+		if m.screen == scrCheckout && m.checkoutVertical == 0 {
+			m.checkout = m.buildCheckout()
+		}
+		return m, nil
+
+	case datasource.PaymentPolledMsg:
+		if dm.Token != m.payToken || m.paymentStage != payWaiting {
+			return m, nil // stale poll (abandoned/superseded) — ignore
+		}
+		if dm.Err != nil {
+			return m, nil // transient — keep waiting/polling
+		}
+		switch dm.Status {
+		case api.PaySuccess:
+			m.paymentStage = payConfirming
+			if m.screen == scrCheckout && m.checkoutVertical == 0 {
+				m.checkout = m.buildCheckout()
+			}
+			return m, datasource.ConfirmOrderCmd(m.backend, m.pending)
+		case api.PayFailed:
+			m.paymentStage = payFailed
+			m.orderErr = "payment failed or cancelled — nothing was charged. try again."
+			if m.screen == scrCheckout && m.checkoutVertical == 0 {
+				m.checkout = m.buildCheckout()
+			}
+			return m, nil
+		default:
+			return m, nil // still pending
+		}
+
 	case datasource.OrderPlacedMsg:
 		m.placingOrder = false
+		m.paymentStage = payIdle // confirm (or Cash place) resolved the payment sub-state
 		if dm.Err != nil {
 			// Surface the real Swiggy rejection on the checkout page, not just the
 			// status bar — the order did NOT go through.
@@ -4119,6 +4219,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Esc closes the restaurant-info modal first (the browse-list 'i' card).
 			if m.screen == scrMenu && m.restInfoOpen {
 				m.restInfoOpen = false
+				return m, nil
+			}
+			// Abandon an in-flight / failed UPI payment: a single esc drops the QR
+			// and returns to the cart summary (the unpaid pending order expires
+			// server-side). Handled before the double-tap so it can't splash away.
+			if m.screen == scrCheckout && m.checkoutVertical == 0 && m.paymentStage != payIdle {
+				m.paymentStage = payIdle
+				m.payToken++ // invalidate any in-flight poll
+				m.pending = api.PendingPayment{}
+				m.orderErr = ""
+				m.lastEscFrame = m.frame
+				m.checkout = m.buildCheckout()
 				return m, nil
 			}
 			if m.frame-m.lastEscFrame <= escDoubleWindow {
@@ -5724,6 +5836,7 @@ func (m Model) buildCheckout() screens.Checkout {
 		WithOrderErr(m.orderErr).
 		WithMutating(m.cartMutating).
 		WithCartWait(m.live && (!m.cartLoaded || m.cartSyncPending || m.cartSyncInFlight)).
+		WithPayment(int(m.paymentStage), m.pending.UPIString, m.pending.Amount).
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.cartScreenLines())))
 }
 
