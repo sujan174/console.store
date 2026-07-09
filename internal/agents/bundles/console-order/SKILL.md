@@ -72,6 +72,7 @@ the server fills the active address):
 | A named restaurant ("open Truffles") | `open_store{restaurant_name:"Truffles"}` — the app finds it and opens its menu |
 | An item/dish from a named restaurant ("burgers from Truffles", "a Maharaja Mac from McDonald's") | `open_store{restaurant_name:"McDonald's", query:"Maharaja Mac"}` — the app opens the restaurant with its in-menu search prefilled to the dish, matches shown, user picks |
 | Reorder ("my usual", "what I got last time", "order that again") | `get_previous_orders{}` → present the list → the user picks one (or `open_store{}` — the home lists recent orders); a human still presses place |
+| Groceries / quick-commerce ("get me milk", "order a red bull", "snacks") | `open_store{vertical:"instamart", query:"milk"}` — the SAME app opens on the grocery vertical; the user browses, picks pack sizes, and checks out (COD) in it |
 
 **Restaurant name**: pass the restaurant the user named as `restaurant_name`
 (don't resolve its id yourself). The app searches for it; if the name clearly
@@ -226,29 +227,18 @@ Never call `place_order` on your own initiative, and never retry it. On any
 error the order may still have been placed — call `list_active_orders` before
 doing anything else.
 
-## Instamart (groceries) — unchanged, text-driven
+## Instamart (groceries) — the same app
 
-Instamart is a separate vertical, not part of the `open_store` app rewrite.
-Quick-commerce groceries ("get me milk", "order a red bull", "add bananas")
-go through the `im_*` tools — NOT the restaurant tools:
+Grocery intents route through `open_store{vertical:"instamart", query?}` —
+one call, same app, same rules (one widget per turn; the app drives the
+`im_*` tools itself). The Food cart and the Instamart cart are independent —
+building one never touches the other; say which cart you're acting on when
+both are in play. Limits the app enforces: **₹99 minimum** (`under_min:`),
+**₹1000 cap** (`over_cap:`), **COD only**, no cancellation.
 
-- `im_search_products {address_id, query}` — products come back with
-  `variants` (pack sizes), each with its own `spin_id` and price. **Carts
-  hold variants**: when several pack sizes exist, ask which one (or match the
-  user's words) — never pick a size silently.
-- `im_update_cart {address_id, items:[{spin_id, qty}]}` — **REPLACES the
-  whole Instamart cart.** Adding to an existing cart: `im_get_cart` first,
-  resend the existing lines plus the new one. The Instamart cart binds to the
-  address and may span multiple stores — there is no restaurant-conflict
-  concept.
-- `im_get_cart` — lines + the real bill (`item_total`, `delivery`,
-  `handling`, `to_pay`) and the available payment methods.
-- `im_prepare_order {address_id}` → bill + `confirmation_id`, then the SAME
-  confirm-then-`place_order` gate as food (`place_order` routes by the
-  confirmation automatically). Limits: **₹99 minimum** (`under_min:`) and the
-  same **₹1000 cap** (`over_cap:`). COD only; typical delivery 10–20 min.
-- The Food cart and the Instamart cart are independent — building one never
-  touches the other. Say which cart you're acting on when both are in play.
+For the TEXT fallback (no MCP Apps) or hands-on recovery, read
+`references/instamart.md` — it covers the `im_*` tool flow, the
+spin_id+sku_id cart requirement, and closed-store handling.
 
 ## Presets
 
