@@ -294,9 +294,8 @@ export function renderRecovery(): string {
       `<div class="load-body">` +
         `<div class="card" style="max-width:400px;text-align:center">` +
           `<div class="cs-line">~ % session paused</div>` +
-          `<div style="font-size:15px;font-weight:600;margin:6px 0 4px">the connection dropped</div>` +
-          `<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">switching chats paused this order session, so it stopped loading. reload to pick up right where you left off.</div>` +
-          `<button type="button" data-reload class="btn btn-primary btn-block" style="margin-top:16px">${icon("refresh", 15)} reload</button>` +
+          `<div style="font-size:15px;font-weight:600;margin:6px 0 4px">this order session timed out</div>` +
+          `<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">switching chats pauses the app and it can't reconnect itself. just ask Claude to open the store again — your cart is saved and will be right where you left it.</div>` +
         `</div>` +
       `</div>` +
     `</div>`

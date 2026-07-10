@@ -913,14 +913,16 @@ let placeInFlight = false;
 // session (`cartVerifiedRestaurant`), BEFORE any update_cart (invariant 3): a
 // foreign non-empty cart raises the menu-level keep/clear prompt and nothing is
 // written until the user resolves it.
-let cartSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let cartVerifiedRestaurant: string | null = null;
 // Writes are serialized on this chain so they never overlap. flushCartSync
 // awaits the chain's tail, giving checkout a TRUE barrier: the latest pending
 // set is on the server before prepare_order (a fire-and-forget reschedule would
 // let prepare_order run against a stale cart).
 let cartSyncChain: Promise<void> = Promise.resolve();
-const CART_SYNC_DEBOUNCE_MS = 550;
+// One trailing sync at most is queued behind the in-flight write — mashing +
+// collapses every intermediate edit into it (syncCartOnce reads state.pending
+// when it RUNS, so the trailing write always carries the latest quantities).
+let cartSyncTrailing = false;
 
 // confirmedPending is the last state.pending snapshot we KNOW the server
 // agrees with — set after a successful update_cart and after a same-restaurant
@@ -1049,14 +1051,35 @@ function setSyncBusy(busy: boolean): void {
   render();
 }
 
+// scheduleCartSync fires the cart write IMMEDIATELY on the edit that caused it
+// (the add press itself syncs — no debounce delay), while still coalescing a
+// burst: edits made while a write is in flight collapse into ONE trailing
+// write. Worst-case write rate stays bounded by the round-trip (ban-safe).
 function scheduleCartSync(): void {
-  if (cartSyncTimer) clearTimeout(cartSyncTimer);
-  setSyncBusy(true); // show "saving…" immediately, through the debounce window
-  cartSyncTimer = setTimeout(() => {
-    cartSyncTimer = null;
-    void enqueueCartSync();
-  }, CART_SYNC_DEBOUNCE_MS);
-  log("scheduleCartSync", { pending: state.pending.size });
+  setSyncBusy(true);
+  if (pendingSyncs > 0) {
+    if (!cartSyncTrailing) {
+      cartSyncTrailing = true;
+      // Clear the flag the moment the trailing write STARTS (not when it
+      // ends): syncCartOnce snapshots state.pending as it runs, so an edit
+      // landing mid-run must be able to queue a FRESH trailing write — with
+      // an on-completion reset that edit would be silently dropped until the
+      // checkout flush.
+      cartSyncChain = cartSyncChain.then(
+        () => {
+          cartSyncTrailing = false;
+        },
+        () => {
+          cartSyncTrailing = false;
+        },
+      );
+      void enqueueCartSync();
+    }
+    log("scheduleCartSync coalesced", { pending: state.pending.size });
+    return;
+  }
+  void enqueueCartSync();
+  log("scheduleCartSync fired", { pending: state.pending.size });
 }
 
 // enqueueCartSync appends one write to the serialized chain and returns a
@@ -1069,7 +1092,7 @@ function enqueueCartSync(): Promise<void> {
   setSyncBusy(true);
   cartSyncChain = cartSyncChain.then(syncCartOnce, syncCartOnce).finally(() => {
     pendingSyncs--;
-    if (pendingSyncs === 0 && !cartSyncTimer) setSyncBusy(false);
+    if (pendingSyncs === 0) setSyncBusy(false);
   });
   return cartSyncChain;
 }
@@ -1077,10 +1100,9 @@ function enqueueCartSync(): Promise<void> {
 // flushCartSync forces any debounced sync to run now and awaits the chain tail,
 // so the server cart matches the pending set before prepare_order at checkout.
 async function flushCartSync(): Promise<void> {
-  if (cartSyncTimer) {
-    clearTimeout(cartSyncTimer);
-    cartSyncTimer = null;
-  }
+  // Every edit already fired its write (leading-edge scheduleCartSync); one
+  // more enqueue makes the tail carry the very latest pending set, and
+  // awaiting it is the true barrier prepare_order needs.
   await enqueueCartSync();
 }
 
@@ -2612,17 +2634,13 @@ function resetRestaurantScopedState(): void {
   state.cartSyncError = null;
   cartToken++; // discard any in-flight checkout from a previous restaurant
   // Fresh restaurant → re-run the cross-restaurant conflict guard on its first
-  // add, and drop any debounced sync queued for the previous restaurant.
+  // add, any in-flight write is fenced by the serialized chain.
   cartVerifiedRestaurant = null;
   // No confirmed baseline yet for this restaurant — an empty Map is the right
   // rollback target (H3) until the first get_cart/update_cart establishes one.
   confirmedPending = null;
   lastSyncOk = true;
   lastBill = null; // M5 — a new restaurant has no bill to stash yet
-  if (cartSyncTimer) {
-    clearTimeout(cartSyncTimer);
-    cartSyncTimer = null;
-  }
 }
 
 type DeepLink = { itemId: string; search: string };
