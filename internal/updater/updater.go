@@ -106,21 +106,24 @@ func Run(ctx context.Context, o Options) {
 		return // no build for this platform
 	}
 
-	fmt.Fprintf(o.Out, "consolestore ↑ updating %s → %s\n", o.Current, pl.Version)
-	bin, err := o.download(ctx)
+	u := newUI(o.Out)
+	u.header(o.Current, pl.Version, o.Mark.Channel)
+	bin, err := o.downloadProgress(ctx, u)
+	u.progressDone()
 	if err != nil {
-		fmt.Fprintf(o.Out, "consolestore: update failed, staying on %s\n", o.Current)
+		u.fail(o.Current)
 		return
 	}
 	got := sha256.Sum256(bin)
 	if hex.EncodeToString(got[:]) != wantSum {
-		fmt.Fprintln(o.Out, "consolestore: update checksum mismatch — skipping")
+		u.badSum()
 		return
 	}
 	if err := o.swap(o.ExePath, bin, 0o755); err != nil {
-		fmt.Fprintf(o.Out, "consolestore: update failed, staying on %s\n", o.Current)
+		u.fail(o.Current)
 		return
 	}
+	u.success()
 	_ = o.reexec(o.ExePath)
 }
 
@@ -148,6 +151,49 @@ func (o Options) download(ctx context.Context) ([]byte, error) {
 	defer cancel()
 	u := fmt.Sprintf("%s/%s/download/%s", o.Base, o.Mark.Channel, o.assetName())
 	return o.get(ctx, u)
+}
+
+// downloadProgress streams the binary while feeding the ui's in-place bar.
+// Identical semantics to download() otherwise; on a non-terminal Out the bar
+// renders nothing and this degrades to a plain buffered read.
+func (o Options) downloadProgress(ctx context.Context, u ui) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
+	defer cancel()
+	url := fmt.Sprintf("%s/%s/download/%s", o.Base, o.Mark.Channel, o.assetName())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if o.Mark.Channel == "alpha" && o.Mark.AlphaCode != "" {
+		q := req.URL.Query()
+		q.Set("code", o.Mark.AlphaCode)
+		req.URL.RawQuery = q.Encode()
+	}
+	resp, err := o.HTTP.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("updater: GET %s -> %d", url, resp.StatusCode)
+	}
+	total := resp.ContentLength
+	var buf []byte
+	chunk := make([]byte, 256<<10)
+	body := io.LimitReader(resp.Body, 64<<20)
+	for {
+		n, rerr := body.Read(chunk)
+		if n > 0 {
+			buf = append(buf, chunk[:n]...)
+			u.progress(int64(len(buf)), total)
+		}
+		if rerr == io.EOF {
+			return buf, nil
+		}
+		if rerr != nil {
+			return nil, rerr
+		}
+	}
 }
 
 // get issues a GET, attaching the alpha code (query param) when present.
