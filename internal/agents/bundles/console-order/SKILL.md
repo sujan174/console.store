@@ -5,15 +5,16 @@ description: Use when the user wants to order food or groceries (Instamart), bui
 
 # Ordering food & groceries with consolestore
 
-consolestore exposes Swiggy ordering as MCP tools. **Food** renders as one
-interactive **ordering app** (opened with `open_store`) that the user browses,
-customizes, and checks out in directly — the app calls the tools it needs
-back itself. Your job on a food intent is **resolution + routing**: figure out
-what the user means and open the app at the right place. You do not build the
-cart or the bill by hand unless you're in the text-only fallback (no MCP Apps
-support) or working the Instamart vertical (see below, unchanged, `im_*`
-tools, its own cart). Food and Instamart carts never interact. Orders cost
-**real money and cannot be cancelled**.
+consolestore exposes Swiggy ordering as MCP tools. Both verticals — **Food**
+(restaurants) and **Instamart** (groceries) — render as one interactive
+**ordering app** (opened with `open_store`) that the user browses, customizes,
+and checks out in directly — the app calls the tools it needs back itself.
+Your job on an ordering intent is **resolution + routing**: figure out what
+the user means and open the app at the right place (food by default;
+`vertical:"instamart"` for groceries). You do not build the cart or the bill
+by hand unless you're in the text-only fallback (no MCP Apps support — see
+`references/instamart.md` for the grocery flow). Food and Instamart carts
+never interact. Orders cost **real money and cannot be cancelled**.
 
 ## Step 1 — never pre-fetch state; every tool self-resolves the address
 
