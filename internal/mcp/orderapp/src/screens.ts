@@ -160,17 +160,34 @@ function itemControl(item: MenuItemData, qty: number): string {
   return `<button type="button" data-add="${esc(item.id)}" class="btn">${icon("plus", 14)} add</button>`;
 }
 
+// itemRow paints one menu item as a bordered `.card` — the Instamart
+// productCard treatment (name + price/·customizable on the left, the existing
+// itemControl stepper/add on the right). Purely visual; the qty aggregation,
+// `--i:` stagger var, sold-out dimming, and itemControl markup are unchanged.
 function itemRow(item: MenuItemData, pending: Map<string, PendingLine>, index: number): string {
   // Aggregate across variants so a customized item shows its true in-cart count.
   const qty = pendingAggQty(pending, item.id);
-  const nameWeight = qty > 0 ? 500 : 400;
+  const nameWeight = qty > 0 ? 600 : 400;
   const customizeNote = item.customizable && item.in_stock ? " · customizable" : "";
   const style = item.in_stock ? `--i:${Math.min(index, 12)}` : `--i:${Math.min(index, 12)};opacity:.5`;
-  return `<div class="tile" style="${style}">${vegMark(item.veg)}<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:${nameWeight}">${esc(item.name)}</div><div style="font-size:13px;color:var(--text-secondary)">${money(item.price)}${customizeNote}</div></div>${itemControl(item, qty)}</div>`;
+  return (
+    `<div class="card" style="${style}">` +
+    `<div style="display:flex;align-items:center;gap:11px">` +
+    vegMark(item.veg) +
+    `<div style="flex:1;min-width:0">` +
+    `<div style="font-size:14px;font-weight:${nameWeight}">${esc(item.name)}</div>` +
+    `<div style="font-size:13px;color:var(--text-secondary);margin-top:3px">${money(item.price)}${customizeNote}</div>` +
+    `</div>` +
+    itemControl(item, qty) +
+    `</div>` +
+    `</div>`
+  );
 }
 
-// The sticky cart bar (surface-kit.md "Cart bar"). "checkout →" is a stub
-// until Task 6 wires the real cart/bill screen.
+// The sticky cart bar — the Instamart imCartBar treatment: a sticky-bottom,
+// full-width primary button reading "N in cart · ₹X … checkout →". Purely
+// visual; the count/total math, saving… + sold-out heads-up logic, and the
+// checkout click hook are unchanged.
 function cartBar(state: AppState): string {
   const pending = state.pending;
   const n = pendingCount(pending);
@@ -184,7 +201,14 @@ function cartBar(state: AppState): string {
   const soldOutNote = [...pending.values()].some((line) => line.available === false)
     ? `<div style="font-size:11px;color:var(--text-warning);margin-bottom:6px">an item in your cart went sold out — check before checkout</div>`
     : "";
-  return `${soldOutNote}<div class="cartbar"><span style="font-size:14px">${n} in cart · ${money(pendingTotal(pending))}${saving}</span><button type="button" data-checkout class="btn btn-primary">checkout →</button></div>`;
+  return (
+    `${soldOutNote}` +
+    `<div style="position:sticky;bottom:0;margin-top:14px;padding-top:8px">` +
+    `<button type="button" data-checkout class="btn btn-primary" style="width:100%;display:flex;justify-content:space-between;padding:12px 16px">` +
+    `<span>${n} in cart · ${money(pendingTotal(pending))}${saving}</span><span>checkout →</span>` +
+    `</button>` +
+    `</div>`
+  );
 }
 
 function header(title: string, sub: string): string {
@@ -448,12 +472,15 @@ export function renderCustomizeScreen(state: AppState, cz: CustomizeState): stri
 
   const price = estimatePrice(item.price, cz.groups, cz.selection);
   const groupsHtml = cz.groups.map((g) => customizeGroup(g, cz.selection)).join("");
+  // The Instamart pickerScreen shell: back button, item title, subtitle, then a
+  // `.card` wrapping the option groups. Only the frame changed — customizeGroup
+  // and its data-cz-* chip/segment controls are untouched.
   return (
     `<h2 class="sr-only">Customize ${esc(item.name)} — pick options, then add to cart.</h2>` +
     back +
     `<div style="display:flex;align-items:center;gap:8px">${vegMark(item.veg)}<span style="font-size:16px;font-weight:500">${esc(item.name)}</span></div>` +
-    `<div style="font-size:12px;color:var(--text-secondary)">customize — in this window</div>` +
-    groupsHtml +
+    `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">customize — in this window</div>` +
+    `<div class="card">${groupsHtml}</div>` +
     `<button type="button" data-cz-add class="btn btn-primary btn-block" style="margin-top:16px">${icon("plus", 15)} add to cart · ${money(price)}</button>`
   );
 }
