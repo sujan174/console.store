@@ -724,6 +724,46 @@ export function toolErrorText(result: ToolResult): string {
   return "couldn't load options";
 }
 
+// isUnauthenticated reports whether a tool result is the server's revoked-token
+// signal (coded error text "unauthenticated: …"). A token present in the
+// keyring but rejected by Swiggy maps (server-side) to this coded error.
+function isUnauthenticated(result: ToolResult): boolean {
+  const isErr = (result as { isError?: boolean }).isError;
+  if (!isErr) return false;
+  return toolErrorText(result).trim().toLowerCase().startsWith("unauthenticated:");
+}
+
+// enterSigninRecovery flips the widget into the sign-in screen for a
+// mid-session token revocation. Idempotent (a burst of failing calls must not
+// start N flows): guarded by state.screen and an in-flight flag. Uses the RAW
+// (unwrapped) call so sign_in itself can't re-trigger recovery.
+let signinRecovering = false;
+async function enterSigninRecovery(
+  rawCall: (a: { name: string; arguments: Record<string, unknown> }) => Promise<ToolResult>,
+): Promise<void> {
+  if (signinRecovering || state.screen === "signin") return;
+  signinRecovering = true;
+  try {
+    const res = await rawCall({ name: "sign_in", arguments: { force: true } });
+    const sc = (res as { structuredContent?: { authorize_url?: string; flow_id?: string } }).structuredContent;
+    state.screen = "signin";
+    state.authorizeURL = sc?.authorize_url ?? "";
+    state.signinOpened = false;
+    // No carried intent — after reconnect, resume lands on the store home and
+    // the user re-does their action against a live token.
+    state.signinIntent = {};
+    render();
+    startAuthPoll();
+  } catch {
+    // Even if sign_in fails, show the gate so the user isn't stuck on a dead
+    // screen; the renderSignIn "copy this URL" affordance degrades gracefully.
+    state.screen = "signin";
+    render();
+  } finally {
+    signinRecovering = false;
+  }
+}
+
 // Items whose get_item_options fetch is currently in flight. Guards against a
 // rapid double-tap firing two concurrent calls for one item (re-entrancy /
 // mild ban-risk multiplier) — at most one call per open.
@@ -3115,6 +3155,22 @@ export function bootstrap(): void {
   document.addEventListener("visibilitychange", onVisibilityChange);
 
   app = new App({ name: "consolestore order", version: "0.1.0" });
+
+  // Intercept EVERY tool result for the revoked-token signal. A token present
+  // in the keyring but rejected by Swiggy maps (server-side) to an
+  // `unauthenticated:` coded error; when we see it, drop into the same sign-in
+  // screen first-run uses, so the user can reconnect instead of dead-ending.
+  // Both food (direct app.callServerTool) and instamart (exported callTool →
+  // same app instance) pass through this one wrapper.
+  const rawCall = app.callServerTool.bind(app);
+  (app as unknown as { callServerTool: typeof rawCall }).callServerTool = async (arg: Parameters<typeof rawCall>[0]) => {
+    const result = await rawCall(arg);
+    if (isUnauthenticated(result)) {
+      void enterSigninRecovery(rawCall);
+    }
+    return result;
+  };
+
   app.onhostcontextchanged = () => applyHostStyling();
   log("bootstrap");
 
