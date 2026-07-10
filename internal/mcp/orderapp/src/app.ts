@@ -9,7 +9,7 @@ import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from
 import { injectStyles } from "./styles";
 import { bootLoader, esc, groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading, renderRecovery, renderSignIn } from "./screens";
 import { renderHome } from "./home";
-import { handleIMClick, handleIMKeydown, im, imEnter, imOnAddressChange, imSeed, initIM } from "./instamart";
+import { handleIMClick, handleIMKeydown, im, imEnter, imOnAddressChange, imSeed, imSeedCategories, initIM } from "./instamart";
 import { renderIM } from "./imScreens";
 import {
   buildWireSelections,
@@ -144,6 +144,9 @@ export interface OpenStoreOut {
     items: MenuItemData[];
   };
   categories?: CategoryDTO[];
+  // The Instamart rail — rides on every home-class shell (categories is
+  // always the FOOD chips) so the vertical tab switches with full data.
+  im_categories?: CategoryDTO[];
   restaurants?: HomeRestaurant[];
   recent_orders?: RecentOrder[];
   query?: string;
@@ -2868,6 +2871,7 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     state.authorizeURL = sc.authorize_url ?? "";
     state.signinOpened = false;
     state.homeCategories = Array.isArray(sc.categories) ? sc.categories : [];
+    imSeedCategories(sc.im_categories);
     state.signinIntent = {
       restaurant_id: sc.restaurant?.id,
       restaurant_name: sc.restaurant?.name,
@@ -2899,6 +2903,10 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     state.screen = "home";
     state.vertical = "instamart";
     state.addressId = sc.address?.id || null;
+    // The shell carries the FOOD home data too (categories chips + recent
+    // orders) so tabbing to food lands on a working home, not a blank one.
+    state.homeCategories = Array.isArray(sc.categories) ? sc.categories : [];
+    state.recentOrders = Array.isArray(sc.recent_orders) ? sc.recent_orders : [];
     imSeed(sc);
     render();
     return;
@@ -2907,6 +2915,9 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
   if (sc.screen === "home") {
     state.screen = "home";
     state.homeCategories = Array.isArray(sc.categories) ? sc.categories : [];
+    // Stash the Instamart rail riding on this food shell — without it the
+    // instamart tab opened onto a blank screen (no categories to load).
+    imSeedCategories(sc.im_categories);
     state.query = sc.query ?? "";
     const homeQuery = state.query;
     if (homeQuery && sc.loading) {

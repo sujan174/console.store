@@ -42,12 +42,17 @@ type OpenStoreOut struct {
 	Vertical string `json:"vertical,omitempty"` // "instamart" when Screen is the instamart shell (or carried through signed_out)
 	// AuthorizeURL is set ONLY on a "signed_out" shell — the browser OAuth URL
 	// the widget's Sign-in button opens (via app.openLink). Empty otherwise.
-	AuthorizeURL string                   `json:"authorize_url,omitempty"`
-	Address      AddrRefDTO               `json:"address"`
-	Restaurant   map[string]string        `json:"restaurant,omitempty"`
-	Entry        map[string]string        `json:"entry,omitempty"`
-	Menu         *GetMenuOut              `json:"menu,omitempty"`
+	AuthorizeURL string            `json:"authorize_url,omitempty"`
+	Address      AddrRefDTO        `json:"address"`
+	Restaurant   map[string]string `json:"restaurant,omitempty"`
+	Entry        map[string]string `json:"entry,omitempty"`
+	Menu         *GetMenuOut       `json:"menu,omitempty"`
+	// Categories is ALWAYS the food cuisine chips; IMCategories is ALWAYS the
+	// Instamart rail. Both ride on every home-class shell (home AND instamart)
+	// so the widget's vertical tab can switch with full data either way — a
+	// shell that seeded only its own vertical left the other one blank.
 	Categories   []CategoryDTO            `json:"categories,omitempty"`
+	IMCategories []CategoryDTO            `json:"im_categories,omitempty"`
 	Restaurants  []RestaurantDTO          `json:"restaurants,omitempty"`
 	RecentOrders []localstore.PlacedOrder `json:"recent_orders,omitempty"`
 	Query        string                   `json:"query,omitempty"`
@@ -160,10 +165,6 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 		if err != nil {
 			return nil, OpenStoreOut{}, err
 		}
-		cats := make([]CategoryDTO, 0)
-		for _, c := range config.DefaultCategories() {
-			cats = append(cats, CategoryDTO{Label: c.Label, Query: c.Query})
-		}
 		rest := map[string]string{}
 		if in.RestaurantID != "" {
 			rest["id"] = in.RestaurantID
@@ -177,7 +178,8 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 			AuthorizeURL: url,
 			Entry:        map[string]string{"item_id": in.ItemID, "search": in.Query, "category": in.Category, "vertical": in.Vertical},
 			Query:        in.Query,
-			Categories:   cats,
+			Categories:   foodCategoryDTOs(),
+			IMCategories: imCategoryDTOs(),
 		}
 		if len(rest) > 0 {
 			out.Restaurant = rest
@@ -190,17 +192,18 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 		// Instamart shell: the widget loads products itself (query if given,
 		// else the first curated category) under its loader — same instant-open
 		// pattern as the restaurant shell. Loading is therefore always true.
-		imCats := make([]CategoryDTO, 0)
-		for _, c := range config.DefaultIMCategories() {
-			imCats = append(imCats, CategoryDTO{Label: c.Label, Query: c.Query})
-		}
+		// Food categories + recent orders ride along so the in-app vertical
+		// tab can switch back to a fully-working food home (both local/cheap).
+		recent, _ := localstore.LoadOrders(addr)
 		return nil, OpenStoreOut{
-			Screen:     "instamart",
-			Vertical:   "instamart",
-			Address:    AddrRefDTO{ID: addr, Label: label},
-			Categories: imCats,
-			Query:      in.Query,
-			Loading:    true,
+			Screen:       "instamart",
+			Vertical:     "instamart",
+			Address:      AddrRefDTO{ID: addr, Label: label},
+			Categories:   foodCategoryDTOs(),
+			IMCategories: imCategoryDTOs(),
+			RecentOrders: recent,
+			Query:        in.Query,
+			Loading:      true,
 		}, nil
 	}
 
@@ -222,10 +225,7 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 		}, nil
 	}
 
-	cats := make([]CategoryDTO, 0)
-	for _, c := range config.DefaultCategories() {
-		cats = append(cats, CategoryDTO{Label: c.Label, Query: c.Query})
-	}
+	cats := foodCategoryDTOs()
 
 	if in.RestaurantName != "" {
 		// Level C — a named restaurant with NO id yet: return a name-only
@@ -251,8 +251,28 @@ func (s *Server) handleOpenStore(ctx context.Context, _ *mcp.CallToolRequest, in
 		Screen:       "home",
 		Address:      AddrRefDTO{ID: addr, Label: label},
 		Categories:   cats,
+		IMCategories: imCategoryDTOs(),
 		RecentOrders: recent,
 		Query:        in.Query,
 		Loading:      in.Query != "",
 	}, nil
+}
+
+// foodCategoryDTOs / imCategoryDTOs are each vertical's curated rail chips.
+// Both ride on every home-class shell so the widget's vertical tab always has
+// full data for the side it switches TO.
+func foodCategoryDTOs() []CategoryDTO {
+	out := make([]CategoryDTO, 0)
+	for _, c := range config.DefaultCategories() {
+		out = append(out, CategoryDTO{Label: c.Label, Query: c.Query})
+	}
+	return out
+}
+
+func imCategoryDTOs() []CategoryDTO {
+	out := make([]CategoryDTO, 0)
+	for _, c := range config.DefaultIMCategories() {
+		out = append(out, CategoryDTO{Label: c.Label, Query: c.Query})
+	}
+	return out
 }

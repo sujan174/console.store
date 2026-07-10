@@ -273,11 +273,11 @@ func TestOpenStoreInstamartShell(t *testing.T) {
 	if out.Screen != "instamart" || out.Vertical != "instamart" {
 		t.Fatalf("screen/vertical = %q/%q, want instamart/instamart", out.Screen, out.Vertical)
 	}
-	if len(out.Categories) == 0 {
-		t.Fatalf("instamart shell carries no categories")
+	if len(out.IMCategories) == 0 {
+		t.Fatalf("instamart shell carries no im_categories")
 	}
-	if out.Categories[0].Label != "Energy Drinks" {
-		t.Fatalf("categories are not DefaultIMCategories: %+v", out.Categories[0])
+	if out.IMCategories[0].Label != "Energy Drinks" {
+		t.Fatalf("im_categories are not DefaultIMCategories: %+v", out.IMCategories[0])
 	}
 	if out.Query != "red bull" || !out.Loading {
 		t.Fatalf("query/loading = %q/%v, want red bull/true", out.Query, out.Loading)
@@ -293,5 +293,36 @@ func TestOpenStoreSignedOutCarriesVertical(t *testing.T) {
 	}
 	if out.Screen != "signed_out" || out.Vertical != "instamart" || out.Entry["vertical"] != "instamart" {
 		t.Fatalf("signed_out shell lost the vertical: %+v", out)
+	}
+}
+
+func TestOpenStoreHomeCarriesIMCategories(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	be := &fakeBackend{addrs: []api.Address{{ID: "a1", Label: "Home", Full: "12 Main St"}}}
+	s := NewServer(be, &fakeAuth{token: true})
+	_, out, err := s.handleOpenStore(context.Background(), nil, OpenStoreIn{})
+	if err != nil {
+		t.Fatalf("handleOpenStore: %v", err)
+	}
+	if len(out.IMCategories) == 0 || out.IMCategories[0].Label != "Energy Drinks" {
+		t.Fatalf("home shell missing im_categories: %+v", out.IMCategories)
+	}
+}
+
+func TestOpenStoreInstamartShellCarriesFoodData(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	be := &fakeBackend{addrs: []api.Address{{ID: "a1", Label: "Home", Full: "12 Main St"}}}
+	s := NewServer(be, &fakeAuth{token: true})
+	_, out, err := s.handleOpenStore(context.Background(), nil, OpenStoreIn{Vertical: "instamart"})
+	if err != nil {
+		t.Fatalf("handleOpenStore: %v", err)
+	}
+	if len(out.IMCategories) == 0 || out.IMCategories[0].Label != "Energy Drinks" {
+		t.Fatalf("instamart shell missing im_categories: %+v", out.IMCategories)
+	}
+	// categories now carries the FOOD cuisine chips so a tab switch to food
+	// has a working home rail (the food-home-blank bug).
+	if len(out.Categories) == 0 || out.Categories[0].Label == "Energy Drinks" {
+		t.Fatalf("instamart shell should carry FOOD categories: %+v", out.Categories)
 	}
 }

@@ -111,15 +111,28 @@ export function storeClosedHere(): boolean {
   return !!im.closedAddrId && im.closedAddrId === d().addressId();
 }
 
-// imSeed consumes the open_store instamart shell: categories + optional query.
+// imSeed consumes the open_store instamart shell: the IM rail + optional
+// query. `im_categories` is the Instamart rail on EVERY home-class shell
+// (`categories` is always the FOOD chips — the two ride together so the
+// vertical tab can switch with full data either way).
 export function imSeed(sc: OpenStoreOut): void {
-  im.categories = Array.isArray(sc.categories) ? sc.categories : [];
+  im.categories = Array.isArray(sc.im_categories) ? sc.im_categories : [];
   im.query = sc.query ?? "";
   im.activeCatQuery = im.query ? null : (im.categories[0]?.query ?? null);
   im.products = [];
   im.cart = null;
   im.picker = null;
   imEnter();
+}
+
+// imSeedCategories stores the IM rail without loading anything — used when a
+// FOOD shell arrives (its im_categories ride along) so a later tab switch to
+// instamart has a working rail instead of a blank screen.
+export function imSeedCategories(cats: CategoryDTO[] | undefined): void {
+  if (Array.isArray(cats) && cats.length > 0) {
+    im.categories = cats;
+    if (!im.activeCatQuery && !im.query) im.activeCatQuery = cats[0]?.query ?? null;
+  }
 }
 
 // imEnter loads the current view's products (query, else active/first
@@ -463,13 +476,9 @@ export function handleIMClick(el: HTMLElement): boolean {
   }
   const close = el.closest<HTMLElement>("[data-im-picker-close]");
   if (close) {
-    // Close on the ✕ button or a true backdrop click. Clicks INSIDE the
-    // sheet card also bubble here (the backdrop wraps the card, and nothing
-    // stops propagation — the pick rows above depend on that), so guard:
-    // an in-card non-row click must not dismiss the picker.
-    if (close.tagName === "BUTTON" || !el.closest("[data-im-sheet]")) {
-      closeIMPicker();
-    }
+    // The picker is an in-place screen now — data-im-picker-close is only its
+    // back button, so a match always means "leave the picker".
+    closeIMPicker();
     return true;
   }
   const inc = el.closest<HTMLElement>("[data-im-inc]");

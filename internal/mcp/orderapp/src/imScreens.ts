@@ -5,21 +5,22 @@ import { im, pendingCount, pendingTotal, qtyForProduct, storeClosedHere, type IM
 import { brandBar, esc, loadingBlock, rupees } from "./screens";
 import { icon } from "./icons";
 
-// verticalTabs is the food ⟷ instamart switch pill, shown on both verticals'
-// headers (the widget-side equivalent of the TUI's Tab toggle).
+// verticalTabs is the food ⟷ instamart switch pill, rendered INSIDE the brand
+// bar next to the wordmark (the widget-side equivalent of the TUI's Tab
+// toggle) so it costs no vertical space of its own.
 export function verticalTabs(active: "food" | "instamart"): string {
   const tab = (key: "food" | "instamart", label: string, attr: string) => {
     const on = active === key;
     return (
       `<button type="button" ${on ? "" : attr} aria-pressed="${on}" class="side-item${on ? " on" : ""}"` +
-      ` style="display:inline-flex;padding:5px 12px">${label}</button>`
+      ` style="display:inline-flex;padding:3px 10px;font-size:11px">${label}</button>`
     );
   };
   return (
-    `<div style="display:inline-flex;gap:4px;margin-bottom:10px">` +
+    `<span style="display:inline-flex;gap:4px;flex:none">` +
     tab("food", "food", "data-food-tab") +
     tab("instamart", "instamart", "data-im-tab") +
-    `</div>`
+    `</span>`
   );
 }
 
@@ -27,7 +28,7 @@ function imHeader(addressLabel: string): string {
   const addr =
     `<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary)">` +
     `${icon("map-pin", 14)} ${esc(addressLabel || "no address")}</span>`;
-  return brandBar(addr);
+  return brandBar(addr, verticalTabs("instamart"));
 }
 
 function imSidebar(): string {
@@ -107,18 +108,20 @@ function productCard(p: IMProductData): string {
   );
 }
 
-// pickerSheet: the pack-size chooser (one row per variant, tap = add).
-function pickerSheet(): string {
+// pickerScreen: the pack-size chooser as an IN-PLACE screen swap (one row per
+// variant, tap = add) — same pattern as food's customize screen, replacing the
+// old modal-overlay sheet so both verticals' customize flows look identical.
+function pickerScreen(): string {
   const p = im.picker;
   if (!p) return "";
   const rows = p.variants
     .map((v) => {
       if (!v.in_stock)
-        return `<div style="display:flex;justify-content:space-between;padding:10px 12px;color:var(--text-muted);font-size:13px"><span>${esc(v.label)}</span><span class="badge-soldout">sold out</span></div>`;
+        return `<div style="display:flex;justify-content:space-between;padding:10px 12px;color:var(--text-muted);font-size:13px;border-bottom:1px solid var(--border)"><span>${esc(v.label)}</span><span class="badge-soldout">sold out</span></div>`;
       return (
         `<div data-im-pick="${esc(p.product_id)}" data-im-spin="${esc(v.spin_id)}" data-im-sku="${esc(v.sku_id)}" ` +
         `data-im-label="${esc(v.label)}" data-im-price="${v.price}" ` +
-        `style="display:flex;justify-content:space-between;padding:10px 12px;cursor:pointer;border-radius:var(--radius-sm)" ` +
+        `style="display:flex;justify-content:space-between;padding:10px 12px;cursor:pointer;border-radius:var(--radius-sm);border-bottom:1px solid var(--border)" ` +
         `onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">` +
         `<span style="font-size:13px">${esc(v.label)}</span>` +
         `<span style="font-size:13px;font-weight:600">${rupees(v.price)}${v.mrp && v.mrp > v.price ? ` <s style="color:var(--text-muted);font-weight:400">${rupees(v.mrp)}</s>` : ""}</span>` +
@@ -127,18 +130,11 @@ function pickerSheet(): string {
     })
     .join("");
   return (
-    // No stopPropagation on the sheet: ALL clicks must bubble to the root
-    // delegate (handleIMClick) or the variant rows/✕ inside never fire. The
-    // close branch guards on data-im-sheet so in-card clicks don't dismiss.
-    `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center" data-im-picker-close>` +
-    `<div class="card" data-im-sheet style="width:min(440px,94vw);max-height:70vh;overflow:auto;margin:0 0 12px;padding:14px">` +
-    `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">` +
-    `<div style="font-size:14px;font-weight:600">${esc(p.name)} — pick a pack size</div>` +
-    `<button type="button" data-im-picker-close class="btn" style="padding:4px 10px">✕</button>` +
-    `</div>` +
-    rows +
-    `</div>` +
-    `</div>`
+    `<h2 class="sr-only">Pick a pack size for ${esc(p.name)}.</h2>` +
+    `<button type="button" data-im-picker-close class="btn" style="margin-bottom:10px">${icon("arrow-left", 14)} back</button>` +
+    `<div style="font-size:16px;font-weight:500">${esc(p.name)}</div>` +
+    `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">pick a pack size — in this window</div>` +
+    `<div class="card" style="padding:4px 6px">${rows}</div>`
   );
 }
 
@@ -239,14 +235,25 @@ export function renderIMCart(): string {
 // renderIM paints the whole instamart vertical. addressLabel comes from the
 // caller (app.ts owns the shared address state).
 export function renderIM(addressLabel: string): string {
+  // Render precedence mirrors food: cart/checkout > pack-size picker > browse.
+  // The vertical tabs live in the brand bar (imHeader) on every branch.
   if (im.cart) {
     return (
       `<h2 class="sr-only">consolestore instamart — cart and checkout.</h2>` +
       imHeader(addressLabel) +
       `<div class="store-layout">` +
       `<div class="content">` +
-      verticalTabs("instamart") +
       renderIMCart() +
+      `</div>` +
+      `</div>`
+    );
+  }
+  if (im.picker) {
+    return (
+      imHeader(addressLabel) +
+      `<div class="store-layout">` +
+      `<div class="content">` +
+      pickerScreen() +
       `</div>` +
       `</div>`
     );
@@ -257,14 +264,12 @@ export function renderIM(addressLabel: string): string {
     `<div class="store-layout">` +
     imSidebar() +
     `<div class="content">` +
-    verticalTabs("instamart") +
     imSearchBar() +
     closedBanner() +
     noteBanner() +
     productList() +
     imCartBar() +
     `</div>` +
-    `</div>` +
-    pickerSheet()
+    `</div>`
   );
 }

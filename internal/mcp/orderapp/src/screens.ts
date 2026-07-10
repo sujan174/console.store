@@ -195,10 +195,13 @@ function header(title: string, sub: string): string {
 // ours: a mono `~ % consolestore` prompt with a blinking cursor, plus an
 // optional right-aligned slot (the home passes its interactive address
 // picker). Content stays host-native; only this chrome carries the brand.
-export function brandBar(rightSlot: string = ""): string {
+export function brandBar(rightSlot: string = "", brandSlot: string = ""): string {
   return (
     `<div class="cs-brandbar">` +
+    `<span style="display:inline-flex;align-items:center;gap:12px;min-width:0">` +
     `<span class="cs-wordmark"><span class="p">~ %</span> consolestore<span class="cs-cursor" aria-hidden="true">█</span></span>` +
+    (brandSlot || "") +
+    `</span>` +
     (rightSlot ? `<div>${rightSlot}</div>` : "") +
     `</div>`
   );

@@ -78,7 +78,7 @@ function addressDropdown(state: AppState): string {
 function homeHeader(state: AppState): string {
   return (
     `<div style="position:relative">` +
-    brandBar(addressSlot(state)) +
+    brandBar(addressSlot(state), verticalTabs("food")) +
     (state.addrPickerOpen ? addressDropdown(state) : "") +
     `</div>`
   );
@@ -263,7 +263,6 @@ export function renderHome(state: AppState): string {
     `<div class="store-layout">` +
     sidebar(state) +
     `<div class="content">` +
-    verticalTabs("food") +
     searchBarSlot(state) +
     restaurantListSlot(state) +
     recentOrdersSlot(state) +
