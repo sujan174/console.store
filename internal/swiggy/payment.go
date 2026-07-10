@@ -248,6 +248,65 @@ func (c *Client) PlaceFoodOrderUPI(ctx context.Context, req PlaceUPIRequest) (Pe
 	return p, nil
 }
 
+// CheckoutUPI places a non-idempotent online-payment INSTAMART order (the /im
+// checkout tool with paymentMethod "UPI"). Mirrors PlaceFoodOrderUPI: no
+// placeWithVerify (an unpaid pending order expires on its own; CallTool's
+// no-retry policy for checkout is the duplicate guard). The /im response shape
+// is decoded by the same tolerant pendingRaw; phantom (no ids) is rejected.
+func (c *Client) CheckoutUPI(ctx context.Context, req PlaceUPIRequest) (PendingPayment, error) {
+	if !liveOrdersEnabled() {
+		return PendingPayment{}, ErrOrdersDisabled
+	}
+	code := req.Method.PaymentCode
+	if code == "" {
+		code = "UPI"
+	}
+	args := map[string]any{
+		"addressId":     req.AddressID,
+		"paymentMethod": code,
+	}
+	if req.Method.Kind == "intent" && req.Method.ID != "" {
+		args["intentApp"] = req.Method.ID
+	} else {
+		args["generateUPIQR"] = true
+	}
+	raw, err := c.CallTool(ctx, "checkout", args)
+	if err != nil {
+		return PendingPayment{}, err
+	}
+	pr, err := decodeResult[pendingRaw](raw, nil)
+	if err != nil {
+		return PendingPayment{}, err
+	}
+	p := pr.pending()
+	p.AddressID = req.AddressID
+	window := int64(pr.MaxPollMs)
+	if window <= 0 {
+		window = defaultPayWindowMs
+	}
+	p.ExpiresAt = time.Now().UnixMilli() + window
+	if p.OrderID == "" && p.PaasID == "" {
+		return PendingPayment{}, fmt.Errorf("swiggy: checkout returned no order id or paas id (payment not started)")
+	}
+	return p, nil
+}
+
+// ConfirmOrderIM finalizes a paid pending INSTAMART order. The /im confirm
+// contract differs from food: orderId + paasId (paasId is the canonical
+// payment-transaction reference); no address/cart/coords.
+func (c *Client) ConfirmOrderIM(ctx context.Context, p PendingPayment) (Order, error) {
+	if !liveOrdersEnabled() {
+		return Order{}, ErrOrdersDisabled
+	}
+	raw, err := c.CallTool(ctx, "confirm_order", map[string]any{
+		"orderId": p.OrderID, "paasId": p.PaasID,
+	})
+	if err != nil {
+		return Order{}, err
+	}
+	return decodeResult[Order](raw, nil)
+}
+
 // PaymentStatus is the coarse state of an in-flight UPI payment.
 type PaymentStatus int
 

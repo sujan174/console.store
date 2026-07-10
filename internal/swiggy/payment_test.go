@@ -264,6 +264,67 @@ func TestConfirmDecodesOrder(t *testing.T) {
 	}
 }
 
+// CheckoutUPI is the Instamart analogue of PlaceFoodOrderUPI: same arg shape
+// (paymentMethod code + generateUPIQR), but calls the /im "checkout" tool.
+func TestCheckoutUPISendsQRArgs(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	var gotArgs map[string]any
+	srv := newFakeMCP(t, map[string]toolFn{
+		"checkout": func(a map[string]any) (any, error) {
+			gotArgs = a
+			return map[string]any{
+				"orderId": "242", "paasId": "P1", "upiIntentUrl": "upi://pay?x",
+				"paidAmount": 199, "maxTimeToPollForInMs": 300000,
+			}, nil
+		},
+	})
+	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
+	p, err := c.CheckoutUPI(context.Background(), PlaceUPIRequest{AddressID: "a1", Method: PaymentMethod{Kind: "qr", PaymentCode: "UPI"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotArgs["paymentMethod"] != "UPI" || gotArgs["generateUPIQR"] != true {
+		t.Fatalf("checkout args = %v; want paymentMethod=UPI generateUPIQR=true", gotArgs)
+	}
+	if p.OrderID != "242" || p.PaasID != "P1" || p.UPIString != "upi://pay?x" {
+		t.Fatalf("pending = %+v", p)
+	}
+	if p.Amount != 199 {
+		t.Fatalf("amount = %d, want 199", p.Amount)
+	}
+	if p.ExpiresAt <= 0 {
+		t.Fatalf("ExpiresAt = %d, want > 0", p.ExpiresAt)
+	}
+	if p.AddressID != "a1" {
+		t.Fatalf("AddressID = %q, want echoed a1", p.AddressID)
+	}
+}
+
+// ConfirmOrderIM's contract differs from food's ConfirmOrder: orderId+paasId
+// only, no address/cart/coords.
+func TestConfirmOrderIMSendsPaasID(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	var gotArgs map[string]any
+	srv := newFakeMCP(t, map[string]toolFn{
+		"confirm_order": func(a map[string]any) (any, error) {
+			gotArgs = a
+			return map[string]any{"orderId": "242", "status": "CONFIRMED"}, nil
+		},
+	})
+	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
+	if _, err := c.ConfirmOrderIM(context.Background(), PendingPayment{OrderID: "242", PaasID: "P1"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotArgs["orderId"] != "242" || gotArgs["paasId"] != "P1" {
+		t.Fatalf("confirm args = %v; want orderId=242 paasId=P1", gotArgs)
+	}
+	for _, k := range []string{"lat", "lng", "cartId"} {
+		if _, has := gotArgs[k]; has {
+			t.Fatalf("confirm args must NOT contain %q; args=%v", k, gotArgs)
+		}
+	}
+}
+
 // A legacy Cash-only user gets no UPI methods — QR nil, no intents.
 func TestDecodePaymentOptionsCashOnly(t *testing.T) {
 	srv := newFakeMCP(t, map[string]toolFn{
