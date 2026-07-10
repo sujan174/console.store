@@ -55,6 +55,13 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Promotion re-tags the SAME commit up the channel chain, so a commit
+          # can carry several tags (v0.4.0-beta.5 AND v0.4.0). GoReleaser's tag
+          # auto-detection then grabs an arbitrary one — the first stable cut
+          # picked the beta tag, republished into the existing beta release
+          # (already_exists 422s), and would have stamped Channel=beta into
+          # "stable" binaries. Pin it to the tag that triggered this run.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
 
       - name: Derive channel from tag
         id: chan
