@@ -2129,7 +2129,8 @@ func (m Model) onTick() (Model, tea.Cmd) {
 	m.nowUnix = time.Now().Unix()
 	// UPI payment: while the QR is up, poll check_payment_status on cadence and
 	// give up after the timeout (nothing is charged for an unpaid pending order).
-	if m.screen == scrCheckout && m.checkoutVertical == 0 && m.paymentStage == payWaiting {
+	if m.screen == scrCheckout && m.paymentStage == payWaiting {
+		im := m.pending.Vertical == "instamart"
 		m.payElapsed++
 		m.payPollTick++
 		// Close the window at Swiggy's real deadline (maxTimeToPollForInMs) so we
@@ -2139,12 +2140,20 @@ func (m Model) onTick() (Model, tea.Cmd) {
 		if expired || (m.pending.ExpiresAt <= 0 && m.payElapsed >= paymentTimeoutTicks) {
 			m.paymentStage = payFailed
 			m.payToken++ // invalidate any in-flight poll
-			m.orderErr = "payment window closed — nothing was charged. place the order again."
-			m.checkout = m.buildCheckout()
+			if im {
+				m.imOrderErr = "payment window closed — nothing was charged. place the order again."
+				m.checkout = m.buildIMCheckout()
+			} else {
+				m.orderErr = "payment window closed — nothing was charged. place the order again."
+				m.checkout = m.buildCheckout()
+			}
 			return m, nil
 		}
 		if m.payPollTick >= paymentPollTicks && m.backend != nil {
 			m.payPollTick = 0
+			if im {
+				return m, datasource.IMPollPaymentCmd(m.backend, m.pending, m.payToken)
+			}
 			return m, datasource.PollPaymentCmd(m.backend, m.pending, m.payToken)
 		}
 	}
@@ -3193,7 +3202,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.checkout = m.buildIMCheckout()
 				return m, nil
 			default:
-				return m, datasource.PlaceIMOrderCmd(m.backend, m.addr.ID)
+				// UPI-first (mirrors food): IMPlaceUPI fetches payment options and,
+				// if the account has a scan-to-pay method, places an online order
+				// (bool=true) and we show the QR. A scan-to-pay-less account comes
+				// back bool=false and IMUPIPlacedMsg falls through to the COD place.
+				return m, datasource.IMPlaceUPICmd(m.backend, m.addr.ID)
 			}
 		}
 		if m.screen == scrInstamart {
@@ -3353,6 +3366,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case datasource.IMUPIPlacedMsg:
+		if dm.Err != nil {
+			m.placingOrder = false
+			m.imOrderErr = "order failed: " + dm.Err.Error()
+			if m.screen == scrCheckout && m.checkoutVertical == 1 {
+				m.checkout = m.buildIMCheckout()
+			}
+			return m, nil
+		}
+		if !dm.UPI {
+			// Scan-to-pay-less account — fall back to the COD Instamart place.
+			// placingOrder stays true; IMOrderPlacedMsg resolves it.
+			return m, datasource.PlaceIMOrderCmd(m.backend, m.addr.ID)
+		}
+		// Online IM order placed as PENDING_PAYMENT — show the QR and start
+		// polling. checkoutVertical stays 1 so the same payment stage renders the
+		// Instamart checkout underneath.
+		m.placingOrder = false
+		m.pending = dm.Pending
+		m.paymentStage = payWaiting
+		m.payToken++
+		m.payPollTick = 0
+		m.payElapsed = 0
+		m.imOrderErr = ""
+		if m.screen == scrCheckout && m.checkoutVertical == 1 {
+			m.checkout = m.buildIMCheckout()
+		}
+		return m, nil
+
 	case datasource.PaymentPolledMsg:
 		if dm.Token != m.payToken || m.paymentStage != payWaiting {
 			return m, nil // stale poll (abandoned/superseded) — ignore
@@ -3360,18 +3402,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if dm.Err != nil {
 			return m, nil // transient — keep waiting/polling
 		}
+		im := m.pending.Vertical == "instamart"
 		switch dm.Status {
 		case api.PaySuccess:
 			m.paymentStage = payConfirming
-			if m.screen == scrCheckout && m.checkoutVertical == 0 {
-				m.checkout = m.buildCheckout()
+			if m.screen == scrCheckout {
+				if im {
+					m.checkout = m.buildIMCheckout()
+				} else if m.checkoutVertical == 0 {
+					m.checkout = m.buildCheckout()
+				}
+			}
+			if im {
+				return m, datasource.IMConfirmOrderCmd(m.backend, m.pending)
 			}
 			return m, datasource.ConfirmOrderCmd(m.backend, m.pending)
 		case api.PayFailed:
 			m.paymentStage = payFailed
-			m.orderErr = "payment failed or cancelled — nothing was charged. try again."
-			if m.screen == scrCheckout && m.checkoutVertical == 0 {
-				m.checkout = m.buildCheckout()
+			if im {
+				m.imOrderErr = "payment failed or cancelled — nothing was charged. try again."
+				if m.screen == scrCheckout {
+					m.checkout = m.buildIMCheckout()
+				}
+			} else {
+				m.orderErr = "payment failed or cancelled — nothing was charged. try again."
+				if m.screen == scrCheckout && m.checkoutVertical == 0 {
+					m.checkout = m.buildCheckout()
+				}
 			}
 			return m, nil
 		default:
@@ -3557,6 +3614,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case datasource.IMOrderPlacedMsg:
 		m.placingOrder = false
+		m.paymentStage = payIdle // confirm (or COD place) resolved the payment sub-state
 		if dm.Err != nil {
 			// Surface the real Swiggy rejection on the checkout page, not just the
 			// status bar — the order did NOT go through.
@@ -3779,7 +3837,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// page in the browser — same idiom as the sign-in button. Only for a real
 		// http(s) page; a bare upi:// has no browser target (the QR is that path),
 		// so we don't fire an OS "no handler" popup for it. On demand, never auto.
-		if m.screen == scrCheckout && m.checkoutVertical == 0 && m.paymentStage == payWaiting &&
+		if m.screen == scrCheckout && m.paymentStage == payWaiting &&
 			(k.String() == "enter" || k.String() == "o") {
 			if link := payLinkFor(m.pending); strings.HasPrefix(link, "http") {
 				return m, openBrowserCmd(link)
@@ -4257,13 +4315,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Abandon an in-flight / failed UPI payment: a single esc drops the QR
 			// and returns to the cart summary (the unpaid pending order expires
 			// server-side). Handled before the double-tap so it can't splash away.
-			if m.screen == scrCheckout && m.checkoutVertical == 0 && m.paymentStage != payIdle {
+			if m.screen == scrCheckout && m.paymentStage != payIdle {
+				im := m.checkoutVertical == 1
 				m.paymentStage = payIdle
 				m.payToken++ // invalidate any in-flight poll
 				m.pending = api.PendingPayment{}
-				m.orderErr = ""
 				m.lastEscFrame = m.frame
-				m.checkout = m.buildCheckout()
+				if im {
+					m.imOrderErr = ""
+					m.checkout = m.buildIMCheckout()
+				} else {
+					m.orderErr = ""
+					m.checkout = m.buildCheckout()
+				}
 				return m, nil
 			}
 			if m.frame-m.lastEscFrame <= escDoubleWindow {
@@ -5919,6 +5983,8 @@ func (m Model) buildCheckout() screens.Checkout {
 		WithMutating(m.cartMutating).
 		WithCartWait(m.live && (!m.cartLoaded || m.cartSyncPending || m.cartSyncInFlight)).
 		WithPayment(int(m.paymentStage), payLinkFor(m.pending), m.pending.Amount, m.payExpiresInSec()).
+		WithPayLink(payLinkFor(m.pending)).
+		WithPayMethod("UPI").
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.cartScreenLines())))
 }
 
@@ -5932,6 +5998,8 @@ func (m Model) buildIMCheckout() screens.Checkout {
 		WithOrderErr(m.imOrderErr).
 		WithMutating(m.imCartMutating).
 		WithCartWait(m.live && (!m.imCartFetched || m.imCartSyncPending || m.imSyncInFlight)).
+		WithPayment(int(m.paymentStage), payLinkFor(m.pending), m.pending.Amount, m.payExpiresInSec()).
+		WithPayLink(payLinkFor(m.pending)).
 		WithCursor(clampIdx(m.checkout.Cursor(), len(m.imLines)))
 }
 

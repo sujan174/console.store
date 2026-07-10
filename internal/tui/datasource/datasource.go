@@ -63,6 +63,14 @@ type Backend interface {
 	IMUpdateCart(addressID string, items []api.IMCartItem) (api.IMCart, error)
 	IMClearCart() error
 	IMPlaceOrder(addressID string) (api.Order, error)
+	// IMPlaceOrderUPI is the Instamart mirror of PlaceUPI: it starts an online
+	// (UPI) Instamart order; bool is false when the account has no scan-to-pay
+	// method (caller falls back to IMPlaceOrder). IMPollPayment/IMConfirmOrder
+	// read/finalize the pending payment, routing to the IM client via the
+	// pending's Vertical "instamart" tag.
+	IMPlaceOrderUPI(addressID string) (api.PendingPayment, bool, error)
+	IMPollPayment(p api.PendingPayment) (api.PaymentStatus, error)
+	IMConfirmOrder(p api.PendingPayment) (api.Order, error)
 	IMOrders(activeOnly bool) ([]api.IMOrder, error)
 	IMTrack(orderID string, lat, lng float64) (api.Tracking, error)
 }
@@ -132,6 +140,14 @@ type (
 	// UPIPlacedMsg carries the pending UPI payment from PlaceUPICmd. UPI is false
 	// when the user has no UPI method (the root then runs the Cash PlaceOrderCmd).
 	UPIPlacedMsg struct {
+		Pending api.PendingPayment
+		UPI     bool
+		Err     error
+	}
+	// IMUPIPlacedMsg is the Instamart mirror of UPIPlacedMsg: the pending online
+	// Instamart payment from IMPlaceUPICmd. UPI is false when the account has no
+	// scan-to-pay method (the root then runs the COD PlaceIMOrderCmd).
+	IMUPIPlacedMsg struct {
 		Pending api.PendingPayment
 		UPI     bool
 		Err     error
@@ -544,6 +560,37 @@ func ClearIMCartCmd(b Backend) tea.Cmd {
 func PlaceIMOrderCmd(b Backend, addressID string) tea.Cmd {
 	return func() tea.Msg {
 		order, err := b.IMPlaceOrder(addressID)
+		return IMOrderPlacedMsg{Order: order, Err: err}
+	}
+}
+
+// IMPlaceUPICmd starts an online (UPI) Instamart order and returns the pending
+// payment (or UPI=false when the account is scan-to-pay-less). The Instamart
+// mirror of PlaceUPICmd; the root renders the QR from the returned pending and
+// begins polling with IMPollPaymentCmd.
+func IMPlaceUPICmd(b Backend, addressID string) tea.Cmd {
+	return func() tea.Msg {
+		p, upi, err := b.IMPlaceOrderUPI(addressID)
+		return IMUPIPlacedMsg{Pending: p, UPI: upi, Err: err}
+	}
+}
+
+// IMPollPaymentCmd reads the pending Instamart payment's current state once.
+// token is echoed back so the root discards a poll from an abandoned/superseded
+// payment (reuses PaymentPolledMsg — vertical-agnostic status).
+func IMPollPaymentCmd(b Backend, p api.PendingPayment, token int) tea.Cmd {
+	return func() tea.Msg {
+		st, err := b.IMPollPayment(p)
+		return PaymentPolledMsg{Token: token, Status: st, Err: err}
+	}
+}
+
+// IMConfirmOrderCmd finalizes a paid pending Instamart order to PLACED (reuses
+// IMOrderPlacedMsg so the placed/tracking + cart-clear + coord-persist transition
+// is identical to the COD path).
+func IMConfirmOrderCmd(b Backend, p api.PendingPayment) tea.Cmd {
+	return func() tea.Msg {
+		order, err := b.IMConfirmOrder(p)
 		return IMOrderPlacedMsg{Order: order, Err: err}
 	}
 }

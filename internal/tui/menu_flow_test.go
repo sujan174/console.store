@@ -82,7 +82,14 @@ func (f *railFake) IMUpdateCart(string, []api.IMCartItem) (api.IMCart, error) {
 }
 func (f *railFake) IMClearCart() error                     { return f.err }
 func (f *railFake) IMPlaceOrder(string) (api.Order, error) { return api.Order{}, f.err }
-func (f *railFake) IMOrders(bool) ([]api.IMOrder, error)   { return nil, f.err }
+func (f *railFake) IMPlaceOrderUPI(string) (api.PendingPayment, bool, error) {
+	return api.PendingPayment{}, false, f.err
+}
+func (f *railFake) IMPollPayment(api.PendingPayment) (api.PaymentStatus, error) {
+	return api.PayPending, f.err
+}
+func (f *railFake) IMConfirmOrder(api.PendingPayment) (api.Order, error) { return api.Order{}, f.err }
+func (f *railFake) IMOrders(bool) ([]api.IMOrder, error)                 { return nil, f.err }
 func (f *railFake) IMTrack(string, float64, float64) (api.Tracking, error) {
 	return api.Tracking{}, f.err
 }

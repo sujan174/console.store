@@ -30,10 +30,11 @@ type Checkout struct {
 	cartWait   bool // live cart fetch in flight — an empty cart shows a loader, never "empty"
 	hour       int  // local hour (0–23) for the loaders' late-night copy
 	// UPI payment sub-state: 0 idle, 1 waiting, 2 confirming, 3 failed.
-	payStage int
-	payLink  string // hosted pay page (our /pay?upi=… or Swiggy bridge) — opened in the browser
-	payTotal int
-	payExpS  int // seconds left in the payment window (0 = unknown/expired)
+	payStage       int
+	payLink        string // hosted pay page (our /pay?upi=… or Swiggy bridge) — opened in the browser
+	payTotal       int
+	payExpS        int    // seconds left in the payment window (0 = unknown/expired)
+	payMethodLabel string // bill "to pay (…)" method tag; "" renders as "COD"
 }
 
 // WithPayment attaches the UPI payment sub-state (stage 0=idle,1=waiting,
@@ -46,6 +47,24 @@ func (c Checkout) WithPayment(stage int, payLink string, amount, expiresInSec in
 	c.payTotal = amount
 	c.payExpS = expiresInSec
 	return c
+}
+
+// WithPayLink sets the http(s) payment page the in-terminal QR encodes (and that
+// enter opens in the browser). Empty leaves the payment page QR-less — exactly
+// today's enter-to-open rendering.
+func (c Checkout) WithPayLink(l string) Checkout { c.payLink = l; return c }
+
+// WithPayMethod sets the bill's "to pay (…)" method tag (e.g. "UPI"). Empty
+// renders as "COD" — the default for a cash-on-delivery bill.
+func (c Checkout) WithPayMethod(label string) Checkout { c.payMethodLabel = label; return c }
+
+// payLabel is the method shown in the bill's "to pay (…)" row, defaulting to
+// "COD" when unset.
+func (c Checkout) payLabel() string {
+	if c.payMethodLabel == "" {
+		return "COD"
+	}
+	return c.payMethodLabel
 }
 
 func NewCheckout(restaurant string, addr catalog.Address, lines []CartLine, eta string) Checkout {
@@ -258,9 +277,22 @@ func (c Checkout) paymentView(frame int) string {
 		}
 		b.WriteString("  " + theme.BrightStyle.Render(fmt.Sprintf("pay  ₹%d", amt)) + theme.DimStyle.Render("  ·  UPI") + "\n\n")
 
-		// No in-terminal QR — a scannable QR that can't go stale lives on the
-		// browser page (opened with enter). Show the enter-to-open button + a live
-		// countdown so a hours-old screen never invites a (refund-causing) payment.
+		// In-terminal QR of the payment page: bright half-block cells scan
+		// straight off the terminal with any phone camera / UPI app. Never blocks
+		// payment — a nil block (encode failed / no link) falls back to just the
+		// enter-to-open hint below, exactly as before.
+		if c.payLink != "" {
+			if qr := components.QRBlock(c.payLink); qr != nil {
+				for _, ln := range qr {
+					b.WriteString("  " + theme.BrightStyle.Render(ln) + "\n")
+				}
+				b.WriteString("  " + theme.DimStyle.Render("scan with your phone — opens the payment page") + "\n\n")
+			}
+		}
+
+		// A scannable QR that can't go stale also lives on the browser page
+		// (opened with enter). Show the enter-to-open button + a live countdown so
+		// a hours-old screen never invites a (refund-causing) payment.
 		b.WriteString("  " + theme.GreenStyle.Render("❯ press enter") +
 			theme.BrightStyle.Render(" to open the payment page & scan the QR") + "\n")
 		if c.payExpS > 0 {
@@ -387,14 +419,14 @@ func (c Checkout) summaryView(frame int) string {
 		b.WriteString(components.DashRule())
 	case compact && c.bill.Live:
 		b.WriteString(components.DashRule())
-		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
+		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay ("+c.payLabel()+")"),
 			theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.bill.ToPay)), w) + "\n")
 	case compact && !c.liveMode:
 		b.WriteString(components.DashRule())
-		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
+		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay ("+c.payLabel()+")"),
 			theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
 	case c.bill.Live:
-		b.WriteString(renderBill(w, c.bill))
+		b.WriteString(renderBill(w, c.bill, c.payLabel()))
 	case c.liveMode:
 		b.WriteString(components.DashRule())
 		if c.syncErr != "" {
@@ -413,7 +445,7 @@ func (c Checkout) summaryView(frame int) string {
 			theme.GreenStyle.Render(fmt.Sprintf("%s  −₹%d", CouponCode, CouponAmount)),
 			theme.GreenStyle.Render("applied"), w) + "\n")
 		b.WriteString(components.DashRule())
-		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
+		b.WriteString("  " + justify(theme.BrightStyle.Render("to pay ("+c.payLabel()+")"),
 			theme.BrightStyle.Render(fmt.Sprintf("₹%d", c.toPay())), w) + "\n")
 	}
 	b.WriteString("\n")

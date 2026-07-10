@@ -25,7 +25,7 @@ func TestFlowMenuToCart(t *testing.T) {
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("to pay (COD)")) && bytes.Contains(b, []byte("Cold Coffee"))
+		return bytes.Contains(b, []byte("to pay (UPI)")) && bytes.Contains(b, []byte("Cold Coffee"))
 	}, teatest.WithDuration(3*time.Second))
 
 	// `q` must NOT quit from the checkout (quit is confined to resting

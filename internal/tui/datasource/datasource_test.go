@@ -199,6 +199,15 @@ func (f *fakeBackend) IMPlaceOrder(string) (api.Order, error) {
 	f.imPlaceCalls++
 	return f.imOrder, f.err
 }
+func (f *fakeBackend) IMPlaceOrderUPI(string) (api.PendingPayment, bool, error) {
+	return api.PendingPayment{}, false, f.err
+}
+func (f *fakeBackend) IMPollPayment(api.PendingPayment) (api.PaymentStatus, error) {
+	return api.PayPending, f.err
+}
+func (f *fakeBackend) IMConfirmOrder(api.PendingPayment) (api.Order, error) {
+	return api.Order{}, f.err
+}
 func (f *fakeBackend) IMOrders(bool) ([]api.IMOrder, error) { return f.imOrders, f.err }
 func (f *fakeBackend) IMTrack(string, float64, float64) (api.Tracking, error) {
 	return f.imTracking, f.err

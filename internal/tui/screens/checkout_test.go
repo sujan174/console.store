@@ -19,6 +19,31 @@ func TestCheckoutShowsBillAndPayToRider(t *testing.T) {
 	}
 }
 
+// The UPI waiting page renders an in-terminal QR (bright half-block cells) of
+// the pay link plus its caption; with no pay link it degrades to exactly the
+// prior enter-to-open copy, no QR.
+func TestPaymentViewInTerminalQR(t *testing.T) {
+	lines := []screens.CartLine{{Item: catalog.Item{Name: "Cold Coffee", Price: 149}, Qty: 1}}
+	base := screens.NewCheckout("Blue Tokai", catalog.Address{Line: "HSR", Label: "home"}, lines, "~45 min")
+
+	link := "https://consolestore.in/pay?upi=upi%3A%2F%2Fpay"
+	withQR := base.WithPayment(1, link, 346, 300).WithPayLink(link).View(0)
+	if !strings.Contains(withQR, "█") {
+		t.Errorf("payment page must render the in-terminal QR block:\n%s", withQR)
+	}
+	if !strings.Contains(withQR, "scan with your phone") {
+		t.Errorf("payment page must show the QR caption:\n%s", withQR)
+	}
+
+	noQR := base.WithPayment(1, "", 346, 300).View(0)
+	if strings.Contains(noQR, "█") {
+		t.Errorf("no pay link → no QR block:\n%s", noQR)
+	}
+	if !strings.Contains(noQR, "press enter") {
+		t.Errorf("no-link payment page keeps the enter-to-open hint:\n%s", noQR)
+	}
+}
+
 // At/over Swiggy's ₹1000 beta cap the checkout shows the evident "use the Swiggy
 // app" callout, disables the place bar, and OverCap() reports true.
 func TestCheckoutBetaCapOver1000(t *testing.T) {

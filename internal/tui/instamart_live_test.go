@@ -269,10 +269,13 @@ func TestIMCheckoutBillAndPlaceOrder(t *testing.T) {
 		t.Fatal("confirming must return the final pre-place sync")
 	}
 	// Confirm fires the final pre-place sync; its price-matched success fires the
-	// actual place command — chase that (deliver drops follow-up cmds).
+	// UPI-first place command. A scan-to-pay-less account (the default fake) comes
+	// back UPI=false and falls through to the COD IMPlaceOrder — chase both hops.
 	nm, placeCmd := m.Update(cmd())
 	m = nm.(Model)
-	m = deliver(t, m, placeCmd)
+	nm, codCmd := m.Update(placeCmd()) // IMUPIPlacedMsg{UPI:false} → COD fallback cmd
+	m = nm.(Model)
+	m = deliver(t, m, codCmd)
 	if be.imPlacedAddr != "a1" {
 		t.Fatalf("IMPlaceOrder must be called with the address id, got %q", be.imPlacedAddr)
 	}

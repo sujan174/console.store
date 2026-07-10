@@ -58,6 +58,60 @@ type liveFake struct {
 	payOptions    api.PaymentOptions // returned by PaymentOptions
 	codOrder      api.Order          // returned by PlaceCOD (defaults filled if zero)
 	codCalls      int
+
+	// Instamart UPI scripting (mirrors the food trio). Default is COD
+	// (imUPIEnabled false) so existing IM place tests keep the legacy path.
+	imUPIEnabled    bool                // IMPlaceOrderUPI returns UPI=true when set
+	imUPIPending    api.PendingPayment  // returned by IMPlaceOrderUPI (defaults filled if zero)
+	imPayStatuses   []api.PaymentStatus // consumed one per IMPollPayment; last value repeats
+	imPayIdx        int
+	imConfirmOrder  api.Order // returned by IMConfirmOrder (defaults filled if zero)
+	imPlaceUPICalls int
+	imPollCalls     int
+	imConfirmCalls  int
+}
+
+func (f *liveFake) IMPlaceOrderUPI(addressID string) (api.PendingPayment, bool, error) {
+	f.imPlaceUPICalls++
+	f.imPlacedAddr = addressID
+	if !f.imUPIEnabled {
+		return api.PendingPayment{}, false, f.err
+	}
+	p := f.imUPIPending
+	if p.OrderID == "" {
+		p.OrderID = "IMO1"
+	}
+	if p.UPIString == "" {
+		p.UPIString = "upi://pay?pa=test@okaxis&am=135&cu=INR"
+	}
+	if p.Amount == 0 {
+		p.Amount = 135
+	}
+	p.Vertical = "instamart" // routes poll/confirm back to the IM client
+	return p, true, f.err
+}
+
+func (f *liveFake) IMPollPayment(api.PendingPayment) (api.PaymentStatus, error) {
+	f.imPollCalls++
+	st := api.PayPending
+	if n := len(f.imPayStatuses); n > 0 {
+		if f.imPayIdx < n {
+			st = f.imPayStatuses[f.imPayIdx]
+			f.imPayIdx++
+		} else {
+			st = f.imPayStatuses[n-1]
+		}
+	}
+	return st, f.err
+}
+
+func (f *liveFake) IMConfirmOrder(api.PendingPayment) (api.Order, error) {
+	f.imConfirmCalls++
+	o := f.imConfirmOrder
+	if o.ID == "" {
+		o.ID, o.Status = "IMO1", "PLACED"
+	}
+	return o, f.err
 }
 
 func (f *liveFake) PlaceUPI(string) (api.PendingPayment, bool, error) {

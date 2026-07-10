@@ -106,8 +106,9 @@ type Bill struct {
 	Live      bool
 }
 
-// renderBill renders Swiggy's real itemized split.
-func renderBill(w int, bill Bill) string {
+// renderBill renders Swiggy's real itemized split. payLabel tags the "to pay
+// (…)" row with the settlement method (e.g. "COD" or "UPI").
+func renderBill(w int, bill Bill, payLabel string) string {
 	var b strings.Builder
 	b.WriteString(components.DashRule())
 	row := func(label string, amt int) {
@@ -118,7 +119,7 @@ func renderBill(w int, bill Bill) string {
 	row("delivery", bill.Delivery)
 	row("taxes & charges", bill.Taxes)
 	b.WriteString(components.DashRule())
-	b.WriteString("  " + justify(theme.BrightStyle.Render("to pay (COD)"),
+	b.WriteString("  " + justify(theme.BrightStyle.Render("to pay ("+payLabel+")"),
 		theme.BrightStyle.Render(fmt.Sprintf("₹%d", bill.ToPay)), w) + "\n")
 	return b.String()
 }
@@ -279,7 +280,7 @@ func (c Cart) View() string {
 	// live mode before pricing arrives; the design mock math otherwise.
 	switch {
 	case c.bill.Live:
-		b.WriteString(renderBill(w, c.bill))
+		b.WriteString(renderBill(w, c.bill, "COD"))
 	case c.liveMode:
 		b.WriteString(components.DashRule())
 		if c.syncErr != "" {
