@@ -160,16 +160,46 @@ function itemControl(item: MenuItemData, qty: number): string {
   return `<button type="button" data-add="${esc(item.id)}" class="btn">${icon("plus", 14)} add</button>`;
 }
 
+// itemInfoButton + itemInfoPanel mirror home.ts's restaurantCard eye toggle
+// (data-rest-info / state.restInfoOpen) for one menu item: a small button
+// that reveals its description and/or rating, zero tool calls (the data
+// already rode in on get_menu). Rendered only when there's something to
+// show — an item with neither a description nor a rating > 0 gets no button
+// at all, so the row stays exactly as clean as before this feature.
+function itemInfoButton(item: MenuItemData, open: boolean): string {
+  return (
+    `<button type="button" data-item-info="${esc(item.id)}" aria-label="item info" aria-pressed="${open}" ` +
+    `class="btn" style="flex:none;padding:6px 8px">${icon("eye", 15)}</button>`
+  );
+}
+
+function itemInfoPanel(item: MenuItemData): string {
+  const rating = item.rating ?? 0;
+  const text =
+    rating > 0
+      ? `★ ${rating.toFixed(1)}${item.description ? ` · ${esc(item.description)}` : ""}`
+      : esc(item.description);
+  return (
+    `<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;padding-top:8px;` +
+    `border-top:1px solid var(--border)">${text}</div>`
+  );
+}
+
 // itemRow paints one menu item as a bordered `.card` — the Instamart
 // productCard treatment (name + price/·customizable on the left, the existing
 // itemControl stepper/add on the right). Purely visual; the qty aggregation,
 // `--i:` stagger var, sold-out dimming, and itemControl markup are unchanged.
-function itemRow(item: MenuItemData, pending: Map<string, PendingLine>, index: number): string {
+// `state` (rather than just its `.pending` map) is threaded through so the
+// item info toggle below can read `state.itemInfoOpen`.
+function itemRow(item: MenuItemData, state: AppState, index: number): string {
+  const pending = state.pending;
   // Aggregate across variants so a customized item shows its true in-cart count.
   const qty = pendingAggQty(pending, item.id);
   const nameWeight = qty > 0 ? 600 : 400;
   const customizeNote = item.customizable && item.in_stock ? " · customizable" : "";
   const style = item.in_stock ? `--i:${Math.min(index, 12)}` : `--i:${Math.min(index, 12)};opacity:.5`;
+  const hasInfo = !!(item.description || (item.rating ?? 0) > 0);
+  const infoOpen = hasInfo && state.itemInfoOpen.has(item.id);
   return (
     `<div class="card" style="${style}">` +
     `<div style="display:flex;align-items:center;gap:11px">` +
@@ -178,8 +208,10 @@ function itemRow(item: MenuItemData, pending: Map<string, PendingLine>, index: n
     `<div style="font-size:14px;font-weight:${nameWeight}">${esc(item.name)}</div>` +
     `<div style="font-size:13px;color:var(--text-secondary);margin-top:3px">${money(item.price)}${customizeNote}</div>` +
     `</div>` +
+    (hasInfo ? itemInfoButton(item, infoOpen) : "") +
     itemControl(item, qty) +
     `</div>` +
+    (infoOpen ? itemInfoPanel(item) : "") +
     `</div>`
   );
 }
@@ -188,27 +220,46 @@ function itemRow(item: MenuItemData, pending: Map<string, PendingLine>, index: n
 // full-width primary button reading "N in cart · ₹X … checkout →". Purely
 // visual; the count/total math, saving… + sold-out heads-up logic, and the
 // checkout click hook are unchanged.
-function cartBar(state: AppState): string {
+export function cartBar(state: AppState): string {
   const pending = state.pending;
   const n = pendingCount(pending);
-  if (!n) return "";
-  const saving = state.cartSyncBusy
-    ? `<span style="font-size:11px;color:var(--text-muted);margin-left:8px">${icon("loader", 12)} saving…</span>`
-    : "";
-  // M3: a lightweight browse-time heads-up when the last sync's returned cart
-  // flagged a pending line sold-out. Placement itself is still blocked at the
-  // bill (CartBillLine.available) — this is just an earlier signal.
-  const soldOutNote = [...pending.values()].some((line) => line.available === false)
-    ? `<div style="font-size:11px;color:var(--text-warning);margin-bottom:6px">an item in your cart went sold out — check before checkout</div>`
-    : "";
-  return (
-    `${soldOutNote}` +
-    `<div style="position:sticky;bottom:0;margin-top:14px;padding-top:8px">` +
-    `<button type="button" data-checkout class="btn btn-primary" style="width:100%;display:flex;justify-content:space-between;padding:12px 16px">` +
-    `<span>${n} in cart · ${money(pendingTotal(pending))}${saving}</span><span>checkout →</span>` +
-    `</button>` +
-    `</div>`
-  );
+  if (n) {
+    const saving = state.cartSyncBusy
+      ? `<span style="font-size:11px;color:var(--text-muted);margin-left:8px">${icon("loader", 12)} saving…</span>`
+      : "";
+    // M3: a lightweight browse-time heads-up when the last sync's returned cart
+    // flagged a pending line sold-out. Placement itself is still blocked at the
+    // bill (CartBillLine.available) — this is just an earlier signal.
+    const soldOutNote = [...pending.values()].some((line) => line.available === false)
+      ? `<div style="font-size:11px;color:var(--text-warning);margin-bottom:6px">an item in your cart went sold out — check before checkout</div>`
+      : "";
+    return (
+      `${soldOutNote}` +
+      `<div style="position:sticky;bottom:0;margin-top:14px;padding-top:8px">` +
+      `<button type="button" data-checkout class="btn btn-primary" style="width:100%;display:flex;justify-content:space-between;padding:12px 16px">` +
+      `<span>${n} in cart · ${money(pendingTotal(pending))}${saving}</span><span>checkout →</span>` +
+      `</button>` +
+      `</div>`
+    );
+  }
+  // No local pending lines, but there IS a server-side food cart we can't edit
+  // (a kept foreign cart or a pre-existing account cart) — surface the SAME
+  // sticky bar so it's always checkout-able. `data-checkout-saved` routes to the
+  // read-only bill path (no update_cart write); get_cart gives us a restaurant
+  // NAME only, not an id, so this cart can't be adopted/edited — only billed.
+  const saved = state.savedCart;
+  if (saved && saved.lines.length) {
+    const count = saved.lines.reduce((sum, l) => sum + l.quantity, 0);
+    const where = saved.restaurant.trim() ? ` — ${esc(saved.restaurant)}` : "";
+    return (
+      `<div style="position:sticky;bottom:0;margin-top:14px;padding-top:8px">` +
+      `<button type="button" data-checkout-saved class="btn btn-primary" style="width:100%;display:flex;justify-content:space-between;padding:12px 16px">` +
+      `<span>${count} in cart · ${money(saved.total)}${where}</span><span>checkout →</span>` +
+      `</button>` +
+      `</div>`
+    );
+  }
+  return "";
 }
 
 function header(title: string, sub: string): string {
@@ -335,6 +386,11 @@ export function renderMenuLoading(state: AppState): string {
 // keystroke by app.ts with ZERO tool calls (ban-safety).
 export function renderMenu(state: AppState): string {
   const title = state.restaurant?.name || state.restaurant?.id || "menu";
+  const rating = state.restaurant?.rating ?? 0;
+  const sub =
+    rating > 0
+      ? `★ ${rating.toFixed(1)} · estimated prices — the real bill shows at checkout`
+      : "estimated prices — the real bill shows at checkout";
   const groups = groupByCategory(state.items);
   const query = state.menuQuery.trim();
   const searching = query.length > 0;
@@ -345,14 +401,14 @@ export function renderMenu(state: AppState): string {
       : [];
   const emptyMsg = searching ? "no items match that search" : "nothing in this category";
   const rows = items.length
-    ? `<div class="stagger">${items.map((item, i) => itemRow(item, state.pending, i)).join("")}</div>`
+    ? `<div class="stagger">${items.map((item, i) => itemRow(item, state, i)).join("")}</div>`
     : `<div style="padding:16px 0;color:var(--text-muted);font-size:13px">${emptyMsg}</div>`;
   const back = `<button type="button" data-menu-back class="btn" style="margin-bottom:10px">${icon("arrow-left", 14)} search</button>`;
   return (
     `<h2 class="sr-only">Ordering app: browse ${esc(title)}'s menu by category, add or customize items, and check out — all in one window.</h2>` +
     brandBar() +
     back +
-    header(title, "estimated prices — the real bill shows at checkout") +
+    header(title, sub) +
     `<div class="store-layout">` +
     menuSidebar(state.categories, state.activeCategory) +
     `<div class="content">` +
@@ -662,7 +718,9 @@ function billView(state: AppState, cart: CartState, placing: boolean): string {
     `<div style="font-size:15px;font-weight:500;margin-bottom:2px">${esc(restaurant)}</div>` +
     `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">your order · the real bill</div>` +
     rebuilt +
-    billLines(bill, state, !placing) +
+    // A read-only (saved-cart) bill can't be edited — get_cart gives no item ids
+    // to key steppers on — so render plain `qty ×` lines from the server bill.
+    billLines(bill, state, !placing && !cart.readOnly) +
     billBlock(bill) +
     addressChip(cart.addressLabel || "") +
     cta
@@ -684,7 +742,7 @@ function overCapView(state: AppState, cart: CartState): string {
     cartBack(restaurant) +
     `<div style="font-size:15px;font-weight:500;margin-bottom:2px">${esc(restaurant)}</div>` +
     `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">your order · the real bill</div>` +
-    billLines(bill, state, true) +
+    billLines(bill, state, !cart.readOnly) +
     billBlock(bill) +
     `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;padding:10px 12px;background:var(--surface-1);border:1px solid var(--text-warning);border-radius:var(--radius)">` +
     `<span style="color:var(--text-warning);flex:none">${icon("alert-triangle", 16)}</span>` +

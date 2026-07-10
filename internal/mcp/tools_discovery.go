@@ -36,13 +36,15 @@ type RestaurantDTO struct {
 	Description string  `json:"description,omitempty"`
 }
 type MenuItemDTO struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Price        int    `json:"price"`
-	Veg          bool   `json:"veg"`
-	InStock      bool   `json:"in_stock"`
-	Customizable bool   `json:"customizable"`
-	Category     string `json:"category,omitempty"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Price        int     `json:"price"`
+	Veg          bool    `json:"veg"`
+	InStock      bool    `json:"in_stock"`
+	Customizable bool    `json:"customizable"`
+	Category     string  `json:"category,omitempty"`
+	Description  string  `json:"description,omitempty"`
+	Rating       float64 `json:"rating,omitempty"`
 }
 
 func toAddressDTOs(in []api.Address) []AddressDTO {
@@ -73,7 +75,7 @@ func toMenuItemDTOs(in []api.MenuItem) []MenuItemDTO {
 			continue
 		}
 		seen[m.ID] = true
-		out = append(out, MenuItemDTO{ID: m.ID, Name: m.Name, Price: m.Price, Veg: m.Veg, InStock: m.InStock, Customizable: m.Customizable, Category: m.Category})
+		out = append(out, MenuItemDTO{ID: m.ID, Name: m.Name, Price: m.Price, Veg: m.Veg, InStock: m.InStock, Customizable: m.Customizable, Category: m.Category, Description: m.Description, Rating: m.Rating})
 	}
 	return out
 }

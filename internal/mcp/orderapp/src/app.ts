@@ -7,7 +7,7 @@
 import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
 import { injectStyles } from "./styles";
-import { bootLoader, esc, groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading, renderRecovery, renderSignIn } from "./screens";
+import { bootLoader, cartBar, esc, groupByCategory, renderCartScreen, renderConflict, renderCustomizeScreen, renderFocusedItem, renderMenu, renderMenuLoading, renderRecovery, renderSignIn } from "./screens";
 import { renderHome } from "./home";
 import { handleIMClick, handleIMKeydown, im, imEnter, imOnAddressChange, imSeed, imSeedCategories, initIM } from "./instamart";
 import { renderIM } from "./imScreens";
@@ -34,6 +34,12 @@ export interface MenuItemData {
   customizable: boolean;
   // Go emits `category,omitempty` — absent or "" both mean "uncategorized".
   category?: string;
+  // Optional (internal/mcp/tools_discovery.go MenuItemDTO): a dish
+  // description and its rating (0 = unknown/absent). Surfaced behind the
+  // item info toggle (itemInfoOpen) — never fetched separately, they ride
+  // on the same get_menu payload as everything else.
+  description?: string;
+  rating?: number;
 }
 
 export interface OpenStoreRestaurant {
@@ -43,6 +49,12 @@ export interface OpenStoreRestaurant {
   id?: string;
   // open_store now sends `name` (the display name / the name to resolve).
   name?: string;
+  // Carried over from the HomeRestaurant this menu screen was opened from
+  // (openRestaurant / resolveRestaurantThenOpen) when one was available —
+  // get_menu itself returns no restaurant rating, so this is the only source.
+  // Absent (not merely 0) when the open path had no HomeRestaurant to read it
+  // from (e.g. a server-seeded open_store shell, or reorder's fallback name).
+  rating?: number;
 }
 
 export interface OpenStoreEntry {
@@ -265,6 +277,10 @@ export interface CartState {
   error?: string;
   errorCode?: string;
   canResync?: boolean;
+  // True for a saved-cart (read-only) checkout: a server-side cart we can bill
+  // but not edit (get_cart returns a restaurant NAME only, no item ids to key
+  // steppers on). billView/overCapView hide the per-line steppers when set.
+  readOnly?: boolean;
 }
 
 export interface AppState {
@@ -332,6 +348,12 @@ export interface AppState {
   items: MenuItemData[];
   categories: string[];
   activeCategory: string | null;
+  // Menu-item ids whose info toggle (description/rating) panel is open —
+  // the itemRow parallel to restInfoOpen above. Pure client-side, no tool
+  // call fires when this changes. Restaurant-scoped: cleared by
+  // resetRestaurantScopedState (a new menu load) and wherever restInfoOpen
+  // resets on navigation back to home.
+  itemInfoOpen: Set<string>;
   // Task 11: the in-menu item search box. Pure client-side substring filter
   // over state.items (screens.ts's itemMatchesQuery) — no tool call fires
   // when this changes, on any keystroke. Mutually exclusive with
@@ -358,7 +380,16 @@ export interface AppState {
   // holds a DIFFERENT restaurant's items, found on the first add of this
   // restaurant session (syncCart's guard, before any write — invariant 3).
   // Renders a menu-level keep/clear prompt; blocks cart sync until resolved.
-  conflict: { foreignRestaurant: string } | null;
+  // `lines`/`total` stash the foreign cart's contents (from the guard's
+  // get_cart) so "keep <other>" can hand them to `savedCart` — otherwise the
+  // kept cart would have no local representation (no bar, no checkout).
+  conflict: { foreignRestaurant: string; lines?: CartBillLine[]; total?: number } | null;
+  // A server-side FOOD cart NOT represented by `pending` — a kept foreign cart
+  // (from a cross-restaurant conflict) or a pre-existing account cart discovered
+  // at boot. Drives the always-visible cart bar (home + any menu) and a
+  // read-only checkout. Never set for Instamart (that vertical owns its own
+  // cart). Cleared when folded into pending, cleared server-side, or on placed.
+  savedCart: { restaurant: string; lines: CartBillLine[]; total: number } | null;
   // A non-blocking note from the debounced cart sync (e.g. over_cap) — shown
   // inline on the menu; the pending cart stays editable so the user can adjust.
   cartSyncError: string | null;
@@ -421,12 +452,14 @@ export const state: AppState = {
   items: [],
   categories: [],
   activeCategory: null,
+  itemInfoOpen: new Set(),
   menuQuery: "",
   pending: new Map(),
   customize: null,
   cart: null,
   focusedItemId: null,
   conflict: null,
+  savedCart: null,
   cartSyncError: null,
   cartSyncBusy: false,
   homeLoading: false,
@@ -611,7 +644,18 @@ function renderScreen(root: HTMLElement): void {
     return;
   }
   if (state.screen === "home") {
-    root.innerHTML = renderHome(state);
+    // A saved-cart checkout can be launched straight from home (data-checkout-
+    // saved) — render the checkout flow over home when state.cart is set, since
+    // the restaurant-screen cart block below is never reached from home.
+    if (state.cart) {
+      root.innerHTML = renderCartScreen(state, state.cart);
+      return;
+    }
+    // Food home only (the instamart vertical short-circuited above) — append the
+    // shared cart bar so a saved/foreign cart stays visible + checkout-able from
+    // home, not just inside a restaurant menu. cartBar renders nothing when there
+    // is neither a pending nor a saved cart.
+    root.innerHTML = renderHome(state) + cartBar(state);
     return;
   }
   // The menu is still loading (a restaurant card was just tapped) — paint the
@@ -1011,6 +1055,9 @@ function newlyAddedLineNames(): string[] {
 // the TUI's seedCartFromLive. Only seeds ids not already tracked this session
 // so a fresher local edit is never clobbered.
 function seedExistingCartLines(lines: CartBillLine[]): void {
+  // This same-restaurant cart is now represented by `pending` — the read-only
+  // savedCart shadow of it (if any) is obsolete (invalidation rule a).
+  state.savedCart = null;
   for (const line of lines) {
     if (!line.item_id) continue;
     // Dedupe by itemId across ALL pending values, not by Map key: a customized
@@ -1169,7 +1216,9 @@ async function syncCartOnce(): Promise<void> {
         log("syncCartOnce:get_cart", { existingRestaurant: existing.restaurant, existingLines: existing.lines.length });
         if (existing.lines.length > 0 && isForeignCart(existing.restaurant)) {
           log("syncCartOnce:conflict", { foreign: existing.restaurant });
-          state.conflict = { foreignRestaurant: existing.restaurant };
+          // Stash the foreign cart so "keep <other>" can promote it to savedCart
+          // (a kept cart must stay visible + checkout-able, not vanish).
+          state.conflict = { foreignRestaurant: existing.restaurant, lines: existing.lines, total: existing.total };
           render();
           lastSyncOk = true; // a pending user decision, not a failure
           return; // do NOT write — wait for keep/clear
@@ -1313,6 +1362,7 @@ async function restoreConfirmedCart(restaurantId: string): Promise<void> {
 async function resolveConflictClear(): Promise<void> {
   if (!app || !state.restaurantId) return;
   state.conflict = null;
+  state.savedCart = null; // the foreign cart is being cleared (invalidation rule b)
   render();
   try {
     await app.callServerTool({ name: "clear_cart", arguments: {} });
@@ -1492,6 +1542,33 @@ async function openCart(): Promise<void> {
   await prepareBill(token, 1);
 }
 
+// openSavedCart checks out the read-only `savedCart` (a kept foreign cart or a
+// pre-existing account cart). Unlike openCart it makes NO cart write: there's no
+// local `pending` to flush and no conflict to guard — prepare_order bills
+// whatever the SERVER cart already holds and only needs address_id. get_cart
+// returned a restaurant NAME, not an id, so this cart can't be adopted/edited;
+// the resulting bill is marked readOnly so the steppers stay hidden. The place
+// button / UPI flow / error mapping are identical to the normal checkout.
+async function openSavedCart(): Promise<void> {
+  const token = ++cartToken;
+  state.customize = null;
+  if (!app || !state.addressId) {
+    state.cart = { status: "error", error: "missing address context" };
+    render();
+    return;
+  }
+  if (!state.savedCart || state.savedCart.lines.length === 0) {
+    state.cart = { status: "error", error: "your cart is empty — add something first" };
+    render();
+    return;
+  }
+  state.cart = { status: "loading", message: "loading your cart…", readOnly: true };
+  render();
+  // Straight to the authoritative bill — NO update_cart, NO flushCartSync, NO
+  // conflict guard (invariant: never write on the saved-cart path).
+  await prepareBill(token, 1);
+}
+
 // The update_cart line shape (order-app-tool-schemas.md). variants_v2 /
 // variants_legacy / addons are present only for customized lines (built in
 // Task 5; H1's 3-way routing — customize.ts buildWireSelections).
@@ -1570,7 +1647,10 @@ async function prepareBill(token: number, retries: number): Promise<void> {
   // loading state — an over_cap (or any other) failure from the prepare_order
   // call below needs it to render the bill-with-notice view (M5).
   if (state.cart?.bill) lastBill = state.cart.bill;
-  state.cart = { status: "loading", message: "pulling the real bill…" };
+  // A saved-cart checkout is read-only through the whole bill flow — carry the
+  // flag across the loading→bill transition so billView keeps steppers hidden.
+  const readOnly = state.cart?.readOnly === true;
+  state.cart = { status: "loading", message: "pulling the real bill…", readOnly };
   render();
 
   try {
@@ -1601,6 +1681,7 @@ async function prepareBill(token: number, retries: number): Promise<void> {
       bill: readBill(sc?.bill),
       addressLabel: str(sc?.address?.label),
       rebuilt: sc?.rebuilt,
+      readOnly,
     };
     render();
   } catch (err) {
@@ -1655,6 +1736,7 @@ async function placeOrder(): Promise<void> {
       return;
     }
     state.pending = new Map();
+    state.savedCart = null; // the cart was consumed by the order (invalidation rule c)
     state.cart = {
       status: "placed",
       order: sc?.order ?? {},
@@ -1792,6 +1874,7 @@ async function confirmPaidOrder(token: number, payment: PaymentInfo, current: Ca
     }
     const sc = res.structuredContent as { order?: OrderSummary } | undefined;
     state.pending = new Map();
+    state.savedCart = null; // the cart was consumed by the order (invalidation rule c)
     state.cart = {
       status: "placed",
       order: sc?.order ?? {},
@@ -2024,7 +2107,7 @@ async function openRestaurant(id: string, fallbackName?: string): Promise<void> 
   searchToken++;
   state.homeLoadingMore = false; // discard any in-flight "load more" — leaving home
   state.screen = "restaurant";
-  state.restaurant = { id, name: r?.name ?? fallbackName ?? "" };
+  state.restaurant = { id, name: r?.name ?? fallbackName ?? "", rating: r?.rating };
   state.items = [];
   state.categories = [];
   state.activeCategory = null;
@@ -2253,7 +2336,7 @@ function onRootClick(evt: MouseEvent): void {
   // first so app.ts never has to know their shape. Returns true when handled.
   if (handleIMClick(target as HTMLElement)) return;
   const el = target.closest<HTMLElement>(
-    "[data-add],[data-inc],[data-dec],[data-dec-item],[data-customize],[data-cat],[data-checkout],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-cart-inc],[data-cart-dec],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin],[data-reload],[data-im-tab]",
+    "[data-add],[data-inc],[data-dec],[data-dec-item],[data-customize],[data-cat],[data-checkout],[data-checkout-saved],[data-menu-back],[data-conflict-keep],[data-conflict-clear],[data-focus-back],[data-cz-back],[data-cz-pick],[data-cz-toggle],[data-cz-add],[data-cart-back],[data-cart-keep],[data-cart-clear],[data-cart-retry],[data-cart-inc],[data-cart-dec],[data-place],[data-addr-open],[data-addr-pick],[data-addr-default],[data-cat-q],[data-home-search],[data-rest-info],[data-item-info],[data-rest-open],[data-rest-closed],[data-reorder],[data-menu-search-clear],[data-signin],[data-reload],[data-im-tab]",
   );
   if (!el) return;
   log("click", { action: Object.keys(el.dataset)[0] ?? "?" });
@@ -2421,9 +2504,15 @@ function onRootClick(evt: MouseEvent): void {
   }
 
   // Cross-restaurant conflict — keep the existing (other) cart: cancel adding
-  // here by dropping the local pending, and stay on the menu.
+  // here by dropping the local pending, and stay on the menu. Promote the
+  // stashed foreign cart to savedCart so it stays visible + checkout-able (a
+  // kept cart with no local representation was the reported bug).
   if (el.dataset.conflictKeep !== undefined) {
+    const c = state.conflict;
     state.pending = new Map();
+    if (c && c.lines && c.lines.length) {
+      state.savedCart = { restaurant: c.foreignRestaurant, lines: c.lines, total: c.total ?? 0 };
+    }
     state.conflict = null;
     render();
     return;
@@ -2455,6 +2544,12 @@ function onRootClick(evt: MouseEvent): void {
 
   if (el.dataset.checkout !== undefined) {
     void openCart();
+    return;
+  }
+
+  // Read-only checkout for a saved/foreign cart (no local pending to sync).
+  if (el.dataset.checkoutSaved !== undefined) {
+    void openSavedCart();
     return;
   }
 
@@ -2511,6 +2606,16 @@ function onRootClick(evt: MouseEvent): void {
   if (restInfoId !== undefined) {
     if (state.restInfoOpen.has(restInfoId)) state.restInfoOpen.delete(restInfoId);
     else state.restInfoOpen.add(restInfoId);
+    render();
+    return;
+  }
+
+  // Menu-item info toggle — the itemRow parallel to the eye toggle above.
+  // Pure client-side, zero tool calls.
+  const itemInfoId = el.dataset.itemInfo;
+  if (itemInfoId !== undefined) {
+    if (state.itemInfoOpen.has(itemInfoId)) state.itemInfoOpen.delete(itemInfoId);
+    else state.itemInfoOpen.add(itemInfoId);
     render();
     return;
   }
@@ -2601,6 +2706,7 @@ async function clearThenMaterialize(existingToken?: number): Promise<void> {
     render();
     return;
   }
+  state.savedCart = null; // the other cart is being cleared (invalidation rule b)
   state.cart = { status: "loading", message: "clearing the other cart…" };
   render();
   try {
@@ -2630,6 +2736,7 @@ function resetRestaurantScopedState(): void {
   state.cart = null;
   state.focusedItemId = null;
   state.menuQuery = ""; // a fresh restaurant screen never opens mid-search
+  state.itemInfoOpen = new Set(); // a new menu's item ids don't carry over
   state.conflict = null;
   state.cartSyncError = null;
   cartToken++; // discard any in-flight checkout from a previous restaurant
@@ -2744,6 +2851,7 @@ function showHomeChooser(name: string, results: HomeRestaurant[], nextOffset: nu
   state.query = name;
   state.activeCatQuery = null;
   state.restInfoOpen = new Set();
+  state.itemInfoOpen = new Set();
   state.closedNoteId = null;
   state.restaurants = sortRestaurants(results);
   state.homeNextOffset = nextOffset;
@@ -2787,7 +2895,7 @@ async function resolveRestaurantThenOpen(name: string, deepLink: DeepLink): Prom
       // Confident, open restaurant → load its menu under the loader, carrying
       // the item deep-link (e.g. prefill "burger"). fetchMenuThenApply owns the
       // next menuToken; nothing after this runs for this call.
-      state.restaurant = { id: pick.id, name: pick.name };
+      state.restaurant = { id: pick.id, name: pick.name, rating: pick.rating };
       state.restaurantId = pick.id ?? null;
       render();
       await fetchMenuThenApply(pick.id ?? "", deepLink);
@@ -2918,6 +3026,47 @@ async function resumeAfterSignin(): Promise<void> {
   seedFromOpenStore(shell);
 }
 
+// savedCartBootFired guards the boot-time get_cart so it runs at most ONCE per
+// app boot (a later open_store home nav must not re-fire it).
+let savedCartBootFired = false;
+
+// seedSavedCartFromServer fires ONE background get_cart after a FOOD home shell
+// seeds, to surface a pre-existing account cart the TUI would have shown via its
+// launch cart-pull (the widget otherwise only discovers it on entering the same
+// restaurant). Fire-and-forget: it never blocks first paint and any failure is
+// swallowed. An MCP error from get_cart means an EMPTY cart (known Swiggy
+// behavior) → savedCart stays null. Only adopts the result if we're still on a
+// food screen with an empty pending and no conflict pending — server truth wins.
+async function seedSavedCartFromServer(): Promise<void> {
+  if (savedCartBootFired) return;
+  // Only burn the once-per-boot flag when the call actually fires — on a fresh
+  // boot the address list may still be loading, and the next home seed (after
+  // addresses resolve) should get another chance.
+  if (!app || !state.addressId) return;
+  savedCartBootFired = true;
+  const addressId = state.addressId;
+  try {
+    const got = await app.callServerTool({ name: "get_cart", arguments: { address_id: addressId } });
+    // Don't clobber a cart the user has since started building, switched
+    // verticals into, or a conflict that surfaced meanwhile.
+    if (state.vertical !== "food") return;
+    if (state.pending.size > 0 || state.conflict) return;
+    if (got.isError) {
+      state.savedCart = null; // empty cart is an MCP error on Swiggy
+      return;
+    }
+    const bill = readBill((got.structuredContent as { cart?: unknown } | undefined)?.cart);
+    if (bill.lines.length === 0) {
+      state.savedCart = null;
+      return;
+    }
+    state.savedCart = { restaurant: bill.restaurant, lines: bill.lines, total: bill.total };
+    render();
+  } catch {
+    // Fire-and-forget — a boot get_cart failure never surfaces to the user.
+  }
+}
+
 function seedFromOpenStore(sc: OpenStoreOut): void {
   // Any open_store result means the boot handshake delivered — stop the boot
   // watchdog, and auto-heal a prior stall if the host re-delivered late.
@@ -2998,6 +3147,7 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
       resetRestaurantScopedState();
       state.homeLoading = true;
       render();
+      void seedSavedCartFromServer(); // background: surface a pre-existing cart
       if (state.addressId) {
         void runHomeSearch(state.addressId, homeQuery);
       } else {
@@ -3030,6 +3180,7 @@ function seedFromOpenStore(sc: OpenStoreOut): void {
     state.activeCategory = null;
     resetRestaurantScopedState();
     render();
+    void seedSavedCartFromServer(); // background: surface a pre-existing cart
     return;
   }
 

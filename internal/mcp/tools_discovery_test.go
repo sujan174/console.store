@@ -94,6 +94,17 @@ func TestToMenuItemDTOsKeepsCategory(t *testing.T) {
 	}
 }
 
+// get_menu must surface description + rating so the agent can describe/rank
+// dishes — both were being dropped at the MCP DTO boundary even though the
+// broker (internal/broker/mapping.go mapMenu) already fills api.MenuItem.
+func TestToMenuItemDTOsKeepsDescriptionAndRating(t *testing.T) {
+	in := []api.MenuItem{{ID: "1", Name: "Veg Wrap", Price: 120, Description: "Whole wheat wrap with grilled veggies", Rating: 4.6}}
+	got := toMenuItemDTOs(in)
+	if len(got) != 1 || got[0].Description != "Whole wheat wrap with grilled veggies" || got[0].Rating != 4.6 {
+		t.Fatalf("description/rating dropped: %+v", got)
+	}
+}
+
 // The MCP menu repeats the same item id across category pages (e.g. it shows
 // up under "Recommended" and again under its real category). toMenuItemDTOs
 // must dedupe by id, keeping the FIRST occurrence, matching the TUI's
