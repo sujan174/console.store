@@ -177,12 +177,13 @@ server-side) — that's normal, not an error; the to-pay/`total` is always the
 authoritative, charged amount. Never invent a reason for a mismatch and never
 hide it.
 
-## UPI payment (food) — place → pay → confirm
+## UPI payment — place → pay → confirm
 
-Swiggy disabled cash-on-delivery, so a **food** `place_order` does NOT return a
-placed order — it returns a `payment` object (the order sits PENDING_PAYMENT
-until the user pays by UPI). Instamart and legacy no-UPI users still return a
-placed `order` directly; branch on which field is present.
+A food **or** Instamart `place_order` may return a `payment` object instead of
+a placed order (the order sits PENDING_PAYMENT until the user pays by UPI) —
+this happens when the account is UPI-enabled. Branch on whether `payment` is
+present, not on which vertical you're in; legacy no-UPI accounts (and
+Instamart's `method:"cod"`) still return a placed `order` directly.
 
 When `place_order` returns `payment`:
 
@@ -235,7 +236,9 @@ one call, same app, same rules (one widget per turn; the app drives the
 `im_*` tools itself). The Food cart and the Instamart cart are independent —
 building one never touches the other; say which cart you're acting on when
 both are in play. Limits the app enforces: **₹99 minimum** (`under_min:`),
-**₹1000 cap** (`over_cap:`), **COD only**, no cancellation.
+**₹1000 cap** (`over_cap:`), no cancellation. Payment: **UPI scan-to-pay when
+the account is UPI-enabled** (same `payment` → `check_payment` →
+`confirm_order` flow as food), else **cash on delivery**.
 
 For the TEXT fallback (no MCP Apps) or hands-on recovery, read
 `references/instamart.md` — it covers the `im_*` tool flow, the
