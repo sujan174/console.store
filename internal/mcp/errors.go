@@ -19,6 +19,7 @@ const (
 	codeCartChanged         = "cart_changed"
 	codeUnderMin            = "under_min"
 	codeNoAddress           = "no_address"
+	codeValidation          = "validation"
 )
 
 // codedErr builds a "<code>: message" error.

@@ -53,6 +53,14 @@ type Backend interface {
 	IMUpdateCart(addressID string, items []api.IMCartItem) (api.IMCart, error)
 	IMClearCart() error
 	IMPlaceOrder(addressID string) (api.Order, error)
+	// Instamart UPI online payment — mirrors the food PlaceUPI/PollPayment/
+	// ConfirmOrder trio. IMPlaceOrderUPI starts a pending IM payment; the bool is
+	// false when the account has no scan-to-pay method (caller falls back to the
+	// COD IMPlaceOrder). The pending carries Vertical "instamart" so poll/confirm
+	// route to the IM client. Carry the api.PendingPayment verbatim between them.
+	IMPlaceOrderUPI(addressID string) (api.PendingPayment, bool, error)
+	IMPollPayment(p api.PendingPayment) (api.PaymentStatus, error)
+	IMConfirmOrder(p api.PendingPayment) (api.Order, error)
 	IMOrders(activeOnly bool) ([]api.IMOrder, error)
 	IMTrack(orderID string, lat, lng float64) (api.Tracking, error)
 }
@@ -173,9 +181,9 @@ func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "update_cart", Description: "set the cart lines for a restaurant (replaces the cart; a cart from another restaurant is auto-replaced and reported in replaced_cart)"}, s.handleUpdateCart)
 	addTool(srv, &mcp.Tool{Name: "clear_cart", Description: "empty the cart"}, s.handleClearCart)
 	addTool(srv, &mcp.Tool{Name: "prepare_order", Description: "sync the cart and return the real bill + a confirmation_id (does NOT place; auto-moves the cart when the address changed and rebuilds it if Swiggy expired it — see the rebuilt field)"}, s.handlePrepareOrder)
-	addTool(srv, &mcp.Tool{Name: "place_order", Description: "place the order for a confirmation_id from prepare_order or im_prepare_order (real; never call without user confirmation). Food orders return a `payment` (UPI scan-to-pay: show the QR/pay link, poll check_payment, then confirm_order when paid); instamart and legacy no-UPI users return a placed `order` directly."}, s.handlePlaceOrder)
-	addTool(srv, &mcp.Tool{Name: "check_payment", Description: "poll a pending UPI payment (payment_id from place_order): reports paid/failed/expired. Read-only — call every couple of seconds while the user pays, until paid or expired."}, s.handleCheckPayment)
-	addTool(srv, &mcp.Tool{Name: "confirm_order", Description: "finalize a paid UPI order (payment_id from place_order) into a placed order. Call ONLY after check_payment reports paid; refuses once the payment window has closed."}, s.handleConfirmOrder)
+	addTool(srv, &mcp.Tool{Name: "place_order", Description: "place the order for a confirmation_id from prepare_order or im_prepare_order (real; never call without user confirmation). Food and (when the account supports it) instamart orders return a `payment` (UPI scan-to-pay: show the QR/pay link, poll check_payment, then confirm_order when paid); a placed `order` comes back directly for COD (legacy no-UPI users, or instamart when UPI is unavailable). Optional `method` picks the payment method: \"upi\" (scan-to-pay) or \"cod\" (cash on delivery); omit for the default (UPI when available, else COD). Food is UPI-only."}, s.handlePlaceOrder)
+	addTool(srv, &mcp.Tool{Name: "check_payment", Description: "poll a pending UPI payment (payment_id from place_order, food or instamart): reports paid/failed/expired. Read-only — call every couple of seconds while the user pays, until paid or expired."}, s.handleCheckPayment)
+	addTool(srv, &mcp.Tool{Name: "confirm_order", Description: "finalize a paid UPI order (payment_id from place_order, food or instamart) into a placed order. Call ONLY after check_payment reports paid; refuses once the payment window has closed."}, s.handleConfirmOrder)
 	addTool(srv, &mcp.Tool{Name: "order_preset", Description: "load a saved preset (food or instamart) into the cart and return a bill + confirmation_id (does NOT place)"}, s.handleOrderPreset)
 	addTool(srv, &mcp.Tool{Name: "sign_in", Description: "start Swiggy sign-in; returns a browser URL (opened automatically when possible)"}, s.handleSignIn)
 	addTool(srv, &mcp.Tool{Name: "auth_status", Description: "whether the user is signed in — and, when signed in, the opening card snapshot (default/last address, favorites, taste, suggestions, policies) so no separate get_card is needed to start"}, s.handleAuthStatus)

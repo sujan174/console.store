@@ -131,6 +131,7 @@ func (s *Server) handlePrepareOrder(ctx context.Context, _ *mcp.CallToolRequest,
 
 type PlaceOrderIn struct {
 	ConfirmationID string `json:"confirmation_id"`
+	Method         string `json:"method,omitempty" jsonschema:"payment method preference: \"upi\" (scan-to-pay) or \"cod\" (cash on delivery); omit for the default (UPI when available, else COD)"`
 }
 type PlaceOrderOut struct {
 	// Exactly one of Order / Payment is set. Order = a placed order (instamart, or
@@ -202,7 +203,13 @@ func (s *Server) handleCheckPayment(ctx context.Context, _ *mcp.CallToolRequest,
 		return nil, CheckPaymentOut{Status: "expired", Expired: true,
 			Note: "the payment window closed — nothing was charged. place the order again for a fresh QR."}, nil
 	}
-	st, err := s.be.PollPayment(e.pay)
+	// Route the poll to the vertical that minted the pending: an Instamart
+	// pending polls the IM client, food the food client.
+	poll := s.be.PollPayment
+	if e.ord.vertical == "instamart" {
+		poll = s.be.IMPollPayment
+	}
+	st, err := poll(e.pay)
 	if err != nil {
 		return nil, CheckPaymentOut{}, err
 	}
@@ -228,6 +235,22 @@ func (s *Server) handleConfirmOrder(ctx context.Context, _ *mcp.CallToolRequest,
 	if paymentExpired(e.pay) {
 		s.payments.remove(in.PaymentID)
 		return nil, PlaceOrderOut{}, codedErr(codeConfirmationExpired, "the payment window closed — nothing was charged. place the order again")
+	}
+	if e.ord.vertical == "instamart" {
+		// Instamart UPI: finalize via the IM client. The broker's IMConfirmOrder
+		// already force-clears the server cart in-service, so we don't clear here.
+		order, err := s.be.IMConfirmOrder(e.pay) // never retried
+		if err != nil {
+			return nil, PlaceOrderOut{}, fmt.Errorf("confirm failed: %w — run list_active_orders before retrying in case it was placed", err)
+		}
+		if order.Restaurant == "" {
+			order.Restaurant = "Instamart"
+		}
+		s.payments.remove(in.PaymentID)
+		// Coords ride on the pending (stamped at place time from the cart) —
+		// track_order needs them and the cart is gone by now.
+		s.recordIMPlacement(e.ord, order, e.pay.Lat, e.pay.Lng)
+		return nil, PlaceOrderOut{Order: toOrderDTOPtr(order)}, nil
 	}
 	order, err := s.be.ConfirmOrder(e.pay) // never retried
 	if err != nil {
@@ -255,8 +278,14 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	if !ok {
 		return nil, PlaceOrderOut{}, codedErr(codeConfirmationExpired, "unknown or expired confirmation_id — call prepare_order again")
 	}
+	method := strings.ToLower(strings.TrimSpace(in.Method))
 	if p.vertical == "instamart" {
-		return s.placeIMOrder(p)
+		return s.placeIMOrder(p, method)
+	}
+	// Food is UPI-only (Swiggy disabled COD for the food vertical), so an explicit
+	// cod request can't be honored — say so instead of silently placing UPI.
+	if method == "cod" {
+		return nil, PlaceOrderOut{}, codedErr(codeValidation, "food orders are UPI-only right now")
 	}
 	// Re-fetch and verify the cart still matches what the user confirmed.
 	c, err := s.be.GetCart(p.addressID, "")
@@ -354,9 +383,12 @@ func (s *Server) recordFoodPlacement(p pendingOrder, order api.Order) {
 
 // placeIMOrder re-verifies and places an Instamart order from a confirmation
 // minted by im_prepare_order/order_preset. Mirrors handlePlaceOrder's food
-// path: re-fetch, hash/total re-check, place once (never retried), persist
-// ActiveOrder (Vertical "instamart"), best-effort stamp Lat/Lng from IMOrders.
-func (s *Server) placeIMOrder(p pendingOrder) (*mcp.CallToolResult, PlaceOrderOut, error) {
+// path: re-fetch, hash/total re-check, then place once (never retried). The
+// method preference picks the tender: "cod" places immediately; "upi" or the
+// default tries a UPI scan-to-pay handoff (IMPlaceOrderUPI) and, when the
+// account has no scan-to-pay method, falls back to COD — unless "upi" was
+// explicit, in which case it's a validation error rather than a silent COD.
+func (s *Server) placeIMOrder(p pendingOrder, method string) (*mcp.CallToolResult, PlaceOrderOut, error) {
 	c, err := s.be.IMGetCart()
 	if err != nil {
 		return nil, PlaceOrderOut{}, err
@@ -364,20 +396,64 @@ func (s *Server) placeIMOrder(p pendingOrder) (*mcp.CallToolResult, PlaceOrderOu
 	if imCartHash(p.addressID, c) != p.hash || c.Total != p.total {
 		return nil, PlaceOrderOut{}, codedErr(codeCartChanged, "cart changed since im_prepare_order — call im_prepare_order again to re-confirm")
 	}
+	if method == "cod" {
+		return s.placeIMCOD(p, c)
+	}
+	// UPI (explicit "upi" or the default): place a PENDING_PAYMENT order and hand
+	// the client a scan-to-pay QR + link, to be polled (check_payment) and
+	// finalized (confirm_order) — the bookkeeping runs at confirm, once the money
+	// clears (mirrors the food UPI path).
+	pend, ok, err := s.be.IMPlaceOrderUPI(p.addressID) // never retried
+	if err != nil {
+		return nil, PlaceOrderOut{}, fmt.Errorf("order failed: %w — run list_active_orders before retrying in case it was placed", err)
+	}
+	if ok {
+		// The re-fetched cart is the ONLY source of the delivery coordinates
+		// track_order requires (get_orders omits them); carry them on the pending
+		// so confirm_order can stamp the ActiveOrder even after the cart is gone.
+		if pend.Lat == 0 && pend.Lng == 0 {
+			pend.Lat, pend.Lng = c.AddrLat, c.AddrLng
+		}
+		payID := s.payments.put(pend, p)
+		return nil, PlaceOrderOut{Payment: toPaymentDTO(payID, pend)}, nil
+	}
+	if method == "upi" {
+		return nil, PlaceOrderOut{}, codedErr(codeValidation, "UPI is not available for this account right now — offer cash on delivery instead")
+	}
+	// Default with no scan-to-pay method available → COD.
+	return s.placeIMCOD(p, c)
+}
+
+// placeIMCOD places the Instamart cart immediately (COD) and records the
+// placement. c is the just-re-verified cart (its AddrLat/AddrLng are the only
+// source of the delivery coordinates track_order needs).
+func (s *Server) placeIMCOD(p pendingOrder, c api.IMCart) (*mcp.CallToolResult, PlaceOrderOut, error) {
 	order, err := s.be.IMPlaceOrder(p.addressID) // never retried
 	if err != nil {
 		return nil, PlaceOrderOut{}, fmt.Errorf("order failed: %w — run list_active_orders before retrying in case it was placed", err)
 	}
+	s.recordIMPlacement(p, order, c.AddrLat, c.AddrLng)
+	// Force-clear the server cart after placement: checkout normally consumes
+	// it, but leftovers have been seen live lingering in the Swiggy app cart.
+	// Best-effort — clear_cart maps "Cart not found" (already empty) to success.
+	_ = s.be.IMClearCart()
+	return nil, PlaceOrderOut{Order: toOrderDTOPtr(order)}, nil
+}
+
+// recordIMPlacement accretes the localstore caches after an Instamart order is
+// truly placed — immediately for COD, and at confirm_order time for UPI. Mirrors
+// recordFoodPlacement's tail for the IM vertical: ActiveOrder with Vertical
+// "instamart" plus the delivery coords track_order requires (get_addresses and
+// get_orders both omit them, harvested 2026-07-03), the placement identity, and
+// addrpref. Best-effort. It deliberately does NOT clear the IM cart: the COD path
+// clears it itself, and the broker's IMConfirmOrder force-clears it in-service.
+func (s *Server) recordIMPlacement(p pendingOrder, order api.Order, lat, lng float64) {
 	etaLo, etaHi := localstore.ParseETAMinutes(order.ETA)
-	active := localstore.ActiveOrder{
+	_ = localstore.SaveActiveOrder(localstore.ActiveOrder{
 		OrderID: order.ID, Restaurant: order.Restaurant, ETALoMin: etaLo, ETAHiMin: etaHi,
 		Total: order.Total, PlacedAt: nowUnix(), Vertical: "instamart",
-		// The cart just re-fetched above is the ONLY source of the delivery
-		// coordinates track_order requires — get_addresses and get_orders both
-		// omit them (harvested 2026-07-03).
-		Lat: c.AddrLat, Lng: c.AddrLng,
-	}
-	_ = localstore.SaveActiveOrder(active)
+		Lat: lat, Lng: lng,
+	})
 	_ = localstore.RecordOrder(p.addressID, p.addrLabel, p.restaurantID, p.restaurantName, nowUnix())
 	// Best-effort, mirrors the food path: keep addrpref current for Instamart
 	// placements too (previously only food touched it).
@@ -385,11 +461,6 @@ func (s *Server) placeIMOrder(p pendingOrder) (*mcp.CallToolResult, PlaceOrderOu
 		_ = localstore.SaveAddrPref(ap.RecordPlacement(p.addressID, p.addrLabel, nowUnix()))
 	}
 	s.markCartWritePlaced()
-	// Force-clear the server cart after placement: checkout normally consumes
-	// it, but leftovers have been seen live lingering in the Swiggy app cart.
-	// Best-effort — clear_cart maps "Cart not found" (already empty) to success.
-	_ = s.be.IMClearCart()
-	return nil, PlaceOrderOut{Order: toOrderDTOPtr(order)}, nil
 }
 
 type OrderPresetIn struct {

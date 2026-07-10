@@ -225,6 +225,18 @@ func (f *fakeRPC) IMPlaceOrder(accountID, addressID string) (api.Order, error) {
 	f.lastAccount = accountID
 	return api.Order{}, f.err
 }
+func (f *fakeRPC) IMPlaceOrderUPI(accountID, addressID string) (api.PendingPayment, bool, error) {
+	f.lastAccount = accountID
+	return api.PendingPayment{}, false, f.err
+}
+func (f *fakeRPC) IMPollPayment(accountID string, p api.PendingPayment) (api.PaymentStatus, error) {
+	f.lastAccount = accountID
+	return api.PayPending, f.err
+}
+func (f *fakeRPC) IMConfirmOrder(accountID string, p api.PendingPayment) (api.Order, error) {
+	f.lastAccount = accountID
+	return api.Order{}, f.err
+}
 func (f *fakeRPC) IMOrders(accountID string, activeOnly bool) ([]api.IMOrder, error) {
 	f.lastAccount = accountID
 	return nil, f.err

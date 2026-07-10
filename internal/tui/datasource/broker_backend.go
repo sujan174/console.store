@@ -37,6 +37,9 @@ type brokerRPC interface {
 	IMUpdateCart(accountID, addressID string, items []api.IMCartItem) (api.IMCart, error)
 	IMClearCart(accountID string) error
 	IMPlaceOrder(accountID, addressID string) (api.Order, error)
+	IMPlaceOrderUPI(accountID, addressID string) (api.PendingPayment, bool, error)
+	IMPollPayment(accountID string, p api.PendingPayment) (api.PaymentStatus, error)
+	IMConfirmOrder(accountID string, p api.PendingPayment) (api.Order, error)
 	IMOrders(accountID string, activeOnly bool) ([]api.IMOrder, error)
 	IMTrack(accountID, orderID string, lat, lng float64) (api.Tracking, error)
 }
@@ -223,6 +226,21 @@ func (b *BrokerBackend) IMClearCart() error {
 func (b *BrokerBackend) IMPlaceOrder(addressID string) (api.Order, error) {
 	r, err := b.rpc.IMPlaceOrder(b.accountID, addressID)
 	return r, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) IMPlaceOrderUPI(addressID string) (api.PendingPayment, bool, error) {
+	p, upi, err := b.rpc.IMPlaceOrderUPI(b.accountID, addressID)
+	return p, upi, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) IMPollPayment(p api.PendingPayment) (api.PaymentStatus, error) {
+	st, err := b.rpc.IMPollPayment(b.accountID, p)
+	return st, wrapAuthErr(err)
+}
+
+func (b *BrokerBackend) IMConfirmOrder(p api.PendingPayment) (api.Order, error) {
+	o, err := b.rpc.IMConfirmOrder(b.accountID, p)
+	return o, wrapAuthErr(err)
 }
 
 func (b *BrokerBackend) IMOrders(activeOnly bool) ([]api.IMOrder, error) {

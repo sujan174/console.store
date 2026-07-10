@@ -57,6 +57,21 @@ type fakeBackend struct {
 	imUpdates    int
 	imUpdateArgs []api.IMCartItem
 	imCleared    int
+
+	// Instamart UPI payment fakes. Mirror the food upi/pending/pollStatus set:
+	// default imUpi=false → IMPlaceOrderUPI reports "no scan-to-pay method" so
+	// callers fall back to the COD IMPlaceOrder (keeps existing IM place tests
+	// immediate-placement). Set imUpi=true to exercise the online path.
+	imUpi          bool
+	imPending      api.PendingPayment
+	imPlaceUPIErr  error
+	imPlacedUPI    int
+	imPolls        int
+	imPayStatus    api.PaymentStatus
+	imPayErr       error
+	imConfirmOrder api.Order
+	imConfirmErr   error
+	imConfirmed    int
 }
 
 func (f *fakeBackend) Addresses() ([]api.Address, error) { return f.addrs, nil }
@@ -157,6 +172,27 @@ func (f *fakeBackend) IMPlaceOrder(addressID string) (api.Order, error) {
 		return api.Order{}, f.imPlaceErr
 	}
 	return f.imOrder, nil
+}
+func (f *fakeBackend) IMPlaceOrderUPI(addressID string) (api.PendingPayment, bool, error) {
+	if !f.imUpi {
+		return api.PendingPayment{}, false, nil // no scan-to-pay method → COD fallback
+	}
+	if f.imPlaceUPIErr != nil {
+		return api.PendingPayment{}, true, f.imPlaceUPIErr
+	}
+	f.imPlacedUPI++
+	return f.imPending, true, nil
+}
+func (f *fakeBackend) IMPollPayment(p api.PendingPayment) (api.PaymentStatus, error) {
+	f.imPolls++
+	return f.imPayStatus, f.imPayErr
+}
+func (f *fakeBackend) IMConfirmOrder(p api.PendingPayment) (api.Order, error) {
+	f.imConfirmed++
+	if f.imConfirmErr != nil {
+		return api.Order{}, f.imConfirmErr
+	}
+	return f.imConfirmOrder, nil
 }
 func (f *fakeBackend) IMOrders(activeOnly bool) ([]api.IMOrder, error) {
 	return f.imOrders, f.imOrdersErr

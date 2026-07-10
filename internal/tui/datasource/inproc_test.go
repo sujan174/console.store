@@ -151,6 +151,18 @@ func (f *fakeService) IMPlaceOrder(_ context.Context, a, _ string) (api.Order, e
 	f.gotAccount = a
 	return api.Order{}, nil
 }
+func (f *fakeService) IMPlaceOrderUPI(_ context.Context, a, _ string) (api.PendingPayment, bool, error) {
+	f.gotAccount = a
+	return api.PendingPayment{}, false, nil
+}
+func (f *fakeService) IMPollPayment(_ context.Context, a string, _ api.PendingPayment) (api.PaymentStatus, error) {
+	f.gotAccount = a
+	return api.PayPending, nil
+}
+func (f *fakeService) IMConfirmOrder(_ context.Context, a string, _ api.PendingPayment) (api.Order, error) {
+	f.gotAccount = a
+	return api.Order{}, nil
+}
 func (f *fakeService) IMOrders(_ context.Context, a string, _ bool) ([]api.IMOrder, error) {
 	f.gotAccount = a
 	return nil, nil

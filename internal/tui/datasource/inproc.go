@@ -38,6 +38,9 @@ type inprocService interface {
 	IMUpdateCart(ctx context.Context, accountID, addressID string, items []api.IMCartItem) (api.IMCart, error)
 	IMClearCart(ctx context.Context, accountID string) error
 	IMPlaceOrder(ctx context.Context, accountID, addressID string) (api.Order, error)
+	IMPlaceOrderUPI(ctx context.Context, accountID, addressID string) (api.PendingPayment, bool, error)
+	IMPollPayment(ctx context.Context, accountID string, p api.PendingPayment) (api.PaymentStatus, error)
+	IMConfirmOrder(ctx context.Context, accountID string, p api.PendingPayment) (api.Order, error)
 	IMOrders(ctx context.Context, accountID string, activeOnly bool) ([]api.IMOrder, error)
 	IMTrack(ctx context.Context, accountID, orderID string, lat, lng float64) (api.Tracking, error)
 }
@@ -157,6 +160,18 @@ func (p InProc) IMClearCart(accountID string) error {
 
 func (p InProc) IMPlaceOrder(accountID, addressID string) (api.Order, error) {
 	return p.svc.IMPlaceOrder(context.Background(), accountID, addressID)
+}
+
+func (p InProc) IMPlaceOrderUPI(accountID, addressID string) (api.PendingPayment, bool, error) {
+	return p.svc.IMPlaceOrderUPI(context.Background(), accountID, addressID)
+}
+
+func (p InProc) IMPollPayment(accountID string, pp api.PendingPayment) (api.PaymentStatus, error) {
+	return p.svc.IMPollPayment(context.Background(), accountID, pp)
+}
+
+func (p InProc) IMConfirmOrder(accountID string, pp api.PendingPayment) (api.Order, error) {
+	return p.svc.IMConfirmOrder(context.Background(), accountID, pp)
 }
 
 func (p InProc) IMOrders(accountID string, activeOnly bool) ([]api.IMOrder, error) {
