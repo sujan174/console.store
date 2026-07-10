@@ -1,7 +1,7 @@
 // Instamart vertical — state + tool-calling logic. Renders via imScreens.ts.
 // Isolated on purpose: app.ts only routes clicks/keys here and seeds from
 // open_store; every im_* tool call lives in this file.
-import type { CategoryDTO, OpenStoreOut, ToolResult } from "./app";
+import type { CategoryDTO, OpenStoreOut, PaymentInfo, ToolResult } from "./app";
 
 export interface IMVariantData {
   spin_id: string;
@@ -48,7 +48,7 @@ export interface IMBill {
   message?: string;
 }
 export interface IMCartState {
-  status: "loading" | "bill" | "placing" | "placed" | "error";
+  status: "loading" | "bill" | "placing" | "paying" | "placed" | "error";
   message?: string;
   bill?: IMBill;
   confirmationId?: string;
@@ -56,6 +56,11 @@ export interface IMCartState {
   order?: Record<string, unknown>;
   error?: string;
   errorCode?: string;
+  // paying: the UPI scan-to-pay handoff (same DTO food uses), the live "M:SS"
+  // countdown label, and whether the window has closed (nothing charged).
+  payment?: PaymentInfo;
+  payLeft?: string;
+  payExpired?: boolean;
 }
 export interface IMState {
   categories: CategoryDTO[];
@@ -384,6 +389,7 @@ async function imSyncAndBill(): Promise<void> {
 }
 
 export function closeIMCart(): void {
+  stopIMPayTimer();
   im.cart = null;
   d().requestRender();
 }
@@ -420,21 +426,141 @@ export async function imClearCart(): Promise<void> {
 
 // imPlace: the ONLY entry to place_order, fired by the button press (safety
 // invariant 1). Never retried; on any error the order may still exist.
-export async function imPlace(): Promise<void> {
+// method "upi" asks the server for a scan-to-pay handoff (Instamart supports
+// COD, so a UPI-unavailable store returns a placed order or a coded error);
+// method "cod" is today's direct place. A returned `payment` flips to the
+// paying screen + poll loop (identical to food's flow).
+export async function imPlace(method: "upi" | "cod"): Promise<void> {
   const current = im.cart;
   if (!current || current.status !== "bill" || !current.confirmationId) return;
   if (current.bill?.lines.some((l) => !l.available)) return; // sold-out line blocks placement
   im.cart = { ...current, status: "placing" };
   d().requestRender();
   try {
-    const result = await d().callTool("place_order", { confirmation_id: current.confirmationId });
+    const result = await d().callTool("place_order", { confirmation_id: current.confirmationId, method });
     if ((result as { isError?: boolean }).isError) throw new Error(d().errorText(result));
-    const scont = (result as { structuredContent?: { order?: Record<string, unknown> } }).structuredContent;
+    const scont = (result as { structuredContent?: { order?: Record<string, unknown>; payment?: PaymentInfo } })
+      .structuredContent;
+    // UPI handoff: sit PENDING_PAYMENT, show the QR + countdown, poll to finalize.
+    if (scont?.payment?.payment_id) {
+      const payment = scont.payment;
+      const expired = payment.expires_at > 0 && Date.now() >= payment.expires_at;
+      im.cart = { ...current, status: "paying", payment, payExpired: expired, payLeft: imPayLeftLabel(payment.expires_at) };
+      d().requestRender();
+      if (!expired) startIMPaymentPoll();
+      return;
+    }
     im.pending.clear();
     im.cart = { status: "placed", order: scont?.order ?? {}, bill: current.bill, addressLabel: current.addressLabel };
   } catch (e) {
     const { code, message } = splitIMError(String((e as Error)?.message ?? e));
     im.cart = { ...current, status: "error", error: message, errorCode: code };
+  }
+  d().requestRender();
+}
+
+// --- UPI payment: single poll timer + live countdown ---
+//
+// After place_order returns a `payment`, the IM order sits PENDING_PAYMENT until
+// the user pays via UPI. One module-local interval owns both the per-second
+// countdown (surgical #im-pay-left text update — never a re-render, which would
+// rebuild the raw QR each tick and flicker) and the check_payment poll (~every 3s,
+// ban-safe). On `paid` we call confirm_order EXACTLY once (guard flag) — the only
+// finalize, never auto-retried; `failed`/`expired` (or a locally-elapsed window)
+// stops the loop with a "nothing was charged" notice. The timer is cleared on any
+// exit: placed / error / cancel / close.
+let imPayTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopIMPayTimer(): void {
+  if (imPayTimer) {
+    clearInterval(imPayTimer);
+    imPayTimer = null;
+  }
+}
+
+// imPayLeftLabel formats the remaining window as "M:SS" (or "" once it closed).
+function imPayLeftLabel(expiresAt: number): string {
+  if (!expiresAt) return "";
+  const secLeft = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+  const mm = Math.floor(secLeft / 60);
+  const ss = String(secLeft % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
+function startIMPaymentPoll(): void {
+  stopIMPayTimer();
+  const payment = im.cart?.payment;
+  if (!payment) return;
+  let confirming = false; // confirm_order guard — fires at most once
+  let polling = false; // one check_payment in flight at a time
+  let tick = 0;
+  const POLL_EVERY = 3; // → check_payment ~every 3s
+  imPayTimer = setInterval(() => {
+    void (async () => {
+      const c = im.cart;
+      // Superseded (cart closed / replaced) → drop the loop.
+      if (!c || c.status !== "paying" || c.payment?.payment_id !== payment.payment_id) {
+        stopIMPayTimer();
+        return;
+      }
+      // Window closed while waiting → flip to expired, stop. No charge.
+      if (payment.expires_at > 0 && Date.now() >= payment.expires_at) {
+        stopIMPayTimer();
+        im.cart = { ...c, payExpired: true, payLeft: "" };
+        d().requestRender();
+        return;
+      }
+      // Surgical countdown — text node only, never a re-render.
+      const leftEl = document.querySelector<HTMLElement>("#im-pay-left");
+      if (leftEl) leftEl.textContent = imPayLeftLabel(payment.expires_at);
+
+      tick++;
+      if (tick % POLL_EVERY !== 0) return; // countdown-only tick
+      if (polling || confirming) return;
+      polling = true;
+      try {
+        const res = await d().callTool("check_payment", { payment_id: payment.payment_id });
+        if ((res as { isError?: boolean }).isError) return; // transient — keep polling
+        const st = (res as { structuredContent?: { status?: string; paid?: boolean; failed?: boolean; expired?: boolean } })
+          .structuredContent;
+        if (st?.paid) {
+          if (confirming) return;
+          confirming = true;
+          stopIMPayTimer();
+          await confirmIMPaidOrder(payment);
+        } else if (st?.expired) {
+          stopIMPayTimer();
+          im.cart = { ...c, payExpired: true, payLeft: "" };
+          d().requestRender();
+        } else if (st?.failed) {
+          stopIMPayTimer();
+          im.cart = { ...c, status: "error", error: "the payment failed — nothing was charged. place the order again.", errorCode: "" };
+          d().requestRender();
+        }
+      } catch {
+        // Network blip — swallow and let the next tick retry.
+      } finally {
+        polling = false;
+      }
+    })();
+  }, 1000);
+}
+
+// confirmIMPaidOrder finalizes a paid UPI payment into a placed order. Called
+// once, only after check_payment reports paid; confirm_order is never retried.
+async function confirmIMPaidOrder(payment: PaymentInfo): Promise<void> {
+  const current = im.cart;
+  im.cart = { status: "placing", bill: current?.bill, addressLabel: current?.addressLabel };
+  d().requestRender();
+  try {
+    const res = await d().callTool("confirm_order", { payment_id: payment.payment_id });
+    if ((res as { isError?: boolean }).isError) throw new Error(d().errorText(res));
+    const scont = (res as { structuredContent?: { order?: Record<string, unknown> } }).structuredContent;
+    im.pending.clear();
+    im.cart = { status: "placed", order: scont?.order ?? {}, bill: current?.bill, addressLabel: current?.addressLabel };
+  } catch (e) {
+    const { code, message } = splitIMError(String((e as Error)?.message ?? e));
+    im.cart = { status: "error", error: message, errorCode: code };
   }
   d().requestRender();
 }
@@ -513,11 +639,26 @@ export function handleIMClick(el: HTMLElement): boolean {
     void imClearCart();
     return true;
   }
-  if (el.closest("[data-im-place]")) {
-    void imPlace();
+  if (el.closest("[data-im-place-upi]")) {
+    void imPlace("upi");
+    return true;
+  }
+  if (el.closest("[data-im-place-cod]")) {
+    void imPlace("cod");
+    return true;
+  }
+  if (el.closest("[data-im-pay-cancel]")) {
+    // Cancel the pending payment and re-sync for a FRESH confirmation — a stale
+    // confirmation_id can't be re-placed (it's tied to the abandoned payment).
+    stopIMPayTimer();
+    im.cart = { status: "loading", message: "~ % updating cart" };
+    d().requestRender();
+    void imSyncAndBill();
     return true;
   }
   if (el.closest("[data-im-retry-bill]")) {
+    // Also the "place again" path after a closed payment window.
+    stopIMPayTimer();
     im.cart = { status: "loading", message: "~ % retrying" };
     d().requestRender();
     void imSyncAndBill();

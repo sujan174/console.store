@@ -186,9 +186,51 @@ export function renderIMCart(): string {
     return (
       `<div class="card" style="margin-top:14px;text-align:center;padding:24px">` +
       `<div style="font-size:16px;font-weight:700">🎉 order placed</div>` +
-      `<div style="font-size:13px;color:var(--text-secondary);margin-top:6px">cash on delivery · typically 10–20 min</div>` +
+      `<div style="font-size:13px;color:var(--text-secondary);margin-top:6px">typically 10–20 min</div>` +
       `<div style="font-size:13px;margin-top:6px">to pay: <b>${rupees(c.bill?.to_pay ?? 0)}</b></div>` +
       `<button type="button" data-im-cart-back class="btn" style="margin-top:14px">back to instamart</button>` +
+      `</div>`
+    );
+  }
+  // paying — UPI scan-to-pay handoff: the QR to scan, a live countdown, the
+  // hosted pay link, and a cancel. Mirrors food's payingView for parity. Past
+  // the window (payExpired) the QR is hidden and a "nothing charged" place-again
+  // notice shows so a stale screen can never invite a refunded payment.
+  if (c.status === "paying") {
+    const pay = c.payment;
+    if (!pay) {
+      return (
+        `<div class="card" style="margin-top:14px">` +
+        `<div style="font-size:14px;font-weight:600;color:var(--text-danger)">no payment to show</div>` +
+        `<button type="button" data-im-cart-back class="btn" style="margin-top:12px">← back</button>` +
+        `</div>`
+      );
+    }
+    if (c.payExpired) {
+      return (
+        `<div class="card" style="margin-top:14px;text-align:center;padding:24px">` +
+        `<div style="font-size:15px;font-weight:600">⌛ payment window closed</div>` +
+        `<div style="font-size:13px;color:var(--text-secondary);margin-top:6px">nothing was charged — the QR expired. place the order again for a fresh one.</div>` +
+        `<button type="button" data-im-retry-bill class="btn btn-primary" style="margin-top:14px">place again</button>` +
+        `</div>`
+      );
+    }
+    // The QR is a ready-to-embed <svg> from our server — inserted RAW (never
+    // esc()'d). White plate so it scans on any theme.
+    const qr = pay.qr_svg
+      ? `<div style="background:#fff;border-radius:12px;padding:12px;width:220px;max-width:70%;margin:12px auto 0;line-height:0">${pay.qr_svg}</div>`
+      : "";
+    return (
+      `<div class="card" style="margin-top:14px;text-align:center;padding:20px">` +
+      `<div style="font-size:15px;font-weight:600">scan to pay · ${rupees(pay.amount)}</div>` +
+      // Countdown lives in its own node so the poll loop updates it in place with
+      // textContent — never a re-render (instamart.ts startIMPaymentPoll).
+      `<div style="font-size:12px;color:var(--sw-orange);margin-top:2px">expires in <span id="im-pay-left">${esc(c.payLeft || "")}</span></div>` +
+      qr +
+      `<div style="font-size:12px;color:var(--text-secondary);margin-top:10px">scan with any UPI app · GPay · PhonePe · Paytm</div>` +
+      `<div style="display:flex;gap:8px;align-items:center;justify-content:center;font-size:13px;color:var(--text-muted);margin-top:12px">${icon("loader", 14)} waiting for payment…</div>` +
+      `<a href="${esc(pay.pay_url)}" target="_blank" rel="noopener" class="btn btn-block" style="margin-top:14px">open payment page</a>` +
+      `<button type="button" data-im-pay-cancel class="btn btn-block" style="margin-top:8px">cancel</button>` +
       `</div>`
     );
   }
@@ -220,13 +262,16 @@ export function renderIMCart(): string {
     billRow("item total", rupees(bill.item_total)) +
     billRow("delivery", bill.delivery === 0 ? "FREE" : rupees(bill.delivery)) +
     billRow("handling + taxes", rupees(bill.handling + bill.taxes)) +
-    billRow("to pay (COD)", rupees(bill.to_pay), true) +
+    billRow("to pay", rupees(bill.to_pay), true) +
     `</div>` +
     (blocked ? `<div style="font-size:12px;color:var(--text-danger);margin-top:8px">a sold-out item blocks this order — remove it first</div>` : "") +
-    `<button type="button" data-im-place class="btn btn-primary" style="width:100%;margin-top:12px;padding:12px"${placing || blocked ? " disabled" : ""}>` +
-    (placing ? "placing…" : `place order · ${rupees(bill.to_pay)} COD`) +
+    `<button type="button" data-im-place-upi class="btn btn-primary" style="width:100%;margin-top:12px;padding:12px"${placing || blocked ? " disabled" : ""}>` +
+    (placing ? "placing…" : `${icon("lock", 15)} pay now · ${rupees(bill.to_pay)} (UPI)`) +
     `</button>` +
-    `<div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">real order · cannot be cancelled · pay cash on delivery</div>` +
+    `<button type="button" data-im-place-cod class="btn" style="width:100%;margin-top:8px;padding:10px"${placing || blocked ? " disabled" : ""}>` +
+    `cash on delivery · ${rupees(bill.to_pay)}` +
+    `</button>` +
+    `<div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">real order · cannot be cancelled</div>` +
     `</div>` +
     `</div>`
   );
