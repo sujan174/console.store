@@ -73,7 +73,7 @@ the server fills the active address):
 | A named restaurant ("open Truffles") | `open_store{restaurant_name:"Truffles"}` — the app finds it and opens its menu |
 | An item/dish from a named restaurant ("burgers from Truffles", "a Maharaja Mac from McDonald's") | `open_store{restaurant_name:"McDonald's", query:"Maharaja Mac"}` — the app opens the restaurant with its in-menu search prefilled to the dish, matches shown, user picks |
 | Reorder ("my usual", "what I got last time", "order that again") | `get_previous_orders{}` → present the list → the user picks one (or `open_store{}` — the home lists recent orders); a human still presses place |
-| Groceries / quick-commerce ("get me milk", "order a red bull", "snacks") | `open_store{vertical:"instamart", query:"milk"}` — the SAME app opens on the grocery vertical; the user browses, picks pack sizes, and checks out (COD) in it |
+| Groceries / quick-commerce ("get me milk", "order a red bull", "snacks") | `open_store{vertical:"instamart", query:"milk"}` — the SAME app opens on the grocery vertical; the user browses, picks pack sizes, and checks out (UPI or COD) in it |
 
 **Restaurant name**: pass the restaurant the user named as `restaurant_name`
 (don't resolve its id yourself). The app searches for it; if the name clearly
