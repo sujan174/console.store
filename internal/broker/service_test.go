@@ -164,6 +164,77 @@ func TestConfirmOrderMapsOrder(t *testing.T) {
 	}
 }
 
+func TestIMPlaceOrderUPINoQRFallback(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	var checkedOut bool
+	mcp := fakeMCP(t, map[string]func(map[string]any) any{
+		"get_payment_options": func(map[string]any) any {
+			return map[string]any{"cod": map[string]any{"available": true}} // COD-only, no QR
+		},
+		"checkout": func(map[string]any) any { checkedOut = true; return map[string]any{"orderId": "O1"} },
+	})
+	store := &fakeStore{tokens: map[string]string{"acct-X": "tok"}}
+	svc := NewService(Config{Store: store, Auth: &fakeAuthz{}, ImBaseURL: mcp.URL, HTTPClient: mcp.Client()})
+	_, eligible, err := svc.IMPlaceOrderUPI(context.Background(), "acct-X", "addr-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eligible || checkedOut {
+		t.Fatalf("expected COD fallback (eligible=false, no checkout); got eligible=%v checkedOut=%v", eligible, checkedOut)
+	}
+}
+
+func TestIMPlaceOrderUPIPicksQR(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	var checkedOut bool
+	mcp := fakeMCP(t, map[string]func(map[string]any) any{
+		"get_payment_options": func(map[string]any) any {
+			return map[string]any{"platforms": map[string]any{"desktop": map[string]any{
+				"methods": []map[string]any{{"id": "PayWithQR", "kind": "qr"}}}}}
+		},
+		"checkout": func(map[string]any) any {
+			checkedOut = true
+			return map[string]any{"orderId": "O1", "paasId": "P1", "upiIntent": "upi://pay?pa=x", "cartId": "C1", "amount": 250}
+		},
+	})
+	store := &fakeStore{tokens: map[string]string{"acct-X": "tok"}}
+	svc := NewService(Config{Store: store, Auth: &fakeAuthz{}, ImBaseURL: mcp.URL, HTTPClient: mcp.Client()})
+	p, eligible, err := svc.IMPlaceOrderUPI(context.Background(), "acct-X", "addr-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !eligible || !checkedOut || p.OrderID != "O1" || p.UPIString == "" || p.AddressID != "addr-1" {
+		t.Fatalf("eligible=%v checkedOut=%v pending=%+v", eligible, checkedOut, p)
+	}
+	if p.Vertical != "instamart" {
+		t.Fatalf("pending must be tagged instamart for routing, got %q", p.Vertical)
+	}
+}
+
+func TestIMConfirmOrderClearsCart(t *testing.T) {
+	t.Setenv("CONSOLE_LIVE_ORDERS", "1")
+	var confirmed, cleared bool
+	mcp := fakeMCP(t, map[string]func(map[string]any) any{
+		"confirm_order": func(map[string]any) any {
+			confirmed = true
+			return map[string]any{"orderId": "O1", "status": "PLACED", "totalAmount": 250}
+		},
+		"clear_cart": func(map[string]any) any { cleared = true; return map[string]any{} },
+	})
+	store := &fakeStore{tokens: map[string]string{"acct-X": "tok"}}
+	svc := NewService(Config{Store: store, Auth: &fakeAuthz{}, ImBaseURL: mcp.URL, HTTPClient: mcp.Client()})
+	o, err := svc.IMConfirmOrder(context.Background(), "acct-X", api.PendingPayment{OrderID: "O1", PaasID: "P1", Vertical: "instamart"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !confirmed || !cleared {
+		t.Fatalf("expected confirm + force cart-clear; confirmed=%v cleared=%v", confirmed, cleared)
+	}
+	if o.ID != "O1" || o.Status != "PLACED" || o.Restaurant != "Instamart" {
+		t.Fatalf("order = %+v", o)
+	}
+}
+
 func TestServiceLogoutPurgesAndDropsClient(t *testing.T) {
 	store := &fakeStore{tokens: map[string]string{"acct-X": "tok"}}
 	svc := NewService(Config{Store: store, Auth: &fakeAuthz{}, FoodBaseURL: "http://unused"})

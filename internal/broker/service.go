@@ -496,6 +496,74 @@ func (s *Service) IMPlaceOrder(ctx context.Context, accountID, addressID string)
 	return mapped, nil
 }
 
+// IMPaymentOptions fetches the live Instamart payment picker. The IM cart is
+// bound server-side to the delivery address, so no addressId arg is sent (unlike
+// the food PaymentOptions); otherwise identical mapping. Read-only.
+func (s *Service) IMPaymentOptions(ctx context.Context, accountID string) (api.PaymentOptions, error) {
+	opts, err := s.imClient(accountID).PaymentOptions(ctx, "")
+	if err != nil {
+		return api.PaymentOptions{}, err
+	}
+	return mapPaymentOptions(opts), nil
+}
+
+// IMPlaceOrderUPI starts an online (UPI) Instamart order. It mirrors the food
+// PlaceOrderUPI eligibility contract: fetch the live payment options and, if a
+// scan-to-pay QR method exists, checkout with it and return the PendingPayment
+// (order is PENDING_PAYMENT until confirmed). The bool is false when the account
+// has NO QR/UPI method — the caller then falls back to the COD IMPlaceOrder. The
+// returned pending is tagged Vertical "instamart" so poll/confirm route back to
+// the IM client. Checkout is arming-gated inside swiggy.
+func (s *Service) IMPlaceOrderUPI(ctx context.Context, accountID, addressID string) (api.PendingPayment, bool, error) {
+	ic := s.imClient(accountID)
+	opts, err := ic.PaymentOptions(ctx, "")
+	if err != nil {
+		return api.PendingPayment{}, false, err
+	}
+	if opts.QR == nil {
+		return api.PendingPayment{}, false, nil // no scan-to-pay method → use COD path
+	}
+	p, err := ic.CheckoutUPI(ctx, swiggy.PlaceUPIRequest{AddressID: addressID, Method: *opts.QR})
+	if err != nil {
+		return api.PendingPayment{}, true, err
+	}
+	pending := mapPending(p)
+	pending.Vertical = "instamart" // routes poll/confirm to the IM client
+	return pending, true, nil
+}
+
+// IMPollPayment reads the current state of a pending Instamart UPI payment
+// (read-only). p carries Vertical "instamart"; the poll routes to the IM client.
+func (s *Service) IMPollPayment(ctx context.Context, accountID string, p api.PendingPayment) (api.PaymentStatus, error) {
+	st, err := s.imClient(accountID).CheckPaymentStatus(ctx, unmapPending(p))
+	return api.PaymentStatus(st), err
+}
+
+// IMConfirmOrder finalizes a paid pending Instamart order to PLACED (the UPI
+// path's real completion point, so telemetry fires here rather than at place).
+// On success it mirrors IMPlaceOrder's broker-layer bookkeeping: default the
+// restaurant label to "Instamart", count the order, and force-clear the server
+// cart — checkout normally consumes the cart, but leftovers have been seen
+// lingering in the Swiggy app cart, so the clear is a best-effort ghost-item
+// guard (clear_cart maps "Cart not found" / already-empty to success). The
+// localstore ActiveOrder / RecordPlacement persistence stays with the caller,
+// exactly as for IMPlaceOrder (the broker does not import localstore).
+func (s *Service) IMConfirmOrder(ctx context.Context, accountID string, p api.PendingPayment) (api.Order, error) {
+	o, err := s.imClient(accountID).ConfirmOrderIM(ctx, unmapPending(p))
+	if err != nil {
+		return api.Order{}, err
+	}
+	mapped := mapOrder(o)
+	if mapped.Restaurant == "" {
+		mapped.Restaurant = "Instamart"
+	}
+	if shouldPingOrder(mapped, nil) {
+		telemetry.OrderPlaced() // anonymous count; fire-and-forget, gated
+	}
+	_ = s.IMClearCart(ctx, accountID) // best-effort ghost-item guard
+	return mapped, nil
+}
+
 // IMOrders lists Instamart orders (last 15 days; activeOnly filters to live).
 func (s *Service) IMOrders(ctx context.Context, accountID string, activeOnly bool) ([]api.IMOrder, error) {
 	os, err := s.imClient(accountID).GetIMOrders(ctx, 20, activeOnly)
