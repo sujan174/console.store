@@ -6,6 +6,7 @@ import (
 	"time"
 
 	swiggysnap "consolestore/internal/catalog/swiggy"
+	"consolestore/internal/tui/datasource"
 	"consolestore/internal/tui/render"
 )
 
@@ -54,5 +55,28 @@ func TestAuthGatePollAdvances(t *testing.T) {
 	updated, _ := m.Update(tickMsg(time.Now()))
 	if updated.(Model).needsAuth {
 		t.Fatal("expected needsAuth=false after poller reports authorized")
+	}
+}
+
+// A revoked token surfaces as ErrNeedsAuth on the first load with NO
+// pre-started flow (boot was signedIn, so main never called Start). The gate
+// must arm a fresh authorize flow itself — otherwise Enter opens an empty URL
+// and the "connect swiggy" button silently does nothing (live bug 2026-07-10).
+func TestNeedsAuthArmsFreshAuthorizeFlow(t *testing.T) {
+	snap := swiggysnap.NewSnapshot()
+	m := New(render.Caps{},
+		WithLiveBackend(&liveFake{}, snap, "local", ""), // signed-in boot: NO authorize URL
+		WithAuthFlow("", fakePoller{}),                  // client present, no flow yet
+	)
+	updated, _ := m.Update(datasource.AddressesLoadedMsg{Err: datasource.ErrNeedsAuth})
+	got := updated.(Model)
+	if !got.needsAuth {
+		t.Fatal("expected needsAuth after ErrNeedsAuth")
+	}
+	if got.authorizeURL == "" {
+		t.Fatal("gate armed with an EMPTY authorize URL — enter would open nothing")
+	}
+	if got.authFlowID == "" {
+		t.Fatal("no flow id — the poller could never see the sign-in complete")
 	}
 }

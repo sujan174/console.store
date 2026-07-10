@@ -2598,7 +2598,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case datasource.AddressesLoadedMsg:
 		if errIsNeedsAuth(dm.Err) {
-			m.needsAuth = true
+			m = m.enterAuthGate()
 			return m, nil
 		}
 		m.addressesLoaded = true
@@ -2622,7 +2622,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case datasource.PlacesLoadedMsg:
 		if errIsNeedsAuth(dm.Err) {
-			m.needsAuth = true
+			m = m.enterAuthGate()
 			return m, nil
 		}
 		if m.searchPending && dm.Query == m.searchSubmitted {
@@ -2641,7 +2641,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case datasource.PlacesPageLoadedMsg:
 		if errIsNeedsAuth(dm.Err) {
-			m.needsAuth = true
+			m = m.enterAuthGate()
 			return m, nil
 		}
 		// Whatever happened, release any deferred launch loads (usuals, cart
@@ -2691,7 +2691,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	case datasource.MenuPageLoadedMsg:
 		if errIsNeedsAuth(dm.Err) {
-			m.needsAuth = true
+			m = m.enterAuthGate()
 			return m, nil
 		}
 		if dm.Gen != m.menuGen {
@@ -2733,7 +2733,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, datasource.LoadMenuPage(m.backend, m.snap, m.addr.ID, dm.PlaceID, dm.Page+1, m.menuGen, m.menuStaged)
 	case datasource.MenuLoadedMsg:
 		if errIsNeedsAuth(dm.Err) {
-			m.needsAuth = true
+			m = m.enterAuthGate()
 			return m, nil
 		}
 		if m.screen == scrRestaurant {
@@ -3067,7 +3067,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case datasource.IMProductsLoadedMsg:
 		if errIsNeedsAuth(dm.Err) {
-			m.needsAuth = true
+			m = m.enterAuthGate()
 			return m, nil
 		}
 		if dm.Query != m.imQuery {
@@ -3991,6 +3991,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.needsAuth && m.screen != scrWelcome {
 			switch k.String() {
 			case "enter":
+				// Defense in depth: if the gate was somehow armed without a URL
+				// (every entry path should arm one now), start a flow right here
+				// rather than silently opening an empty string.
+				if m.authorizeURL == "" {
+					m = m.enterAuthGate()
+				}
+				if m.authorizeURL == "" {
+					return m, nil // still nothing (mock/no client) — don't fire `open ""`
+				}
 				return m, openBrowserCmd(m.authorizeURL)
 			case "r":
 				m.needsAuth = false
@@ -5784,6 +5793,25 @@ func splitHint(body string) (content, hint string) {
 
 func errIsNeedsAuth(err error) bool {
 	return err != nil && errors.Is(err, datasource.ErrNeedsAuth)
+}
+
+// enterAuthGate flips the model into the connect-swiggy gate AND makes sure a
+// fresh authorize flow is armed. A signed-in boot never pre-starts a flow
+// (main only calls Start when the keyring has no token), so when a REVOKED
+// token 401s mid-session the gate used to appear with an empty authorizeURL —
+// and enter opened nothing (live bug 2026-07-10). Starting the flow here gives
+// the gate a real URL + a flow id the tick poller can watch.
+func (m Model) enterAuthGate() Model {
+	m.needsAuth = true
+	if m.authorizeURL == "" && m.authClient != nil {
+		if fid, url, err := m.authClient.StartAuth(m.accountID); err == nil {
+			m.authFlowID = fid
+			m.authorizeURL = url
+		} else {
+			dbgTUI("auth gate: start flow failed: %v", err)
+		}
+	}
+	return m
 }
 
 // liveSyncCart assembles the current food cart and dispatches a SyncCart Cmd
