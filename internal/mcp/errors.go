@@ -20,6 +20,7 @@ const (
 	codeUnderMin            = "under_min"
 	codeNoAddress           = "no_address"
 	codeValidation          = "validation"
+	codeUnauthenticated     = "unauthenticated"
 )
 
 // codedErr builds a "<code>: message" error.

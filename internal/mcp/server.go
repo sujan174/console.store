@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"consolestore/internal/broker/api"
+	"consolestore/internal/swiggy"
 	"consolestore/internal/version"
 )
 
@@ -162,7 +163,26 @@ func addTool[In, Out any](srv *mcp.Server, t *mcp.Tool, h mcp.ToolHandlerFor[In,
 	if sc := toolInputSchema[In](); sc != nil {
 		t.InputSchema = sc
 	}
-	mcp.AddTool(srv, t, h)
+	wrapped := func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
+		res, out, err := h(ctx, req, in)
+		return res, out, mapAuthErr(err)
+	}
+	mcp.AddTool(srv, t, wrapped)
+}
+
+// mapAuthErr translates a Swiggy auth-sentinel failure (a token that is
+// expired, revoked, or missing scope — including a token that is PRESENT in
+// the keyring but rejected server-side) into a coded "unauthenticated" error
+// agents can branch on and recover from by calling sign_in with force:true.
+// Any other error (including nil) passes through unchanged.
+func mapAuthErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, swiggy.ErrTokenExpired) || errors.Is(err, swiggy.ErrSessionRevoked) || errors.Is(err, swiggy.ErrInsufficientScope) {
+		return codedErr(codeUnauthenticated, "your Swiggy session has expired — call sign_in with force:true to reconnect, then retry")
+	}
+	return err
 }
 
 // register wires every tool. Later tasks append to it.
@@ -185,7 +205,7 @@ func (s *Server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{Name: "check_payment", Description: "poll a pending UPI payment (payment_id from place_order, food or instamart): reports paid/failed/expired. Read-only — call every couple of seconds while the user pays, until paid or expired."}, s.handleCheckPayment)
 	addTool(srv, &mcp.Tool{Name: "confirm_order", Description: "finalize a paid UPI order (payment_id from place_order, food or instamart) into a placed order. Call ONLY after check_payment reports paid; refuses once the payment window has closed."}, s.handleConfirmOrder)
 	addTool(srv, &mcp.Tool{Name: "order_preset", Description: "load a saved preset (food or instamart) into the cart and return a bill + confirmation_id (does NOT place)"}, s.handleOrderPreset)
-	addTool(srv, &mcp.Tool{Name: "sign_in", Description: "start Swiggy sign-in; returns a browser URL (opened automatically when possible)"}, s.handleSignIn)
+	addTool(srv, &mcp.Tool{Name: "sign_in", Description: "start Swiggy sign-in; returns a browser URL (opened automatically when possible). Pass force:true to reconnect after a session expired (unauthenticated error)."}, s.handleSignIn)
 	addTool(srv, &mcp.Tool{Name: "auth_status", Description: "whether the user is signed in — and, when signed in, the opening card snapshot (default/last address, favorites, taste, suggestions, policies) so no separate get_card is needed to start"}, s.handleAuthStatus)
 	addTool(srv, &mcp.Tool{Name: "get_card", Description: "the user's saved personalization: default/last address, favorite restaurants, policies, per-item tastes, and pending suggestions"}, s.handleGetCard)
 	addTool(srv, &mcp.Tool{Name: "remember", Description: "save an explicit preference — a per-restaurant-item taste, a cross-restaurant policy, or the default address; or confirm a suggestion"}, s.handleRemember)

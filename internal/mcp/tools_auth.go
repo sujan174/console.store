@@ -27,7 +27,9 @@ func (s *Server) handleAuthStatus(ctx context.Context, _ *mcp.CallToolRequest, _
 	return nil, out, nil
 }
 
-type SignInIn struct{}
+type SignInIn struct {
+	Force bool `json:"force,omitempty" jsonschema:"set true to start a fresh sign-in even when a (possibly stale/revoked) token is already present — used to recover from an expired session"`
+}
 type SignInOut struct {
 	AlreadySignedIn bool   `json:"already_signed_in"`
 	AuthorizeURL    string `json:"authorize_url,omitempty"`
@@ -35,11 +37,11 @@ type SignInOut struct {
 	Note            string `json:"note,omitempty"`
 }
 
-func (s *Server) handleSignIn(ctx context.Context, _ *mcp.CallToolRequest, _ SignInIn) (*mcp.CallToolResult, SignInOut, error) {
+func (s *Server) handleSignIn(ctx context.Context, _ *mcp.CallToolRequest, in SignInIn) (*mcp.CallToolResult, SignInOut, error) {
 	if s.auth == nil {
 		return nil, SignInOut{}, errAuthUnavailable
 	}
-	if s.auth.TokenPresent(ctx) {
+	if s.auth.TokenPresent(ctx) && !in.Force {
 		return nil, SignInOut{AlreadySignedIn: true, Note: "already signed in"}, nil
 	}
 	url, flow, err := s.auth.Start(ctx)
