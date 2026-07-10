@@ -14,6 +14,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/image v0.43.0
+	rsc.io/qr v0.2.0
 )
 
 require (
@@ -43,5 +44,4 @@ require (
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
-	rsc.io/qr v0.2.0 // indirect
 )
