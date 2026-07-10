@@ -23,8 +23,8 @@ export default function Home() {
           and TUI for ordering food and Instamart groceries through Swiggy —
           and an MCP server with a full ordering app that runs inside Claude
           (Claude Desktop and Claude Code). Browse restaurants, reorder a saved
-          preset in one line (console order dinner), or just tell Claude “order
-          my usual” — real Swiggy orders with a real bill and your explicit
+          preset in one line (console order dinner), or tell Claude what you
+          want to eat — real Swiggy orders with a real bill and your explicit
           confirmation, from the command line or your AI agent. No browser, no
           mouse.
         </p>

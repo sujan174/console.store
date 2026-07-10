@@ -710,8 +710,8 @@ export function mount(root) {
       sp(C.blue, "▍ ", true) + sp(C.bright, "consolestore.in", true) + sp(C.purple, "&nbsp;&nbsp;v0.1.0-beta.20") +
       '<span style="margin-left:auto;padding-left:14px;flex:none">' + sp(C.dim, "deliver to ") + sp(C.green, "⊕ ") + sp(C.bright, "Home") + sp(C.faint, " ⌄") + sp(C.faint, " &nbsp;·&nbsp; ") + cart + "</span></div>" +
       '<div style="border-bottom:1px solid rgba(234,181,96,.38)"></div>';
-    const cartEmpty = sp(C.dim, "🛒 cart empty");
-    const cartOne = sp(C.gold, "🛒 cart · 1 · ₹139");
+    const cartEmpty = sp(C.dim, "cart empty");
+    const cartOne = sp(C.gold, "cart · 1 · ₹139");
     // ---- FOOD / Instamart tabs (menu.go verticalTabs + keycapHint) ----
     const goldTab = (t) => '<span style="background:' + C.gold + ';color:#1a1408;font-weight:700;padding:1px 8px;border-radius:3px">' + t + "</span>";
     const tabsRow = () =>
@@ -739,7 +739,7 @@ export function mount(root) {
       [
         line(sp(C.dim, "~ % ") + sp(C.text, "console") + sp(C.faint, "&nbsp;&nbsp;&nbsp;# v0.1.0-beta.20 · beta")),
         gap(14),
-        '<div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap"><div style="font-weight:800;font-size:26px;letter-spacing:-.02em;line-height:1.1"><span style="color:#aebcff">console</span><span style="color:#eab560;font-size:.62em;vertical-align:.06em">store</span></div><span style="border:1px dashed rgba(234,181,96,.5);color:' + C.gold + ';font-size:10px;padding:2px 8px;border-radius:4px;margin-bottom:3px">✦ Real devs eat in the terminal</span></div>',
+        '<div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap"><div style="font-weight:800;font-size:26px;letter-spacing:-.02em;line-height:1.1"><span style="color:#aebcff">console</span><span style="color:#eab560;font-size:.62em;vertical-align:.06em">store</span></div><span style="border:1px dashed rgba(234,181,96,.5);color:' + C.gold + ';font-size:10px;padding:2px 8px;border-radius:4px;margin-bottom:3px">Real devs eat in the terminal</span></div>',
         gap(8),
         line(sp(C.dim, "coffee · food · quick snacks")),
         line(sp(C.dim, "orders fulfilled through ") + sp(C.gold, "Swiggy", true)),
@@ -823,7 +823,7 @@ export function mount(root) {
         gap(8) +
         line(sp(C.text, "abcoffee") + sp(C.faint, " · ") + sp(C.dim, "ETA 25-30 min") + sp(C.faint, " · ") + sp(C.dim, "999")) +
         gap(10) +
-        line(sp(C.gold, "⚡ ordered in 2.1s · 4 keystrokes")) +
+        line(sp(C.gold, "ordered in 2.1s · 4 keystrokes")) +
         line(sp(C.dim, "this session best 1.8s &nbsp;·&nbsp; phone app ~45s")) +
         gap(12) +
         line(sp(C.faint, "↵ track &nbsp;&nbsp;&nbsp;&nbsp; esc back to menu"))

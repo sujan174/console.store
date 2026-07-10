@@ -71,7 +71,7 @@ export const MARKUP = String.raw`
 
       <!-- the two paths, spelled out before the CTA — one binary serves both -->
       <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;animation:introUp .8s cubic-bezier(.22,1,.36,1) both .6s">
-        <a href="#agent" class="way-chip" style="display:inline-flex;align-items:center;gap:9px;border:1px solid rgba(176,140,245,.28);border-radius:10px;background:#0d0c18;padding:10px 16px;font-size:12.5px;text-decoration:none"><span style="color:#b08cf5">✳ ask Claude</span><span style="color:#565b80">“order my usual”</span></a>
+        <a href="#agent" class="way-chip" style="display:inline-flex;align-items:center;gap:9px;border:1px solid rgba(176,140,245,.28);border-radius:10px;background:#0d0c18;padding:10px 16px;font-size:12.5px;text-decoration:none"><span style="color:#b08cf5">✳ ask Claude</span><span style="color:#565b80">“get me dinner”</span></a>
         <a href="#run" class="way-chip" style="display:inline-flex;align-items:center;gap:9px;border:1px solid rgba(234,181,96,.26);border-radius:10px;background:#0d0c18;padding:10px 16px;font-size:12.5px;text-decoration:none"><span style="color:#eab560">$ console</span><span style="color:#565b80">the terminal shop</span></a>
       </div>
 
@@ -169,8 +169,8 @@ export const MARKUP = String.raw`
         <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.3);border-radius:999px;padding:5px 13px;margin-bottom:16px">✳ AI AGENT · MCP + SKILLS</span>
         <div style="font-size:11px;letter-spacing:2px;color:#b08cf5;margin-bottom:14px">// hand it to your ai</div>
         <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">just tell<br><span style="color:#b08cf5">Claude</span>.</h2>
-        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">one install plugs consolestore into <span style="color:#e9ebf7">Claude Desktop and Claude Code</span>. say <span style="color:#e9ebf7">"order my usual dinner"</span> or <span style="color:#e9ebf7">"grab me an energy drink"</span> — Claude searches, builds the cart, shows the <span style="color:#e9ebf7">real Swiggy bill</span>, and places it <span style="color:#e9ebf7">only after you say yes</span>.</p>
-        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">restaurants or <span style="color:#e9ebf7">Instamart groceries</span>, same flow. every tool call is visible, every order needs your yes — <span style="color:#e9ebf7">never a charge you didn't approve</span>.</p>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">one install plugs consolestore into <span style="color:#e9ebf7">Claude Desktop and Claude Code</span>. say <span style="color:#e9ebf7">"order biryani from Meghana Foods"</span> or <span style="color:#e9ebf7">"grab me an energy drink"</span> — Claude searches, builds the cart, shows the <span style="color:#e9ebf7">real Swiggy bill</span>, and places it <span style="color:#e9ebf7">only after you say yes</span>.</p>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">restaurants or <span style="color:#e9ebf7">Instamart groceries</span>, same flow. you see every tool call as it runs, and <span style="color:#e9ebf7">nothing gets charged without your yes</span>.</p>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
           <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">Claude Desktop · Claude Code</span>
           <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">plain language</span>
@@ -196,9 +196,9 @@ export const MARKUP = String.raw`
       <div>
         <span style="display:inline-flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:1.5px;color:#b08cf5;border:1px solid rgba(176,140,245,.3);border-radius:999px;padding:5px 13px;margin-bottom:16px">✳ IN CLAUDE · A REAL APP</span>
         <div style="font-size:11px;letter-spacing:2px;color:#b08cf5;margin-bottom:14px">// the fast path</div>
-        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">dinner in<br><span style="color:#b08cf5">three words</span>.</h2>
-        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">Claude doesn't just print text — consolestore renders a <span style="color:#e9ebf7">full ordering app right inside the chat</span>. browse menus, customize dishes, edit the cart — no tabs, no re-typing your address.</p>
-        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">the checkout shows the <span style="color:#e9ebf7">real Swiggy bill</span>, and the button says what it means: <span style="color:#e9ebf7">nothing places before you press it</span>. say "order my usual" and dinner is moving in <span style="color:#e9ebf7">seconds, not minutes</span>.</p>
+        <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">dinner in<br><span style="color:#b08cf5">one message</span>.</h2>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 16px">consolestore puts a <span style="color:#e9ebf7">full ordering app right inside the chat</span>. browse menus, customize dishes, edit the cart — no tabs, no re-typing your address.</p>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 22px">the checkout shows the <span style="color:#e9ebf7">real Swiggy bill</span>, and the button says what it means: <span style="color:#e9ebf7">nothing places before you press it</span>. a few words in chat and dinner is moving in <span style="color:#e9ebf7">seconds, not minutes</span>.</p>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
           <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">a real app, inside Claude</span>
           <span style="font-size:12px;color:#b6bce0;border:1px solid rgba(147,168,255,.14);border-radius:7px;padding:5px 11px;background:#0d0d18">the real bill, not a guess</span>
@@ -212,7 +212,7 @@ export const MARKUP = String.raw`
           <span style="margin-left:auto;width:7px;height:7px;border-radius:99px;background:#8ee08a;box-shadow:0 0 8px #8ee08a"></span>
         </div>
         <div style="padding:16px 16px 18px">
-          <div style="margin:0 0 14px;text-align:right"><span style="display:inline-block;background:#14162a;border:1px solid rgba(147,168,255,.16);border-radius:12px 12px 3px 12px;padding:8px 13px;color:#e9ebf7;font-size:12.5px">order my usual</span></div>
+          <div style="margin:0 0 14px;text-align:right"><span style="display:inline-block;background:#14162a;border:1px solid rgba(147,168,255,.16);border-radius:12px 12px 3px 12px;padding:8px 13px;color:#e9ebf7;font-size:12.5px">get me biryani from Meghana Foods</span></div>
           <!-- ↓ the widget: real tokens from internal/mcp/orderapp/src/styles.ts (dark) -->
           <div style="border:1px solid #33302a;border-radius:14px;background:#1c1b18;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5);font-family:ui-sans-serif,system-ui,sans-serif">
             <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid #33302a;background:#232019">
@@ -233,11 +233,11 @@ export const MARKUP = String.raw`
             </div>
             <div style="padding:0 14px 13px">
               <div style="display:inline-flex;align-items:center;gap:6px;border:1px solid #33302a;border-radius:999px;background:#232019;padding:4px 10px;font-size:11px;color:#a6a08f;margin-bottom:10px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M12 21s-7-5.1-7-11a7 7 0 1 1 14 0c0 5.9-7 11-7 11z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="2.6" stroke="currentColor" stroke-width="1.8"/></svg>deliver to · Home</div>
-              <button style="display:block;width:100%;background:#fc8019;border:0;border-radius:10px;padding:11px;color:#fff;font-weight:700;font-family:inherit;font-size:13px;cursor:pointer">🔒 place order · ₹538</button>
+              <button style="display:block;width:100%;background:#fc8019;border:0;border-radius:10px;padding:11px;color:#fff;font-weight:700;font-family:inherit;font-size:13px;cursor:pointer">place order · ₹538</button>
               <div style="margin-top:7px;text-align:center;font-size:10.5px;color:#6f6a5c">pressing this is your confirmation — nothing places before it</div>
             </div>
           </div>
-          <div style="margin:12px 2px 0;color:#565b80;font-size:11px"><span style="color:#b08cf5">✳</span> your usual from Meghana Foods — press place order when ready, I'll track it.</div>
+          <div style="margin:12px 2px 0;color:#565b80;font-size:11px"><span style="color:#b08cf5">✳</span> biryani from Meghana Foods, naan on the side — press place order when ready. I'll track it.</div>
         </div>
       </div>
     </div>
@@ -249,7 +249,7 @@ export const MARKUP = String.raw`
       <div>
         <div style="font-size:11px;letter-spacing:2px;color:#eab560;margin-bottom:14px">// watch it run</div>
         <h2 style="font-weight:800;font-size:clamp(22px,2.8vw,36px);letter-spacing:-.02em;margin:0 0 18px;color:#e9ebf7;line-height:1.1">the whole shop<br>is a <span style="color:#eab560">tui</span>.</h2>
-        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 28px">prefer to stay at the prompt? type <span style="color:#e9ebf7">console</span> and the whole shop is a keyboard-only terminal app — browse, cart, checkout, track. what you're watching is the <span style="color:#e9ebf7">actual UI</span>: same screens, same keys, same copy.</p>
+        <p style="color:#b6bce0;font-size:13.5px;line-height:1.72;margin:0 0 28px">prefer to stay at the prompt? type <span style="color:#e9ebf7">console</span> and the whole shop is a keyboard-only terminal app — browse, cart, checkout, track. what you're watching is the <span style="color:#e9ebf7">actual UI</span>, same screens and same keys.</p>
         <div style="display:flex;flex-direction:column;gap:11px">
           <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#8ee08a;border-radius:1px"></span>restaurants + instamart, one <span style="color:#9aa0c4">tab</span> apart</div>
           <div style="display:flex;align-items:center;gap:11px;font-size:12.5px;color:#565b80"><span style="width:6px;height:6px;min-width:6px;background:#93a8ff;border-radius:1px"></span>cart to checkout without touching the mouse</div>
