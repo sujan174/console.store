@@ -492,8 +492,10 @@ export function requestRender(): void {
 // customize sheet, not here); anything else falls through to the menu.
 // DEBUG heavy logging — readable in Claude Desktop's iframe devtools
 // (Cmd+Opt+I → Console). Every state transition, tool call, and error is
-// tagged "[order-app]" so bugs are diagnosable without server access.
-const DEBUG = true;
+// tagged "[order-app]" so bugs are diagnosable without server access. Also
+// gates the on-screen [dbg] state strip (debugBarHTML). OFF in shipped builds —
+// flip to true locally when diagnosing a widget bug.
+const DEBUG = false;
 function log(tag: string, data?: unknown): void {
   if (!DEBUG) return;
   try {
