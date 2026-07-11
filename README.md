@@ -61,4 +61,4 @@ The binary sends anonymous install and order-count pings, with no identity and n
 
 ---
 
-Sujan H · [consolestore.in](https://consolestore.in) · sowbhagyahareesha@gmail.com
+Sujan H · [consolestore.in](https://consolestore.in) · sjn.174@gmail.com
