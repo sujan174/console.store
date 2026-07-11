@@ -757,12 +757,18 @@ function overCapView(state: AppState, cart: CartState): string {
 // rendered mono with a dashed rule, and a `~ % console` wordmark footer — the
 // peak-of-funnel brand moment. Degrades to a plain confirmation when no bill
 // is on hand (defensive: place_order is what got us here, bill should exist).
-function placedView(cart: CartState): string {
+function placedView(cart: CartState, vertical?: string): string {
   const bill = cart.bill;
   const id = orderIdOf(cart.order);
   const eta = orderEtaOf(cart.order);
   const where = cart.addressLabel ? ` to ${esc(cart.addressLabel)}` : "";
   const restaurant = (bill && bill.restaurant) || cart.addressLabel || "your order";
+  // Which consumer app owns this order — Instamart orders track in the Instamart
+  // app, Food orders in the Swiggy app. That's where the live map, rider contact,
+  // and rating live; the widget itself has no live-tracking screen.
+  const app = vertical === "instamart" ? "Instamart app" : "Swiggy app";
+  const trackNote =
+    `<div style="font-size:12px;color:var(--text-muted);margin-top:6px">follow the live map, contact the rider, or rate it in the ${app}.</div>`;
 
   const head =
     `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">` +
@@ -783,6 +789,7 @@ function placedView(cart: CartState): string {
       cardShell(
         head +
           `<div style="font-size:13px;color:var(--text-secondary)">your order is confirmed${where} — it's on the way.</div>` +
+          trackNote +
           footer,
       )
     );
@@ -808,6 +815,7 @@ function placedView(cart: CartState): string {
         `<div style="display:flex;justify-content:space-between;color:var(--text-primary);font-weight:600"><span>to pay</span><span>${rupees(bill.total)}</span></div>` +
         `</div>` +
         `<div style="font-size:12px;color:var(--text-secondary);margin-top:10px">on the way${where}.</div>` +
+        trackNote +
         footer,
     )
   );
@@ -912,6 +920,7 @@ export function renderSignIn(state: AppState): string {
     `<div style="font-size:13px;color:var(--text-secondary)">connect your Swiggy account to browse restaurants and place orders right here.</div>` +
     `<button type="button" data-signin class="btn btn-primary btn-block" style="margin-top:14px"${disabled}>${icon("lock", 15)} sign in with Swiggy</button>` +
     waiting +
+    `<div style="font-size:11px;color:var(--text-muted);margin-top:14px;line-height:1.5">consolestore is an independent project, not affiliated with Swiggy. it connects to Swiggy's own APIs; your account, orders, and payments stay with Swiggy.</div>` +
     `</div>`
   );
 }
@@ -930,7 +939,7 @@ export function renderCartScreen(state: AppState, cart: CartState): string {
     case "paying":
       return payingView(cart);
     case "placed":
-      return placedView(cart);
+      return placedView(cart, state.vertical);
     case "error":
       // M5: an over_cap failure keeps the bill visible with an inline notice
       // instead of the generic full-screen error card, when a bill is

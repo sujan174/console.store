@@ -2340,7 +2340,7 @@ func (m Model) swapTrackedOrder() (Model, tea.Cmd) {
 	m.track = screens.NewTracking(
 		m.activeOrder.Restaurant, m.activeOrder.AddrLine, m.activeOrder.OrderID,
 		m.activeOrder.PlacedAt, m.activeOrder.ETALoMin, m.activeOrder.ETAHiMin,
-	).WithAlt(true)
+	).WithAlt(true).WithVertical(m.activeOrder.Vertical)
 	m.trackTick = 0
 	m.screen = scrTracking
 	m.dodge = nil
@@ -3672,7 +3672,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeOrder = ao
 		m.hasActiveOrder = true
 		m.confirmTick = 0
-		m.track = screens.NewTracking("Instamart", m.addr.Line, dm.Order.ID, placedAt, etaLo, etaHi)
+		m.track = screens.NewTracking("Instamart", m.addr.Line, dm.Order.ID, placedAt, etaLo, etaHi).WithVertical("instamart")
 		m = m.splashOrder(splashOrderLabel("Instamart", "", "", etaHi))
 		// Force-clear the server cart after placement: checkout normally consumes
 		// it, but leftovers have been seen live lingering in the Swiggy app cart —
@@ -4120,7 +4120,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.track = screens.NewTracking(
 					m.activeOrder.Restaurant, m.activeOrder.AddrLine, m.activeOrder.OrderID,
 					m.activeOrder.PlacedAt, m.activeOrder.ETALoMin, m.activeOrder.ETAHiMin,
-				).WithAlt(true)
+				).WithAlt(true).WithVertical(m.activeOrder.Vertical)
 				m.trackTick = 0
 				m.screen = scrTracking
 				m.dodge = nil
@@ -4455,7 +4455,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.activeOrder.PlacedAt,
 						m.activeOrder.ETALoMin,
 						m.activeOrder.ETAHiMin,
-					)
+					).WithVertical(m.activeOrder.Vertical)
 					m.screen = scrTracking
 					m.dodge = nil
 					var pollCmd tea.Cmd
@@ -5901,7 +5901,7 @@ func (m Model) confirmPlaceOrder() (tea.Model, tea.Cmd) {
 			oid := orderID(m.checkout.Lines())
 			m.checkout = m.checkout.Placed(oid, "~40 min")
 			m.screen = scrConfirm
-			m.track = screens.NewTracking("Instamart", m.addr.Line, oid, 0, 0, 0)
+			m.track = screens.NewTracking("Instamart", m.addr.Line, oid, 0, 0, 0).WithVertical("instamart")
 		}
 		return m, nil
 	}

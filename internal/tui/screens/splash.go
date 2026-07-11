@@ -206,9 +206,11 @@ func tagline() string {
 // word is accented in warm Gold (Tokyo Night's on-theme stand-in for Swiggy
 // orange) so the line reads as a deliberate badge, not a footnote.
 func swiggyLine() string {
-	return strings.Repeat(" ", bodyIndent) +
+	pad := strings.Repeat(" ", bodyIndent)
+	return pad +
 		theme.DimStyle.Render("orders fulfilled through ") +
-		theme.GoldStyle.Bold(true).Render("Swiggy")
+		theme.GoldStyle.Bold(true).Render("Swiggy") + "\n" +
+		pad + theme.FaintStyle.Render("an independent project · not affiliated with Swiggy")
 }
 
 // prompt is the settled call-to-action: a live shell prompt with a blinking

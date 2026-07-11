@@ -21,6 +21,24 @@ type Tracking struct {
 	liveDetail string
 	viewportH  int  // terminal height; trims the secondary notes on a short screen
 	hasAlt     bool // a second delivery is live; the hint row offers 'o' to switch
+	// vertical is "instamart" for a Swiggy Instamart order, "" (or "food") for a
+	// Food order. It only picks which consumer app the "check your order" notes
+	// point at — the Instamart app tracks Instamart orders, the Swiggy app the rest.
+	vertical string
+}
+
+// WithVertical tags the order's vertical so the tracking notes name the right
+// consumer app (Instamart app vs Swiggy app).
+func (t Tracking) WithVertical(v string) Tracking { t.vertical = v; return t }
+
+// appName is the consumer app that owns this order — where the user goes for the
+// live map, rider contact, and rating. Instamart orders live in the Instamart
+// app; Food orders in the Swiggy app.
+func (t Tracking) appName() string {
+	if t.vertical == "instamart" {
+		return "Instamart app"
+	}
+	return "Swiggy app"
 }
 
 // WithAlt marks that a second live delivery exists (the other vertical), so
@@ -243,18 +261,19 @@ func (t Tracking) View(nowUnix int64, frame int, spin string) string {
 			b.WriteString("  " + theme.DimStyle.Render(s) + "\n")
 		}
 	}
+	app := t.appName()
 	if ts.Delivered {
 		if ts.Estimated {
 			// Time-based delivered estimate — can't confirm yet.
 			b.WriteString("  " + theme.DimStyle.Render(padTo("status", 7)) + theme.GoldStyle.Render("est. delivered") + "\n")
-			swiggyNote("confirm delivery & contact rider → open the Swiggy app")
+			swiggyNote("confirm delivery & contact rider → open the " + app)
 		} else {
 			// Live confirmed delivery.
 			b.WriteString("  " + theme.DimStyle.Render(padTo("status", 7)) + theme.GreenStyle.Render("delivered ✓") + "\n")
-			swiggyNote("rider contact & live map → open the Swiggy app")
+			swiggyNote("rider contact & live map → open the " + app)
 			if !compact {
 				b.WriteString("\n  " + theme.GreenStyle.Bold(true).Render("enjoy your order!") + "\n")
-				swiggyNote("rate the delivery in the Swiggy app — thank you!")
+				swiggyNote("rate the delivery in the " + app + " — thank you!")
 			}
 		}
 	} else {
@@ -275,7 +294,7 @@ func (t Tracking) View(nowUnix int64, frame int, spin string) string {
 		if d := strings.TrimSpace(t.liveDetail); d != "" && !strings.EqualFold(d, t.liveStatus) {
 			b.WriteString("  " + theme.DimStyle.Render(padTo("", 7)) + theme.DimStyle.Render(d) + "\n")
 		}
-		swiggyNote("rider contact & live map → open the Swiggy app")
+		swiggyNote("rider contact & live map → open the " + app)
 	}
 	b.WriteString("\n")
 
