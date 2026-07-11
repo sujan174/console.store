@@ -60,5 +60,6 @@ console.store is an independent project built against Swiggy's publicly document
 The binary sends anonymous install and order-count pings, with no identity and no order contents. Set `CONSOLE_NO_TELEMETRY=1` to disable.
 
 ---
-
-Sujan H · [consolestore.in](https://consolestore.in) · sjn.174@gmail.com
+- Website · [consolestore.in](https://consolestore.in)
+- Sujan H · sjn.174@gmail.com
+- Jnanasagara S · sagara123jnana@gmail.com
