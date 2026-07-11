@@ -80,8 +80,7 @@ export const MARKUP = String.raw`
         <div class="install-hero" style="display:inline-flex;align-items:stretch;border:1px solid rgba(147,168,255,.15);border-radius:10px;background:#09090f;box-shadow:0 0 48px rgba(147,168,255,.05),0 24px 64px rgba(0,0,0,.55);overflow:hidden;font-size:13.5px">
           <div data-action="copy" title="click to copy" class="install-cmdrow" style="display:flex;align-items:center;gap:11px;padding:14px 20px;cursor:pointer">
             <span data-install-prompt style="color:#2d2f48">$</span>
-            <span data-ref="install" data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh -s -- --beta</span>
-            <span style="margin-left:3px;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7fe0ff;border:1px solid rgba(127,224,255,.32);border-radius:99px;padding:2px 8px;flex:none">beta</span>
+            <span data-ref="install" data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh</span>
           </div>
           <div class="install-actions" style="display:flex;align-items:stretch;flex:none">
             <div data-action="copy" title="click to copy" class="install-act install-act-gold" style="display:flex;align-items:center;justify-content:center;gap:7px;padding:0 18px;background:#eab560;border-left:1px solid rgba(234,181,96,.4);color:#1a1408;font-weight:600;font-size:11.5px;flex:none;cursor:pointer">
@@ -99,7 +98,7 @@ export const MARKUP = String.raw`
           <span>Windows</span><span style="color:#2d2f48">·</span>
           <span style="color:#b08cf5">+ Claude</span>
         </div>
-        <div data-install-hint style="font-size:11.5px;color:#8088b0">beta channel · armed builds place real orders, the default stays safe.</div>
+        <div data-install-hint style="font-size:11.5px;color:#8088b0">armed builds place real orders, the default stays safe.</div>
       </div>
     </div>
   </header>
@@ -318,7 +317,7 @@ export const MARKUP = String.raw`
     <div style="border-top:1px solid rgba(147,168,255,.08)">
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">is it live yet?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
-        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">early access. the command above is auto-picked for your OS — <span style="color:#e9ebf7">curl … | sh</span> on macOS/Linux, <span style="color:#e9ebf7">irm … | iex</span> on Windows. it installs a signed binary that self-updates on launch. the public (stable) channel is rolling out; alpha &amp; beta are invite-only.</p></div>
+        <div data-faq-a style="max-height:0;overflow:hidden;transition:max-height .3s ease"><p style="margin:0 4px 20px;color:#b6bce0;font-size:13px;line-height:1.72">the command above is auto-picked for your OS — <span style="color:#e9ebf7">curl … | sh</span> on macOS/Linux, <span style="color:#e9ebf7">irm … | iex</span> on Windows. it installs a signed binary on the <span style="color:#e9ebf7">stable channel</span> that self-updates on launch. alpha &amp; beta channels stay invite-only for early builds.</p></div>
       </div>
       <div data-faq style="border-bottom:1px solid rgba(147,168,255,.08)">
         <div data-faq-q style="display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 4px;cursor:pointer;color:#e9ebf7;font-size:14.5px">can I order without opening the app?<span data-faq-i style="color:#565b80;transition:transform .2s;flex:none">+</span></div>
@@ -362,8 +361,7 @@ export const MARKUP = String.raw`
           <div style="font-size:13px;color:#565b80;margin-bottom:20px"><span style="color:#3a3d5c">&gt;</span> see you in the shell <span style="display:inline-block;width:7px;height:13px;background:#93a8ff;vertical-align:middle;animation:blink 1.05s step-end infinite"></span></div>
           <div data-action="copy" title="click to copy" class="install-foot" style="display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(147,168,255,.12);border-radius:8px;background:#0a0a12;padding:12px 16px;font-size:12.5px;cursor:pointer;margin-bottom:16px">
             <span data-install-prompt style="color:#2d2f48">$</span>
-            <span data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh -s -- --beta</span>
-            <span style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7fe0ff;border:1px solid rgba(127,224,255,.32);border-radius:99px;padding:2px 8px;flex:none">beta</span>
+            <span data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh</span>
             <span style="display:flex;align-items:center;gap:6px;color:#93a8ff;font-size:11px;border-left:1px solid rgba(147,168,255,.18);padding-left:11px;flex:none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.8"/></svg><span data-copy-label>copy</span></span>
           </div>
           <div style="font-size:11.5px;color:#2d2f48">// not affiliated with swiggy. preview build, no warranty, no real orders on this page.</div>
@@ -383,7 +381,7 @@ export const MARKUP = String.raw`
           </div>
           <div style="display:flex;flex-direction:column;gap:11px">
             <span style="color:#565b80;font-size:10.5px;letter-spacing:1px">STATUS</span>
-            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:99px;background:#7fe0ff;animation:pulseDot 2.4s ease-in-out infinite;flex:none"></span>beta</span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:99px;background:#8ee08a;animation:pulseDot 2.4s ease-in-out infinite;flex:none"></span>stable</span>
           </div>
         </div>
       </div>

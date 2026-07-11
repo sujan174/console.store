@@ -57,12 +57,12 @@ export function mount(root) {
     if (/Linux/i.test(plat) || /Linux/i.test(ua)) return touch ? "mobile" : "unix";
     return "unix";
   };
-  // Beta channel install commands, auto-picked per OS. Unix/macOS pass --beta to
-  // the install script; Windows sets the channel env before the PowerShell installer.
+  // Stable-channel install commands, auto-picked per OS. The bare curl / irm
+  // installs the stable release; no channel flag needed.
   const INSTALL = {
-    unix: { cmd: "curl -fsSL consolestore.in/install | sh -s -- --beta", prompt: "$", hint: "macOS & Linux · beta channel · armed builds place real orders, the default stays safe." },
-    windows: { cmd: '$env:CONSOLE_CHANNEL="beta"; irm consolestore.in/install.ps1 | iex', prompt: "PS>", hint: "Windows PowerShell · beta channel · armed builds place real orders, the default stays safe." },
-    mobile: { cmd: "curl -fsSL consolestore.in/install | sh -s -- --beta", prompt: "$", hint: "beta channel · run this on your computer — macOS, Linux, or Windows (PowerShell)." },
+    unix: { cmd: "curl -fsSL consolestore.in/install | sh", prompt: "$", hint: "macOS & Linux · armed builds place real orders, the default stays safe." },
+    windows: { cmd: "irm consolestore.in/install.ps1 | iex", prompt: "PS>", hint: "Windows PowerShell · armed builds place real orders, the default stays safe." },
+    mobile: { cmd: "curl -fsSL consolestore.in/install | sh", prompt: "$", hint: "run this on your computer — macOS, Linux, or Windows (PowerShell)." },
   }[detectOS()];
   root.querySelectorAll("[data-install-cmd]").forEach((e) => (e.textContent = INSTALL.cmd));
   root.querySelectorAll("[data-install-prompt]").forEach((e) => (e.textContent = INSTALL.prompt));
@@ -707,7 +707,7 @@ export function mount(root) {
     // deliver-to segment, cart chip, full-width gold rule ----
     const chrome = (cart) =>
       '<div style="display:flex;align-items:center;padding-bottom:5px">' +
-      sp(C.blue, "▍ ", true) + sp(C.bright, "consolestore.in", true) + sp(C.purple, "&nbsp;&nbsp;v0.1.0-beta.20") +
+      sp(C.blue, "▍ ", true) + sp(C.bright, "consolestore.in", true) + sp(C.purple, "&nbsp;&nbsp;v0.4.2") +
       '<span style="margin-left:auto;padding-left:14px;flex:none">' + sp(C.dim, "deliver to ") + sp(C.green, "⊕ ") + sp(C.bright, "Home") + sp(C.faint, " ⌄") + sp(C.faint, " &nbsp;·&nbsp; ") + cart + "</span></div>" +
       '<div style="border-bottom:1px solid rgba(234,181,96,.38)"></div>';
     const cartEmpty = sp(C.dim, "cart empty");
@@ -737,7 +737,7 @@ export function mount(root) {
     // Swiggy provenance, home buttons, hint ----
     const splash = () =>
       [
-        line(sp(C.dim, "~ % ") + sp(C.text, "console") + sp(C.faint, "&nbsp;&nbsp;&nbsp;# v0.1.0-beta.20 · beta")),
+        line(sp(C.dim, "~ % ") + sp(C.text, "console") + sp(C.faint, "&nbsp;&nbsp;&nbsp;# v0.4.2 · stable")),
         gap(14),
         '<div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap"><div style="font-weight:800;font-size:26px;letter-spacing:-.02em;line-height:1.1"><span style="color:#aebcff">console</span><span style="color:#eab560;font-size:.62em;vertical-align:.06em">store</span></div><span style="border:1px dashed rgba(234,181,96,.5);color:' + C.gold + ';font-size:10px;padding:2px 8px;border-radius:4px;margin-bottom:3px">Real devs eat in the terminal</span></div>',
         gap(8),
