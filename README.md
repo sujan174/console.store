@@ -1,70 +1,64 @@
 # console.store
 
-**Order real food from your terminal — or by talking to Claude.**
+A food ordering client for Swiggy that runs in the terminal, as a shell command, and inside Claude. It uses Swiggy's public MCP API to browse restaurants and groceries, build carts, take payment through UPI, and track orders. Swiggy is India's largest food delivery platform. The whole thing is a single Go binary with no server and no database.
 
-A terminal-native ordering client for Swiggy (Food + Instamart), built on Swiggy's public MCP API. Real restaurants, real carts, real UPI payments, live order tracking. One Go binary, no server, no database.
-
-## 🎬 Demo — full walkthrough
+## Demo
 
 https://github.com/user-attachments/assets/c21ae7d6-52f8-4739-ab71-35e3ab3a96b3
 
----
+## The three ways to use it
 
-## What is this?
+**Terminal app.** Run `console` with no arguments and you get a full-screen terminal UI (Tokyo Night theme, built with bubbletea). You can browse restaurants and Swiggy Instamart, edit a cart, customize items, pay with a UPI QR code, and watch live order status with the rider's progress.
 
-One binary, three surfaces:
+**Shell commands.** `console order lunch` reorders a saved preset: it pushes the cart, shows you the live bill, and places the order when you press Enter. Presets are named cart snapshots you save inside the terminal app. `console status` prints the current order status and ETA for both food and grocery orders.
 
-| Surface | What you get |
-|---|---|
-| **TUI** — run `console` | A full Tokyo Night terminal app: browse restaurants and Instamart, build carts, customize items, pay via UPI QR, track your rider — without leaving the terminal. |
-| **CLI** — `console order lunch` | Headless one-liners. Save a cart as a named preset in the TUI, then reorder it from any shell. `console status` shows live order + ETA. |
-| **Claude** — say *"open console store"* | A complete interactive ordering app **inside Claude**, rendered as an MCP App widget: menus, cart, checkout, UPI QR, live tracking — in the chat. Works on Claude's **free** plan. |
+**Inside Claude.** MCP (Model Context Protocol) is the standard interface AI assistants use to call external tools. `console mcp` runs a local MCP server that exposes about 30 tools for search, menus, carts, presets, payment, and tracking, plus an embedded HTML app that Claude renders directly in the conversation. Say "open console store" in Claude and you get a working ordering interface in the chat: menus, cart, checkout with a UPI QR code, live tracking. This works on Claude's free plan.
 
-The Claude surface is the interesting one: `console mcp` ships an embedded [MCP Apps](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) widget (`ui://` resource, single-file HTML app) plus 30+ tools for search, menus, carts, presets, payments, and tracking across both the Food and Instamart verticals. Claude recommends; you browse, confirm, and pay.
-
-## Quick start
+## Install
 
 ```bash
-curl -fsSL https://consolestore.in/install | sh   # installs + auto-updates `console`
-console                                            # first run: one-time Swiggy sign-in in your browser
+curl -fsSL https://consolestore.in/install | sh
+console
 ```
 
-- Auth is OAuth 2.1 + PKCE against Swiggy's MCP endpoints; the token lives in your **OS keyring**, never on disk.
-- The installer also provisions Claude automatically (registers the `console` MCP server + installs the ordering skill). Restart Claude Desktop once and say *"open console store"*. Opt out with `CONSOLE_NO_AGENT_SETUP=1`.
+The first run opens your browser once to sign in to Swiggy (OAuth 2.1 with PKCE and dynamic client registration). The token is stored in the operating system keyring, not on disk, and survives updates. The binary updates itself on launch from a signed manifest.
 
-## Safety by design
+The installer also registers the MCP server with Claude Desktop and Claude Code and installs the ordering skill, so the Claude integration works after one restart of Claude. Set `CONSOLE_NO_AGENT_SETUP=1` to skip this.
 
-Real money moves through this, so the invariants are strict:
+## Safety
 
-- **A human always pays.** Payment is UPI on *your phone* — the app renders a QR / deep link; money never moves without your scan + PIN. The agent has no payment credential, ever.
-- **Confirm-before-place.** Every order path (TUI, CLI, Claude) re-fetches the live bill and requires an explicit confirmation bound to the exact cart contents. Cart changed → confirmation invalid.
-- **Never auto-retried.** Order placement is non-idempotent; a timeout is surfaced to you, never silently retried into a duplicate order.
-- **Order cap** enforced client-side (₹1,000 during Swiggy's MCP beta), plus Instamart's ₹99 minimum.
-- **Dev builds are disarmed.** Plain `go build` cannot place orders; only release builds (or an explicit env arm) can.
+The app moves real money, so order placement is deliberately conservative:
 
-## How it's built
+- Payment happens on your phone. The app displays a UPI QR code or payment link; you pay in your own UPI app with your own PIN. Neither the binary nor Claude ever holds a payment credential.
+- Placing an order requires an explicit confirmation tied to the exact cart contents and the live bill. If the cart changed after the bill was shown, the confirmation is rejected and you start over.
+- Order placement is never retried automatically. A timeout or server error is reported to you instead, because a retry could place the same order twice.
+- Orders above ₹1,000 are refused client-side, matching Swiggy's MCP beta cap. Instamart orders under the ₹99 minimum are refused as well.
+- Development builds (`go build`, `go run`) cannot place orders at all. Only release builds are armed.
+
+## Code layout
 
 ```
-cmd/store          one entrypoint: TUI (no args) · headless CLI (subcommands) · `console mcp`
-internal/tui       bubbletea app — Tokyo Night, Kitty graphics hero art, 60ms single-tick animation
-internal/cli       headless commands: status · order <preset> · alias
-internal/mcp       MCP server for Claude + the embedded ordering widget (MCP Apps, Vite/TS single file)
-internal/swiggy    Swiggy Food + Instamart MCP client — rate-limited, tolerant decoders, backoff
-internal/auth      OAuth 2.1 + PKCE + dynamic client registration, loopback callback
-internal/localstore  keyring token · presets · order history — all local, single machine
-internal/updater   ed25519-signed self-update, atomic swap + re-exec
+cmd/store            entrypoint: terminal app (no args), CLI subcommands, `console mcp`
+internal/tui         the terminal app (bubbletea, Kitty graphics with truecolor fallback)
+internal/cli         headless commands: status, order <preset>, alias
+internal/mcp         MCP server for Claude + the embedded ordering app (single-file HTML, TypeScript)
+internal/swiggy      client for Swiggy's Food and Instamart MCP endpoints: rate limiting, retry
+                     with backoff, tolerant response decoding
+internal/auth        OAuth 2.1: dynamic client registration, PKCE, loopback callback, refresh
+internal/localstore  keyring token, presets, order history; everything stays on your machine
+internal/updater     self-update: ed25519 signature check, atomic binary swap, re-exec
 ```
 
-Go, stdlib-first (the only notable deps: bubbletea/lipgloss for the TUI, go-keyring, a QR encoder). No server, no database, no accounts of ours — your data stays on your machine.
+Written in Go, mostly standard library. The notable dependencies are bubbletea and lipgloss for the terminal UI, go-keyring, and a QR encoder.
 
-## Attribution
+## Relationship to Swiggy
 
-console.store is an independent, unofficial client built on **Swiggy's publicly documented MCP API**. It is **not affiliated with, endorsed by, or partnered with Swiggy**. "Swiggy" and "Instamart" are trademarks of Swiggy Limited, used here only to describe interoperability. Orders are placed through Swiggy's own APIs against your own Swiggy account; delivery, pricing, and fulfilment are entirely Swiggy's.
+console.store is an independent project built against Swiggy's publicly documented MCP API. It is not affiliated with, endorsed by, or partnered with Swiggy. "Swiggy" and "Instamart" are trademarks of Swiggy Limited, used here only to describe what the software connects to. Orders go through Swiggy's own API on your own Swiggy account; pricing, delivery, and fulfilment are Swiggy's.
 
 ## Telemetry
 
-Anonymous install + order-count pings only (no identity, no order contents). Opt out: `CONSOLE_NO_TELEMETRY=1`.
+The binary sends anonymous install and order-count pings, with no identity and no order contents. Set `CONSOLE_NO_TELEMETRY=1` to disable.
 
 ---
 
-**Author:** Sujan H · [consolestore.in](https://consolestore.in) · sowbhagyahareesha@gmail.com
+Sujan H · [consolestore.in](https://consolestore.in) · sowbhagyahareesha@gmail.com
