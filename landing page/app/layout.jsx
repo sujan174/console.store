@@ -23,7 +23,7 @@ export const metadata = {
     "CLI food ordering",
     "terminal-native ordering",
     "order food from terminal",
-    "Swiggy CLI",
+    "unofficial Swiggy ordering CLI",
     "command line ordering",
     "TUI food app",
     "developer tools"
@@ -99,7 +99,7 @@ const jsonLd = {
       operatingSystem: "macOS, Linux, Windows",
       url: SITE,
       description:
-        "A terminal-native CLI that brokers real Swiggy food orders. Browse, search, cart, checkout, and track delivery without leaving the shell.",
+        "An independent, unofficial terminal-native CLI that places orders through Swiggy's MCP APIs (not affiliated with Swiggy). Browse, search, cart, checkout, and track delivery without leaving the shell.",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" }
     }
   ]

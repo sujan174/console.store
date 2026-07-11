@@ -1097,26 +1097,19 @@ export default function HowToPage() {
                 >
                   <span style={{ color: "#2d2f48" }}>$</span>
                   <span style={{ color: "#e9ebf7" }}>
-                    curl -fsSL consolestore.in/install | sh -s -- --beta
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      letterSpacing: "1.2px",
-                      textTransform: "uppercase",
-                      color: "#7fe0ff",
-                      border: "1px solid rgba(127,224,255,.32)",
-                      borderRadius: "99px",
-                      padding: "2px 8px",
-                      flex: "none"
-                    }}
-                  >
-                    beta
+                    curl -fsSL consolestore.in/install | sh
                   </span>
                 </div>
-                <div style={{ fontSize: "12px", color: "#2d2f48" }}>
-                  // not affiliated with swiggy. preview build, no warranty, no real orders on
-                  this page.
+                <div style={{ fontSize: "12px", color: "#565b80", lineHeight: 1.65, maxWidth: "440px" }}>
+                  consolestore is an independent, unofficial project &mdash; not affiliated with,
+                  endorsed by, sponsored by, or partnered with Swiggy. it connects to
+                  Swiggy&apos;s own MCP APIs; restaurants, menus, prices, orders, and delivery are
+                  all provided and fulfilled by Swiggy. &quot;Swiggy&quot; and &quot;Instamart&quot; are
+                  trademarks of Bundl Technologies Pvt. Ltd., used here only to describe what
+                  consolestore connects to.
+                  <div style={{ color: "#2d2f48", marginTop: "6px" }}>
+                    // this page is a preview &mdash; no real orders are placed here.
+                  </div>
                 </div>
               </div>
 
@@ -1183,12 +1176,12 @@ export default function HowToPage() {
                         width: "6px",
                         height: "6px",
                         borderRadius: "99px",
-                        background: "#7fe0ff",
+                        background: "#8ee08a",
                         animation: "pulseDot 2.4s ease-in-out infinite",
                         flex: "none"
                       }}
                     />
-                    beta
+                    stable
                   </span>
                 </div>
               </div>

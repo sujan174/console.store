@@ -364,7 +364,7 @@ export const MARKUP = String.raw`
             <span data-install-cmd style="color:#e9ebf7">curl -fsSL consolestore.in/install | sh</span>
             <span style="display:flex;align-items:center;gap:6px;color:#93a8ff;font-size:11px;border-left:1px solid rgba(147,168,255,.18);padding-left:11px;flex:none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.8"/></svg><span data-copy-label>copy</span></span>
           </div>
-          <div style="font-size:11.5px;color:#2d2f48">// not affiliated with swiggy. preview build, no warranty, no real orders on this page.</div>
+          <div style="font-size:11.5px;color:#565b80;line-height:1.65;max-width:430px">consolestore is an independent, unofficial project — not affiliated with, endorsed by, sponsored by, or partnered with Swiggy. it connects to Swiggy's own MCP APIs; restaurants, menus, prices, orders, and delivery are all provided and fulfilled by Swiggy. "Swiggy" and "Instamart" are trademarks of Bundl Technologies Pvt. Ltd., used here only to describe what consolestore connects to.<div style="color:#2d2f48;margin-top:6px">// this page is a preview — no real orders are placed here.</div></div>
         </div>
         <div style="display:flex;gap:40px;font-size:12.5px;color:#b6bce0;flex-wrap:wrap">
           <div style="display:flex;flex-direction:column;gap:11px">
