@@ -55,12 +55,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Push access to the separate Homebrew tap repo (sujan174/homebrew-tap).
-          # The default GITHUB_TOKEN can't push to another repo, so this is a PAT
-          # secret with `contents:write` on the tap. Only used on stable tags
-          # (brews.skip_upload: auto skips alpha/beta); if the secret is empty the
-          # brew step is the ONLY thing that fails — binaries still publish.
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           # Promotion re-tags the SAME commit up the channel chain, so a commit
           # can carry several tags (v0.4.0-beta.5 AND v0.4.0). GoReleaser's tag
           # auto-detection then grabs an arbitrary one — the first stable cut

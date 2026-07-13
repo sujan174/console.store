@@ -14,11 +14,6 @@ var (
 	Version = "dev"
 	Channel = "stable"
 	Commit  = ""
-	// InstallSource identifies who owns updates for this binary. Empty (the
-	// default for `curl | sh` and local builds) means the self-updater owns
-	// them. A package manager stamps its own name ("brew", "npm", …) so the
-	// updater no-ops and never fights `brew upgrade` / a managed checksum.
-	InstallSource = ""
 )
 
 // IsDev reports an unstamped local build — the updater skips on these.

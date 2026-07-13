@@ -4,11 +4,7 @@ project_name: console-store
 builds:
   - id: store
     main: ./cmd/store
-    # Inner binary name. Drives the tar.gz archive's contents (→ the Homebrew
-    # cask installs the `console` command) and is irrelevant to the raw
-    # binary-format archive, which the updater fetches by its name_template
-    # (store_<os>_<arch>) — so renaming this does NOT affect self-update.
-    binary: console
+    binary: store
     env: [CGO_ENABLED=0]
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
@@ -24,51 +20,6 @@ archives:
   - id: raw
     formats: [binary]
     name_template: "store_{{ .Os }}_{{ .Arch }}"
-  # A tar.gz archive JUST for Homebrew: the cask installs from a real archive
-  # containing the `console` binary. Named "console_*" so signtool's
-  # `store_*`-only SHA256SUMS scan ignores it and the signed self-update
-  # manifest keeps referencing only the raw binaries.
-  - id: targz
-    ids: [store]
-    formats: [tar.gz]
-    name_template: "console_{{ .Os }}_{{ .Arch }}"
-
-# Homebrew cask, auto-generated + pushed to the tap on STABLE releases only.
-# `skip_upload: auto` skips prereleases (alpha/beta tags), so brew users track
-# the stable channel exclusively; alpha/beta stay curl + code. A cask (not a
-# formula) is the modern path for a prebuilt binary and auto-strips the macOS
-# Gatekeeper quarantine xattr on the unsigned download.
-homebrew_casks:
-  # Cask token is "consolestore" (NOT "console") — a bare `console` collides with
-  # Homebrew core's unrelated Console.app cask, so `brew install --cask console`
-  # would grab the wrong thing. The installed COMMAND is still `console` (that's
-  # the binary name in `binaries`, independent of the cask token).
-  - name: consolestore
-    ids: [targz]
-    binaries: [console]
-    repository:
-      owner: sujan174
-      name: homebrew-tap
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Casks
-    homepage: "https://consolestore.in"
-    description: "Terminal-native Swiggy food & grocery ordering — Tokyo Night TUI + Claude MCP app"
-    skip_upload: auto
-    commit_msg_template: "console {{ .Tag }}"
-    # The macOS binary is unsigned, so a cask download carries the Gatekeeper
-    # quarantine xattr → "developer cannot be verified" on first run. Strip it on
-    # install so `console` runs immediately. (Curl installs never get quarantined.)
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/console"]
-          end
-    # brew ships the SAME release binary, so InstallSource can't be stamped for
-    # it. The self-updater no-ops on brew installs via path detection
-    # (updater.managedInstall spots the /Cellar/ prefix), so `brew upgrade` owns
-    # updates and nothing fights it.
 
 checksum:
   name_template: "SHA256SUMS"

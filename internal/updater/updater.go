@@ -9,9 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"consolestore/internal/version"
@@ -232,9 +230,6 @@ func RunDefault(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	if managedInstall(version.InstallSource, resolveExe(exe)) {
-		return
-	}
 	base := defaultBase
 	if b := os.Getenv("CONSOLE_UPDATE_BASE"); b != "" {
 		base = b
@@ -248,44 +243,4 @@ func RunDefault(ctx context.Context) {
 		Pub:     PublicKey(),
 		Force:   os.Getenv("CONSOLE_FORCE_UPDATE") == "1",
 	})
-}
-
-// managedPrefixes are path fragments that mark a binary owned by an external
-// package manager. GoReleaser's brew formula ships the SAME release binary
-// (no rebuild), so the build stamp can't distinguish it — the install path is
-// the reliable signal. Checked with forward slashes on every OS.
-var managedPrefixes = []string{
-	"/cellar/",       // Homebrew: /usr/local/Cellar (Intel), /opt/homebrew/Cellar (arm)
-	"/opt/homebrew/", // Homebrew arm prefix (symlink in bin/, before EvalSymlinks resolves it)
-	"/linuxbrew/",    // Homebrew on Linux
-	"/nix/store/",    // Nix
-	"/node_modules/", // npm wrapper (esbuild-style prebuilt binary shim)
-}
-
-// managedInstall reports that update ownership belongs to a package manager, so
-// the self-updater must no-op. An explicit build-stamped source wins; otherwise
-// the resolved executable path is matched against known package prefixes.
-func managedInstall(source, exePath string) bool {
-	switch strings.ToLower(strings.TrimSpace(source)) {
-	case "", "curl", "manual", "dev":
-		// self-managed — fall through to the path check
-	default:
-		return true
-	}
-	p := strings.ToLower(filepath.ToSlash(exePath))
-	for _, prefix := range managedPrefixes {
-		if strings.Contains(p, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-// resolveExe best-effort resolves symlinks so a Homebrew bin/ symlink is judged
-// by its real Cellar target. On failure it returns the input unchanged.
-func resolveExe(exe string) string {
-	if real, err := filepath.EvalSymlinks(exe); err == nil {
-		return real
-	}
-	return exe
 }
