@@ -55,6 +55,16 @@ Thumbs.db
 # Dev-process docs (specs/plans) — keep local, out of the repo
 docs/superpowers/
 
+# Internal dev / AI-assistant docs — kept local, never published to GitHub.
+# (Removed from tracking; the working copies stay on disk to guide local tooling.)
+/CLAUDE.md
+/AGENTS.md
+/RELEASING.md
+/PRODUCT.md
+
+# Internal audit reports — security findings, keep out of the public repo
+docs/audit/
+
 # local agent state + dev artifacts (never commit)
 .claude/
 .claire/
