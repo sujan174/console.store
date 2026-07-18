@@ -542,7 +542,17 @@ const WATCHDOG_MS = 12000; // normal stuck-loader window
 const WATCHDOG_RESUME_MS = 3500; // shorter window after returning to the tab
 
 function isLoadingNow(): boolean {
-  return bootPending || state.menuLoading || state.homeLoading;
+  // A screen is "loading" only when a tool call is genuinely in flight, so the
+  // watchdog can flip to the "session paused" recovery if it stalls. This must
+  // cover EVERY loader — not just boot/menu/home — or a bridge-suspend during
+  // the highest-value screens (food bill/checkout, the whole Instamart vertical)
+  // would spin forever with no recovery. It must NOT include active waits like
+  // "paying"/"placing" (those are legitimately long, not stalls).
+  if (bootPending || state.menuLoading || state.homeLoading) return true;
+  if (state.cart && state.cart.status === "loading") return true; // food bill/checkout
+  if (im.loading) return true; // instamart browse
+  if (im.cart && im.cart.status === "loading") return true; // instamart bill/checkout
+  return false;
 }
 
 function clearWatchdog(): void {

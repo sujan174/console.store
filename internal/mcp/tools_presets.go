@@ -61,6 +61,13 @@ func (s *Server) handleSavePreset(ctx context.Context, _ *mcp.CallToolRequest, i
 	if !ok {
 		return nil, SavePresetOut{}, errors.New("no recent cart to save — add items first")
 	}
+	// The last cart write may belong to the Instamart vertical (address-bound,
+	// marked "Instamart"). Snapshotting its spinId lines into a FOOD preset
+	// would produce a preset that fails at Swiggy's food update_cart on the next
+	// order_preset. Refuse and point at the right vertical.
+	if cw.RestaurantName == "Instamart" {
+		return nil, SavePresetOut{}, errors.New("the most recent cart is an Instamart cart — pass vertical:\"instamart\" to save it, or add food items first")
+	}
 
 	c, err := localstore.LoadCard()
 	if err != nil {

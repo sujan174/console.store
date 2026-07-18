@@ -82,7 +82,7 @@ func AppendOrder(addrID string, o PlacedOrder) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, raw, 0o600)
+	return writeFileAtomic(p, raw, 0o600)
 }
 
 func LoadOrders(addrID string) ([]PlacedOrder, error) {

@@ -1,4 +1,4 @@
-import { checkAlphaCode, logAlphaGrant, ghReleaseBody } from "../../../_lib/channels.js";
+import { checkAlphaCode, logAlphaGrant, ghReleaseBody, parseTag } from "../../../_lib/channels.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +9,11 @@ export async function GET(req, { params }) {
   const { channel, version } = await params;
   if (!CHANNELS.has(channel)) {
     return new Response("unknown channel", { status: 404 });
+  }
+  // Validate the version tag before it reaches the GitHub API URL (defense in
+  // depth — ghReleaseBody also rejects it). Sibling routes validate their params.
+  if (!parseTag(version)) {
+    return new Response("bad version", { status: 400 });
   }
 
   const code = new URL(req.url).searchParams.get("code") || req.headers.get("x-console-code") || "";

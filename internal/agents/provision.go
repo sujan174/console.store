@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 )
 
 func optedOut() bool { return os.Getenv("CONSOLE_NO_AGENT_SETUP") == "1" }
@@ -21,23 +20,33 @@ func unwireMCP(a Agent) (bool, error) {
 
 // Install wires the `console mcp` server + skills into every detected agent.
 // Idempotent. Honors CONSOLE_NO_AGENT_SETUP=1. Best-effort per agent: a failure
-// on one agent is reported but does not abort the others.
-func Install(out io.Writer) error {
+// on one agent is reported but does not abort the others. Returns the number of
+// agents successfully wired and a non-nil error if ANY agent failed — so the
+// caller can decide whether the sync marker may be stamped (a partial failure
+// must retry on the next launch, not be recorded as complete).
+//
+// Install does NOT write the sync marker itself; SyncIfChanged owns the marker
+// and only stamps it on a fully-clean run with ≥1 agent wired.
+func Install(out io.Writer) (int, error) {
 	if optedOut() {
 		fmt.Fprintln(out, "agent setup skipped (CONSOLE_NO_AGENT_SETUP=1)")
-		return nil
+		return 0, nil
 	}
 	agents := Detect()
 	if len(agents) == 0 {
 		fmt.Fprintln(out, "no local agents detected — nothing to set up.")
-		writeMarker(syncHash())
-		return nil
+		return 0, nil
 	}
 	bin := consoleBinary()
+	wired := 0
+	var firstErr error
 	for _, a := range agents {
 		changed, err := wireMCP(a, bin)
 		if err != nil {
 			fmt.Fprintf(out, "  %-16s mcp: error: %v\n", a.Title, err)
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		status := "already current"
@@ -48,15 +57,18 @@ func Install(out io.Writer) error {
 		if a.SkillsDir != "" {
 			if names, serr := installSkills(a.SkillsDir); serr != nil {
 				skillNote = fmt.Sprintf(" · skills: error: %v", serr)
+				if firstErr == nil {
+					firstErr = serr
+				}
 			} else if len(names) > 0 {
 				skillNote = fmt.Sprintf(" · skills: %d", len(names))
 			}
 		}
+		wired++
 		fmt.Fprintf(out, "  %-16s mcp: %s%s\n", a.Title, status, skillNote)
 	}
 	fmt.Fprintln(out, "done. (Claude Desktop must be restarted to load the new MCP server.)")
-	writeMarker(syncHash())
-	return nil
+	return wired, firstErr
 }
 
 // List prints which agents are detected and whether console is wired.
@@ -68,18 +80,29 @@ func List(out io.Writer) error {
 	}
 	for _, a := range agents {
 		wired := "not wired"
-		if raw, err := os.ReadFile(a.ConfigPath); err == nil {
-			if containsServer(string(raw)) {
-				wired = "wired"
-			}
+		if isWired(a.ConfigPath) {
+			wired = "wired"
 		}
 		fmt.Fprintf(out, "  %-16s %s  (%s)\n", a.Title, wired, a.ConfigPath)
 	}
 	return nil
 }
 
-func containsServer(content string) bool {
-	return strings.Contains(content, "\""+ServerName+"\"")
+// isWired reports whether path's mcpServers map actually contains our server
+// entry. Parses the JSON rather than scanning the whole file for the string
+// "console", which false-positives on any unrelated value equal to the server
+// name (a command path, a project name, …).
+func isWired(path string) bool {
+	m, err := loadJSONObject(path)
+	if err != nil {
+		return false
+	}
+	servers, ok := m["mcpServers"].(map[string]any)
+	if !ok {
+		return false
+	}
+	_, present := servers[ServerName]
+	return present
 }
 
 // Remove unwires the server + skills from every detected agent.

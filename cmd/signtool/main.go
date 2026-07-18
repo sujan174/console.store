@@ -41,8 +41,13 @@ func keygen() {
 		fmt.Fprintln(os.Stderr, "signtool:", err)
 		os.Exit(1)
 	}
+	// The PUBLIC key is safe to echo (it's embedded in the binary). The PRIVATE
+	// key is the release signing secret — write it to STDERR with a warning so
+	// it never lands in a captured stdout log / redirected file, and so a
+	// `signtool keygen > pub.txt` doesn't silently persist the secret.
 	fmt.Println("PUBLIC=" + base64.StdEncoding.EncodeToString(pub))
-	fmt.Println("PRIVATE=" + base64.StdEncoding.EncodeToString(priv))
+	fmt.Fprintln(os.Stderr, "signtool: PRIVATE key below — store it ONLY in the CONSOLE_SIGN_KEY secret, never commit or log it:")
+	fmt.Fprintln(os.Stderr, "PRIVATE="+base64.StdEncoding.EncodeToString(priv))
 }
 
 func signCmd(args []string) error {

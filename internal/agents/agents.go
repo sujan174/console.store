@@ -77,12 +77,16 @@ func present(a Agent) bool {
 // agentDirs are dedicated directories whose existence proves the agent is
 // installed (excludes the home root).
 func agentDirs(a Agent) []string {
-	h := home()
 	switch a.Name {
 	case "claude-desktop":
 		return []string{filepath.Dir(a.ConfigPath)} // .../Claude
 	case "claude-code":
-		return []string{filepath.Join(h, ".claude")}
+		// Claude Code is proven ONLY by its config file (~/.claude.json), never
+		// by the ~/.claude directory: we create ~/.claude/skills ourselves when
+		// wiring Claude DESKTOP, so treating that dir as a Claude Code install
+		// would false-positive and write a spurious ~/.claude.json for an agent
+		// that isn't installed. present() already checks ConfigPath.
+		return nil
 	}
 	return nil
 }

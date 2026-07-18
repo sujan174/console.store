@@ -278,8 +278,8 @@ func (c CmdBar) input(blink bool) string {
 	return theme.BrightStyle.Render(before) + caret + theme.BrightStyle.Render(after)
 }
 
-// View renders the palette body (output lines, prompt with blinking cursor, hint)
-// on the PanelCmd background. Width matches the content column.
+// View renders the palette body (output lines, prompt with blinking cursor, hint).
+// Width matches the content column.
 func (c CmdBar) View(blink bool) string {
 	var lines []string
 	for _, l := range c.out {

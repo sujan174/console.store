@@ -58,17 +58,75 @@ case "$arch" in
   *) die "unsupported arch: $arch" ;;
 esac
 ASSET="store_${GOOS}_${GOARCH}"
-Q=""
-[ "$CHANNEL" = "alpha" ] && Q="?code=${CODE}"
+
+# curl_c wraps curl, attaching the alpha access code as a request HEADER (not a
+# ?code= query param) so it never lands in server/CDN/proxy access logs, which
+# routinely record full URLs but not custom headers.
+curl_c() {
+  if [ "$CHANNEL" = "alpha" ]; then
+    curl -H "x-console-code: ${CODE}" "$@"
+  else
+    curl "$@"
+  fi
+}
+
+# base64_d decodes stdin, tolerating both GNU (-d) and BSD (-D) base64.
+base64_d() { base64 -d 2>/dev/null || base64 -D 2>/dev/null; }
 
 # ── best-effort version (decoded from the channel manifest; never fatal) ──
 VER=""
-MANIFEST="$(curl -fsSL "${BASE}/${CHANNEL}/manifest.json${Q}" 2>/dev/null || true)"
+MANIFEST="$(curl_c -fsSL "${BASE}/${CHANNEL}/manifest.json" 2>/dev/null || true)"
+MPAYLOAD=""
 if [ -n "$MANIFEST" ]; then
-  PAYLOAD="$(printf '%s' "$MANIFEST" | sed -n 's/.*"payload":"\([^"]*\)".*/\1/p')"
-  VER="$(printf '%s' "$PAYLOAD" | { base64 -d 2>/dev/null || base64 -D 2>/dev/null || true; } \
-        | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')"
+  MPAYLOAD="$(printf '%s' "$MANIFEST" | sed -n 's/.*"payload":"\([^"]*\)".*/\1/p')"
+  VER="$(printf '%s' "$MPAYLOAD" | base64_d | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')"
 fi
+
+# ── ed25519 signing key (pinned; MUST match internal/updater/pubkey.go) ──
+# SPKI PEM of the release signing public key. Client-side verification of the
+# manifest signature (below) makes the install trust the SAME signed manifest
+# the self-updater pins — so a poisoned GitHub asset (no signing key) is caught
+# at first install too, not only on later updates.
+SIGN_PUBKEY_PEM='-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEA2eKjjdwLlQcgyxWZZZNcxIzv7wFFAYQfncuW3wgdNu4=
+-----END PUBLIC KEY-----'
+
+# verify_manifest_sig checks the manifest envelope's ed25519 signature against
+# the pinned key, when openssl supports ed25519 (1.1.1+). Echoes "ok" on a valid
+# signature, "unsupported" when openssl can't do ed25519 (skip — TLS + the
+# server-side verify still apply), or dies on a DEFINITIVE signature mismatch.
+# $1 = payload (base64), $2 = sig (base64).
+verify_manifest_sig() {
+  _pl="$1"; _sig="$2"
+  [ -n "$_pl" ] && [ -n "$_sig" ] || return 0            # no envelope → skip (VER is best-effort)
+  command -v openssl >/dev/null 2>&1 || { echo unsupported; return 0; }
+  _d="$(mktemp -d 2>/dev/null)" || { echo unsupported; return 0; }
+  printf '%s' "$SIGN_PUBKEY_PEM" > "$_d/pub.pem"
+  printf '%s' "$_pl"  | base64_d > "$_d/payload.bin" 2>/dev/null || { rm -rf "$_d"; echo unsupported; return 0; }
+  printf '%s' "$_sig" | base64_d > "$_d/sig.bin"     2>/dev/null || { rm -rf "$_d"; echo unsupported; return 0; }
+  # openssl 3.x supports raw ed25519 verify with -rawin. If this openssl build
+  # doesn't understand the flags, treat as unsupported rather than a failure.
+  if openssl pkeyutl -verify -pubin -inkey "$_d/pub.pem" -rawin \
+       -in "$_d/payload.bin" -sigfile "$_d/sig.bin" >/dev/null 2>&1; then
+    rm -rf "$_d"; echo ok; return 0
+  fi
+  # Distinguish "bad signature" from "openssl can't do this": re-run capturing
+  # stderr; a usage/unknown-option error means unsupported, anything else on a
+  # well-formed call means the signature did not verify.
+  _err="$(openssl pkeyutl -verify -pubin -inkey "$_d/pub.pem" -rawin \
+       -in "$_d/payload.bin" -sigfile "$_d/sig.bin" 2>&1 || true)"
+  rm -rf "$_d"
+  case "$_err" in
+    *nknown\ option*|*nvalid\ command*|*rawin*|*unsupported*|*Unsupported*)
+      echo unsupported ;;
+    *)
+      echo invalid ;;   # a well-formed verify that failed → tampered/forged
+  esac
+}
+
+MSIG="$(printf '%s' "$MANIFEST" | sed -n 's/.*"sig":"\([^"]*\)".*/\1/p')"
+SIG_STATUS="$(verify_manifest_sig "$MPAYLOAD" "$MSIG")"
+[ "$SIG_STATUS" = "invalid" ] && die "manifest signature INVALID — refusing to install (possible tampered release)"
 
 # ── banner — the consolestore wordmark, gold prompt motif, Tokyo Night ──
 sub="$CHANNEL"
@@ -95,7 +153,7 @@ if [ "$ASSUME_YES" -eq 0 ] && [ "$TUI_ONLY" -eq 0 ] && [ -e /dev/tty ] && [ -t 1
   printf "\n  ${B}what would you like to set up?${R}\n\n"
   printf "    ${B}${CYAN}1${R}  everything ${DIM}— terminal app + Claude skills/MCP${R}  ${GOLD}(recommended)${R}\n"
   printf "    ${B}${CYAN}2${R}  terminal app only\n"
-  printf "    ${B}${CYAN}3${R}  Claude integration only ${DIM}— MCP server + skills${R}\n"
+  printf "    ${B}${CYAN}3${R}  Claude integration ${DIM}— MCP server + skills (also installs the console binary)${R}\n"
   printf "    ${B}${CYAN}q${R}  cancel\n\n"
   printf "  ${GOLD}❯${R} choice ${DIM}[1]${R}: "
   read -r CHOICE < /dev/tty || CHOICE=""
@@ -109,11 +167,22 @@ fi
 
 step "download ${DIM}·${R} ${CYAN}${CHANNEL}${R}"
 
-# 1. trusted checksum (TLS-protected) ───────────────────────────────────────
-SUM="$(curl -fsSL "${BASE}/${CHANNEL}/checksum/${ASSET}${Q}")" \
-  || die "could not reach ${BASE} (alpha needs a valid --code)"
-[ -n "$SUM" ] || die "empty checksum from server"
-ok "release checksum fetched"
+# 1. trusted checksum. Prefer the sha256 read from the SIGNATURE-VERIFIED
+# manifest payload (assets[<goos_goarch>]); fall back to the /checksum endpoint
+# (which the server also signature-verifies) when we couldn't verify locally.
+SUM=""
+ASSET_KEY="${GOOS}_${GOARCH}"
+if [ "$SIG_STATUS" = "ok" ] && [ -n "$MPAYLOAD" ]; then
+  SUM="$(printf '%s' "$MPAYLOAD" | base64_d \
+        | sed -n 's/.*"'"$ASSET_KEY"'":"\([0-9a-f]\{64\}\)".*/\1/p')"
+  [ -n "$SUM" ] && ok "release checksum verified ${DIM}(signed manifest)${R}"
+fi
+if [ -z "$SUM" ]; then
+  SUM="$(curl_c -fsSL "${BASE}/${CHANNEL}/checksum/${ASSET}")" \
+    || die "could not reach ${BASE} (alpha needs a valid --code)"
+  [ -n "$SUM" ] || die "empty checksum from server"
+  ok "release checksum fetched"
+fi
 
 # 2. download — temp file lives IN $BIN_DIR so the final mv is a same-filesystem
 # atomic rename (a cross-fs mv copies+unlinks and can leave a partial binary on
@@ -122,7 +191,7 @@ mkdir -p "$BIN_DIR" || die "cannot create $BIN_DIR"
 TMP="$(mktemp "$BIN_DIR/.console.XXXXXX")" || die "cannot create a temp file in $BIN_DIR"
 trap 'rm -f "$TMP"' EXIT
 printf "  ${CYAN}◆${R}  downloading ${B}console${R}\n"
-curl -fSL --progress-bar "${BASE}/${CHANNEL}/download/${ASSET}${Q}" -o "$TMP" \
+curl_c -fSL --progress-bar "${BASE}/${CHANNEL}/download/${ASSET}" -o "$TMP" \
   || die "download failed"
 ok "downloaded console"
 

@@ -176,10 +176,11 @@ func placePreset(d Deps, p localstore.Preset, st style) int {
 		fmt.Fprintf(d.Out, "\n%s\n", st.dim("cancelled — no order placed."))
 		return 0
 	}
-	order, err := d.Backend.PlaceOrder(p.AddrID) // never retried
-	if err != nil {
-		fmt.Fprintf(d.Out, "%s\n%s\n", st.warn(fmt.Sprintf("order failed: %v", err)),
-			st.dim("if you may have been charged, run `console status` before retrying."))
+	// UPI-first, COD fallback — the same payment resolution the TUI and MCP
+	// use (Swiggy disabled the legacy Cash token for food 2026-07-09; most
+	// accounts pay by scan-to-pay QR). None of these calls is ever retried.
+	order, ok := placeFood(d, p.AddrID, st)
+	if !ok {
 		return 1
 	}
 	etaLo, etaHi := localstore.ParseETAMinutes(order.ETA)

@@ -124,6 +124,49 @@ func TestSearchIMProductsDecodesLiveShape(t *testing.T) {
 	}
 }
 
+func TestSearchIMProductsDecodesDataWrappedShape(t *testing.T) {
+	// Swiggy wrapped the search_products / your_go_to_items payload under
+	// {"success":true,"data":{...}} (observed live 2026-07-18). The decoder must
+	// read products from inside "data", not just the flat top level.
+	srv := newFakeMCP(t, map[string]toolFn{
+		"search_products": func(args map[string]any) (any, error) {
+			return map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"nextOffset": "1",
+					"products": []map[string]any{{
+						"displayName": "Red Bull Energy Drink, 250 ml",
+						"brand":       "Red Bull",
+						"inStock":     true,
+						"isAvail":     true,
+						"productId":   "RUR8E3DZ69",
+						"variations": []map[string]any{{
+							"spinId":                "N0KO7KQUD0",
+							"skuId":                 "TMYOMT43XI",
+							"quantityDescription":   "250 ml",
+							"displayName":           "Red Bull Energy Drink, 250 ml",
+							"brandName":             "Red Bull",
+							"price":                 map[string]any{"mrp": 125, "offerPrice": 112},
+							"isInStockAndAvailable": true,
+						}},
+					}},
+				},
+			}, nil
+		},
+	})
+	c := NewClient(srv.URL, StaticToken("tok"), WithHTTPClient(srv.Client()))
+	got, err := c.SearchIMProducts(context.Background(), "a1", "red bull", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "RUR8E3DZ69" {
+		t.Fatalf("products = %+v", got)
+	}
+	if v := got[0].Variants; len(v) != 1 || v[0].SpinID != "N0KO7KQUD0" || v[0].SkuID != "TMYOMT43XI" {
+		t.Fatalf("variants = %+v", v)
+	}
+}
+
 func TestGetIMCartEmptyIsNotError(t *testing.T) {
 	srv := newFakeMCP(t, map[string]toolFn{
 		"get_cart": func(map[string]any) (any, error) {

@@ -74,36 +74,52 @@ func (o *Options) defaults() {
 	}
 }
 
+// Outcome is the result of a Run attempt, so a caller (the `console update`
+// command) can report honestly instead of always claiming "up to date".
+type Outcome int
+
+const (
+	// OutcomeUpToDate: the manifest verified but no newer build was applicable
+	// (already current, dev/managed build, or no build for this platform).
+	OutcomeUpToDate Outcome = iota
+	// OutcomeUpdated: a new binary was downloaded, verified, and swapped in
+	// (Run normally re-execs before returning this).
+	OutcomeUpdated
+	// OutcomeFailed: the check or download could not complete (offline, bad
+	// signature, checksum mismatch, swap error) — NOT a clean "up to date".
+	OutcomeFailed
+)
+
 // Run performs one best-effort update. It never blocks the app on failure: any
-// error (offline, bad sig, unsupported arch) returns silently and the caller
-// continues on the current binary.
-func Run(ctx context.Context, o Options) {
+// error (offline, bad sig, unsupported arch) returns an Outcome the caller may
+// ignore, and the caller continues on the current binary.
+func Run(ctx context.Context, o Options) Outcome {
 	o.defaults()
 	if o.Pub == nil || o.ExePath == "" {
-		return
+		return OutcomeUpToDate
 	}
 	cleanupOld(o.ExePath)
 
 	env, err := o.fetchManifest(ctx)
 	if err != nil {
-		return
+		return OutcomeFailed // couldn't reach / read the manifest
 	}
 	pl, err := env.Verify(o.Pub)
 	if err != nil {
-		return // unsigned/forged manifest — refuse
+		return OutcomeFailed // unsigned/forged manifest — refuse
 	}
 	if pl.Channel != o.Mark.Channel {
-		return // signed manifest is for a different channel — refuse
+		return OutcomeUpToDate // signed manifest is for a different channel — refuse
 	}
 	// Force re-pulls the channel's current signed build even when it isn't
 	// "newer" — the recovery hatch for a mis-stamped version that otherwise
 	// thinks it's already ahead of the channel and never updates.
 	if !o.Force && !Newer(o.Current, pl.Version) {
-		return
+		return OutcomeUpToDate
 	}
 	wantSum, ok := pl.Assets[AssetKey(o.GOOS, o.GOARCH)]
 	if !ok {
-		return // no build for this platform
+		return OutcomeUpToDate // no build for this platform
 	}
 
 	u := newUI(o.Out)
@@ -112,19 +128,20 @@ func Run(ctx context.Context, o Options) {
 	u.progressDone()
 	if err != nil {
 		u.fail(o.Current)
-		return
+		return OutcomeFailed
 	}
 	got := sha256.Sum256(bin)
 	if hex.EncodeToString(got[:]) != wantSum {
 		u.badSum()
-		return
+		return OutcomeFailed
 	}
 	if err := o.swap(o.ExePath, bin, 0o755); err != nil {
 		u.fail(o.Current)
-		return
+		return OutcomeFailed
 	}
 	u.success()
 	_ = o.reexec(o.ExePath)
+	return OutcomeUpdated
 }
 
 func (o Options) assetName() string {
@@ -146,16 +163,17 @@ func (o Options) fetchManifest(ctx context.Context) (Envelope, error) {
 	return ParseEnvelope(b)
 }
 
-func (o Options) download(ctx context.Context) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
-	defer cancel()
-	u := fmt.Sprintf("%s/%s/download/%s", o.Base, o.Mark.Channel, o.assetName())
-	return o.get(ctx, u)
+// setAlphaCode attaches the alpha invite code as a request header (never a
+// query param) when the channel is alpha and a code is set. See get().
+func setAlphaCode(req *http.Request, mark Mark) {
+	if mark.Channel == "alpha" && mark.AlphaCode != "" {
+		req.Header.Set("x-console-code", mark.AlphaCode)
+	}
 }
 
-// downloadProgress streams the binary while feeding the ui's in-place bar.
-// Identical semantics to download() otherwise; on a non-terminal Out the bar
-// renders nothing and this degrades to a plain buffered read.
+// downloadProgress streams the binary while feeding the ui's in-place bar. On a
+// non-terminal Out the bar renders nothing and this degrades to a plain
+// buffered read.
 func (o Options) downloadProgress(ctx context.Context, u ui) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
 	defer cancel()
@@ -164,11 +182,7 @@ func (o Options) downloadProgress(ctx context.Context, u ui) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if o.Mark.Channel == "alpha" && o.Mark.AlphaCode != "" {
-		q := req.URL.Query()
-		q.Set("code", o.Mark.AlphaCode)
-		req.URL.RawQuery = q.Encode()
-	}
+	setAlphaCode(req, o.Mark)
 	resp, err := o.HTTP.Do(req)
 	if err != nil {
 		return nil, err
@@ -180,11 +194,19 @@ func (o Options) downloadProgress(ctx context.Context, u ui) ([]byte, error) {
 	total := resp.ContentLength
 	var buf []byte
 	chunk := make([]byte, 256<<10)
-	body := io.LimitReader(resp.Body, 64<<20)
+	// Read one byte past the cap so an over-size binary is DETECTED and fails
+	// with a clear message, instead of silently truncating to maxBinary and
+	// then failing the sha256 check as a confusing "checksum mismatch" that
+	// never resolves. The cap is far above the real ~10MB binary.
+	const maxBinary = 256 << 20
+	body := io.LimitReader(resp.Body, maxBinary+1)
 	for {
 		n, rerr := body.Read(chunk)
 		if n > 0 {
 			buf = append(buf, chunk[:n]...)
+			if len(buf) > maxBinary {
+				return nil, fmt.Errorf("updater: downloaded binary exceeds %d bytes — refusing (truncated download or wrong asset)", maxBinary)
+			}
 			u.progress(int64(len(buf)), total)
 		}
 		if rerr == io.EOF {
@@ -196,17 +218,15 @@ func (o Options) downloadProgress(ctx context.Context, u ui) ([]byte, error) {
 	}
 }
 
-// get issues a GET, attaching the alpha code (query param) when present.
+// get issues a GET, attaching the alpha code via a request HEADER when present.
+// A header (not a ?code= query param) keeps the secret out of access/CDN/proxy
+// logs, which routinely record full URLs but not custom headers.
 func (o Options) get(ctx context.Context, u string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
-	if o.Mark.Channel == "alpha" && o.Mark.AlphaCode != "" {
-		q := req.URL.Query()
-		q.Set("code", o.Mark.AlphaCode)
-		req.URL.RawQuery = q.Encode()
-	}
+	setAlphaCode(req, o.Mark)
 	resp, err := o.HTTP.Do(req)
 	if err != nil {
 		return nil, err
@@ -218,23 +238,25 @@ func (o Options) get(ctx context.Context, u string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 }
 
-// RunDefault is the production entry point used by main.go.
-func RunDefault(ctx context.Context) {
+// RunDefault is the production entry point used by main.go (launch) and the
+// `console update` command. It returns the Outcome so the command can report
+// honestly; the launch path ignores it.
+func RunDefault(ctx context.Context) Outcome {
 	if os.Getenv("CONSOLE_NO_UPDATE") == "1" || os.Getenv("CONSOLE_UPDATED") == "1" {
-		return
+		return OutcomeUpToDate
 	}
 	if version.IsDev() {
-		return
+		return OutcomeUpToDate
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		return
+		return OutcomeFailed
 	}
 	base := defaultBase
 	if b := os.Getenv("CONSOLE_UPDATE_BASE"); b != "" {
 		base = b
 	}
-	Run(ctx, Options{
+	return Run(ctx, Options{
 		Base:    base,
 		Mark:    LoadMark(),
 		Current: version.Version,

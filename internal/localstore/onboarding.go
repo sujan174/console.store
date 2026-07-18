@@ -43,7 +43,7 @@ func MarkOnboarded() error {
 		return err
 	}
 	content := fmt.Sprintf("onboarded at %s\n", time.Now().UTC().Format(time.RFC3339))
-	return os.WriteFile(p, []byte(content), 0o600)
+	return writeFileAtomic(p, []byte(content), 0o600)
 }
 
 // ShouldOnboard reports whether the first-run onboarding manual should auto-open.

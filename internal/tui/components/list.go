@@ -73,11 +73,31 @@ func (l List) VisibleRows() []Row {
 	if l.filter == "" {
 		return l.Rows
 	}
+	idxs := l.visibleIndices()
+	out := make([]Row, len(idxs))
+	for i, si := range idxs {
+		out[i] = l.Rows[si]
+	}
+	return out
+}
+
+// visibleIndices returns the indices into Rows of the currently visible rows,
+// in display order. This is the source-of-truth mapping visible-position →
+// Rows index, so a selected row resolves to the RIGHT source row even when two
+// rows are byte-identical (a value search would collapse both to the first).
+func (l List) visibleIndices() []int {
+	if l.filter == "" {
+		idxs := make([]int, len(l.Rows))
+		for i := range l.Rows {
+			idxs[i] = i
+		}
+		return idxs
+	}
 	q := flatten(l.filter)
-	var out []Row
-	for _, r := range l.Rows {
+	var out []int
+	for i, r := range l.Rows {
 		if strings.Contains(flatten(stripANSI(r.Left)), q) {
-			out = append(out, r)
+			out = append(out, i)
 		}
 	}
 	return out
@@ -86,21 +106,19 @@ func (l List) VisibleRows() []Row {
 // flatten lowercases and removes spaces for letter-spacing-insensitive matching.
 func flatten(s string) string { return strings.ReplaceAll(strings.ToLower(s), " ", "") }
 
-// SelectedIndex returns the index into Rows of the currently selected visible row.
+// SelectedIndex returns the index into Rows of the currently selected visible
+// row. It maps the cursor through visibleIndices (position → source index)
+// rather than searching Rows by value, so two byte-identical rows resolve to
+// the one actually under the cursor, not always the first.
 func (l List) SelectedIndex() int {
-	vis := l.VisibleRows()
+	idxs := l.visibleIndices()
 	// Guard Cursor locally: exported setters (WithCursor/WithListCursor) can write
-	// it raw, and an active filter can shrink vis below a previously-valid cursor.
-	if l.Cursor < 0 || l.Cursor >= len(vis) {
+	// it raw, and an active filter can shrink the visible set below a previously-
+	// valid cursor.
+	if l.Cursor < 0 || l.Cursor >= len(idxs) {
 		return -1
 	}
-	sel := vis[l.Cursor]
-	for i, r := range l.Rows {
-		if r == sel {
-			return i
-		}
-	}
-	return -1
+	return idxs[l.Cursor]
 }
 
 func (l *List) Up() {
@@ -155,6 +173,15 @@ func (l List) View() string {
 		}
 		if l.Cursor >= end {
 			end = l.Cursor + 1
+		}
+		// Clamp to the slice bounds so an out-of-range Cursor (which every caller
+		// should prevent, but this must not depend on) can never push start/end
+		// past vis and panic the render loop below.
+		if start < 0 {
+			start = 0
+		}
+		if end > len(vis) {
+			end = len(vis)
 		}
 	}
 

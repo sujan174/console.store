@@ -98,7 +98,7 @@ export const MARKUP = String.raw`
           <span>Windows</span><span style="color:#2d2f48">·</span>
           <span style="color:#b08cf5">+ Claude</span>
         </div>
-        <div data-install-hint style="font-size:11.5px;color:#8088b0">armed builds place real orders, the default stays safe.</div>
+        <div data-install-hint style="font-size:11.5px;color:#8088b0">the installed binary places real orders — always behind your explicit Enter.</div>
       </div>
     </div>
   </header>

@@ -60,14 +60,44 @@ func loadJSONObject(path string) (map[string]any, error) {
 }
 
 func saveJSONObject(path string, m map[string]any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	raw, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(raw, '\n'), 0o644)
+	raw = append(raw, '\n')
+	// Write to a unique temp file and rename over path. ~/.claude.json is Claude
+	// Code's PRIMARY state file (settings, history, project data) — a plain
+	// os.WriteFile truncates it before writing, so a kill / crash / ENOSPC
+	// mid-write would corrupt or empty it. rename(2) within one dir is atomic:
+	// a reader sees either the old file or the fully-written new one.
+	f, err := os.CreateTemp(dir, ".tmp-"+filepath.Base(path)+"-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	if _, err := f.Write(raw); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Chmod(0o644); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // writeJSONServerAt merges entry under keyPath[name], preserving every other

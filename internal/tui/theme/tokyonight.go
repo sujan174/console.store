@@ -4,11 +4,8 @@ import "github.com/charmbracelet/lipgloss"
 
 // Tokyo Night — the approved palette hexes.
 const (
-	BgDeep   = "#0a0a10" // html/body, overlay base
 	Bg       = "#15161f" // app background
-	PanelHi  = "#191a24" // address modal surface
 	PanelLo  = "#10111a" // status bar / cmd output surface
-	PanelCmd = "#0e0f17" // command palette surface
 	SelRowBg = "#1f2335" // selected row background (gradient start; solid here)
 	Div      = "#232539" // section dividers / screen top borders
 	Div2     = "#2c2e44" // dashed bill rules, modal border

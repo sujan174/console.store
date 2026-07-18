@@ -271,18 +271,6 @@ func (c *Client) FlushFoodCart(ctx context.Context) error {
 	return err
 }
 
-func (c *Client) FetchFoodCoupons(ctx context.Context, addressID, restaurantID string) ([]Coupon, error) {
-	return decodeResult[[]Coupon](c.CallTool(ctx, "fetch_food_coupons", map[string]any{
-		"addressId": addressID, "restaurantId": restaurantID,
-	}))
-}
-
-func (c *Client) ApplyFoodCoupon(ctx context.Context, addressID, couponCode string) (Cart, error) {
-	return decodeResult[Cart](c.CallTool(ctx, "apply_food_coupon", map[string]any{
-		"addressId": addressID, "couponCode": couponCode,
-	}))
-}
-
 var reTrack = regexp.MustCompile(`^Order (\S+): (.+?) \((.+)\)(?: - ETA: (.+))?$`)
 var reOrderLine = regexp.MustCompile(`Order (\S+) — (.+?) \| (.+?) \| ₹+(\d+)(?:\s*\[[^\]]+\])?`)
 
@@ -316,7 +304,7 @@ func parseOrdersText(s string) []Order {
 	var out []Order
 	for _, m := range reOrderLine.FindAllStringSubmatch(s, -1) {
 		total, _ := strconv.Atoi(m[4])
-		out = append(out, Order{ID: flexID(m[1]), Restaurant: m[2], Status: m[3], Total: total})
+		out = append(out, Order{ID: flexID(m[1]), Restaurant: m[2], Status: m[3], Total: flexInt(total)})
 	}
 	return out
 }

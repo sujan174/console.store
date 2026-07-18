@@ -22,12 +22,24 @@ function amountFromUPI(upi) {
   return 0;
 }
 
+// payeeFromUPI returns the UPI VPA (pa=) so the page can SHOW who is being paid.
+// A branded "scan to pay ₹N" page for an attacker-supplied intent is a phishing
+// surface; surfacing the payee lets the user eyeball the real recipient.
+function payeeFromUPI(upi) {
+  try {
+    const u = new URL(upi);
+    return u.searchParams.get("pa") || "";
+  } catch {}
+  return "";
+}
+
 export default async function Pay({ searchParams }) {
   const sp = await searchParams;
   const raw = sp?.upi;
   const upi = Array.isArray(raw) ? raw[0] : raw || "";
   const valid = upi.startsWith("upi://");
   const amt = valid ? amountFromUPI(upi) : 0;
+  const payee = valid ? payeeFromUPI(upi) : "";
   // exp: the payment-window deadline (unix millis) the terminal passed. The
   // client component enforces it live so a hours-old page can't invite a payment.
   const expRaw = Array.isArray(sp?.exp) ? sp.exp[0] : sp?.exp;
@@ -67,7 +79,7 @@ export default async function Pay({ searchParams }) {
       </div>
 
       {valid ? (
-        <PayClient svg={svg} amt={amt} upi={upi} exp={exp} />
+        <PayClient svg={svg} amt={amt} upi={upi} exp={exp} payee={payee} />
       ) : (
         <div style={{ color: "#e9ebf7", fontSize: "16px", maxWidth: "420px", lineHeight: 1.7 }}>
           no payment to show — open this from the consolestore terminal's payment

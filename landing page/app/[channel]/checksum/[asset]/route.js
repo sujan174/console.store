@@ -1,4 +1,4 @@
-import { latestTag, fetchSignedManifest, checkAlphaCode } from "../../../_lib/channels.js";
+import { latestTag, fetchSignedManifest, checkAlphaCode, verifyManifest } from "../../../_lib/channels.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,8 +23,13 @@ export async function GET(req, { params }) {
 
   const body = await fetchSignedManifest(tag);
   if (body === null) return new Response("manifest missing", { status: 502 });
-  const env = JSON.parse(body);
-  const payload = JSON.parse(Buffer.from(env.payload, "base64").toString("utf8"));
+  // VERIFY the ed25519 signature before trusting any field from the manifest —
+  // a compromised GitHub asset (poisoned payload + checksum, without the signing
+  // key) is caught here rather than served to the installer. verifyManifest
+  // also absorbs malformed-JSON, returning null instead of throwing an uncaught
+  // 500.
+  const payload = verifyManifest(body);
+  if (payload === null) return new Response("manifest verification failed", { status: 502 });
   // asset name → asset key: strip "store_" prefix and ".exe" suffix.
   const key = asset.replace(/^store_/, "").replace(/\.exe$/, "");
   const sum = payload.assets?.[key];

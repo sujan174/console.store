@@ -60,8 +60,8 @@ export function mount(root) {
   // Stable-channel install commands, auto-picked per OS. The bare curl / irm
   // installs the stable release; no channel flag needed.
   const INSTALL = {
-    unix: { cmd: "curl -fsSL consolestore.in/install | sh", prompt: "$", hint: "macOS & Linux · armed builds place real orders, the default stays safe." },
-    windows: { cmd: "irm consolestore.in/install.ps1 | iex", prompt: "PS>", hint: "Windows PowerShell · armed builds place real orders, the default stays safe." },
+    unix: { cmd: "curl -fsSL consolestore.in/install | sh", prompt: "$", hint: "macOS & Linux · the installed binary places real orders — always behind your explicit Enter." },
+    windows: { cmd: "irm consolestore.in/install.ps1 | iex", prompt: "PS>", hint: "Windows PowerShell · the installed binary places real orders — always behind your explicit Enter." },
     mobile: { cmd: "curl -fsSL consolestore.in/install | sh", prompt: "$", hint: "run this on your computer — macOS, Linux, or Windows (PowerShell)." },
   }[detectOS()];
   root.querySelectorAll("[data-install-cmd]").forEach((e) => (e.textContent = INSTALL.cmd));

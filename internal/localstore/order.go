@@ -49,7 +49,7 @@ func SaveActiveOrder(o ActiveOrder) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, raw, 0o600)
+	return writeFileAtomic(p, raw, 0o600)
 }
 
 func LoadActiveOrder() (ActiveOrder, bool, error) {

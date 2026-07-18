@@ -228,9 +228,11 @@ func (s *Server) handleConfirmOrder(ctx context.Context, _ *mcp.CallToolRequest,
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, PlaceOrderOut{}, err
 	}
-	e, ok := s.payments.get(in.PaymentID)
+	// Atomically claim the payment for this confirm so two concurrent
+	// confirm_order calls can't both fire the non-idempotent ConfirmOrder.
+	e, ok := s.payments.claimConfirm(in.PaymentID)
 	if !ok {
-		return nil, PlaceOrderOut{}, codedErr(codeConfirmationExpired, "unknown or expired payment_id — place the order again")
+		return nil, PlaceOrderOut{}, codedErr(codeConfirmationExpired, "unknown, expired, or already-confirming payment_id — place the order again")
 	}
 	if paymentExpired(e.pay) {
 		s.payments.remove(in.PaymentID)
@@ -241,6 +243,7 @@ func (s *Server) handleConfirmOrder(ctx context.Context, _ *mcp.CallToolRequest,
 		// already force-clears the server cart in-service, so we don't clear here.
 		order, err := s.be.IMConfirmOrder(e.pay) // never retried
 		if err != nil {
+			s.payments.releaseConfirm(in.PaymentID) // failed — allow a manual retry
 			return nil, PlaceOrderOut{}, fmt.Errorf("confirm failed: %w — run list_active_orders before retrying in case it was placed", err)
 		}
 		if order.Restaurant == "" {
@@ -254,6 +257,7 @@ func (s *Server) handleConfirmOrder(ctx context.Context, _ *mcp.CallToolRequest,
 	}
 	order, err := s.be.ConfirmOrder(e.pay) // never retried
 	if err != nil {
+		s.payments.releaseConfirm(in.PaymentID) // failed — allow a manual retry
 		return nil, PlaceOrderOut{}, fmt.Errorf("confirm failed: %w — run list_active_orders before retrying in case it was placed", err)
 	}
 	s.payments.remove(in.PaymentID)
@@ -274,11 +278,22 @@ func (s *Server) handlePlaceOrder(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, PlaceOrderOut{}, err
 	}
+	// Validate the tender enum BEFORE consuming the confirmation: only "",
+	// "upi", "cod" are meaningful. An unknown value ("card", a typo) must be
+	// REJECTED, not silently treated as the UPI default (the agent would
+	// believe it selected a method we ignored) — and rejecting it here, before
+	// pending.take, means a pure input error doesn't burn the confirmation and
+	// force a redundant prepare_order.
+	method := strings.ToLower(strings.TrimSpace(in.Method))
+	switch method {
+	case "", "upi", "cod":
+	default:
+		return nil, PlaceOrderOut{}, codedErr(codeValidation, "unknown payment method — use \"upi\", \"cod\", or leave it empty for the default")
+	}
 	p, ok := s.pending.take(in.ConfirmationID, nowUnix())
 	if !ok {
 		return nil, PlaceOrderOut{}, codedErr(codeConfirmationExpired, "unknown or expired confirmation_id — call prepare_order again")
 	}
-	method := strings.ToLower(strings.TrimSpace(in.Method))
 	if p.vertical == "instamart" {
 		return s.placeIMOrder(p, method)
 	}

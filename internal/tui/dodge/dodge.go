@@ -50,9 +50,8 @@ const minGapMargin = 8
 // obstacle is a ground car: a rectangle in cell space moving left at speed
 // cells/frame. All are jump-over (no ducking, no aerial obstacles).
 type obstacle struct {
-	x      float64 // left cell, world moves it leftward
-	w, h   int     // width/height in cells
-	passed bool
+	x    float64 // left cell, world moves it leftward
+	w, h int     // width/height in cells
 }
 
 // Game is the headless runner core: physics, spawns, collision, scoring and
@@ -62,7 +61,6 @@ type Game struct {
 	rng  *rand.Rand
 
 	state State
-	frame int // frames since last reset/death settle
 
 	// player
 	px       float64 // fixed column
@@ -120,7 +118,6 @@ func (g *Game) groundRow() int { return g.playRows() - 1 }
 
 func (g *Game) reset() {
 	g.state = Playing
-	g.frame = 0
 	g.py, g.vy = 0, 0
 	g.grounded = true
 	g.airT = 0
@@ -165,9 +162,10 @@ func (g *Game) doJump() {
 	g.grounded = false
 }
 
-// Tick advances the game by one 60ms frame.
-func (g *Game) Tick(frame int) {
-	g.frame = frame
+// Tick advances the game by one 60ms frame. The frame arg keeps the animation
+// cadence in lockstep with the root Model's single tick; time-based state is
+// derived from it where needed.
+func (g *Game) Tick(_ int) {
 	if g.state != Playing {
 		return
 	}
@@ -208,9 +206,6 @@ func (g *Game) Tick(frame int) {
 	kept := g.obstacles[:0]
 	for _, o := range g.obstacles {
 		o.x -= g.speed
-		if !o.passed && o.x+float64(o.w) < g.px {
-			o.passed = true
-		}
 		if o.x+float64(o.w) > -2 {
 			kept = append(kept, o)
 		}
@@ -225,7 +220,6 @@ func (g *Game) Tick(frame int) {
 
 func (g *Game) die() {
 	g.state = Dead
-	g.frame = 0
 	if g.score > g.best {
 		g.best = g.score
 	}

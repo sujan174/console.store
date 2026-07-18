@@ -132,16 +132,10 @@ func writeCacheFile(path string, v any) {
 	if err != nil {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return
-	}
-	// Write-then-rename so a crash mid-write can't leave a torn JSON file
-	// that poisons every later launch.
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		return
-	}
-	_ = os.Rename(tmp, path)
+	// Write-then-rename (unique temp name) so a crash mid-write can't leave a
+	// torn JSON file that poisons every later launch, and concurrent writers
+	// don't clobber a shared ".tmp".
+	_ = writeFileAtomic(path, raw, 0o600)
 }
 
 func fresh(savedAt int64) bool {

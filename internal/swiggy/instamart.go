@@ -51,10 +51,28 @@ type IMProduct struct {
 }
 
 // imProductsEnvelope wraps both product tools. nextOffset arrives as a STRING
-// ("1"); json.Number tolerates either.
+// ("1"); json.Number tolerates either. Swiggy nests the payload under
+// {"success":true,"data":{...}} (observed live 2026-07-18); older/other shapes
+// were flat, so both the nested Data and the flat top-level fields are decoded
+// and products() prefers whichever is populated.
 type imProductsEnvelope struct {
+	NextOffset json.Number     `json:"nextOffset"`
+	Products   []IMProduct     `json:"products"`
+	Data       *imProductsData `json:"data"`
+}
+
+type imProductsData struct {
 	NextOffset json.Number `json:"nextOffset"`
 	Products   []IMProduct `json:"products"`
+}
+
+// products returns the product list from whichever shape the server sent —
+// the nested data wrapper takes precedence, falling back to the flat top level.
+func (e imProductsEnvelope) products() []IMProduct {
+	if e.Data != nil && len(e.Data.Products) > 0 {
+		return e.Data.Products
+	}
+	return e.Products
 }
 
 // SearchIMProducts searches the Instamart catalog at an address.
@@ -62,7 +80,7 @@ func (c *Client) SearchIMProducts(ctx context.Context, addressID, query string, 
 	env, err := decodeResult[imProductsEnvelope](c.CallTool(ctx, "search_products", map[string]any{
 		"addressId": addressID, "query": query, "offset": offset,
 	}))
-	return env.Products, err
+	return env.products(), err
 }
 
 // IMGoToItems returns the account's "Your Go To Items" (frequent buys) for an
@@ -77,7 +95,7 @@ func (c *Client) IMGoToItems(ctx context.Context, addressID string) ([]IMProduct
 	if err != nil && strings.Contains(err.Error(), "Your Go To Items") {
 		return nil, nil
 	}
-	return env.Products, err
+	return env.products(), err
 }
 
 // IMCartItem is the SENT shape for update_cart items (which REPLACES the whole
@@ -614,9 +632,16 @@ func (c *Client) TrackIMOrder(ctx context.Context, orderID string, lat, lng floa
 	}
 	var t imTrackRaw
 	if uerr := json.Unmarshal(raw, &t); uerr != nil || t.Status.StatusMessage == "" {
-		// Unrecognized payload — treat it as human-readable status text rather
-		// than failing the poll (the raw is already debug-logged for harvesting).
 		txt := strings.TrimSpace(strings.Trim(string(raw), `"`))
+		// A drifted STRUCTURED payload (a JSON object/array we couldn't map, or
+		// an empty status) is NOT a definitive tracking state — Known:false,
+		// Active:false, so a terminal order can't show "live" forever just
+		// because its shape changed (mirrors Food's parseTrackText discipline;
+		// the raw is debug-logged for harvesting). Only genuine human-readable
+		// status TEXT is trusted as a live status.
+		if txt == "" || strings.HasPrefix(txt, "{") || strings.HasPrefix(txt, "[") {
+			return Tracking{OrderID: orderID, Status: txt, Active: false, Known: false}, nil
+		}
 		return Tracking{OrderID: orderID, Status: txt, Active: !imDelivered(txt), Known: true}, nil
 	}
 	return Tracking{

@@ -18,6 +18,15 @@ type Backend interface {
 	UpdateCart(addressID, restaurantID, restaurantName string, items []api.CartItem) (api.Cart, error)
 	GetCart(addressID, restaurantName string) (api.Cart, error)
 	PlaceOrder(addressID string) (api.Order, error)
+
+	// UPI-first food placement, mirroring the TUI/MCP flow: PlaceUPI starts an
+	// online order and returns the pending payment to poll + confirm; hasQR ==
+	// false means the account has no scan-to-pay method and the caller falls
+	// back to PlaceOrder (COD). Signatures mirror datasource.Backend exactly so
+	// datasource.BrokerBackend structurally satisfies this interface too.
+	PlaceUPI(addressID string) (api.PendingPayment, bool, error)
+	PollPayment(p api.PendingPayment) (api.PaymentStatus, error)
+	ConfirmOrder(p api.PendingPayment) (api.Order, error)
 	ActiveOrders(addressID string) ([]api.Order, error)
 	TrackOrder(orderID string) (api.Tracking, error)
 	Logout() error

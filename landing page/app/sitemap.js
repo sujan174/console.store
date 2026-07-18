@@ -11,6 +11,11 @@ export default function sitemap() {
       url: SITE + "/how-to",
       changeFrequency: "monthly",
       priority: 0.8
+    },
+    {
+      url: SITE + "/features",
+      changeFrequency: "monthly",
+      priority: 0.7
     }
   ];
 }

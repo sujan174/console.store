@@ -39,5 +39,5 @@ func SetLastSeenVersion(v string) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(p, []byte(v), 0o600)
+	return writeFileAtomic(p, []byte(v), 0o600)
 }

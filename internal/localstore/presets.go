@@ -107,7 +107,7 @@ func SavePresets(ps Presets) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, raw, 0o600)
+	return writeFileAtomic(p, raw, 0o600)
 }
 
 // ByName returns all presets with the given name (case-insensitive), in order.

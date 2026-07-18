@@ -251,17 +251,6 @@ func LoadAddresses(b Backend, snap *swiggysnap.Snapshot) tea.Cmd {
 	}
 }
 
-func LoadPlaces(b Backend, snap *swiggysnap.Snapshot, addressID string, section catalog.Section) tea.Cmd {
-	return func() tea.Msg {
-		got, err := b.Places(addressID, section)
-		if err != nil {
-			return PlacesLoadedMsg{Section: section, Err: err}
-		}
-		snap.SetPlaces(addressID, string(section), toPlaces(got, section))
-		return PlacesLoadedMsg{Section: section}
-	}
-}
-
 // LoadPlacesQuery runs a free/chip restaurant search and caches it under the
 // query key.
 func LoadPlacesQuery(b Backend, snap *swiggysnap.Snapshot, addressID, query string) tea.Cmd {
@@ -414,7 +403,7 @@ func ClearCartCmd(b Backend) tea.Cmd {
 // PlaceOrderCmd submits the order through the broker. The TUI must have already
 // synced the cart via SyncCart before calling this. On success the broker returns
 // the placed order; on failure the TUI shows the error and stays on scrCheckout.
-func PlaceOrderCmd(b Backend, snap *swiggysnap.Snapshot, addressID string) tea.Cmd {
+func PlaceOrderCmd(b Backend, addressID string) tea.Cmd {
 	return func() tea.Msg {
 		order, err := b.PlaceOrder(addressID)
 		return OrderPlacedMsg{Order: order, Err: err}
@@ -445,22 +434,6 @@ func PollPaymentCmd(b Backend, p api.PendingPayment, token int) tea.Cmd {
 func ConfirmOrderCmd(b Backend, p api.PendingPayment) tea.Cmd {
 	return func() tea.Msg {
 		order, err := b.ConfirmOrder(p)
-		return OrderPlacedMsg{Order: order, Err: err}
-	}
-}
-
-// PaymentOptionsCmd fetches the cart's available payment methods for the picker.
-func PaymentOptionsCmd(b Backend, addressID string) tea.Cmd {
-	return func() tea.Msg {
-		opts, err := b.PaymentOptions(addressID)
-		return PaymentOptionsMsg{Options: opts, Err: err}
-	}
-}
-
-// PlaceCODCmd places a cash-on-delivery order (reuses OrderPlacedMsg → tracking).
-func PlaceCODCmd(b Backend, addressID string) tea.Cmd {
-	return func() tea.Msg {
-		order, err := b.PlaceCOD(addressID)
 		return OrderPlacedMsg{Order: order, Err: err}
 	}
 }

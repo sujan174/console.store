@@ -23,6 +23,20 @@ type fakeBackend struct {
 	placeN    int
 	logoutN   int
 
+	// UPI-path fakes. Default (zero-value) hasQR==false routes placeFood to
+	// the PlaceOrder COD fallback, so pre-UPI tests keep their behavior.
+	pending    api.PendingPayment
+	hasQR      bool
+	upiErr     error
+	payStatus  api.PaymentStatus
+	pollErr    error
+	onPoll     func() // called on every PollPayment (e.g. to cancel the ctx mid-wait)
+	confirmed  api.Order
+	confirmErr error
+	upiN       int
+	pollN      int
+	confirmN   int
+
 	// Instamart fakes.
 	imCart       api.IMCart
 	imPlaced     api.Order
@@ -53,8 +67,23 @@ func (f *fakeBackend) UpdateCart(_, _, _ string, _ []api.CartItem) (api.Cart, er
 func (f *fakeBackend) GetCart(_, _ string) (api.Cart, error)    { return f.cart, f.getErr }
 func (f *fakeBackend) PlaceOrder(string) (api.Order, error)     { f.placeN++; return f.placed, f.placeErr }
 func (f *fakeBackend) ActiveOrders(string) ([]api.Order, error) { return f.active, f.activeErr }
-func (f *fakeBackend) TrackOrder(string) (api.Tracking, error)  { return f.tracking, nil }
-func (f *fakeBackend) Logout() error                            { f.logoutN++; return f.logoutErr }
+func (f *fakeBackend) PlaceUPI(string) (api.PendingPayment, bool, error) {
+	f.upiN++
+	return f.pending, f.hasQR, f.upiErr
+}
+func (f *fakeBackend) PollPayment(api.PendingPayment) (api.PaymentStatus, error) {
+	f.pollN++
+	if f.onPoll != nil {
+		f.onPoll()
+	}
+	return f.payStatus, f.pollErr
+}
+func (f *fakeBackend) ConfirmOrder(api.PendingPayment) (api.Order, error) {
+	f.confirmN++
+	return f.confirmed, f.confirmErr
+}
+func (f *fakeBackend) TrackOrder(string) (api.Tracking, error) { return f.tracking, nil }
+func (f *fakeBackend) Logout() error                           { f.logoutN++; return f.logoutErr }
 
 func (f *fakeBackend) IMUpdateCart(addressID string, items []api.IMCartItem) (api.IMCart, error) {
 	f.imUpdateAddr = addressID

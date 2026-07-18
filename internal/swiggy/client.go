@@ -146,6 +146,41 @@ func WithWriteLimit(burst int, refill time.Duration) Option {
 	}
 }
 
+// Limiter bundles the read (min-interval) and write (token-bucket) throttles so
+// they can be SHARED across clients — e.g. one account's Food and Instamart
+// clients rate-limit against a single ceiling instead of each getting its own,
+// which would let concurrent cross-vertical bursts hit ~2× the intended rate.
+type Limiter struct {
+	read  *rateLimiter
+	write *writeLimiter
+}
+
+// NewLimiter builds a shared Limiter. Zero/negative components disable that
+// throttle (matching WithMinInterval / WithWriteLimit semantics).
+func NewLimiter(interval time.Duration, writeBurst int, writeInterval time.Duration) *Limiter {
+	l := &Limiter{}
+	if interval > 0 {
+		l.read = newRateLimiter(interval)
+	}
+	if writeBurst > 0 && writeInterval > 0 {
+		l.write = newWriteLimiter(writeBurst, writeInterval)
+	}
+	return l
+}
+
+// WithLimiter installs a shared Limiter (both read + write throttles) on the
+// client. Use instead of WithMinInterval + WithWriteLimit when several clients
+// must share one rate ceiling. A nil Limiter is a no-op.
+func WithLimiter(l *Limiter) Option {
+	return func(c *Client) {
+		if l == nil {
+			return
+		}
+		c.limiter = l.read
+		c.writeLimiter = l.write
+	}
+}
+
 // writeTools are the bursty cart-mutation tools the writeLimiter throttles. Order
 // placement (place_food_order/checkout) is deliberately EXCLUDED — it's a one-off
 // the user is waiting on, never a burst, and must never be delayed.
@@ -158,10 +193,15 @@ var writeTools = map[string]bool{
 // actually succeeded server-side, so a retry risks a duplicate side effect. Cart
 // writes (update_food_cart) are safe: they SET the cart to a value, so a repeat
 // is idempotent. Reads are always safe. Order placement is dangerous:
-// place_food_order (Food) and checkout (Instamart) both create a real order.
+// place_food_order (Food) and checkout (Instamart) both create a real order, and
+// confirm_order finalizes an already-paid UPI order for either vertical — its
+// success-response shape is unverified, so a blind re-send is exactly the
+// ambiguity this invariant exists to guard against. Callers verify via
+// list_active_orders before any manual retry.
 var nonIdempotentTools = map[string]bool{
 	"place_food_order": true,
 	"checkout":         true,
+	"confirm_order":    true,
 }
 
 func retryableTool(name string) bool { return !nonIdempotentTools[name] }

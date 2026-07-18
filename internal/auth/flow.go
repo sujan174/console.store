@@ -26,10 +26,18 @@ type Config struct {
 	Now         func() time.Time
 }
 
+// stateTTL bounds how long an unclaimed CSRF state stays valid. The authorize
+// round-trip is interactive (open browser → sign in → redirect) but bounded;
+// 15 minutes is generous. It makes the "expired" wording in the callback error
+// real and stops the pendingByState map from growing unbounded when a user
+// opens the authorize URL and never completes it.
+const stateTTL = 15 * time.Minute
+
 type pending struct {
-	flowID   string
-	verifier string
-	pubkey   string
+	flowID    string
+	verifier  string
+	pubkey    string
+	createdAt time.Time
 }
 
 type Manager struct {
@@ -70,8 +78,16 @@ func (m *Manager) Start(pubkey string) (Pending, error) {
 		"code_challenge_method": {"S256"},
 	}.Encode()
 
+	now := m.cfg.Now()
 	m.mu.Lock()
-	m.pendingByState[state] = &pending{flowID: flowID, verifier: verifier, pubkey: pubkey}
+	// Sweep states that were opened but never completed (or expired) so the map
+	// can't grow without bound over a long-lived process.
+	for k, p := range m.pendingByState {
+		if now.Sub(p.createdAt) > stateTTL {
+			delete(m.pendingByState, k)
+		}
+	}
+	m.pendingByState[state] = &pending{flowID: flowID, verifier: verifier, pubkey: pubkey, createdAt: now}
 	m.mu.Unlock()
 	return Pending{FlowID: flowID, AuthorizeURL: authURL}, nil
 }
@@ -89,6 +105,11 @@ func (m *Manager) HandleCallback(ctx context.Context, state, code string) error 
 	m.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("auth: unknown, expired, or already-used state (CSRF check failed)")
+	}
+	if m.cfg.Now().Sub(p.createdAt) > stateTTL {
+		// The authorize link was opened too long ago — treat as expired so a
+		// stale, possibly-leaked state can't be redeemed.
+		return fmt.Errorf("auth: the authorization link expired — start again")
 	}
 
 	tok, err := Exchange(ctx, m.cfg.HTTPClient, m.cfg.Metadata.TokenEndpoint,
@@ -137,7 +158,10 @@ func (m *Manager) CallbackHandler() http.HandlerFunc {
 			// callback hit a DIFFERENT consolestore process than the one that
 			// opened the link — i.e. a second instance is holding this port.
 			log.Printf("auth: callback rejected: %v", err)
-			http.Error(w, "authorization failed: "+err.Error()+
+			// Show a GENERIC message in the browser — the full reason (which may
+			// echo the upstream token-endpoint's error body) goes only to the
+			// log/terminal, not the rendered page.
+			http.Error(w, "authorization failed — see your terminal for details."+
 				"\n\nIf another consolestore is running, close it (it's holding this port) and try again.",
 				http.StatusBadRequest)
 			return

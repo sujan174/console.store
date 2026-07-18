@@ -851,6 +851,12 @@ function payingView(cart: CartState): string {
   const qr = pay.qr_svg
     ? `<div style="background:#fff;border-radius:12px;padding:12px;width:220px;max-width:70%;margin:12px auto 0;line-height:0">${pay.qr_svg}</div>`
     : "";
+  // Always offer the hosted pay page when we have a pay_url — it's the ONLY way
+  // to pay if the QR failed to encode (qr_svg empty), and a convenience
+  // otherwise (matches the Instamart paying view, which always shows it).
+  const openLink = pay.pay_url
+    ? `<a href="${esc(pay.pay_url)}" target="_blank" rel="noopener" class="btn btn-block" style="margin-top:14px">open payment page</a>`
+    : "";
 
   return (
     `<h2 class="sr-only">Scan the QR to pay by UPI; the order finalizes once you pay.</h2>` +
@@ -860,7 +866,8 @@ function payingView(cart: CartState): string {
         qr +
         `<div style="font-size:12px;color:var(--text-secondary);text-align:center;margin-top:10px">scan with any UPI app · GPay · PhonePe · Paytm</div>` +
         `<div style="display:flex;gap:8px;align-items:center;justify-content:center;font-size:13px;color:var(--text-muted);margin-top:12px">${icon("loader", 14)} waiting for payment…</div>` +
-        `<button type="button" data-cart-back class="btn btn-block" style="margin-top:14px">cancel</button>`,
+        openLink +
+        `<button type="button" data-cart-back class="btn btn-block" style="margin-top:${openLink ? "8px" : "14px"}">cancel</button>`,
     )
   );
 }

@@ -20,7 +20,7 @@ func Dispatch(args []string, out io.Writer) int {
 	}
 	switch sub {
 	case "", "install", "setup":
-		if err := Install(out); err != nil {
+		if _, err := Install(out); err != nil {
 			fmt.Fprintf(out, "agents: %v\n", err)
 			return 1
 		}

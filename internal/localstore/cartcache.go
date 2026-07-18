@@ -62,7 +62,7 @@ func SaveCartCache(c CartCache) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, raw, 0o600)
+	return writeFileAtomic(p, raw, 0o600)
 }
 
 func LoadCartCache() (CartCache, bool, error) {

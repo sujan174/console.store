@@ -25,6 +25,10 @@ type storeTokenSource struct {
 	accountID string
 	now       func() time.Time
 	mu        sync.Mutex // serializes refresh so concurrent calls mint once
+	// NOTE: one instance is shared by an account's Food AND Instamart clients
+	// (see Service.accountTokenSource), so this lock serializes refreshes across
+	// BOTH verticals — two clients near expiry can't each POST the same refresh
+	// token and trip rotated-token reuse detection.
 }
 
 func newStoreTokenSource(store TokenStore, refresher Refresher, accountID string) *storeTokenSource {

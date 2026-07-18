@@ -105,7 +105,7 @@ func SaveTaste(t Taste) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, raw, 0o600)
+	return writeFileAtomic(p, raw, 0o600)
 }
 
 // Find looks up the entry for (restID, itemName), if any.

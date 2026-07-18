@@ -91,6 +91,29 @@ func TestConfirmedShowsCupAndOrderId(t *testing.T) {
 	}
 }
 
+// The speed receipt shows REAL measured values when provided, and is OMITTED
+// entirely when unmeasured — never a fabricated placeholder (audit #2).
+func TestSpeedReceiptShownOnlyWhenMeasured(t *testing.T) {
+	base := screens.NewCheckout("Blue Tokai", catalog.Address{Line: "HSR"}, []screens.CartLine{{Item: catalog.Item{Name: "X", Price: 149}, Qty: 1}}, "~40 min").Placed("#SW1A2B", "~40 min")
+
+	// Unmeasured: no receipt.
+	if v := base.View(0); strings.Contains(v, "ordered in") {
+		t.Errorf("unmeasured order must NOT show a speed receipt:\n%s", v)
+	}
+
+	// Measured: shows the real elapsed + keystrokes.
+	measured := base.WithSpeedStats(3.4, 7, 3.4).View(0)
+	for _, want := range []string{"ordered in 3.4s", "7 keystrokes", "session best 3.4s"} {
+		if !strings.Contains(measured, want) {
+			t.Errorf("measured receipt missing %q:\n%s", want, measured)
+		}
+	}
+	// The old fabricated placeholder must never appear.
+	if strings.Contains(measured, "2.1s") {
+		t.Errorf("stale placeholder 2.1s leaked into the receipt:\n%s", measured)
+	}
+}
+
 func TestCheckoutWithPlacingChangesCTA(t *testing.T) {
 	addr := catalog.Address{ID: "a1", Label: "home", Line: "HSR Layout"}
 	lines := []screens.CartLine{{Item: catalog.Item{ID: "i1", Name: "Cold Coffee", Price: 220}, Qty: 1}}

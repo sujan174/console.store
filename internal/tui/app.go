@@ -80,13 +80,13 @@ const (
 	scrSplash screen = iota
 	scrMenu
 	scrRestaurant
-	scrCart
-	scrAddress
+	scrCart    // DEAD: the cart is merged into scrCheckout; never navigated to. Kept so the iota values below don't shift.
+	scrAddress // DEAD: never navigated to in production (a leftover of the cut address screen). Kept for the same reason; has a stale screenLabel() case.
 	scrCheckout
 	scrConfirm
 	scrTracking
 	scrInstamart
-	scrImCart
+	scrImCart  // navigated to only on the mock (non-live) path; dead for live sessions.
 	scrWelcome // first-run onboarding: food animation + intro card (appended last so no other iota shifts)
 )
 
@@ -343,6 +343,13 @@ type Model struct {
 	seeded       bool       // true when catalog/swiggy.Snapshot was pre-seeded from config; skips live init loads
 
 	placingOrder bool // true while PlaceOrderCmd is in-flight; blocks double-fire
+	// Speed-receipt measurement (the post-order "ordered in Ns · K keystrokes"
+	// flex). orderStart is set on the first add to an empty cart and cleared on
+	// placement; orderKeys counts key presses over that span; sessionBestSecs is
+	// the fastest completed order this process. All real — no placeholders.
+	orderStart      time.Time
+	orderKeys       int
+	sessionBestSecs float64
 	// UPI payment sub-state on the food checkout. When Swiggy has disabled Cash,
 	// place returns a PENDING_PAYMENT order + a UPI intent; the user scans the QR,
 	// we poll for payment, then confirm. paymentStage drives the checkout render;
@@ -1365,6 +1372,17 @@ func (m Model) clearPlacedCarts() Model {
 	m.lines = nil
 	m.cartRestaurant = ""
 	m.cartSection = ""
+	// Reset the food live bill, sold-out flags, and the confirmed baseline too —
+	// not just the lines — so no stale food cart state survives (matches the IM
+	// reset below and keeps the "both verticals reset defensively" contract real).
+	m.liveCart = api.Cart{}
+	m.unavailableItems = nil
+	m.confirmedLines = nil
+	m.confirmedRestaurant = ""
+	m.confirmedSection = ""
+	m.confirmedForeign = false
+	m.cartConfirmed = false
+	m.cartForeign = false
 	m.imLines = nil
 	m.imLiveCart = api.IMCart{}
 	m.imCartPulled = false
@@ -1862,8 +1880,45 @@ func (m Model) commitAdd(item catalog.Item, addons []catalog.AddOn, sels []catal
 		m.cartRestaurant = rest
 		m.cartSection = section
 		m.cartForeign = false // a real in-app add now owns the cart
+		m = m.startOrderTimer()
 	}
 	return m
+}
+
+// startOrderTimer begins the speed-receipt measurement on the first add to an
+// empty cart (either vertical). It anchors the elapsed clock and zeroes the
+// keystroke count; no-op if a measurement is already running.
+func (m Model) startOrderTimer() Model {
+	if m.orderStart.IsZero() {
+		m.orderStart = time.Now()
+		m.orderKeys = 0
+	}
+	return m
+}
+
+// orderSpeedStats returns the measured (elapsed seconds, keystrokes) for the
+// in-progress order, or (0,0) when nothing was measured (e.g. a resumed/foreign
+// cart placed without a fresh in-app add). recordOrderSpeed folds a completed
+// order's time into the session best and returns (secs, keys, best).
+func (m Model) orderSpeedStats() (float64, int) {
+	if m.orderStart.IsZero() {
+		return 0, 0
+	}
+	return time.Since(m.orderStart).Seconds(), m.orderKeys
+}
+
+// recordOrderSpeed finalizes the current order's measurement: it returns the
+// elapsed seconds, keystrokes, and the resulting session-best, and updates the
+// stored best. Returns zeros when nothing was measured.
+func (m *Model) recordOrderSpeed() (secs float64, keys int, best float64) {
+	secs, keys = m.orderSpeedStats()
+	if secs <= 0 || keys <= 0 {
+		return 0, 0, 0
+	}
+	if m.sessionBestSecs <= 0 || secs < m.sessionBestSecs {
+		m.sessionBestSecs = secs
+	}
+	return secs, keys, m.sessionBestSecs
 }
 
 // imCommitAdd adds an Instamart product (with its chosen pack-size variant, if
@@ -1879,12 +1934,34 @@ func (m Model) imCommitAdd(item catalog.Item, sels []catalog.Selection, price in
 			item.SwiggyID = s.ChoiceID
 			item.SkuID = s.SkuID
 			if s.Name != "" {
-				item.Name = item.Name + " (" + s.Name + ")"
+				// Re-picking a variant on an already-suffixed line must REPLACE the
+				// old " (pack size)" suffix, not stack a second one ("Coke (250 ml)
+				// (1 L)"). Strip a single trailing parenthetical before appending.
+				item.Name = stripTrailingParen(item.Name) + " (" + s.Name + ")"
 			}
 		}
 	}
+	wasEmpty := len(m.imLines) == 0
 	m.imLines = appendOrInc(m.imLines, item, nil, sels, price)
+	if wasEmpty {
+		m = m.startOrderTimer()
+	}
 	return m
+}
+
+// stripTrailingParen removes a single trailing " (...)" group from a display
+// name (the synthesized pack-size suffix). Balanced-paren aware so a name with
+// no trailing group is returned unchanged.
+func stripTrailingParen(name string) string {
+	s := strings.TrimRight(name, " ")
+	if !strings.HasSuffix(s, ")") {
+		return name
+	}
+	i := strings.LastIndex(s, " (")
+	if i < 0 {
+		return name
+	}
+	return s[:i]
 }
 
 // addonsFromSelections returns the non-variant selections as flat AddOns for the
@@ -1923,6 +2000,7 @@ func (m Model) commitAddNoSync(item catalog.Item, addons []catalog.AddOn, sels [
 		m.cartRestaurant = rest
 		m.cartSection = section
 		m.cartForeign = false // a real in-app add now owns the cart
+		m = m.startOrderTimer()
 	}
 	return m
 }
@@ -2591,6 +2669,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
+	// Count keystrokes for the speed receipt while an order is being built (from
+	// the first add until placement). Every key the user presses over that span
+	// counts toward the "K keystrokes" flex — real, not a placeholder.
+	if _, isKey := msg.(tea.KeyMsg); isKey && !m.orderStart.IsZero() {
+		m.orderKeys++
 	}
 	switch dm := msg.(type) {
 	case browserOpenedMsg:
@@ -3351,7 +3435,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !dm.UPI {
 			// Cash-only user (no UPI method) — fall back to the legacy Cash place.
 			// placingOrder stays true; OrderPlacedMsg resolves it.
-			return m, datasource.PlaceOrderCmd(m.backend, m.snap, m.addr.ID)
+			return m, datasource.PlaceOrderCmd(m.backend, m.addr.ID)
 		}
 		// Online order placed as PENDING_PAYMENT — show the QR and start polling.
 		m.placingOrder = false
@@ -3452,11 +3536,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if eta == "" {
 			eta = "~40 min"
 		}
-		m.checkout = m.checkout.Placed(dm.Order.ID, eta)
+		secs, keys, best := m.recordOrderSpeed()
+		m.orderStart = time.Time{} // measurement consumed
+		m.checkout = m.checkout.Placed(dm.Order.ID, eta).WithSpeedStats(secs, keys, best)
 		m.screen = scrConfirm
 		m.lines = nil
 		m.cartRestaurant = ""
 		m.cartSection = ""
+		// Fully reset the food cart state, mirroring the Instamart path: clear the
+		// live bill and any sold-out flags, and re-baseline the confirmed cart to
+		// EMPTY. Without this the cart chip keeps showing the just-placed order's
+		// count/total, and a later failed sync on a NEW restaurant would
+		// rollbackCart() to resurrect the delivered order's lines.
+		m.liveCart = api.Cart{}
+		m.unavailableItems = nil
+		m = m.commitCartConfirmed()
 		// Persist the active order for crash-resume + splash liveness.
 		etaLo, etaHi := localstore.ParseETAMinutes(eta)
 		placedAt := time.Now().Unix()
@@ -3629,7 +3723,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if eta == "" {
 			eta = "10-20 mins"
 		}
-		m.checkout = m.checkout.Placed(dm.Order.ID, eta)
+		secs, keys, best := m.recordOrderSpeed()
+		m.orderStart = time.Time{} // measurement consumed
+		m.checkout = m.checkout.Placed(dm.Order.ID, eta).WithSpeedStats(secs, keys, best)
 		m.screen = scrConfirm
 		// Capture the total before the cart is cleared (Order.Total may be unset
 		// on some responses — the last synced IMCart is the fallback source).
@@ -3837,7 +3933,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// page in the browser — same idiom as the sign-in button. Only for a real
 		// http(s) page; a bare upi:// has no browser target (the QR is that path),
 		// so we don't fire an OS "no handler" popup for it. On demand, never auto.
-		if m.screen == scrCheckout && m.paymentStage == payWaiting &&
+		// Gate on !helpOpen so that with the help modal up, Enter closes help
+		// (handled just below) instead of opening the browser behind it.
+		if !m.helpOpen && m.screen == scrCheckout && m.paymentStage == payWaiting &&
 			(k.String() == "enter" || k.String() == "o") {
 			if link := payLinkFor(m.pending); strings.HasPrefix(link, "http") {
 				return m, openBrowserCmd(link)
@@ -4037,7 +4135,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.imCartPulled = false                // address changed — Instamart cart binds to address, re-pull next entry
 					m.imLoadedQueries = map[string]bool{} // dedupe is per-address: the snapshot is keyed addr+query
-					m.imStoreClosedAddr = ""              // closed status is per-address; a new address may be open
+					m.loadedQueries = map[string]bool{}   // food dedupe is per-address too (snapshot keyed addr+query)
+					m.seededQueries = map[string]bool{}
+					m.imStoreClosedAddr = "" // closed status is per-address; a new address may be open
 					m.screen = scrMenu
 					m.railActive = screens.RailHome
 					m.railFocus = true
@@ -4074,7 +4174,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.homePending = false
 					m.imCartPulled = false                // Instamart cart binds to address, re-pull next entry
 					m.imLoadedQueries = map[string]bool{} // dedupe is per-address: the snapshot is keyed addr+query
-					m.imStoreClosedAddr = ""              // closed status is per-address; a new address may be open
+					m.loadedQueries = map[string]bool{}   // food dedupe is per-address too (snapshot keyed addr+query)
+					m.seededQueries = map[string]bool{}
+					m.imStoreClosedAddr = "" // closed status is per-address; a new address may be open
 					if m.screen == scrInstamart {
 						// Switched from inside Instamart — stay there: refetch the go-to
 						// list + re-pull the cart for the new address.
@@ -5448,7 +5550,7 @@ func (m Model) screenKeybinds() string {
 		return "↑↓ pick · + − qty · ⌫ remove · ↵ place · : cmd · ? help"
 	case scrInstamart:
 		if m.imSearchMode {
-			return "↑↓ move · ↵ open · esc usuals · : cmd"
+			return "↑↓ move · ↵ open · esc categories · : cmd"
 		}
 		if m.imRailFocus {
 			return "↑↓ move · ↵ open · / search · : cmd · ? help"
@@ -5760,7 +5862,11 @@ func trackingGameRows(m Model) (rows int, shown bool) {
 	content, _ := splitHint(track)
 	contentLines := strings.Count(content, "\n") + 1
 	const footerReserve = 3
-	rows = m.h - contentLines - footerReserve
+	// View() always prepends the 2-row BrandBanner (screens.BrandHeaderLines) —
+	// account for it here like every other body-sizing site, or the game panel
+	// overshoots the viewport by 2 rows and scrolls the brand banner / header off
+	// the top of the alt-screen.
+	rows = m.h - contentLines - footerReserve - screens.BrandHeaderLines
 	shown = rows >= 6
 	return rows, shown
 }

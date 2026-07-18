@@ -60,13 +60,50 @@ type Service struct {
 	// Food and Instamart are separate MCP endpoints sharing one OAuth token.
 	food map[string]*swiggy.Client
 	im   map[string]*swiggy.Client
+	// One shared TokenSource per account, used by BOTH the food and IM clients:
+	// its refresh lock serializes cross-vertical refreshes so two clients near
+	// expiry can't each POST the same refresh token (a rotated-token reuse a
+	// strict OAuth AS may treat as a replay and revoke).
+	tokenSrc map[string]*storeTokenSource
+	// One shared rate limiter per account across BOTH verticals, so concurrent
+	// food+IM bursts stay under Swiggy's per-account ceiling (relevant given the
+	// 403 anomaly-detection history) instead of each vertical getting its own.
+	limiter map[string]*swiggy.Limiter
 }
 
 func NewService(cfg Config) *Service {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = http.DefaultClient
 	}
-	return &Service{cfg: cfg, food: map[string]*swiggy.Client{}, im: map[string]*swiggy.Client{}}
+	return &Service{
+		cfg:      cfg,
+		food:     map[string]*swiggy.Client{},
+		im:       map[string]*swiggy.Client{},
+		tokenSrc: map[string]*storeTokenSource{},
+		limiter:  map[string]*swiggy.Limiter{},
+	}
+}
+
+// accountTokenSource returns the single shared token source for accountID,
+// creating it on first use. Caller holds s.mu.
+func (s *Service) accountTokenSource(accountID string) *storeTokenSource {
+	if ts, ok := s.tokenSrc[accountID]; ok {
+		return ts
+	}
+	ts := newStoreTokenSource(s.cfg.Store, s.cfg.Refresher, accountID)
+	s.tokenSrc[accountID] = ts
+	return ts
+}
+
+// accountLimiter returns the single shared rate limiter for accountID, creating
+// it on first use. Caller holds s.mu.
+func (s *Service) accountLimiter(accountID string) *swiggy.Limiter {
+	if l, ok := s.limiter[accountID]; ok {
+		return l
+	}
+	l := swiggy.NewLimiter(s.cfg.MinInterval, s.cfg.WriteBurst, s.cfg.WriteInterval)
+	s.limiter[accountID] = l
+	return l
 }
 
 // AuthState is the outcome of EnsureAuth's startup token check.
@@ -120,10 +157,9 @@ func (s *Service) foodClient(accountID string) *swiggy.Client {
 		return c
 	}
 	c := swiggy.NewClient(s.cfg.FoodBaseURL,
-		newStoreTokenSource(s.cfg.Store, s.cfg.Refresher, accountID),
+		s.accountTokenSource(accountID),
 		swiggy.WithHTTPClient(s.cfg.HTTPClient),
-		swiggy.WithMinInterval(s.cfg.MinInterval),
-		swiggy.WithWriteLimit(s.cfg.WriteBurst, s.cfg.WriteInterval))
+		swiggy.WithLimiter(s.accountLimiter(accountID)))
 	s.food[accountID] = c
 	return c
 }
@@ -278,10 +314,12 @@ func (s *Service) GetCart(ctx context.Context, accountID, addressID, restaurantN
 }
 
 // shouldPingOrder reports whether a placement is a real, successful order worth
-// counting. The disarmed no-op returns an error (ErrOrdersDisabled), so gating
-// on err==nil && ID!="" excludes both failures and disarmed builds.
-func shouldPingOrder(o api.Order, err error) bool {
-	return err == nil && o.ID != ""
+// counting. Every caller already returns early on a placement error and only
+// reaches here with err==nil, so the check is purely "did a real order id come
+// back" — a non-empty ID. (The disarmed no-op returns ErrOrdersDisabled and so
+// never reaches this call at all.)
+func shouldPingOrder(o api.Order) bool {
+	return o.ID != ""
 }
 
 func (s *Service) PlaceOrder(ctx context.Context, accountID, addressID string) (api.Order, error) {
@@ -290,7 +328,7 @@ func (s *Service) PlaceOrder(ctx context.Context, accountID, addressID string) (
 		return api.Order{}, err
 	}
 	mapped := mapOrder(o)
-	if shouldPingOrder(mapped, nil) {
+	if shouldPingOrder(mapped) {
 		telemetry.OrderPlaced() // anonymous count; fire-and-forget, gated
 	}
 	return mapped, nil
@@ -338,7 +376,7 @@ func (s *Service) PlaceOrderCOD(ctx context.Context, accountID, addressID string
 		return api.Order{}, err
 	}
 	mapped := mapOrder(o)
-	if shouldPingOrder(mapped, nil) {
+	if shouldPingOrder(mapped) {
 		telemetry.OrderPlaced()
 	}
 	return mapped, nil
@@ -358,7 +396,7 @@ func (s *Service) ConfirmOrder(ctx context.Context, accountID string, p api.Pend
 		return api.Order{}, err
 	}
 	mapped := mapOrder(o)
-	if shouldPingOrder(mapped, nil) {
+	if shouldPingOrder(mapped) {
 		telemetry.OrderPlaced()
 	}
 	return mapped, nil
@@ -401,10 +439,13 @@ func (s *Service) CaptureTracking(ctx context.Context, accountID, addressID, ord
 }
 
 func (s *Service) Logout(ctx context.Context, accountID string) error {
-	// drop the cached clients (and their token sources) then purge the token.
+	// drop the cached clients, the shared token source, and the shared limiter
+	// so a fresh sign-in rebuilds clean state, then purge the token.
 	s.mu.Lock()
 	delete(s.food, accountID)
 	delete(s.im, accountID)
+	delete(s.tokenSrc, accountID)
+	delete(s.limiter, accountID)
 	s.mu.Unlock()
 	return s.cfg.Store.PurgeToken(ctx, accountID)
 }
@@ -430,10 +471,9 @@ func (s *Service) imClient(accountID string) *swiggy.Client {
 		return c
 	}
 	c := swiggy.NewClient(s.cfg.ImBaseURL,
-		newStoreTokenSource(s.cfg.Store, s.cfg.Refresher, accountID),
+		s.accountTokenSource(accountID),
 		swiggy.WithHTTPClient(s.cfg.HTTPClient),
-		swiggy.WithMinInterval(s.cfg.MinInterval),
-		swiggy.WithWriteLimit(s.cfg.WriteBurst, s.cfg.WriteInterval))
+		swiggy.WithLimiter(s.accountLimiter(accountID)))
 	s.im[accountID] = c
 	return c
 }
@@ -490,7 +530,7 @@ func (s *Service) IMPlaceOrder(ctx context.Context, accountID, addressID string)
 	if mapped.Restaurant == "" {
 		mapped.Restaurant = "Instamart"
 	}
-	if shouldPingOrder(mapped, nil) {
+	if shouldPingOrder(mapped) {
 		telemetry.OrderPlaced() // anonymous count; fire-and-forget, gated
 	}
 	return mapped, nil
@@ -557,7 +597,7 @@ func (s *Service) IMConfirmOrder(ctx context.Context, accountID string, p api.Pe
 	if mapped.Restaurant == "" {
 		mapped.Restaurant = "Instamart"
 	}
-	if shouldPingOrder(mapped, nil) {
+	if shouldPingOrder(mapped) {
 		telemetry.OrderPlaced() // anonymous count; fire-and-forget, gated
 	}
 	_ = s.IMClearCart(ctx, accountID) // best-effort ghost-item guard

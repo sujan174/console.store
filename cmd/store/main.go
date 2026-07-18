@@ -216,7 +216,17 @@ func bootstrap(ctx context.Context) (be *datasource.BrokerBackend, signedIn bool
 	// a flaky network never logs anyone out.
 	_, _, _, ok, kerr := ls.GetTokenFull(ctx, localstore.LocalAccountID)
 	if kerr != nil {
-		return nil, false, nil, nil, nil, "", fmt.Errorf("read keyring: %w", kerr)
+		// GetTokenFull only errors on a corrupt/truncated token blob (backend
+		// failures fall back to the file store and return ok=false, not an
+		// error). That is exactly the dead-token case the purge-and-reauth
+		// block below handles — so recover in place instead of aborting the
+		// whole binary (which took down the TUI and every subcommand). Purge
+		// the unreadable blob and start signed-out; the auth gate re-authorizes.
+		log.Printf("auth: unreadable stored token (%v) — purging and re-authorizing", kerr)
+		if perr := ls.PurgeToken(ctx, localstore.LocalAccountID); perr != nil {
+			log.Printf("auth: purge unreadable token: %v", perr)
+		}
+		ok = false
 	}
 	signedIn = ok
 	if ok {

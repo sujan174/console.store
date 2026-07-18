@@ -42,9 +42,14 @@ func (a authClient) StartAuth(accountID string) (flowID, url string, err error) 
 func resolveRegistration(ctx context.Context, httpc *http.Client, metaURL, redirect string) (localstore.Registration, error) {
 	if reg, ok, err := localstore.LoadRegistration(); err != nil {
 		return localstore.Registration{}, err
-	} else if ok {
+	} else if ok && (reg.RedirectURI == "" || reg.RedirectURI == redirect) {
+		// Cache hit whose redirect still matches (or an old cache written before
+		// the redirect was recorded — assumed to match the default). No network.
 		return reg, nil
 	}
+	// No cache, or the cached client_id was registered with a different
+	// redirect_uri than the current one — re-run DCR so the AS accepts the
+	// callback.
 	meta, err := auth.Discover(ctx, httpc, metaURL)
 	if err != nil {
 		return localstore.Registration{}, err
@@ -57,6 +62,7 @@ func resolveRegistration(ctx context.Context, httpc *http.Client, metaURL, redir
 		ClientID:              clientID,
 		AuthorizationEndpoint: meta.AuthorizationEndpoint,
 		TokenEndpoint:         meta.TokenEndpoint,
+		RedirectURI:           redirect,
 	}
 	if err := localstore.SaveRegistration(reg); err != nil {
 		return localstore.Registration{}, err

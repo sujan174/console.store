@@ -127,8 +127,8 @@ func TestCallToolNeverRetriesOrderPlacement(t *testing.T) {
 // checkout (Instamart order placement) must also never auto-retry — same
 // duplicate-order risk as place_food_order.
 func TestCallToolNeverRetriesCheckout(t *testing.T) {
-	if retryableTool("checkout") || retryableTool("place_food_order") {
-		t.Fatal("checkout and place_food_order must be non-retryable")
+	if retryableTool("checkout") || retryableTool("place_food_order") || retryableTool("confirm_order") {
+		t.Fatal("checkout, place_food_order and confirm_order must be non-retryable")
 	}
 	srv, count := rateLimitServer(t, 99) // always 429
 	c := NewClient(srv.URL, StaticToken("tok"),
@@ -137,6 +137,23 @@ func TestCallToolNeverRetriesCheckout(t *testing.T) {
 	_, _ = c.CallTool(context.Background(), "checkout", nil)
 	if got := count(); got != 1 {
 		t.Fatalf("checkout must be attempted exactly once, got %d", got)
+	}
+}
+
+// confirm_order finalizes an already-paid UPI order (both verticals) and must
+// never auto-retry either — its success shape is unverified, so a transient
+// failure may mean it already finalized (H-1, audit 2026-07-12).
+func TestCallToolNeverRetriesConfirmOrder(t *testing.T) {
+	srv, count := rateLimitServer(t, 99) // always 429
+	c := NewClient(srv.URL, StaticToken("tok"),
+		WithHTTPClient(srv.Client()),
+		WithRetry(4, time.Millisecond, func(time.Duration) {}))
+	_, err := c.CallTool(context.Background(), "confirm_order", nil)
+	if err == nil {
+		t.Fatal("expected the 429 to surface")
+	}
+	if got := count(); got != 1 {
+		t.Fatalf("confirm_order must be attempted exactly once, got %d", got)
 	}
 }
 

@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 export const GITHUB_REPO = "sujan174/console.store";
 
 export function ghAssetURL(tag, asset) {
@@ -93,6 +95,21 @@ export function pickLatestTag(tags, channel) {
 //   1. Authenticate when GITHUB_TOKEN is set (raises the limit to 5000/hour).
 //   2. Cache the list for 10 min, so even unauthenticated we make at most ~6
 //      calls/hour regardless of how many testers poll.
+// MAX_RELEASE_PAGES bounds pagination so a runaway can't loop forever. 10 pages
+// × 100 = 1000 releases, far beyond any realistic count.
+const MAX_RELEASE_PAGES = 10;
+
+// nextPageURL extracts the `rel="next"` URL from a GitHub Link header, or null
+// when there are no more pages.
+function nextPageURL(linkHeader) {
+  if (!linkHeader) return null;
+  for (const part of linkHeader.split(",")) {
+    const m = /<([^>]+)>\s*;\s*rel="next"/.exec(part);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 export async function latestTag(channel) {
   const headers = {
     Accept: "application/vnd.github+json",
@@ -100,28 +117,110 @@ export async function latestTag(channel) {
   };
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
   if (token) headers.Authorization = `Bearer ${token}`;
-  // per_page must exceed the total release count: GitHub's list order is not
-  // reliably newest-first, so a too-small window can drop a channel's latest tag
-  // and silently serve a stale version. 100 is the API max — revisit with real
-  // pagination before the repo ever holds 100+ releases.
-  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100`, {
-    headers,
-    next: { revalidate: 600 },
-  });
-  if (!res.ok) return null;
-  const releases = await res.json();
-  const tags = releases.filter((r) => !r.draft).map((r) => r.tag_name);
+  // Page through ALL releases following the Link: rel="next" header. GitHub's
+  // list order is not reliably newest-first (promotion re-tags an older commit,
+  // which sorts down by created_at), so a single 100-item page can drop a
+  // channel's true latest tag once the repo crosses 100 releases — the
+  // "stuck-on-a-stale-version" incident class. Cache each page 10 min so even
+  // unauthenticated we make few calls/hour regardless of poll volume.
+  let url = `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100`;
+  const tags = [];
+  for (let page = 0; page < MAX_RELEASE_PAGES && url; page++) {
+    const res = await fetch(url, { headers, next: { revalidate: 600 } });
+    if (!res.ok) {
+      // A later page failing shouldn't discard tags already collected; only a
+      // first-page failure yields null (no data at all).
+      if (page === 0) return null;
+      break;
+    }
+    const releases = await res.json();
+    for (const r of releases) {
+      if (!r.draft) tags.push(r.tag_name);
+    }
+    url = nextPageURL(res.headers.get("link"));
+  }
   return pickLatestTag(tags, channel);
+}
+
+// constantTimeEqual compares two strings without an early-exit timing side
+// channel. Both sides are sha256-hashed first so the buffers are always the same
+// length (timingSafeEqual throws on a length mismatch).
+function constantTimeEqual(a, b) {
+  const ha = crypto.createHash("sha256").update(String(a)).digest();
+  const hb = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
 }
 
 export function checkAlphaCode(code) {
   if (!code) return { ok: false, label: null };
   const raw = process.env.CONSOLE_ALPHA_CODES || "";
+  let matched = { ok: false, label: null };
   for (const pair of raw.split(",")) {
-    const [label, value] = pair.split(":");
-    if (value && value === code) return { ok: true, label: label || "unknown" };
+    const idx = pair.indexOf(":");
+    if (idx < 0) continue;
+    const label = pair.slice(0, idx);
+    const value = pair.slice(idx + 1);
+    // Constant-time compare, and DON'T break early — scan every configured code
+    // so the total work doesn't depend on which (or whether) one matched.
+    if (value && constantTimeEqual(value, code)) {
+      matched = { ok: true, label: label || "unknown" };
+    }
   }
-  return { ok: false, label: null };
+  return matched;
+}
+
+// The ed25519 public key that verifies release manifests, as raw base64 (the
+// 32-byte key). MUST stay in sync with internal/updater/pubkey.go
+// (signingPubKeyB64). The private counterpart lives only in the CONSOLE_SIGN_KEY
+// CI secret.
+const SIGN_PUBKEY_B64 = "2eKjjdwLlQcgyxWZZZNcxIzv7wFFAYQfncuW3wgdNu4=";
+
+// ED25519 SPKI DER prefix for a raw 32-byte public key.
+const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
+
+function signingKey() {
+  const raw = Buffer.from(SIGN_PUBKEY_B64, "base64");
+  return crypto.createPublicKey({
+    key: Buffer.concat([ED25519_SPKI_PREFIX, raw]),
+    format: "der",
+    type: "spki",
+  });
+}
+
+// verifyManifest checks a signed manifest envelope's ed25519 signature and, on
+// success, returns the DECODED payload object. Returns null on any failure
+// (malformed JSON, missing fields, bad signature) — the caller must treat null
+// as "do not trust". The signature is over the RAW base64-decoded payload bytes,
+// matching internal/updater/manifest.go Envelope.Verify.
+export function verifyManifest(envelopeText) {
+  let env;
+  try {
+    env = JSON.parse(envelopeText);
+  } catch {
+    return null;
+  }
+  if (!env || typeof env.payload !== "string" || typeof env.sig !== "string") {
+    return null;
+  }
+  let payloadBytes, sigBytes;
+  try {
+    payloadBytes = Buffer.from(env.payload, "base64");
+    sigBytes = Buffer.from(env.sig, "base64");
+  } catch {
+    return null;
+  }
+  let ok = false;
+  try {
+    ok = crypto.verify(null, payloadBytes, signingKey(), sigBytes);
+  } catch {
+    return null;
+  }
+  if (!ok) return null;
+  try {
+    return JSON.parse(payloadBytes.toString("utf8"));
+  } catch {
+    return null;
+  }
 }
 
 export function logAlphaGrant({ label, asset, version, ip, ua }) {
@@ -131,7 +230,10 @@ export function logAlphaGrant({ label, asset, version, ip, ua }) {
 }
 
 export async function ghReleaseBody(tag) {
-  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${tag}`, {
+  // Validate the tag before interpolating it into the GitHub API URL — sibling
+  // routes validate their params (asset/channel) and this one must too.
+  if (!parseTag(tag)) return null;
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${encodeURIComponent(tag)}`, {
     headers: { "User-Agent": "consolestore-landing" },
   });
   if (!res.ok) return null;

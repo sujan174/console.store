@@ -31,7 +31,19 @@ func Discover(ctx context.Context, httpc *http.Client, metadataURL string) (Meta
 	if resp.StatusCode != 200 {
 		return m, fmt.Errorf("auth: discovery status %d", resp.StatusCode)
 	}
-	return m, json.NewDecoder(resp.Body).Decode(&m)
+	// Cap the body: discovery metadata is a small JSON doc; an unbounded read of
+	// a hostile/misconfigured endpoint shouldn't be possible.
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&m); err != nil {
+		return m, err
+	}
+	// Validate the endpoints we actually depend on rather than accepting a 200
+	// with empty/partial metadata (e.g. a `{}` body or a captive-portal page
+	// that happens to parse) — otherwise the failure surfaces much later as an
+	// opaque error on the first authorize/exchange.
+	if m.AuthorizationEndpoint == "" || m.TokenEndpoint == "" {
+		return m, fmt.Errorf("auth: discovery metadata missing authorization/token endpoint")
+	}
+	return m, nil
 }
 
 func Register(ctx context.Context, httpc *http.Client, registrationURL, redirectURI, scope string) (string, error) {

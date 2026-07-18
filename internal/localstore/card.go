@@ -85,7 +85,7 @@ func SaveCard(c Card) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, raw, 0o600)
+	return writeFileAtomic(p, raw, 0o600)
 }
 
 // RecordOrder updates the card after a successful placement: bump the

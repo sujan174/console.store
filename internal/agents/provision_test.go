@@ -16,8 +16,12 @@ func TestInstallWiresDetectedAgents(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(home, ".claude.json"), []byte("{}"), 0o600)
 
 	var buf bytes.Buffer
-	if err := Install(&buf); err != nil {
+	wired, err := Install(&buf)
+	if err != nil {
 		t.Fatalf("Install: %v", err)
+	}
+	if wired != 1 {
+		t.Fatalf("Install wired %d agents, want 1 (Claude Code)", wired)
 	}
 	// Claude Code JSON now has our server.
 	raw, _ := os.ReadFile(filepath.Join(home, ".claude.json"))
@@ -41,7 +45,7 @@ func TestInstallRespectsOptOut(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(home, ".claude.json"), []byte("{}"), 0o600)
 
 	var buf bytes.Buffer
-	if err := Install(&buf); err != nil {
+	if _, err := Install(&buf); err != nil {
 		t.Fatalf("Install: %v", err)
 	}
 	raw, _ := os.ReadFile(filepath.Join(home, ".claude.json"))

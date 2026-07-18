@@ -89,7 +89,7 @@ func fileSetToken(raw string) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(p, []byte(raw), 0o600)
+	return writeFileAtomic(p, []byte(raw), 0o600)
 }
 
 // fileDeleteToken removes the fallback token.json (a missing file is not an
@@ -165,6 +165,11 @@ func (s *Store) PutToken(_ context.Context, _ string, access, refresh string, ex
 		}
 		return serr
 	}
+	// Keyring write succeeded — the secret now lives in the OS store, so purge
+	// any plaintext token.json left behind by a prior keyring-less run. Without
+	// this a stale plaintext refresh token lingers indefinitely once the
+	// keyring recovers (only sign-out cleared it before).
+	_ = fileDeleteToken()
 	return nil
 }
 

@@ -105,10 +105,14 @@ func isAuthSentinel(err error) bool {
 //     on a transient (5xx) response we MUST NOT attempt new-ID recovery
 //     against an empty/unreliable set — the original place error is surfaced.
 //  2. Call place() exactly once.
-//  3. On success, decode the result into Order; reject a response with an
-//     empty ID (phantom success guard).
-//  4. On a transient failure AND a successful pre-snapshot, re-read via
+//  3. On success, decode the result into Order. A 200 that yields no order id
+//     (undecodable/drifted body) is NOT trusted as success — but since the
+//     order very likely placed, it falls through to recovery instead of being
+//     reported as a bare failure (which would invite a duplicate re-order).
+//  4. When the place MAY have landed server-side (5xx/429, client timeout, or
+//     the undecodable-200 above) AND the pre-snapshot succeeded, re-read via
 //     snapshot() and return the first order whose ID was not in the pre-set.
+//     A definitive rejection (4xx validation/auth/arming) skips recovery.
 //
 // Known limitation (COD, no server idempotency key): the new-ID diff cannot
 // distinguish "our order that landed despite the 5xx" from "a concurrent order
@@ -140,22 +144,28 @@ func (c *Client) placeWithVerify(
 	// Step 2: place exactly once.
 	raw, placeErr := place(ctx)
 	if placeErr == nil {
-		// Step 3: decode and reject phantom success.
+		// Step 3: decode; a decodable response with a real id is the happy path.
 		o, err := decodeResult[Order](raw, nil)
-		if err != nil {
-			return Order{}, err
+		if err == nil && o.ID != "" {
+			return o, nil
 		}
-		if o.ID == "" {
-			return Order{}, fmt.Errorf("swiggy: order placed but response had no order id")
+		// HTTP 200 but the body didn't yield an order id (drifted/unrecognized
+		// shape). The order very likely DID place — reporting a bare failure
+		// here invites the user to re-order (duplicate hazard), so fall through
+		// to the same snapshot recovery as a transient failure.
+		if err == nil {
+			err = fmt.Errorf("swiggy: order placed but response had no order id")
 		}
-		return o, nil
-	}
-
-	if !isTransient(placeErr) {
+		placeErr = err
+	} else if !mayHaveSucceeded(placeErr) {
+		// A definitive rejection (4xx validation, auth, arming) — the order did
+		// not place; no recovery to attempt.
 		return Order{}, placeErr
 	}
 
-	// Step 4: transient failure recovery — only when the pre-snapshot succeeded.
+	// Step 4: the place MAY have landed server-side (5xx/429, client timeout,
+	// or a 200 we couldn't decode). Recovery — only when the pre-snapshot
+	// succeeded.
 	if !snapshotOK {
 		// Pre-snapshot was unreliable; surfacing the original place error is
 		// safer than guessing against an empty/stale known set.
@@ -188,9 +198,11 @@ func (c *Client) PlaceFoodOrder(ctx context.Context, req PlaceFoodOrderRequest) 
 	}
 	pay := req.PaymentMethod
 	if pay == "" {
-		// Swiggy's cash-on-delivery payment method is named "Cash" (payment_code
-		// from the cart's paymentOptions). "COD" is rejected as unsupported.
-		pay = "Cash"
+		// Swiggy renamed the food COD payment_code to "COD" (2026-07-09): the
+		// legacy "Cash" token now returns "cash option temporarily disabled"
+		// (see broker.PlaceOrderCOD, memory swiggy-upi-payment). Default to the
+		// live token so every food place path submits the same method.
+		pay = "COD"
 	}
 	snapshot := func(ctx context.Context) ([]Order, error) {
 		return c.GetFoodOrders(ctx, req.AddressID, true)
@@ -234,7 +246,7 @@ func (c *Client) Checkout(ctx context.Context, req CheckoutRequest) (Order, erro
 		}
 		out := make([]Order, 0, len(ims))
 		for _, o := range ims {
-			out = append(out, Order{ID: flexID(o.ID), Status: o.Status, ETA: o.ETA, Total: o.Total})
+			out = append(out, Order{ID: flexID(o.ID), Status: o.Status, ETA: o.ETA, Total: flexInt(o.Total)})
 		}
 		return out, nil
 	}
@@ -290,7 +302,7 @@ func normalizeIMCheckout(raw json.RawMessage) json.RawMessage {
 	for _, r := range orders {
 		o := r.toOrder()
 		if o.ID != "" {
-			b, err := json.Marshal(Order{ID: flexID(o.ID), Status: o.Status, ETA: o.ETA, Total: o.Total})
+			b, err := json.Marshal(Order{ID: flexID(o.ID), Status: o.Status, ETA: o.ETA, Total: flexInt(o.Total)})
 			if err != nil {
 				return raw
 			}

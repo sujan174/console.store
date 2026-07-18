@@ -35,6 +35,12 @@ type Checkout struct {
 	payTotal       int
 	payExpS        int    // seconds left in the payment window (0 = unknown/expired)
 	payMethodLabel string // bill "to pay (…)" method tag; "" renders as "COD"
+	// Real per-order speed metrics, measured by the root model (elapsed from the
+	// first add to placement + keystrokes over that span). Zero = unmeasured, in
+	// which case the speed receipt is omitted entirely rather than faked.
+	orderSecs float64
+	orderKeys int
+	bestSecs  float64 // fastest order this session (0 = none yet)
 }
 
 // WithPayment attaches the UPI payment sub-state (stage 0=idle,1=waiting,
@@ -79,6 +85,17 @@ func (c Checkout) Placed(orderID, eta string) Checkout {
 	c.placed = true
 	c.orderID = orderID
 	c.eta = eta
+	return c
+}
+
+// WithSpeedStats attaches the real measured speed of this order: elapsed
+// seconds from the first add to placement, keystrokes over that span, and the
+// session-best time. Any zero value suppresses the speed receipt (see
+// speedReceipt) so a placeholder is never shown as if measured.
+func (c Checkout) WithSpeedStats(secs float64, keys int, bestSecs float64) Checkout {
+	c.orderSecs = secs
+	c.orderKeys = keys
+	c.bestSecs = bestSecs
 	return c
 }
 
@@ -552,7 +569,9 @@ func (c Checkout) confirmView(frame int) string {
 	b.WriteString("  " + theme.FavStyle.Render("can't be cancelled now") + "\n\n")
 
 	if !compact {
-		b.WriteString(c.speedReceipt())
+		if r := c.speedReceipt(); r != "" {
+			b.WriteString(r)
+		}
 	}
 
 	b.WriteString("  " + theme.GreenStyle.Render("↵") + " " + theme.FaintStyle.Render("track") +
@@ -560,22 +579,26 @@ func (c Checkout) confirmView(frame int) string {
 	return b.String()
 }
 
-// Speed-receipt dummies. The "mastery flex" pillar: prove how fast the order
-// was vs. tapping a phone app. TODO: wire to real per-order measurement —
-// keystroke count + elapsed time from menu-open to "order placed", tracked in
-// the root model; session best held in-memory (no cross-session persistence yet).
-const (
-	dummyOrderSecs   = 2.1 // TODO: elapsed time of this order
-	dummyOrderKeys   = 4   // TODO: keystrokes for this order
-	dummySessionBest = 1.8 // TODO: fastest order this session (in-memory)
-	phoneAppAvgLabel = "~45s"
-)
+// phoneAppAvgLabel is a deliberately-rounded, clearly-framed ESTIMATE of how
+// long the same order takes tapping through a phone app — a reference point,
+// not a per-order measurement.
+const phoneAppAvgLabel = "~45s"
 
-// speedReceipt renders the post-order speed flex. Values are placeholders.
+// speedReceipt renders the post-order speed flex from REAL measured values
+// (elapsed + keystrokes from the first add to placement). It returns "" when the
+// order wasn't measured (orderSecs/orderKeys zero) so a fabricated receipt is
+// never shown — the project's real-strings stance.
 func (c Checkout) speedReceipt() string {
+	if c.orderSecs <= 0 || c.orderKeys <= 0 {
+		return ""
+	}
 	var b strings.Builder
-	b.WriteString("  " + theme.GoldStyle.Render(fmt.Sprintf("⚡ ordered in %.1fs · %d keystrokes", dummyOrderSecs, dummyOrderKeys)) + "\n")
-	b.WriteString("     " + theme.DimStyle.Render(fmt.Sprintf("this session best %.1fs  ·  phone app %s", dummySessionBest, phoneAppAvgLabel)) + "\n")
+	b.WriteString("  " + theme.GoldStyle.Render(fmt.Sprintf("⚡ ordered in %.1fs · %d keystrokes", c.orderSecs, c.orderKeys)) + "\n")
+	best := c.bestSecs
+	if best <= 0 || c.orderSecs < best {
+		best = c.orderSecs // this order is the session best (or the only one)
+	}
+	b.WriteString("     " + theme.DimStyle.Render(fmt.Sprintf("this session best %.1fs  ·  phone app %s", best, phoneAppAvgLabel)) + "\n")
 	b.WriteString("  " + theme.FaintStyle.Render(strings.Repeat("─", 44)) + "\n")
 	b.WriteString("  " + theme.DimStyle.Render("flex it:  ") + theme.BrandStyle.Render("curl consolestore.in/install") + "\n\n")
 	return b.String()

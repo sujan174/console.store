@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -217,5 +218,83 @@ func TestFlowTwoFlowsBindOwnPubkeys(t *testing.T) {
 	// is that keyA's callback did not silently drop keyB's binding.
 	if store.pubkeys["keyA"] == "" || store.pubkeys["keyB"] == "" {
 		t.Fatalf("unexpected empty account in pubkeys=%v", store.pubkeys)
+	}
+}
+
+// TestCallbackHandlerRejectsAuthorizeError verifies the HTTP handler returns 400
+// on an ?error= param and never leaks a token in the body.
+func TestCallbackHandlerRejectsAuthorizeError(t *testing.T) {
+	m := managerWithFakeAuthz(t, newFakeStore())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/cb?error=access_denied", nil)
+	m.CallbackHandler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+// TestCallbackHandlerGenericBodyOnFailure verifies a failed callback renders a
+// GENERIC message to the browser (auth-02): no raw upstream error body, no
+// token, no state value echoed.
+func TestCallbackHandlerGenericBodyOnFailure(t *testing.T) {
+	m := managerWith400TokenEndpoint(t, newFakeStore())
+	p, _ := m.Start("keyX")
+	u, _ := url.Parse(p.AuthorizeURL)
+	state := u.Query().Get("state")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/cb?state="+state+"&code=abc", nil)
+	m.CallbackHandler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "see your terminal") {
+		t.Fatalf("body should be the generic terminal message, got: %q", body)
+	}
+	if strings.Contains(body, "invalid_grant") {
+		t.Fatalf("body must NOT reflect the upstream token-endpoint error, got: %q", body)
+	}
+}
+
+// TestCallbackHandlerSuccessBodyHasNoToken verifies the success page returns
+// only the plain "return to your terminal" text — never the access token.
+func TestCallbackHandlerSuccessBodyHasNoToken(t *testing.T) {
+	store := newFakeStore()
+	m := managerWithFakeAuthz(t, store)
+	p, _ := m.Start("keyY")
+	u, _ := url.Parse(p.AuthorizeURL)
+	state := u.Query().Get("state")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/cb?state="+state+"&code=abc", nil)
+	m.CallbackHandler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%q)", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for acct, tok := range store.tokens {
+		if tok != "" && strings.Contains(body, tok) {
+			t.Fatalf("success page leaked the token for %s", acct)
+		}
+	}
+}
+
+// TestFlowCallbackRejectsExpiredState verifies a state older than stateTTL is
+// rejected even if it is otherwise valid and unused (auth-01).
+func TestFlowCallbackRejectsExpiredState(t *testing.T) {
+	store := newFakeStore()
+	m := managerWithFakeAuthz(t, store)
+	// Drive a controllable clock.
+	base := time.Now()
+	m.cfg.Now = func() time.Time { return base }
+	p, _ := m.Start("keyZ")
+	u, _ := url.Parse(p.AuthorizeURL)
+	state := u.Query().Get("state")
+
+	// Advance past the TTL, then attempt the callback.
+	m.cfg.Now = func() time.Time { return base.Add(stateTTL + time.Minute) }
+	if err := m.HandleCallback(context.Background(), state, "auth-code"); err == nil {
+		t.Fatal("expected an expired-state rejection")
 	}
 }

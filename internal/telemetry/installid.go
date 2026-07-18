@@ -49,11 +49,19 @@ func InstallID() string {
 		return ""
 	}
 	p := filepath.Join(dir, "install.json")
-	if b, err := os.ReadFile(p); err == nil {
+	b, rerr := os.ReadFile(p)
+	if rerr == nil {
 		var f installFile
 		if json.Unmarshal(b, &f) == nil && f.ID != "" {
 			return f.ID
 		}
+		// File exists but is corrupt/empty — fall through to regenerate it.
+	} else if !os.IsNotExist(rerr) {
+		// A TRANSIENT read error (permissions blip, locked file) — do NOT mint a
+		// new id and overwrite the existing one, or this machine would be counted
+		// as a brand-new install every time the read hiccups. Skip this ping;
+		// the next successful read reuses the stable id.
+		return ""
 	}
 	id, err := newUUIDv4()
 	if err != nil {
@@ -62,8 +70,8 @@ func InstallID() string {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ""
 	}
-	b, _ := json.Marshal(installFile{ID: id})
-	if err := os.WriteFile(p, b, 0o600); err != nil {
+	nb, _ := json.Marshal(installFile{ID: id})
+	if err := os.WriteFile(p, nb, 0o600); err != nil {
 		return ""
 	}
 	return id

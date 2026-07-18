@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -68,9 +69,18 @@ func rpc(ctx context.Context, c *http.Client, base, bearer, sessionID string, pa
 		return rpcResult{}, err
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
+	// Cap the body read so a runaway or hostile response can't OOM the process.
+	// A real MCP tool response is a few KB–low MB; 32MB is far above any
+	// legitimate payload. Reading one extra byte past the cap detects an
+	// over-limit body and fails loudly rather than silently truncating JSON
+	// (which would surface as a confusing decode error).
+	const maxBody = 32 << 20
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
 		return rpcResult{}, err
+	}
+	if len(raw) > maxBody {
+		return rpcResult{}, fmt.Errorf("swiggy: response body exceeds %d bytes", maxBody)
 	}
 	sid := resp.Header.Get("Mcp-Session-Id")
 	if sid == "" {

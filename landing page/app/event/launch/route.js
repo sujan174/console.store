@@ -1,11 +1,12 @@
 import { ensureSchema, query } from "../../_lib/db.js";
-import { validEvent, rateLimited } from "../../_lib/telemetry.js";
+import { validEvent, rateLimited, clientIP, tooLarge } from "../../_lib/telemetry.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (tooLarge(req.headers)) return new Response("payload too large", { status: 413 });
+  const ip = clientIP(req.headers);
   if (rateLimited(ip)) return new Response("rate limited", { status: 429 });
 
   let body;

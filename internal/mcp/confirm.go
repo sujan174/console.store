@@ -64,11 +64,23 @@ func cartHash(addressID string, c api.Cart) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// sweepLocked drops confirmations older than the TTL. The caller holds s.mu.
+// Called on every put so abandoned confirmations (prepared, never placed) don't
+// accumulate for the lifetime of a long-lived `console mcp` stdio server.
+func (s *confirmStore) sweepLocked(nowUnix int64) {
+	for id, p := range s.m {
+		if nowUnix-p.createdAt > confirmTTLSeconds {
+			delete(s.m, id)
+		}
+	}
+}
+
 func (s *confirmStore) put(addressID string, c api.Cart, ident orderIdentity, nowUnix int64) string {
 	var b [12]byte
 	_, _ = rand.Read(b[:])
 	id := hex.EncodeToString(b[:])
 	s.mu.Lock()
+	s.sweepLocked(nowUnix)
 	s.m[id] = pendingOrder{
 		addressID: addressID, total: c.Total,
 		restaurantID: ident.restaurantID, restaurantName: ident.restaurantName, addrLabel: ident.addrLabel,
@@ -105,6 +117,7 @@ func (s *confirmStore) putIM(addressID string, c api.IMCart, ident orderIdentity
 	_, _ = rand.Read(b[:])
 	id := hex.EncodeToString(b[:])
 	s.mu.Lock()
+	s.sweepLocked(nowUnix)
 	s.m[id] = pendingOrder{
 		addressID: addressID, total: c.Total,
 		restaurantID: ident.restaurantID, restaurantName: ident.restaurantName, addrLabel: ident.addrLabel,

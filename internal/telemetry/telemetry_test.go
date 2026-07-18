@@ -104,6 +104,6 @@ func TestDevBuildNoSend(t *testing.T) {
 
 func TestBlackholeEndpointSwallowed(t *testing.T) {
 	enableForTest(t, "http://127.0.0.1:1") // refused
-	Launch()      // must not panic/block
-	OrderPlaced() // must not panic/block
+	Launch()                               // must not panic/block
+	OrderPlaced()                          // must not panic/block
 }

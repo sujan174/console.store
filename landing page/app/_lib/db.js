@@ -7,11 +7,16 @@ function pool() {
     const url = process.env.DATABASE_URL || "";
     // Railway's internal network (*.railway.internal) speaks plain TCP — forcing
     // SSL there fails ("server does not support SSL"). The public proxy host does
-    // require SSL (self-signed → rejectUnauthorized:false).
+    // require SSL. Production uses the internal host, so this path is normally a
+    // no-op; when a public-proxy/staging URL IS used, set DATABASE_CA (the
+    // server's CA PEM) to verify the cert. Without it we fall back to accepting
+    // the cert unverified — the documented Railway workaround, but a MITM window
+    // on a public host, hence the CA override.
     const needsSSL = url !== "" && !url.includes(".railway.internal");
+    const ca = process.env.DATABASE_CA || "";
     _pool = new Pool({
       connectionString: url,
-      ssl: needsSSL ? { rejectUnauthorized: false } : undefined,
+      ssl: needsSSL ? (ca ? { ca } : { rejectUnauthorized: false }) : undefined,
       max: 4,
     });
   }

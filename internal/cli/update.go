@@ -52,9 +52,25 @@ func runUpdate(d Deps, args []string) int {
 		return 0
 	}
 
-	// No channel arg: force a check now against the saved channel.
+	// No channel arg: force a check now against the saved channel. Use the
+	// SIGINT-aware ctx so Ctrl-C interrupts the check/download, and report the
+	// real outcome instead of unconditionally claiming "up to date".
+	ctx := d.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	fmt.Fprintln(d.Out, "checking for updates…")
-	updater.RunDefault(context.Background())
-	fmt.Fprintln(d.Out, "up to date")
-	return 0
+	switch updater.RunDefault(ctx) {
+	case updater.OutcomeFailed:
+		fmt.Fprintln(d.Out, "update check failed — still on the current build (see stderr).")
+		return 1
+	case updater.OutcomeUpdated:
+		// Run normally re-execs on a successful swap, so this line rarely prints;
+		// keep it honest if it does.
+		fmt.Fprintln(d.Out, "updated.")
+		return 0
+	default:
+		fmt.Fprintln(d.Out, "up to date")
+		return 0
+	}
 }

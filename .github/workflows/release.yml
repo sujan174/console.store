@@ -21,6 +21,15 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
+          # Only three tag shapes are valid: vX.Y.Z, vX.Y.Z-alpha.N, vX.Y.Z-beta.N.
+          # Reject anything else (e.g. an off-book -rc.1) up front — such a tag would
+          # be stamped Channel=beta by GoReleaser while the manifest step derives a
+          # different channel, producing a self-inconsistent artifact no channel can
+          # update to.
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-alpha\.[0-9]+|-beta\.[0-9]+)?$ ]]; then
+            echo "::error::Invalid release tag $TAG — use vX.Y.Z, vX.Y.Z-alpha.N, or vX.Y.Z-beta.N."
+            exit 1
+          fi
           SHA="$(git rev-list -n1 "$TAG")"
           BASE="${TAG%%-*}"   # vX.Y.Z
           if [[ "$TAG" == *-alpha* ]]; then
@@ -30,15 +39,25 @@ jobs:
           else
             NEED="beta"
           fi
+          # Require a PUBLISHED predecessor RELEASE on the same commit — not just
+          # a tag ref. A tag exists the instant it's pushed, regardless of whether
+          # its release workflow succeeded; a failed -beta.1 that published nothing
+          # must NOT unlock the stable tag. So for each candidate predecessor tag
+          # on this SHA, confirm `gh release view` finds a non-draft release.
           FOUND=""
           for t in $(git tag -l "${BASE}-${NEED}.*"); do
-            if [[ "$(git rev-list -n1 "$t")" == "$SHA" ]]; then FOUND="$t"; break; fi
+            if [[ "$(git rev-list -n1 "$t")" != "$SHA" ]]; then continue; fi
+            isDraft="$(gh release view "$t" --json isDraft -q .isDraft 2>/dev/null || echo missing)"
+            if [[ "$isDraft" == "false" ]]; then FOUND="$t"; break; fi
+            echo "note: predecessor tag $t exists but has no published release (state: $isDraft) — not accepted"
           done
           if [[ -z "$FOUND" ]]; then
-            echo "::error::Promotion gate: $TAG needs a $NEED release on commit $SHA first. Promote in order local → alpha → beta → production, re-tagging the SAME commit (e.g. tag the $NEED commit, verify, then this tag)."
+            echo "::error::Promotion gate: $TAG needs a PUBLISHED $NEED release on commit $SHA first. Promote in order local → alpha → beta → production, re-tagging the SAME commit (e.g. tag the $NEED commit, wait for its release to publish, then this tag)."
             exit 1
           fi
-          echo "promotion ok: $FOUND ($NEED, same commit) → $TAG"
+          echo "promotion ok: $FOUND ($NEED release published, same commit) → $TAG"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - uses: actions/setup-go@v5
         with: { go-version: "1.26" }

@@ -290,10 +290,29 @@ func (e cartEnvelope) toCart() Cart {
 	return c
 }
 
-type Coupon struct {
-	Code        string `json:"code"`
-	Description string `json:"description"`
-	Amount      int    `json:"amount"`
+// flexInt decodes a JSON money amount that may arrive as an integer (346), a
+// float (346.0), or a numeric string ("346") — Swiggy money fields have
+// shipped all three shapes (MenuItem.Price was made float64 for exactly this
+// class). It marshals back as a plain number. An unparseable value decodes to
+// 0 instead of erroring: on a place/confirm response the order id is the
+// load-bearing field, and aborting the whole Order decode over a cosmetic
+// amount-shape drift would report a REAL placed order as failed — a
+// duplicate-order hazard on COD.
+type flexInt int
+
+func (f *flexInt) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(strings.TrimSpace(string(b)), `"`)
+	if s == "" || s == "null" {
+		*f = 0
+		return nil
+	}
+	var n float64
+	if err := json.Unmarshal([]byte(s), &n); err != nil {
+		*f = 0
+		return nil
+	}
+	*f = flexInt(math.Round(n))
+	return nil
 }
 
 // Order matches place_food_order / get_food_orders / (normalized) checkout.
@@ -303,11 +322,11 @@ type Coupon struct {
 // field fails to decode one of the two forms and the order silently looks
 // failed even when CONFIRMED — a duplicate-order hazard on COD.
 type Order struct {
-	ID         flexID `json:"orderId"`
-	Status     string `json:"status"`
-	Restaurant string `json:"restaurantName"`
-	Total      int    `json:"totalAmount"`
-	ETA        string `json:"estimatedDelivery"`
+	ID         flexID  `json:"orderId"`
+	Status     string  `json:"status"`
+	Restaurant string  `json:"restaurantName"`
+	Total      flexInt `json:"totalAmount"`
+	ETA        string  `json:"estimatedDelivery"`
 }
 
 type Tracking struct {

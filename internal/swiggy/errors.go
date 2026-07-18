@@ -1,8 +1,10 @@
 package swiggy
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 )
 
 var (
@@ -54,4 +56,21 @@ func mapStatus(status int, body []byte) error {
 func isTransient(err error) bool {
 	var he *httpError
 	return errors.As(err, &he) && (he.Status == 429 || he.Status >= 500)
+}
+
+// mayHaveSucceeded reports whether a failed order placement could have landed
+// server-side anyway: a transient 5xx/429 response, OR a client-side timeout
+// (net.Error timeout / context deadline, typically wrapped in a *url.Error by
+// http.Client). A slow-but-successful placement whose response we never read
+// is the PRIMARY case placeWithVerify's snapshot recovery exists for — it must
+// not be blind to timeouts.
+func mayHaveSucceeded(err error) bool {
+	if isTransient(err) {
+		return true
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true
+	}
+	return errors.Is(err, context.DeadlineExceeded)
 }

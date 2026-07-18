@@ -1,7 +1,12 @@
-// Command improbe is a TEMPORARY read-only dev probe for the Instamart MCP
-// endpoint (https://mcp.swiggy.com/im). It lists the server's tools (raw
-// tools/list) and calls read-only tools to harvest real response shapes.
-// It NEVER places an order and never calls checkout/update/clear tools.
+// Command improbe is a TEMPORARY dev probe for the Instamart MCP endpoint
+// (https://mcp.swiggy.com/im). It lists the server's tools (raw tools/list) and
+// calls read-only tools to harvest real response shapes. It NEVER places an
+// order (never calls checkout).
+//
+// It is read-only BY DEFAULT. The opt-in cart-round-trip modes DO mutate the
+// caller's LIVE Instamart cart: IMPROBE_CART / IMPROBE_SESS / IMPROBE_DELSEM
+// each call update_cart + clear_cart to exercise cart semantics. Use only on an
+// account whose cart you're willing to overwrite; checkout is never called.
 //
 //	CONSOLE_DEBUG_LOG=/tmp/improbe.log go run ./cmd/improbe [query...]
 package main

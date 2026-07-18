@@ -15,6 +15,12 @@ type Registration struct {
 	ClientID              string `json:"client_id"`
 	AuthorizationEndpoint string `json:"authorization_endpoint"`
 	TokenEndpoint         string `json:"token_endpoint"`
+	// RedirectURI is the loopback callback the client_id was registered with.
+	// Cached so a changed CONSOLE_REDIRECT_URI is detected and forces a fresh
+	// DCR — reusing the old client_id with a new redirect is rejected by the AS
+	// with a non-obvious error. Empty in caches written before this field
+	// existed (treated as "matches the default").
+	RedirectURI string `json:"redirect_uri,omitempty"`
 }
 
 // baseConfigDir returns ~/.config/console-store, honoring XDG_CONFIG_HOME. It is
@@ -75,5 +81,5 @@ func SaveRegistration(r Registration) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, raw, 0o600)
+	return writeFileAtomic(p, raw, 0o600)
 }

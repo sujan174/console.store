@@ -69,8 +69,11 @@ func SyncIfChanged(out io.Writer) {
 	}
 	// Stale (or first run): re-assert MCP wiring + skills, then stamp the marker
 	// so we don't repeat the work until the bundles change again. Only stamp on a
-	// clean Install so a failure retries on the next launch.
-	if err := Install(out); err == nil {
+	// fully-clean run that actually wired ≥1 agent — so (a) a partial failure
+	// retries next launch, and (b) a machine with NO agent yet (Claude installed
+	// AFTER consolestore) is re-checked every launch and picked up once it
+	// appears, instead of being permanently suppressed by an early stamp.
+	if wired, err := Install(out); err == nil && wired > 0 {
 		writeMarker(want)
 	}
 }

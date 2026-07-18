@@ -78,16 +78,6 @@ func TestLoadAddressesFillsSnapshot(t *testing.T) {
 	}
 }
 
-func TestLoadPlacesPropagatesError(t *testing.T) {
-	b := &fakeBackend{err: ErrNeedsAuth}
-	snap := swiggysnap.NewSnapshot()
-	msg := LoadPlaces(b, snap, "a1", catalog.SectionCoffee)()
-	m, ok := msg.(PlacesLoadedMsg)
-	if !ok || !errors.Is(m.Err, ErrNeedsAuth) || m.Section != catalog.SectionCoffee {
-		t.Fatalf("msg = %#v", msg)
-	}
-}
-
 func TestLoadMenuFillsSnapshot(t *testing.T) {
 	b := &fakeBackend{menu: api.Menu{RestaurantID: "p1", Items: []api.MenuItem{{ID: "i1", Name: "Latte", Price: 250}}}}
 	snap := swiggysnap.NewSnapshot()
@@ -128,8 +118,7 @@ func TestSyncCartPropagatesError(t *testing.T) {
 
 func TestPlaceOrderCmdReturnsOrder(t *testing.T) {
 	b := &fakeBackend{order: api.Order{ID: "order-42", Status: "placed"}}
-	snap := swiggysnap.NewSnapshot()
-	msg := PlaceOrderCmd(b, snap, "a1")()
+	msg := PlaceOrderCmd(b, "a1")()
 	m, ok := msg.(OrderPlacedMsg)
 	if !ok {
 		t.Fatalf("msg type = %T", msg)
@@ -144,8 +133,7 @@ func TestPlaceOrderCmdReturnsOrder(t *testing.T) {
 
 func TestPlaceOrderCmdPropagatesError(t *testing.T) {
 	b := &fakeBackend{err: errors.New("order failed")}
-	snap := swiggysnap.NewSnapshot()
-	msg := PlaceOrderCmd(b, snap, "a1")()
+	msg := PlaceOrderCmd(b, "a1")()
 	m, ok := msg.(OrderPlacedMsg)
 	if !ok || m.Err == nil {
 		t.Fatalf("expected OrderPlacedMsg with error; got %#v", msg)
